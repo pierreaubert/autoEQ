@@ -1,7 +1,19 @@
-//! A Rust library for fast IIR biquad filtering.
+//! AutoEQ - A library for audio equalization and filter optimization
 //!
-//! This is a port of the Python IIR filter implementation, optimized for performance
-//! using the `ndarray` crate for vectorized frequency response calculations.
+//! Copyright (C) 2025 Pierre Aubert pierre(at)spinorama(dot)org
+//!
+//! This program is free software: you can redistribute it and/or modify
+//! it under the terms of the GNU General Public License as published by
+//! the Free Software Foundation, either version 3 of the License, or
+//! (at your option) any later version.
+//!
+//! This program is distributed in the hope that it will be useful,
+//! but WITHOUT ANY WARRANTY; without even the implied warranty of
+//! MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//! GNU General Public License for more details.
+//!
+//! You should have received a copy of the GNU General Public License
+//! along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 use ndarray::Array1;
 use std::f64::consts::PI;
@@ -21,19 +33,27 @@ pub fn q2bw(q: f64) -> f64 {
 }
 
 // Constants
+/// Default Q factor for high/low pass filters
 pub const DEFAULT_Q_HIGH_LOW_PASS: f64 = 1.0 / std::f64::consts::SQRT_2;
+/// Default Q factor for high/low shelf filters
 pub const DEFAULT_Q_HIGH_LOW_SHELF: f64 = 1.0668676536332304; // Value of bw2q(0.9)
 
-/// Enum representing the different types of biquad filters.
-/// This is a type-safe replacement for the "pretend enumeration" in Python.
+/// Filter types for biquad filters
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BiquadFilterType {
+    /// Low-pass filter
     Lowpass,
+    /// High-pass filter
     Highpass,
+    /// Band-pass filter
     Bandpass,
+    /// Peaking filter
     Peak,
+    /// Notch filter
     Notch,
+    /// Low-shelf filter
     Lowshelf,
+    /// High-shelf filter
     Highshelf,
 }
 
@@ -68,23 +88,28 @@ impl BiquadFilterType {
 /// Represents a single biquad IIR filter.
 #[derive(Debug, Clone)]
 pub struct Biquad {
+    /// The type of filter
     pub filter_type: BiquadFilterType,
+    /// Center frequency in Hz
     pub freq: f64,
+    /// Sample rate in Hz
     pub srate: f64,
+    /// Q factor (quality factor)
     pub q: f64,
+    /// Gain in dB (for peaking and shelving filters)
     pub db_gain: f64,
-    // Filter coefficients
+    /// Filter coefficients
     a1: f64,
     a2: f64,
     b0: f64,
     b1: f64,
     b2: f64,
-    // Filter state (for processing samples)
+    /// Filter state (for processing samples)
     x1: f64,
     x2: f64,
     y1: f64,
     y2: f64,
-    // Pre-computed coefficients for fast frequency response calculation
+    /// Pre-computed coefficients for fast frequency response calculation
     r_up0: f64,
     r_up1: f64,
     r_up2: f64,
@@ -306,12 +331,21 @@ impl fmt::Display for Biquad {
     }
 }
 
-/// A struct to hold filter data.
-#[derive(Debug, Clone)]
+/// Represents a single filter in a parametric equalizer.
+#[derive(Debug, Clone, Default)]
+///
+/// Center frequency in Hz
+/// Q factor (quality factor)
+/// Gain in dB
+/// Type of filter (e.g., "PK", "LP", "HP")
 pub struct FilterRow {
+    /// Center frequency in Hz
     pub freq: f64,
+    /// Q factor (quality factor)
     pub q: f64,
+    /// Gain in dB
     pub gain: f64,
+    /// Type of filter (e.g., "PK", "LP", "HP")
     pub kind: &'static str,
 }
 
@@ -418,6 +452,19 @@ mod peq_response_tests {
     }
 }
 
+/// Build a vector of sorted filter rows from optimization parameters
+///
+/// # Arguments
+/// * `x` - Slice of optimization parameters laid out as [f0, Q, gain, f0, Q, gain, ...]
+/// * `iir_hp_pk` - If true, treat the lowest-frequency filter as a Highpass filter
+///
+/// # Returns
+/// * Vector of FilterRow structs sorted by frequency
+///
+/// # Details
+/// Converts the flat parameter vector into a vector of FilterRow structs,
+/// sorts them by frequency, and optionally marks the lowest-frequency filter
+/// as a Highpass filter for display purposes.
 pub fn build_sorted_filters(x: &[f64], iir_hp_pk: bool) -> Vec<FilterRow> {
     let mut rows: Vec<FilterRow> = Vec::with_capacity(x.len() / 3);
     for i in 0..(x.len() / 3) {
@@ -441,6 +488,78 @@ pub fn build_sorted_filters(x: &[f64], iir_hp_pk: bool) -> Vec<FilterRow> {
         rows[0].kind = "Highpass";
     }
     rows
+}
+
+/// Print a formatted table of the parametric EQ filters.
+///
+/// The filters are printed with any non-Peak (i.e., Highpass when `iir_hp_pk` is true)
+/// shown first, followed by Peak filters sorted by frequency.
+pub fn peq_print(x: &[f64], iir_hp_pk: bool) {
+    let rows = build_sorted_filters(x, iir_hp_pk);
+    println!("+ -------------- Global: Optimal IIR Filters -------------+");
+    println!(
+        "| {:<5} | {:<10} | {:<10} | {:<10} | {:<8} |",
+        "Filter", "Freq (Hz)", "Q", "Gain (dB)", "Type"
+    );
+    println!("|-------|------------|------------|------------|----------|");
+
+    // If there is a non-Peak first (Highpass), print it before the rest.
+    if iir_hp_pk {
+        if let Some(first) = rows.first() {
+            if first.kind != "Peak" {
+                println!(
+                    "| {:<5} | {:<10.2} | {:<10.3} | {:<+10.3} | {:<8} |",
+                    1, first.freq, first.q, first.gain, first.kind
+                );
+                // Print the remaining Peak filters with correct numbering
+                for (idx, r) in rows.iter().enumerate().skip(1) {
+                    println!(
+                        "| {:<5} | {:<10.2} | {:<10.3} | {:<+10.3} | {:<8} |",
+                        idx + 1,
+                        r.freq,
+                        r.q,
+                        r.gain,
+                        r.kind
+                    );
+                }
+                println!("+-------|------------|------------|------------|----------+");
+                return;
+            }
+        }
+    }
+
+    // Default: print all rows in order
+    for (i, r) in rows.iter().enumerate() {
+        println!(
+            "| {:<5} | {:<10.2} | {:<10.3} | {:<+10.3} | {:<8} |",
+            i + 1,
+            r.freq,
+            r.q,
+            r.gain,
+            r.kind
+        );
+    }
+    println!("+-------|------------|------------|------------|----------+");
+}
+
+#[cfg(test)]
+mod peq_print_tests {
+    use super::{build_sorted_filters, peq_print};
+
+    #[test]
+    fn peq_print_does_not_panic() {
+        let x = vec![
+            1000.0, 1.0, 2.0, // Peak
+            80.0, 0.707, 0.0, // Candidate HP when iir_hp_pk=true
+            5000.0, 2.0, -3.0, // Peak
+        ];
+        // Ensure helper runs without panicking (output captured by test harness)
+        peq_print(&x, true);
+        peq_print(&x, false);
+        // Also ensure build_sorted_filters remains consistent
+        let rows = build_sorted_filters(&x, true);
+        assert_eq!(rows.len(), 3);
+    }
 }
 
 #[cfg(test)]

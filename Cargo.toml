@@ -1,11 +1,22 @@
 [package]
-name = "eqopt"
+name = "autoeq"
 version = "0.1.0"
 edition = "2024"
+description = "A library and tool for audio equalization and filter optimization"
+repository = "https://github.com/pierreaubert/autoeq"
+license = "GPL-3.0-or-later"
 
 [lib]
-name = "eqopt"
-path = "src/iir.rs"
+name = "autoeq"
+path = "src/lib.rs"
+
+[[bin]]
+name = "opt_single"
+path = "src/opt_single.rs"
+
+[[bin]]
+name = "opt_score"
+path = "src/opt_score.rs"
 
 [dependencies]
 base64 = "0.21"

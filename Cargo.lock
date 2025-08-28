@@ -198,6 +198,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 
 [[package]]
+name = "autoeq"
+version = "0.1.0"
+dependencies = [
+ "base64 0.21.7",
+ "blas-src",
+ "clap",
+ "cmake",
+ "csv",
+ "ndarray",
+ "ndarray-linalg",
+ "nlopt",
+ "plotly",
+ "reqwest 0.11.27",
+ "serde",
+ "serde_json",
+ "tokio",
+ "urlencoding",
+]
+
+[[package]]
 name = "backtrace"
 version = "0.3.75"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -711,26 +731,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "75030f3c4f45dafd7586dd6780965a8c7e8e285a5ecb86713e63a79c5b2766f3"
 dependencies = [
  "cfg-if",
-]
-
-[[package]]
-name = "eqopt"
-version = "0.1.0"
-dependencies = [
- "base64 0.21.7",
- "blas-src",
- "clap",
- "cmake",
- "csv",
- "ndarray",
- "ndarray-linalg",
- "nlopt",
- "plotly",
- "reqwest 0.11.27",
- "serde",
- "serde_json",
- "tokio",
- "urlencoding",
 ]
 
 [[package]]

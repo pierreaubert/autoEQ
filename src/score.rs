@@ -1,17 +1,52 @@
+use std::collections::HashMap;
+use std::error::Error;
+
 use ndarray::concatenate;
 use ndarray::s;
 use ndarray::{Array1, Array2, Axis};
 
+use crate::Curve;
+
+/// Convert SPL values to pressure values
+///
+/// # Arguments
+/// * `spl` - Array of SPL values
+///
+/// # Returns
+/// * Array of pressure values
+///
+/// # Formula
+/// pressure = 10^((spl-105)/20)
 fn spl2pressure(spl: &Array1<f64>) -> Array1<f64> {
     // 10^((spl-105)/20)
     spl.mapv(|v| 10f64.powf((v - 105.0) / 20.0))
 }
 
+/// Convert pressure values to SPL values
+///
+/// # Arguments
+/// * `p` - Array of pressure values
+///
+/// # Returns
+/// * Array of SPL values
+///
+/// # Formula
+/// spl = 20*log10(p) + 105
 fn pressure2spl(p: &Array1<f64>) -> Array1<f64> {
     // 20*log10(p) + 105
     p.mapv(|v| 20.0 * v.log10() + 105.0)
 }
 
+/// Convert SPL values to squared pressure values
+///
+/// # Arguments
+/// * `spl` - 2D array of SPL values
+///
+/// # Returns
+/// * 2D array of squared pressure values
+///
+/// # Details
+/// Computes pressure values from SPL and then squares them for each row
 fn spl2pressure2(spl: &Array2<f64>) -> Array2<f64> {
     // square(pressure) per row
     let mut out = Array2::<f64>::zeros(spl.raw_dim());
@@ -22,6 +57,19 @@ fn spl2pressure2(spl: &Array2<f64>) -> Array2<f64> {
     out
 }
 
+/// Compute the CEA2034 spinorama from SPL data (internal implementation)
+///
+/// # Arguments
+/// * `spl` - 2D array of SPL measurements
+/// * `idx` - Indices for grouping measurements
+/// * `weights` - Weights for computing weighted averages
+///
+/// # Returns
+/// * 2D array representing the CEA2034 spinorama
+///
+/// # Details
+/// Computes various CEA2034 curves including On Axis, Listening Window,
+/// Early Reflections, Sound Power, and Predicted In-Room response.
 fn cea2034_array(spl: &Array2<f64>, idx: &[Vec<usize>], weights: &Array1<f64>) -> Array2<f64> {
     let len_spl = spl.shape()[1];
     let p2 = spl2pressure2(spl);
@@ -69,6 +117,17 @@ fn cea2034_array(spl: &Array2<f64>, idx: &[Vec<usize>], weights: &Array1<f64>) -
     cea
 }
 
+/// Apply RMS averaging to pressure squared values
+///
+/// # Arguments
+/// * `p2` - 2D array of squared pressure values
+/// * `idx` - Indices of rows to include in RMS calculation
+///
+/// # Returns
+/// * Array of SPL values after RMS averaging
+///
+/// # Formula
+/// rms = sqrt(sum(p2\[idx\]) / len) then converted to SPL
 fn apply_rms(p2: &Array2<f64>, idx: &[usize]) -> Array1<f64> {
     // sqrt(sum(p2[idx]) / len) then to SPL
     let ncols = p2.shape()[1];
@@ -81,6 +140,18 @@ fn apply_rms(p2: &Array2<f64>, idx: &[usize]) -> Array1<f64> {
     pressure2spl(&r)
 }
 
+/// Apply weighted RMS averaging to pressure squared values
+///
+/// # Arguments
+/// * `p2` - 2D array of squared pressure values
+/// * `idx` - Indices of rows to include in weighted RMS calculation
+/// * `weights` - Weights for each row
+///
+/// # Returns
+/// * Array of SPL values after weighted RMS averaging
+///
+/// # Formula
+/// weighted_rms = sqrt(sum(p2\[idx\] * weights\[idx\]) / sum(weights)) then converted to SPL
 fn apply_weighted_rms(p2: &Array2<f64>, idx: &[usize], weights: &Array1<f64>) -> Array1<f64> {
     let ncols = p2.shape()[1];
     let mut acc = Array1::<f64>::zeros(ncols);
@@ -94,6 +165,18 @@ fn apply_weighted_rms(p2: &Array2<f64>, idx: &[usize], weights: &Array1<f64>) ->
     pressure2spl(&r)
 }
 
+/// Compute Mean Absolute Deviation (MAD) for a slice of SPL values
+///
+/// # Arguments
+/// * `spl` - Array of SPL values
+/// * `imin` - Start index (inclusive)
+/// * `imax` - End index (exclusive)
+///
+/// # Returns
+/// * Mean absolute deviation value
+///
+/// # Formula
+/// mad = mean(|x - mean(x)|)
 fn mad(spl: &Array1<f64>, imin: usize, imax: usize) -> f64 {
     let slice = spl.slice(s![imin..imax]).to_owned();
     let m = slice.mean().unwrap_or(0.0);
@@ -101,25 +184,14 @@ fn mad(spl: &Array1<f64>, imin: usize, imax: usize) -> f64 {
     diffs.mean().unwrap_or(f64::NAN)
 }
 
-fn consecutive_groups_first_group(indices: &[(usize, f64)]) -> Vec<(usize, f64)> {
-    // Return the first group of consecutive indices
-    if indices.is_empty() {
-        return Vec::new();
-    }
-    let mut group: Vec<(usize, f64)> = Vec::new();
-    let mut prev = indices[0].0;
-    group.push(indices[0]);
-    for &(i, f) in indices.iter().skip(1) {
-        if i == prev + 1 {
-            group.push((i, f));
-            prev = i;
-        } else {
-            break; // only first group
-        }
-    }
-    group
-}
-
+/// Compute the coefficient of determination (R-squared) between two arrays
+///
+/// # Arguments
+/// * `x` - First array of values
+/// * `y` - Second array of values
+///
+/// # Returns
+/// * R-squared value (Pearson correlation coefficient squared)
 fn r_squared(x: &Array1<f64>, y: &Array1<f64>) -> f64 {
     // Pearson correlation squared
     let n = x.len() as f64;
@@ -147,10 +219,29 @@ fn r_squared(x: &Array1<f64>, y: &Array1<f64>) -> f64 {
 
 // ---------------- Pure Rust API below ----------------
 
+/// Compute the CEA2034 spinorama from SPL data
+///
+/// # Arguments
+/// * `spl` - 2D array of SPL measurements
+/// * `idx` - Indices for grouping measurements
+/// * `weights` - Weights for computing weighted averages
+///
+/// # Returns
+/// * 2D array representing the CEA2034 spinorama
 pub fn cea2034(spl: &Array2<f64>, idx: &[Vec<usize>], weights: &Array1<f64>) -> Array2<f64> {
     cea2034_array(spl, idx, weights)
 }
 
+/// Generate octave band frequencies
+///
+/// # Arguments
+/// * `count` - Number of bands per octave
+///
+/// # Returns
+/// * Vector of tuples representing (low, center, high) frequencies for each band
+///
+/// # Panics
+/// * If count is less than 2
 pub fn octave(count: usize) -> Vec<(f64, f64, f64)> {
     assert!(count >= 2, "count (N) must be >= 2");
     let reference = 1290.0_f64;
@@ -171,6 +262,14 @@ pub fn octave(count: usize) -> Vec<(f64, f64, f64)> {
         .collect()
 }
 
+/// Compute octave band intervals for a given frequency array
+///
+/// # Arguments
+/// * `count` - Number of bands per octave
+/// * `freq` - Array of frequencies
+///
+/// # Returns
+/// * Vector of tuples representing (start_index, end_index) for each band
 pub fn octave_intervals(count: usize, freq: &Array1<f64>) -> Vec<(usize, usize)> {
     let bands = octave(count);
 
@@ -190,6 +289,14 @@ pub fn octave_intervals(count: usize, freq: &Array1<f64>) -> Vec<(usize, usize)>
     out
 }
 
+/// Compute the Narrow Band Deviation (NBD) metric
+///
+/// # Arguments
+/// * `intervals` - Vector of (start_index, end_index) tuples for frequency bands
+/// * `spl` - SPL measurements
+///
+/// # Returns
+/// * NBD value as f64
 pub fn nbd(intervals: &[(usize, usize)], spl: &Array1<f64>) -> f64 {
     let mut sum = 0.0;
     let mut cnt = 0.0;
@@ -203,25 +310,29 @@ pub fn nbd(intervals: &[(usize, usize)], spl: &Array1<f64>) -> f64 {
     if cnt == 0.0 { f64::NAN } else { sum / cnt }
 }
 
+/// Compute the Low Frequency Extension (LFX) metric
+///
+/// # Arguments
+/// * `freq` - Frequency array
+/// * `lw` - Listening window SPL measurements
+/// * `sp` - Sound power SPL measurements
+///
+/// # Returns
+/// * LFX value as f64 (log10 of the frequency)
 pub fn lfx(freq: &Array1<f64>, lw: &Array1<f64>, sp: &Array1<f64>) -> f64 {
-    let lw_min = freq.iter().position(|&f| f > 300.0).unwrap_or(freq.len());
-    let lw_max = freq
-        .iter()
-        .position(|&f| f >= 10000.0)
-        .unwrap_or(freq.len());
+    // Match Python behavior:
+    // LW reference is mean(LW) over [300 Hz, 10 kHz], inclusive on both ends.
+    // Implemented by indices: [first f >= 300] .. [first f > 10000]
+    let lw_min = freq.iter().position(|&f| f >= 300.0).unwrap_or(freq.len());
+    let lw_max = freq.iter().position(|&f| f > 10000.0).unwrap_or(freq.len());
     if lw_min >= lw_max {
         return (300.0_f64).log10();
     }
     let lw_ref = lw.slice(s![lw_min..lw_max]).mean().unwrap_or(0.0) - 6.0;
-    // Collect indices where freq <= 300 Hz and SP level is at least 6 dB below LW reference
+    // Collect indices where freq <= 300 Hz AND SP <= (LW_ref)
     let mut indices: Vec<usize> = Vec::new();
-    for (i, (&f, &spv)) in freq
-        .iter()
-        .take(lw_min)
-        .zip(sp.iter().take(lw_min))
-        .enumerate()
-    {
-        if spv <= lw_ref {
+    for (i, (&f, &spv)) in freq.iter().zip(sp.iter()).enumerate() {
+        if f <= 300.0 && spv <= lw_ref {
             indices.push(i);
         }
     }
@@ -240,16 +351,24 @@ pub fn lfx(freq: &Array1<f64>, lw: &Array1<f64>, sp: &Array1<f64>) -> f64 {
         }
     }
 
-    // Use the *next* frequency bin (pos + 1) to align with the Python behaviour
-    let next_idx = if last_idx + 1 < freq.len() {
-        last_idx + 1
+    // Use the next frequency bin (pos + 1) to align with Python behavior
+    let next_idx = last_idx + 1;
+    if next_idx < freq.len() {
+        freq[next_idx].log10()
     } else {
-        last_idx // fallback to last_idx if we are already at the end
-    };
-
-    freq[next_idx].log10()
+        // Some measurements might end at/below 300 Hz, use default per Python
+        (300.0_f64).log10()
+    }
 }
 
+/// Compute the Smoothness Metric (SM)
+///
+/// # Arguments
+/// * `freq` - Frequency array
+/// * `spl` - SPL measurements
+///
+/// # Returns
+/// * SM value as f64 (R-squared value)
 pub fn sm(freq: &Array1<f64>, spl: &Array1<f64>) -> f64 {
     let f_min = freq.iter().position(|&f| f > 100.0).unwrap_or(freq.len());
     let f_max = freq
@@ -264,15 +383,33 @@ pub fn sm(freq: &Array1<f64>, spl: &Array1<f64>) -> f64 {
     r_squared(&x, &y)
 }
 
+/// Metrics computed for the CEA2034 preference score
 #[derive(Debug, Clone)]
 pub struct ScoreMetrics {
+    /// Narrow Band Deviation for on-axis response
     pub nbd_on: f64,
+    /// Narrow Band Deviation for predicted in-room response
     pub nbd_pir: f64,
+    /// Low Frequency Extension metric
     pub lfx: f64,
+    /// Smoothness Metric for predicted in-room response
     pub sm_pir: f64,
+    /// Overall preference score
     pub pref_score: f64,
 }
 
+/// Compute all CEA2034 metrics and preference score
+///
+/// # Arguments
+/// * `freq` - Frequency array
+/// * `intervals` - Octave band intervals
+/// * `on` - On-axis SPL measurements
+/// * `lw` - Listening window SPL measurements
+/// * `sp` - Sound power SPL measurements
+/// * `pir` - Predicted in-room SPL measurements
+///
+/// # Returns
+/// * ScoreMetrics struct containing all computed metrics
 pub fn score(
     freq: &Array1<f64>,
     intervals: &[(usize, usize)],
@@ -295,6 +432,22 @@ pub fn score(
     }
 }
 
+/// Compute CEA2034 metrics and preference score for a PEQ filter
+///
+/// # Arguments
+/// * `freq` - Frequency array
+/// * `idx` - Indices for grouping measurements
+/// * `intervals` - Octave band intervals
+/// * `weights` - Weights for computing weighted averages
+/// * `spl_h` - Horizontal SPL measurements
+/// * `spl_v` - Vertical SPL measurements
+/// * `peq` - PEQ filter response
+///
+/// # Returns
+/// * Tuple containing (spinorama data, ScoreMetrics)
+///
+/// # Panics
+/// * If peq length doesn't match SPL columns
 pub fn score_peq(
     freq: &Array1<f64>,
     idx: &[Vec<usize>],
@@ -345,6 +498,22 @@ pub fn score_peq(
     (spin_nd, metrics)
 }
 
+/// Compute approximate CEA2034 metrics and preference score for a PEQ filter
+///
+/// This is a simplified version of score_peq that works directly with pre-computed
+/// LW, SP, and PIR curves rather than computing them from raw measurements.
+///
+/// # Arguments
+/// * `freq` - Frequency array
+/// * `intervals` - Octave band intervals
+/// * `lw` - Listening window SPL measurements
+/// * `sp` - Sound power SPL measurements
+/// * `pir` - Predicted in-room SPL measurements
+/// * `on` - On-axis SPL measurements
+/// * `peq` - PEQ filter response
+///
+/// # Returns
+/// * ScoreMetrics struct containing all computed metrics
 pub fn score_peq_approx(
     freq: &Array1<f64>,
     intervals: &[(usize, usize)],
@@ -398,8 +567,54 @@ mod tests {
         assert!((m1.sm_pir - m2.sm_pir).abs() < 1e-12);
         assert!((m1.pref_score - m2.pref_score).abs() < 1e-12);
     }
+
+    #[test]
+    fn lfx_next_bin_after_first_block() {
+        // Frequencies spanning below and above 300 and up to 12k
+        let freq = Array1::from(vec![
+            50.0, 100.0, 200.0, 300.0, 500.0, 1000.0, 5000.0, 10000.0, 12000.0,
+        ]);
+        // LW constant 80 dB; LW_ref = 80 - 6 = 74
+        let lw = Array1::from(vec![80.0; 9]);
+        // SP <= LW_ref for first two bins only (50, 100). First block ends at index 1.
+        // Next bin is index 2 -> 200 Hz
+        let sp = Array1::from(vec![70.0, 73.0, 75.0, 76.0, 80.0, 80.0, 80.0, 80.0, 80.0]);
+        let val = lfx(&freq, &lw, &sp);
+        assert!((val - 200.0_f64.log10()).abs() < 1e-12);
+    }
+
+    #[test]
+    fn lfx_no_indices_falls_back_to_first_freq() {
+        let freq = Array1::from(vec![
+            50.0, 100.0, 200.0, 300.0, 500.0, 1000.0, 5000.0, 10000.0, 12000.0,
+        ]);
+        let lw = Array1::from(vec![80.0; 9]);
+        // All SP > LW_ref (74) for <= 300
+        let sp = Array1::from(vec![75.0, 80.0, 80.0, 80.0, 80.0, 80.0, 80.0, 80.0, 80.0]);
+        let val = lfx(&freq, &lw, &sp);
+        assert!((val - 50.0_f64.log10()).abs() < 1e-12);
+    }
+
+    #[test]
+    fn lfx_next_index_oob_defaults_to_300() {
+        let freq = Array1::from(vec![100.0, 200.0, 300.0]);
+        let lw = Array1::from(vec![80.0, 80.0, 80.0]);
+        // All SP <= LW_ref (74) for <= 300 => indices [0,1,2]; next index OOB
+        let sp = Array1::from(vec![70.0, 70.0, 70.0]);
+        let val = lfx(&freq, &lw, &sp);
+        assert!((val - 300.0_f64.log10()).abs() < 1e-12);
+    }
 }
 
+/// Compute Predicted In-Room (PIR) response from LW, ER, and SP measurements
+///
+/// # Arguments
+/// * `lw` - Listening window SPL measurements
+/// * `er` - Early reflections SPL measurements
+/// * `sp` - Sound power SPL measurements
+///
+/// # Returns
+/// * PIR SPL measurements
 pub fn compute_pir_from_lw_er_sp(
     lw: &Array1<f64>,
     er: &Array1<f64>,
@@ -416,10 +631,97 @@ pub fn compute_pir_from_lw_er_sp(
     pressure2spl(&pir_p)
 }
 
+/// Compute CEA2034 metrics for speaker performance evaluation
+///
+/// # Arguments
+/// * `freq` - Frequency grid for computation
+/// * `cea_plot_data` - Cached plot data (may be updated if fetched)
+/// * `peq` - Optional PEQ response to apply to metrics
+///
+/// # Returns
+/// * Result containing ScoreMetrics or an error
+///
+/// # Details
+/// Computes CEA2034 metrics including preference score, Narrow Band Deviation (NBD),
+/// Low Frequency Extension (LFX), and Smoothness Metric (SM) for various curves.
+pub async fn compute_cea2034_metrics(
+    freq: &Array1<f64>,
+    cea2034_data: &HashMap<String, Curve>,
+    peq: Option<&Array1<f64>>,
+) -> Result<ScoreMetrics, Box<dyn Error>> {
+    let on = &cea2034_data.get("On Axis").unwrap().spl;
+    let lw = &cea2034_data.get("Listening Window").unwrap().spl;
+    let sp = &cea2034_data.get("Sound Power").unwrap().spl;
+    let pir = &cea2034_data.get("Estimated In-Room Response").unwrap().spl;
+
+    // 1/2 octave intervals for band metrics
+    let intervals = octave_intervals(2, freq);
+
+    // Use provided PEQ or assume zero PEQ
+    let peq_arr = peq
+        .map(|p| p.clone())
+        .unwrap_or_else(|| Array1::zeros(freq.len()));
+
+    Ok(score_peq_approx(
+        freq, &intervals, &lw, &sp, &pir, &on, &peq_arr,
+    ))
+}
+
 #[cfg(test)]
 mod pir_helpers_tests {
     use super::{compute_pir_from_lw_er_sp, pressure2spl, spl2pressure};
+    use crate::Curve;
     use ndarray::Array1;
+    use std::collections::HashMap;
+
+    // Helpers to encode f64 arrays into the Plotly-typed array base64 format used in read.rs
+    fn le_f64_bytes(vals: &[f64]) -> Vec<u8> {
+        let mut out = Vec::with_capacity(vals.len() * 8);
+        for v in vals {
+            out.extend_from_slice(&v.to_bits().to_le_bytes());
+        }
+        out
+    }
+
+    fn base64_encode(bytes: &[u8]) -> String {
+        let alphabet = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        let mut out = String::new();
+        let mut i = 0usize;
+        while i < bytes.len() {
+            let b0 = bytes[i] as u32;
+            let b1 = if i + 1 < bytes.len() {
+                bytes[i + 1] as u32
+            } else {
+                0
+            };
+            let b2 = if i + 2 < bytes.len() {
+                bytes[i + 2] as u32
+            } else {
+                0
+            };
+
+            let idx0 = (b0 >> 2) & 0x3F;
+            let idx1 = ((b0 & 0x03) << 4) | ((b1 >> 4) & 0x0F);
+            let idx2 = ((b1 & 0x0F) << 2) | ((b2 >> 6) & 0x03);
+            let idx3 = b2 & 0x3F;
+
+            out.push(alphabet[idx0 as usize] as char);
+            out.push(alphabet[idx1 as usize] as char);
+            if i + 1 < bytes.len() {
+                out.push(alphabet[idx2 as usize] as char);
+            } else {
+                out.push('=');
+            }
+            if i + 2 < bytes.len() {
+                out.push(alphabet[idx3 as usize] as char);
+            } else {
+                out.push('=');
+            }
+
+            i += 3;
+        }
+        out
+    }
 
     #[test]
     fn spl_pressure_roundtrip_is_identity() {
@@ -451,6 +753,75 @@ mod pir_helpers_tests {
         let pir = compute_pir_from_lw_er_sp(&lw, &er, &sp);
         for v in pir.iter() {
             assert!(*v > 75.0 && *v < 81.0);
+        }
+    }
+
+    #[tokio::test]
+    async fn metrics_with_precomputed_curves() {
+        use super::{compute_cea2034_metrics, octave_intervals, score};
+
+        // Simple two-point dataset
+        let freq = Array1::from(vec![100.0, 1000.0]);
+        let on_vals = Array1::from(vec![80.0_f64, 85.0_f64]);
+        let lw_vals = Array1::from(vec![81.0_f64, 84.0_f64]);
+        let er_vals = Array1::from(vec![79.0_f64, 83.0_f64]);
+        let sp_vals = Array1::from(vec![78.0_f64, 82.0_f64]);
+
+        // Precompute PIR from LW/ER/SP
+        let pir_vals = compute_pir_from_lw_er_sp(&lw_vals, &er_vals, &sp_vals);
+
+        // Build CEA2034 data map expected by the helper
+        let mut cea2034_data: HashMap<String, Curve> = HashMap::new();
+        cea2034_data.insert(
+            "On Axis".to_string(),
+            Curve {
+                freq: freq.clone(),
+                spl: on_vals.clone(),
+            },
+        );
+        cea2034_data.insert(
+            "Listening Window".to_string(),
+            Curve {
+                freq: freq.clone(),
+                spl: lw_vals.clone(),
+            },
+        );
+        cea2034_data.insert(
+            "Sound Power".to_string(),
+            Curve {
+                freq: freq.clone(),
+                spl: sp_vals.clone(),
+            },
+        );
+        cea2034_data.insert(
+            "Estimated In-Room Response".to_string(),
+            Curve {
+                freq: freq.clone(),
+                spl: pir_vals.clone(),
+            },
+        );
+
+        // Compute using the async helper
+        let got = compute_cea2034_metrics(&freq, &cea2034_data, None)
+            .await
+            .expect("metrics");
+
+        // Build expected
+        let intervals = octave_intervals(2, &freq);
+        let expected = score(&freq, &intervals, &on_vals, &lw_vals, &sp_vals, &pir_vals);
+
+        assert!((got.nbd_on - expected.nbd_on).abs() < 1e-12);
+        assert!((got.nbd_pir - expected.nbd_pir).abs() < 1e-12);
+        assert!((got.lfx - expected.lfx).abs() < 1e-12);
+        if got.sm_pir.is_nan() && expected.sm_pir.is_nan() {
+            // ok
+        } else {
+            assert!((got.sm_pir - expected.sm_pir).abs() < 1e-12);
+        }
+        if got.pref_score.is_nan() && expected.pref_score.is_nan() {
+            // ok
+        } else {
+            assert!((got.pref_score - expected.pref_score).abs() < 1e-12);
         }
     }
 }

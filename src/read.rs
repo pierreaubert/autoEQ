@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::error::Error;
 use std::path::PathBuf;
 
@@ -8,13 +9,27 @@ use serde::Deserialize;
 use serde_json::Value;
 use urlencoding;
 
+use crate::Curve;
+use crate::score;
+
 #[derive(Debug, Deserialize)]
 struct CsvRecord {
     frequency: f64,
     spl: f64,
 }
 
-pub fn read_curve_from_csv(path: &PathBuf) -> Result<super::Curve, Box<dyn Error>> {
+/// Read a frequency response curve from a CSV file
+///
+/// # Arguments
+/// * `path` - Path to the CSV file
+///
+/// # Returns
+/// * Result containing a Curve struct or an error
+///
+/// # CSV Format
+/// The CSV file should have a header row with "frequency" and "spl" columns,
+/// followed by rows of frequency (Hz) and SPL (dB) values.
+pub fn read_curve_from_csv(path: &PathBuf) -> Result<Curve, Box<dyn Error>> {
     let mut rdr = ReaderBuilder::new().has_headers(true).from_path(path)?;
     let mut freqs = Vec::new();
     let mut spls = Vec::new();
@@ -31,6 +46,16 @@ pub fn read_curve_from_csv(path: &PathBuf) -> Result<super::Curve, Box<dyn Error
     })
 }
 
+/// Fetch a frequency response curve from the spinorama API
+///
+/// # Arguments
+/// * `speaker` - Speaker name
+/// * `version` - Measurement version
+/// * `measurement` - Measurement type (e.g., "CEA2034")
+/// * `curve_name` - Name of the specific curve to extract
+///
+/// # Returns
+/// * Result containing a Curve struct or an error
 pub async fn fetch_curve_from_api(
     speaker: &str,
     version: &str,
@@ -42,7 +67,15 @@ pub async fn fetch_curve_from_api(
     extract_curve_by_name(&plot_data, measurement, curve_name)
 }
 
-/// Fetch and parse the full Plotly JSON object for a given measurement (single HTTP GET).
+/// Fetch and parse the full Plotly JSON object for a given measurement (single HTTP GET)
+///
+/// # Arguments
+/// * `speaker` - Speaker name
+/// * `version` - Measurement version
+/// * `measurement` - Measurement type (e.g., "CEA2034")
+///
+/// # Returns
+/// * Result containing the Plotly JSON data or an error
 pub async fn fetch_measurement_plot_data(
     speaker: &str,
     version: &str,
@@ -58,7 +91,7 @@ pub async fn fetch_measurement_plot_data(
         encoded_speaker, encoded_version, encoded_measurement
     );
 
-    println!("🔄 Fetching data from {}", url);
+    println!("* Fetching data from {}", url);
 
     let response = reqwest::get(&url).await?;
     if !response.status().is_success() {
@@ -68,7 +101,6 @@ pub async fn fetch_measurement_plot_data(
 
     // The API response is a list with a single element that is a JSON string
     let data_string = if let Some(array) = api_response.as_array() {
-        // println!("API response array length: {}", array.len());
         if let Some(first_element) = array.get(0) {
             first_element
                 .as_str()
@@ -82,11 +114,19 @@ pub async fn fetch_measurement_plot_data(
 
     let plot_data: Value = serde_json::from_str(&data_string)?;
     let trace_names = collect_trace_names(&plot_data);
-    println!("Trace names: {:?}", trace_names);
+    println!(" Trace names: {:?}", trace_names);
     Ok(plot_data)
 }
 
-/// Extract a single curve from a previously-fetched Plotly JSON object.
+/// Extract a single curve from a previously-fetched Plotly JSON object
+///
+/// # Arguments
+/// * `plot_data` - The Plotly JSON data
+/// * `measurement` - Measurement type (e.g., "CEA2034")
+/// * `curve_name` - Name of the specific curve to extract
+///
+/// # Returns
+/// * Result containing a Curve struct or an error
 pub fn extract_curve_by_name(
     plot_data: &Value,
     measurement: &str,
@@ -118,7 +158,6 @@ pub fn extract_curve_by_name(
                             {
                                 let decoded_x = decode_typed_array(bdata_str, dtype_str)?;
                                 freqs = decoded_x;
-                                // println!("Decoded {} frequency values", freqs.len());
                             }
                         }
                     }
@@ -132,7 +171,6 @@ pub fn extract_curve_by_name(
                             {
                                 let decoded_y = decode_typed_array(bdata_str, dtype_str)?;
                                 spls = decoded_y;
-                                // println!("Decoded {} SPL values", spls.len());
                             }
                         }
                     }
@@ -146,8 +184,6 @@ pub fn extract_curve_by_name(
     if freqs.is_empty() {
         return Err("Failed to extract frequency and SPL data from plot data".into());
     }
-
-    // println!("Extracted {} frequency points", freqs.len());
 
     Ok(super::Curve {
         freq: Array1::from(freqs),
@@ -320,6 +356,156 @@ fn collect_trace_names(plot_data: &Value) -> Vec<String> {
         .unwrap_or_default()
 }
 
+/// Extract all CEA2034 curves from plot data and interpolate to target frequency grid
+///
+/// # Arguments
+/// * `plot_data` - The Plotly JSON data containing CEA2034 measurements
+/// * `measurement` - Measurement type (e.g., "CEA2034")
+/// * `freq` - Target frequency grid for interpolation
+///
+/// # Returns
+/// * HashMap of curve names to interpolated Curve structs
+///
+/// # Details
+/// Extracts standard CEA2034 curves (On Axis, Listening Window, Early Reflections,
+/// Sound Power, etc.) and interpolates them to the specified frequency grid.
+pub fn extract_cea2034_curves(
+    plot_data: &Value,
+    measurement: &str,
+    freq: &Array1<f64>,
+) -> Result<HashMap<String, Curve>, Box<dyn Error>> {
+    let mut curves = HashMap::new();
+
+    // List of CEA2034 curves to extract
+    let curve_names = [
+        "On Axis",
+        "Listening Window",
+        "Early Reflections",
+        "Sound Power",
+        "Early Reflections DI",
+        "Sound Power DI",
+    ];
+
+    // Extract each curve
+    for name in &curve_names {
+        match extract_curve_by_name(plot_data, measurement, name) {
+            Ok(curve) => {
+                // Interpolate to the target frequency grid
+                let interpolated = interpolate(freq, &curve.freq, &curve.spl);
+                curves.insert(
+                    name.to_string(),
+                    Curve {
+                        freq: freq.clone(),
+                        spl: interpolated,
+                    },
+                );
+            }
+            Err(e) => {
+                eprintln!("⚠️  Could not extract curve '{}': {}", name, e);
+            }
+        }
+    }
+
+    let lw = &curves.get("Listening Window").unwrap().spl;
+    let er = &curves.get("Early Reflections").unwrap().spl;
+    let sp = &curves.get("Sound Power").unwrap().spl;
+    let pir = score::compute_pir_from_lw_er_sp(lw, er, sp);
+    curves.insert(
+        "Estimated In-Room Response".to_string(),
+        Curve {
+            freq: freq.clone(),
+            spl: pir,
+        },
+    );
+
+    Ok(curves)
+}
+
+/// Try to extract a PIR curve directly from plot data and interpolate it to target freq
+///
+/// Attempts several common trace names used for predicted/estimated in-room responses.
+/// Returns None if no such trace is present in the plot data.
+pub fn extract_pir_interpolated(plot_data: &Value, freq: &Array1<f64>) -> Option<Array1<f64>> {
+    let names = [
+        "Estimated In-Room Response",
+        "Predicted In-Room Response",
+        "In-Room Response",
+        "In-Room",
+        "Estimated In-Room",
+    ];
+
+    let data = plot_data.get("data")?.as_array()?;
+
+    // Find the first trace whose name matches any of the PIR aliases
+    for alias in names.iter() {
+        if let Some(trace) = data.iter().find(|t| {
+            t.get("name")
+                .and_then(|n| n.as_str())
+                .map(|s| s.contains(alias))
+                .unwrap_or(false)
+        }) {
+            // Decode x/y typed arrays
+            if let (Some(x_obj), Some(y_obj)) = (trace.get("x"), trace.get("y")) {
+                if let (Some(xo), Some(yo)) = (x_obj.as_object(), y_obj.as_object()) {
+                    if let (Some(dx), Some(bx), Some(dy), Some(by)) = (
+                        xo.get("dtype"),
+                        xo.get("bdata"),
+                        yo.get("dtype"),
+                        yo.get("bdata"),
+                    ) {
+                        if let (Some(dx), Some(bx), Some(dy), Some(by)) =
+                            (dx.as_str(), bx.as_str(), dy.as_str(), by.as_str())
+                        {
+                            if let (Ok(x_vals), Ok(y_vals)) =
+                                (decode_typed_array(bx, dx), decode_typed_array(by, dy))
+                            {
+                                let x = Array1::from(x_vals);
+                                let y = Array1::from(y_vals);
+                                let yi = interpolate(freq, &x, &y);
+                                return Some(yi);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // As a very loose fallback, search any trace whose name includes "Room"
+    if let Some(trace) = data.iter().find(|t| {
+        t.get("name")
+            .and_then(|n| n.as_str())
+            .map(|s| s.contains("Room"))
+            .unwrap_or(false)
+    }) {
+        if let (Some(x_obj), Some(y_obj)) = (trace.get("x"), trace.get("y")) {
+            if let (Some(xo), Some(yo)) = (x_obj.as_object(), y_obj.as_object()) {
+                if let (Some(dx), Some(bx), Some(dy), Some(by)) = (
+                    xo.get("dtype"),
+                    xo.get("bdata"),
+                    yo.get("dtype"),
+                    yo.get("bdata"),
+                ) {
+                    if let (Some(dx), Some(bx), Some(dy), Some(by)) =
+                        (dx.as_str(), bx.as_str(), dy.as_str(), by.as_str())
+                    {
+                        if let (Ok(x_vals), Ok(y_vals)) =
+                            (decode_typed_array(bx, dx), decode_typed_array(by, dy))
+                        {
+                            let x = Array1::from(x_vals);
+                            let y = Array1::from(y_vals);
+                            let yi = interpolate(freq, &x, &y);
+                            return Some(yi);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::{collect_trace_names, extract_curve_by_name, is_target_trace_name};
@@ -481,7 +667,15 @@ mod tests {
     }
 }
 
-/// Linear interpolation function.
+/// Linear interpolation function
+///
+/// # Arguments
+/// * `target_freqs` - Target frequencies to interpolate to
+/// * `source_freqs` - Source frequency array
+/// * `source_spls` - Source SPL values
+///
+/// # Returns
+/// * Interpolated SPL values at target frequencies
 pub fn interpolate(
     target_freqs: &Array1<f64>,
     source_freqs: &Array1<f64>,
@@ -525,13 +719,28 @@ pub fn interpolate(
     result
 }
 
-/// Clamp only positive dB values to +max_db, leave negatives unchanged.
+/// Clamp only positive dB values to +max_db, leave negatives unchanged
+///
+/// # Arguments
+/// * `arr` - Array of SPL values
+/// * `max_db` - Maximum positive dB value
+///
+/// # Returns
+/// * Array with positive values clamped to max_db
 pub fn clamp_positive_only(arr: &Array1<f64>, max_db: f64) -> Array1<f64> {
     arr.mapv(|v| if v > 0.0 { v.min(max_db) } else { v })
 }
 
 /// Simple 1/N-octave smoothing: for each frequency f_i, average values whose
-/// frequency lies within [f_i * 2^(-1/(2N)), f_i * 2^(1/(2N))].
+/// frequency lies within [f_i * 2^(-1/(2N)), f_i * 2^(1/(2N))]
+///
+/// # Arguments
+/// * `freqs` - Frequency array
+/// * `values` - SPL values to smooth
+/// * `n` - Number of bands per octave
+///
+/// # Returns
+/// * Smoothed SPL values
 pub fn smooth_one_over_n_octave(
     freqs: &Array1<f64>,
     values: &Array1<f64>,

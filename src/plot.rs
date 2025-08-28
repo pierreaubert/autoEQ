@@ -2,46 +2,89 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::path::PathBuf;
 
-use eqopt::{Biquad, BiquadFilterType};
 use ndarray::Array1;
 use plotly::common::{Mode, Title};
-use plotly::layout::{AxisType, GridPattern, Layout, LayoutGrid, RowOrder};
-use plotly::{Plot, Scatter};
+use plotly::layout::{AxisType, GridPattern, LayoutGrid, RowOrder};
+use plotly::{Layout, Plot, Scatter};
 
+use crate::{Biquad, BiquadFilterType};
+
+/// Get a color from the Plotly qualitative color palette
+///
+/// # Arguments
+/// * `index` - Index of the color to retrieve (cycles through 10 colors)
+///
+/// # Returns
+/// * Hex color code as a static string
+///
+/// # Details
+/// Uses a predefined set of 10 colors from Plotly's qualitative palette.
+/// Cycles through the colors when index exceeds the palette size.
 fn filter_color(index: usize) -> &'static str {
+    // Plotly qualitative color palette (10 colors)
+    // Matches expectations in tests: index 0 -> #1f77b4, index 3 -> #d62728, index 9 -> #17becf
     const COLORS: [&str; 10] = [
-        "#5c77a5", "#dc842a", "#c85857", "#89b5b1", "#71a152", "#bab0ac", "#e15759", "#b07aa1",
-        "#76b7b2", "#ff9da7",
+        "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f",
+        "#bcbd22", "#17becf",
     ];
     COLORS[index % COLORS.len()]
 }
 
-fn vline_points(x: f64, y_min: f64, y_max: f64) -> (Vec<f64>, Vec<f64>) {
-    (vec![x, x], vec![y_min, y_max])
+// Create two horizontal reference lines at y=1 and y=-1 spanning x=100..10000 for a given subplot axes
+fn make_ref_lines(x_axis: &str, y_axis: &str) -> Vec<Scatter<f64, f64>> {
+    let x_ref = vec![100.0_f64, 10000.0_f64];
+    let y_pos = vec![1.0_f64, 1.0_f64];
+    let y_neg = vec![-1.0_f64, -1.0_f64];
+
+    let ref_pos = *Scatter::new(x_ref.clone(), y_pos)
+        .mode(Mode::Lines)
+        .name("+1 dB ref")
+        .x_axis(x_axis)
+        .y_axis(y_axis)
+        .line(plotly::common::Line::new().color("#000000").width(1.0));
+    let ref_neg = *Scatter::new(x_ref, y_neg)
+        .mode(Mode::Lines)
+        .name("-1 dB ref")
+        .x_axis(x_axis)
+        .y_axis(y_axis)
+        .line(plotly::common::Line::new().color("#000000").width(1.0));
+
+    vec![ref_pos, ref_neg]
 }
 
-// Clamp an Array1 of dB values to ±max_db
-fn apply_db_clamp(arr: &Array1<f64>, max_db: f64) -> Array1<f64> {
-    arr.mapv(|v| v.max(-max_db).min(max_db))
-}
-
-// Create CEA2034 traces for the combined plot
+/// Create CEA2034 traces for the combined plot
+///
+/// # Arguments
+/// * `curves` - HashMap of curve names to Curve data
+///
+/// # Returns
+/// * Vector of Scatter traces for CEA2034 curves
+///
+/// # Details
+/// Creates traces for standard CEA2034 curves (On Axis, Listening Window,
+/// Early Reflections, Sound Power) with appropriate fallback aliases
+/// for variations in dataset labels.
 fn create_cea2034_traces(curves: &HashMap<String, super::Curve>) -> Vec<Scatter<f64, f64>> {
     let mut traces = Vec::new();
 
-    let curve_names = [
-        "On Axis",
-        "Listening Window",
-        "Early Reflections",
-        "Sound Power",
+    // Primary curve names with possible fallback aliases to handle variations in dataset labels
+    let curve_aliases: [&[&str]; 4] = [
+        &["On Axis"],
+        &["Listening Window", "Lateral"],
+        &["Early Reflections", "Vertical"],
+        &["Sound Power", "Estimated In-Room Response"],
     ];
     let axes = ["x3y3", "x4y4", "x5y5", "x6y6"];
 
-    for (i, (name, axis)) in curve_names.iter().zip(axes.iter()).enumerate() {
-        if let Some(curve) = curves.get(*name) {
+    for (i, (aliases, axis)) in curve_aliases.iter().zip(axes.iter()).enumerate() {
+        // Find the first alias present in the curves map
+        if let Some((name, curve)) = aliases
+            .iter()
+            .find_map(|candidate| curves.get_key_value(*candidate))
+        {
             let trace = Scatter::new(curve.freq.to_vec(), curve.spl.to_vec())
                 .mode(Mode::Lines)
-                .name(name)
+                .name(name.as_str())
                 .x_axis(&axis[..2])
                 .y_axis(&axis[2..])
                 .line(plotly::common::Line::new().color(filter_color(i)));
@@ -52,23 +95,38 @@ fn create_cea2034_traces(curves: &HashMap<String, super::Curve>) -> Vec<Scatter<
     traces
 }
 
-// Create CEA2034 traces with EQ response applied
+/// Create CEA2034 traces with EQ response applied
+///
+/// # Arguments
+/// * `curves` - HashMap of curve names to Curve data
+/// * `eq_response` - Array of EQ response values to apply
+///
+/// # Returns
+/// * Vector of Scatter traces for CEA2034 curves with EQ applied
+///
+/// # Details
+/// Creates traces for standard CEA2034 curves with the EQ response
+/// applied, using the same alias mapping as create_cea2034_traces.
 fn create_cea2034_with_eq_traces(
     curves: &HashMap<String, super::Curve>,
     eq_response: &Array1<f64>,
 ) -> Vec<Scatter<f64, f64>> {
     let mut traces = Vec::new();
 
-    let curve_names = [
-        "On Axis",
-        "Listening Window",
-        "Early Reflections",
-        "Sound Power",
+    // Same alias mapping as create_cea2034_traces
+    let curve_aliases: [&[&str]; 4] = [
+        &["On Axis"],
+        &["Listening Window", "Lateral"],
+        &["Early Reflections", "Vertical"],
+        &["Sound Power", "Estimated In-Room Response"],
     ];
     let axes = ["x3y3", "x4y4", "x5y5", "x6y6"];
 
-    for (i, (name, axis)) in curve_names.iter().zip(axes.iter()).enumerate() {
-        if let Some(curve) = curves.get(*name) {
+    for (i, (aliases, axis)) in curve_aliases.iter().zip(axes.iter()).enumerate() {
+        if let Some((name, curve)) = aliases
+            .iter()
+            .find_map(|candidate| curves.get_key_value(*candidate))
+        {
             // Apply EQ response to the curve
             let eq_applied: Vec<f64> = curve
                 .spl
@@ -84,7 +142,7 @@ fn create_cea2034_with_eq_traces(
                 .y_axis(&axis[2..])
                 .line(
                     plotly::common::Line::new()
-                        .color(filter_color(i + curve_names.len()))
+                        .color(filter_color(i + curve_aliases.len()))
                         .width(2.0),
                 );
             traces.push(*trace);
@@ -94,7 +152,27 @@ fn create_cea2034_with_eq_traces(
     traces
 }
 
+/// Generate and save an HTML plot comparing the input curve with the optimized EQ response.
+///
+/// # Arguments
+/// * `input_curve_name` - The name of the original frequency response curve
+/// * `input_curve` - The original frequency response curve
+/// * `optimized_params` - The optimized filter parameters
+/// * `num_filters` - The number of filters used in optimization
+/// * `sample_rate` - The sample rate in Hz
+/// * `max_db` - Maximum absolute dB value
+/// * `smoothed` - Optional smoothed inverted target curve
+/// * `output_path` - The path to save the HTML output file
+/// * `speaker` - Optional speaker name
+/// * `measurement` - Optional measurement name
+/// * `iir_hp_pk` - Whether to use a high-pass filter for the lowest frequency
+/// * `cea2034_curves` - Optional CEA2034 curves to include in the plot
+/// * `eq_response` - Optional EQ response to include in the plot
+///
+/// # Returns
+/// * Result indicating success or failure
 pub async fn plot_results(
+    input_curve_name: &str,
     input_curve: &super::Curve,
     optimized_params: &[f64],
     num_filters: usize,
@@ -142,12 +220,20 @@ pub async fn plot_results(
     // ----------------------------------------------------------------------
     // First subplot: Individual filters (y axis)
     // ----------------------------------------------------------------------
-    for i in 0..num_filters {
-        let f0 = optimized_params[i * 3];
-        let q = optimized_params[i * 3 + 1];
-        let gain = optimized_params[i * 3 + 2];
-
-        let ftype = if iir_hp_pk && i == hp_index {
+    // Prepare filters sorted by center frequency for display
+    let mut filters: Vec<(usize, f64, f64, f64)> = (0..num_filters)
+        .map(|i| {
+            (
+                i,
+                optimized_params[i * 3],
+                optimized_params[i * 3 + 1],
+                optimized_params[i * 3 + 2],
+            )
+        })
+        .collect();
+    filters.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+    for (display_idx, (orig_i, f0, q, gain)) in filters.into_iter().enumerate() {
+        let ftype = if iir_hp_pk && orig_i == hp_index {
             BiquadFilterType::Highpass
         } else {
             BiquadFilterType::Peak
@@ -156,16 +242,20 @@ pub async fn plot_results(
         let filter_response = filter.np_log_result(&plot_freqs);
         combined_response = combined_response + &filter_response;
 
-        let label = if iir_hp_pk && i == hp_index {
+        let label = if iir_hp_pk && orig_i == hp_index {
             "Highpass"
         } else {
             "Peak"
         };
         let individual_trace = Scatter::new(plot_freqs.to_vec(), filter_response.to_vec())
             .mode(Mode::Lines)
-            .name(&format!("Filter {} ({} at {:5.0}Hz)", i + 1, label, f0))
+            .name(&format!("{} {} at {:5.0}Hz", label, orig_i + 1, f0))
             .y_axis("y")
-            .marker(plotly::common::Marker::new().color(filter_color(i)).size(1));
+            .marker(
+                plotly::common::Marker::new()
+                    .color(filter_color(display_idx))
+                    .size(1),
+            );
         plot.add_trace(individual_trace);
     }
 
@@ -213,6 +303,10 @@ pub async fn plot_results(
     // ----------------------------------------------------------------------
     // Add CEA2034 curves if provided
     // ----------------------------------------------------------------------
+    let mut x_axis3_title = "ON -- Frequency (Hz)".to_string();
+    let mut x_axis4_title = "LW -- Frequency (Hz)".to_string();
+    let mut x_axis5_title = "ER -- Frequency (Hz)".to_string();
+    let mut x_axis6_title = "SP -- Frequency (Hz)".to_string();
     if let Some(curves) = cea2034_curves {
         // Create CEA2034 traces
         let cea2034_traces = create_cea2034_traces(curves);
@@ -227,13 +321,49 @@ pub async fn plot_results(
                 plot.add_trace(Box::new(trace));
             }
         }
+    } else {
+        // No CEA2034 data: show input curve (left) and input + PEQ (right) on second row
+        x_axis3_title = format!("{} -- Frequency (Hz)", input_curve_name).to_string();
+        x_axis4_title = format!("{} EQ -- Frequency (Hz)", input_curve_name).to_string();
+        x_axis5_title = "unused".to_string();
+        x_axis6_title = "unused".to_string();
+        // Interpolate input to plotting freqs to align with combined_response
+        let input_on_plot =
+            crate::read::interpolate(&plot_freqs, &input_curve.freq, &input_curve.spl);
+
+        // Left subplot (x3/y3): Input Curve
+        let input_second_row = Scatter::new(plot_freqs.to_vec(), input_on_plot.to_vec())
+            .mode(Mode::Lines)
+            .name(input_curve_name)
+            .x_axis("x3")
+            .y_axis("y3")
+            .line(plotly::common::Line::new().color("#1f77b4"));
+        plot.add_trace(input_second_row);
+
+        // Right subplot (x4/y4): Input Curve + PEQ response
+        let input_plus_peq = &input_on_plot + &combined_response;
+        let input_plus_peq_trace = Scatter::new(plot_freqs.to_vec(), input_plus_peq.to_vec())
+            .mode(Mode::Lines)
+            .name(format!("{} + EQ", input_curve_name))
+            .x_axis("x4")
+            .y_axis("y4")
+            .line(plotly::common::Line::new().color("#2ca02c"));
+        plot.add_trace(input_plus_peq_trace);
+
+        // Add reference lines y=1 and y=-1 from x=100 to x=10000 (black) on both subplots
+        for t in make_ref_lines("x3", "y3") {
+            plot.add_trace(Box::new(t));
+        }
+        for t in make_ref_lines("x4", "y4") {
+            plot.add_trace(Box::new(t));
+        }
     }
 
     // ----------------------------------------------------------------------
     // Title with optional speaker name
     // ----------------------------------------------------------------------
     let title_text = match speaker {
-        Some(s) if !s.is_empty() => format!("{} -- #{}", s, num_filters),
+        Some(s) if !s.is_empty() => format!("{} -- #{} peq(s)", s, num_filters),
         _ => "IIR Filter Optimization Results".to_string(),
     };
 
@@ -278,9 +408,7 @@ pub async fn plot_results(
         // CEA2034 subplot axes
         .x_axis3(
             plotly::layout::Axis::new()
-                .title(plotly::common::Title::with_text(
-                    "On Axis -- Frequency (Hz)",
-                ))
+                .title(plotly::common::Title::with_text(x_axis3_title))
                 .type_(AxisType::Log)
                 .range(vec![1.301, 4.301])
                 .domain(&[0., 0.45]),
@@ -293,9 +421,7 @@ pub async fn plot_results(
         )
         .x_axis4(
             plotly::layout::Axis::new()
-                .title(plotly::common::Title::with_text(
-                    "Listening Window -- Frequency (Hz)",
-                ))
+                .title(plotly::common::Title::with_text(x_axis4_title))
                 .type_(AxisType::Log)
                 .range(vec![1.301, 4.301])
                 .domain(&[0.55, 1.0]),
@@ -308,9 +434,7 @@ pub async fn plot_results(
         )
         .x_axis5(
             plotly::layout::Axis::new()
-                .title(plotly::common::Title::with_text(
-                    "Early Reflections -- Frequency (Hz)",
-                ))
+                .title(plotly::common::Title::with_text(x_axis5_title))
                 .type_(AxisType::Log)
                 .range(vec![1.301, 4.301])
                 .domain(&[0., 0.45]),
@@ -323,9 +447,7 @@ pub async fn plot_results(
         )
         .x_axis6(
             plotly::layout::Axis::new()
-                .title(plotly::common::Title::with_text(
-                    "Sound Power -- Frequency (Hz)",
-                ))
+                .title(plotly::common::Title::with_text(x_axis6_title))
                 .type_(AxisType::Log)
                 .range(vec![1.301, 4.301])
                 .domain(&[0.55, 1.0]),
@@ -338,12 +460,7 @@ pub async fn plot_results(
         );
     plot.set_layout(layout);
 
-    // Save to file
     plot.write_html(output_path);
-    println!(
-        "\n📊 Interactive plot with subplots saved to {:?}",
-        output_path
-    );
 
     Ok(())
 }
@@ -351,10 +468,11 @@ pub async fn plot_results(
 #[cfg(test)]
 mod tests {
     use super::{
-        apply_db_clamp, create_cea2034_traces, create_cea2034_with_eq_traces, filter_color,
-        vline_points,
+        create_cea2034_traces, create_cea2034_with_eq_traces, filter_color, make_ref_lines,
     };
     use ndarray::Array1;
+    use serde_json::json;
+    use serde_json::to_value as to_json;
     use std::collections::HashMap;
 
     #[test]
@@ -365,20 +483,6 @@ mod tests {
         // Cycle wraps around
         assert_eq!(filter_color(10), "#1f77b4");
         assert_eq!(filter_color(13), "#d62728");
-    }
-
-    #[test]
-    fn vline_points_two_points() {
-        let (xs, ys) = vline_points(1000.0, -5.0, 5.0);
-        assert_eq!(xs, vec![1000.0, 1000.0]);
-        assert_eq!(ys, vec![-5.0, 5.0]);
-    }
-
-    #[test]
-    fn clamp_limits_values() {
-        let arr = Array1::from(vec![-30.0, -10.0, 0.0, 10.0, 30.0]);
-        let out = apply_db_clamp(&arr, 12.0);
-        assert_eq!(out.to_vec(), vec![-12.0, -10.0, 0.0, 10.0, 12.0]);
     }
 
     #[test]
@@ -432,5 +536,17 @@ mod tests {
 
         // Should have 4 traces
         assert_eq!(eq_traces.len(), 4);
+    }
+
+    #[test]
+    fn test_make_ref_lines_values() {
+        let lines = make_ref_lines("x3", "y3");
+        assert_eq!(lines.len(), 2);
+        let v0 = to_json(&lines[0]).unwrap();
+        let v1 = to_json(&lines[1]).unwrap();
+        assert_eq!(v0["x"], json!([100.0, 10000.0]));
+        assert_eq!(v1["x"], json!([100.0, 10000.0]));
+        assert_eq!(v0["y"], json!([1.0, 1.0]));
+        assert_eq!(v1["y"], json!([-1.0, -1.0]));
     }
 }
