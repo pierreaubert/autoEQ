@@ -25,5 +25,3 @@ urlencoding = "2.1"
 [build-dependencies]
 cmake = "0.1.54"
 
-[env]
-CMAKE_CONFIGURE_ARGS = "-DCMAKE_POLICY_VERSION_MINIMUM=3.5"

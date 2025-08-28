@@ -1,18 +1,22 @@
 use clap::Parser;
 use ndarray::Array1;
+use serde_json::Value;
+use std::collections::HashMap;
 use std::error::Error;
 use std::path::PathBuf;
 
+mod iir;
 mod optim;
+use optim::ObjectiveData;
 mod plot;
 mod read;
-use optim::ObjectiveData;
+mod score;
 
 /// A command-line tool to find optimal IIR filters to match a frequency curve.
 #[derive(Parser, Debug)]
-#[command(author, version, about, long_about = None)]
+#[command(author, about, long_about = None)]
 struct Args {
-    /// Number of IIR filters to use for optimization (lowest-frequency filter is Highpass, others are Peak).
+    /// Number of IIR filters to use for optimization.
     #[arg(short = 'n', long, default_value_t = 6)]
     num_filters: usize,
 
@@ -31,19 +35,19 @@ struct Args {
     sample_rate: f64,
 
     /// Maximum absolute dB gain allowed for each filter.
-    #[arg(long, default_value_t = 20.0)]
+    #[arg(long, default_value_t = 6.0)]
     max_db: f64,
 
     /// Minimum absolute dB gain allowed for each filter.
-    #[arg(long, default_value_t = 0.0)]
+    #[arg(long, default_value_t = 0.5)]
     min_db: f64,
 
     /// Maximum Q factor allowed for each filter.
-    #[arg(long, default_value_t = 10.0)]
+    #[arg(long, default_value_t = 6.0)]
     max_q: f64,
 
     /// Minimum Q factor allowed for each filter.
-    #[arg(long, default_value_t = 0.1)]
+    #[arg(long, default_value_t = 0.2)]
     min_q: f64,
 
     /// Minimum frequency allowed for each filter.
@@ -96,7 +100,7 @@ struct Args {
     local_algo: String,
 
     /// Minimum spacing between filter center frequencies in octaves (0 disables)
-    #[arg(long, default_value_t = 0.25)]
+    #[arg(long, default_value_t = 0.4)]
     min_spacing_oct: f64,
 
     /// Weight for the spacing penalty in the objective function
@@ -110,49 +114,11 @@ struct Args {
     /// Smoothing level as 1/N octave (N in [1..24]). Example: N=6 => 1/6 octave smoothing
     #[arg(long, default_value_t = 6)]
     smooth_n: usize,
-}
 
-/// Extract sorted center frequencies from parameter vector and compute adjacent spacings in octaves.
-fn compute_sorted_freqs_and_adjacent_octave_spacings(x: &[f64]) -> (Vec<f64>, Vec<f64>) {
-    let n = x.len() / 3;
-    let mut freqs: Vec<f64> = Vec::with_capacity(n);
-    for i in 0..n {
-        freqs.push(x[i * 3]);
-    }
-    freqs.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-    let spacings: Vec<f64> = if freqs.len() < 2 {
-        Vec::new()
-    } else {
-        freqs
-            .windows(2)
-            .map(|w| (w[1].max(1e-9) / w[0].max(1e-9)).log2().abs())
-            .collect()
-    };
-    (freqs, spacings)
-}
-
-#[cfg(test)]
-mod spacing_diag_tests {
-    use super::compute_sorted_freqs_and_adjacent_octave_spacings;
-
-    #[test]
-    fn adjacent_octave_spacings_basic() {
-        // x: [f,q,g, f,q,g, f,q,g]
-        let x = [100.0, 1.0, 0.0, 200.0, 1.0, 0.0, 400.0, 1.0, 0.0];
-        let (freqs, spacings) = compute_sorted_freqs_and_adjacent_octave_spacings(&x);
-        assert_eq!(freqs, vec![100.0, 200.0, 400.0]);
-        assert!((spacings[0] - 1.0).abs() < 1e-12);
-        assert!((spacings[1] - 1.0).abs() < 1e-12);
-    }
-
-    #[test]
-    fn adjacent_octave_spacings_two_filters() {
-        let x = [1000.0, 1.0, 0.0, 1100.0, 1.0, 0.0];
-        let (_freqs, spacings) = compute_sorted_freqs_and_adjacent_octave_spacings(&x);
-        // log2(1100/1000) ~ 0.1375 octaves
-        assert!(spacings.len() == 1);
-        assert!((spacings[0] - (1100.0_f64 / 1000.0).log2().abs()).abs() < 1e-12);
-    }
+    /// If present/true: use a Highpass for the lowest-frequency IIR and do NOT clip the inverted curve.
+    /// If false: use all Peak filters and clip the inverted curve on the positive side (current behaviour).
+    #[arg(long, default_value_t = false)]
+    iir_hp_pk: bool,
 }
 
 /// A struct to hold frequency and SPL data.
@@ -162,170 +128,123 @@ pub struct Curve {
     pub spl: Array1<f64>,
 }
 
-/// Linear interpolation function.
-fn interpolate(
-    target_freqs: &Array1<f64>,
-    source_freqs: &Array1<f64>,
-    source_spls: &Array1<f64>,
-) -> Array1<f64> {
-    let mut result = Array1::zeros(target_freqs.len());
+// Compute CEA2034 metrics on the provided frequency grid, optionally with a PEQ response applied.
+// Reuses cached plot data if available to avoid redundant API calls.
+// Extract all CEA2034 curves from plot data
+fn extract_cea2034_curves(
+    plot_data: &Value,
+    measurement: &str,
+    freq: &Array1<f64>,
+) -> Result<HashMap<String, Curve>, Box<dyn Error>> {
+    let mut curves = HashMap::new();
 
-    for (i, &target_freq) in target_freqs.iter().enumerate() {
-        // Find the two nearest points in the source data
-        let mut left_idx = 0;
-        let mut right_idx = source_freqs.len() - 1;
+    // List of CEA2034 curves to extract
+    let curve_names = [
+        "On Axis",
+        "Listening Window",
+        "Early Reflections",
+        "Sound Power",
+        "Early Reflections DI",
+        "Sound Power DI",
+    ];
 
-        // Binary search for the closest points
-        if target_freq <= source_freqs[0] {
-            // Target frequency is below the range, use the first point
-            result[i] = source_spls[0];
-        } else if target_freq >= source_freqs[source_freqs.len() - 1] {
-            // Target frequency is above the range, use the last point
-            result[i] = source_spls[source_freqs.len() - 1];
-        } else {
-            // Find the two points that bracket the target frequency
-            for j in 1..source_freqs.len() {
-                if source_freqs[j] >= target_freq {
-                    left_idx = j - 1;
-                    right_idx = j;
-                    break;
-                }
+    // Extract each curve
+    for name in &curve_names {
+        match read::extract_curve_by_name(plot_data, measurement, name) {
+            Ok(curve) => {
+                // Interpolate to the target frequency grid
+                let interpolated = read::interpolate(freq, &curve.freq, &curve.spl);
+                curves.insert(
+                    name.to_string(),
+                    Curve {
+                        freq: freq.clone(),
+                        spl: interpolated,
+                    },
+                );
             }
-
-            // Linear interpolation
-            let freq_left = source_freqs[left_idx];
-            let freq_right = source_freqs[right_idx];
-            let spl_left = source_spls[left_idx];
-            let spl_right = source_spls[right_idx];
-
-            let t = (target_freq - freq_left) / (freq_right - freq_left);
-            result[i] = spl_left + t * (spl_right - spl_left);
-        }
-    }
-
-    result
-}
-
-/// Clamp only positive dB values to +max_db, leave negatives unchanged.
-fn clamp_positive_only(arr: &Array1<f64>, max_db: f64) -> Array1<f64> {
-    arr.mapv(|v| if v > 0.0 { v.min(max_db) } else { v })
-}
-
-/// Simple 1/N-octave smoothing: for each frequency f_i, average values whose
-/// frequency lies within [f_i * 2^(-1/(2N)), f_i * 2^(1/(2N))].
-fn smooth_one_over_n_octave(
-    freqs: &Array1<f64>,
-    values: &Array1<f64>,
-    n: usize,
-) -> Array1<f64> {
-    let n = n.max(1);
-    let half_win = (2.0_f64).powf(1.0 / (2.0 * n as f64));
-    let mut out = Array1::zeros(values.len());
-    for i in 0..freqs.len() {
-        let f = freqs[i].max(1e-12);
-        let lo = f / half_win;
-        let hi = f * half_win;
-        let mut sum = 0.0;
-        let mut cnt = 0usize;
-        for j in 0..freqs.len() {
-            let fj = freqs[j];
-            if fj >= lo && fj <= hi {
-                sum += values[j];
-                cnt += 1;
+            Err(e) => {
+                eprintln!("⚠️  Could not extract curve '{}': {}", name, e);
             }
         }
-        out[i] = if cnt > 0 { sum / cnt as f64 } else { values[i] };
     }
-    out
+
+    Ok(curves)
 }
 
-#[cfg(test)]
-mod clamp_and_smooth_tests {
-    use super::{clamp_positive_only, smooth_one_over_n_octave};
-    use ndarray::Array1;
+async fn compute_cea2034_metrics(
+    freq: &Array1<f64>,
+    args: &Args,
+    cea_plot_data: &mut Option<Value>,
+    peq: Option<&Array1<f64>>,
+) -> Result<score::ScoreMetrics, Box<dyn Error>> {
+    let speaker = args
+        .speaker
+        .as_ref()
+        .ok_or("speaker must be provided when computing CEA2034 metrics")?;
+    let version = args
+        .version
+        .as_ref()
+        .ok_or("version must be provided when computing CEA2034 metrics")?;
+    let measurement = args
+        .measurement
+        .as_ref()
+        .ok_or("measurement must be provided when computing CEA2034 metrics")?;
 
-    #[test]
-    fn clamp_positive_only_clamps_only_positive_side() {
-        let arr = Array1::from(vec![-15.0, -1.0, 0.0, 1.0, 10.0, 25.0]);
-        let out = clamp_positive_only(&arr, 12.0);
-        assert_eq!(out.to_vec(), vec![-15.0, -1.0, 0.0, 1.0, 10.0, 12.0]);
-    }
+    // Use cached plot data or fetch once
+    let plot_data = if let Some(pd) = cea_plot_data {
+        pd.clone()
+    } else {
+        let pd = read::fetch_measurement_plot_data(speaker, version, measurement).await?;
+        *cea_plot_data = Some(pd.clone());
+        pd
+    };
 
-    #[test]
-    fn smooth_one_over_n_octave_basic_monotonic() {
-        // Simple check: with N large, window small -> output close to input
-        let freqs = Array1::from(vec![100.0, 200.0, 400.0, 800.0]);
-        let vals = Array1::from(vec![0.0, 1.0, 0.0, -1.0]);
-        let out = smooth_one_over_n_octave(&freqs, &vals, 24);
-        // Expect no drastic change
-        for (o, v) in out.iter().zip(vals.iter()) {
-            assert!((o - v).abs() <= 0.5);
+    // Extract required traces and interpolate to the input frequency grid
+    let on_ax = read::extract_curve_by_name(&plot_data, measurement, "On Axis")?;
+    let lw_c = read::extract_curve_by_name(&plot_data, measurement, "Listening Window")?;
+    let sp_c = read::extract_curve_by_name(&plot_data, measurement, "Sound Power")?;
+    let on = read::interpolate(freq, &on_ax.freq, &on_ax.spl);
+    let lw = read::interpolate(freq, &lw_c.freq, &lw_c.spl);
+    let sp = read::interpolate(freq, &sp_c.freq, &sp_c.spl);
+
+    // PIR may not be present for some datasets; fall back to LW+ER+SP formula
+    let pir = match read::extract_curve_by_name(&plot_data, measurement, "Predicted In-Room") {
+        Ok(pir_c) => read::interpolate(freq, &pir_c.freq, &pir_c.spl),
+        Err(e) => {
+            eprintln!("⚠️  PIR trace not found, computing from LW+ER+SP. {}", e);
+            let er_c = read::extract_curve_by_name(&plot_data, measurement, "Early Reflections")?;
+            let er = read::interpolate(freq, &er_c.freq, &er_c.spl);
+            score::compute_pir_from_lw_er_sp(&lw, &er, &sp)
         }
-    }
-}
+    };
 
-/// A struct to hold filter data.
-#[derive(Debug, Clone)]
-struct FilterRow {
-    freq: f64,
-    q: f64,
-    gain: f64,
-    kind: &'static str,
-}
+    // 1/2 octave intervals for band metrics
+    let intervals = score::octave_intervals(2, freq);
 
-fn build_sorted_filters(x: &[f64]) -> Vec<FilterRow> {
-    let mut rows: Vec<FilterRow> = Vec::with_capacity(x.len() / 3);
-    for i in 0..(x.len() / 3) {
-        let freq = x[i * 3];
-        let q = x[i * 3 + 1];
-        let gain = x[i * 3 + 2];
-        rows.push(FilterRow {
-            freq,
-            q,
-            gain,
-            kind: "Peak",
-        });
-    }
-    rows.sort_by(|a, b| {
-        a.freq
-            .partial_cmp(&b.freq)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
-    // Mark the lowest-frequency filter as Highpass for display purposes
-    if !rows.is_empty() {
-        rows[0].kind = "Highpass";
-    }
-    rows
-}
+    // Use provided PEQ or assume zero PEQ
+    let peq_arr = peq
+        .map(|p| p.clone())
+        .unwrap_or_else(|| Array1::zeros(freq.len()));
 
-#[cfg(test)]
-mod filter_tests {
-    use super::build_sorted_filters;
-
-    #[test]
-    fn sorts_by_freq_and_sets_type() {
-        let x = vec![1000.0, 1.0, 0.0, 100.0, 2.0, 1.0, 500.0, 0.5, -1.0];
-        let rows = build_sorted_filters(&x);
-        let freqs: Vec<f64> = rows.iter().map(|r| r.freq).collect();
-        assert_eq!(freqs, vec![100.0, 500.0, 1000.0]);
-        assert!(rows[0].kind == "Highpass");
-        assert!(rows.iter().skip(1).all(|r| r.kind == "Peak"));
-        assert!((rows[0].q - 2.0).abs() < 1e-12 && (rows[0].gain - 1.0).abs() < 1e-12);
-        assert!((rows[1].q - 0.5).abs() < 1e-12 && (rows[1].gain + 1.0).abs() < 1e-12);
-        assert!((rows[2].q - 1.0).abs() < 1e-12 && (rows[2].gain - 0.0).abs() < 1e-12);
-    }
+    Ok(score::score_peq_approx(
+        freq, &intervals, &lw, &sp, &pir, &on, &peq_arr,
+    ))
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
+    let mut cea_plot_data: Option<Value> = None;
 
     // 1. Load the input curve (the one we want to match).
     // Use API data if speaker, version, and measurement are provided, otherwise use CSV file
     let input_curve = if let (Some(speaker), Some(version), Some(measurement)) =
         (&args.speaker, &args.version, &args.measurement)
     {
-        read::fetch_curve_from_api(speaker, version, measurement, &args.curve_name).await?
+        // Fetch full measurement once and cache it
+        let plot_data = read::fetch_measurement_plot_data(speaker, version, measurement).await?;
+        cea_plot_data = Some(plot_data.clone());
+        read::extract_curve_by_name(&plot_data, measurement, &args.curve_name)?
     } else {
         // If no API parameters are provided, curve file must be provided
         let curve_path = args.curve.as_ref().ok_or(
@@ -336,13 +255,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // 2. Build inverted target from the selected curve, with positive-only clamp and optional smoothing.
     // Base target is flat 0 dB unless a target file was provided (we still invert the selected curve relative to it).
-    let base_target = if let Some(target_path) = args.target {
+    let base_target = if let Some(ref target_path) = args.target {
         let target_curve = read::read_curve_from_csv(&target_path)?;
         println!(
             "✅ Loaded target curve with {} points.",
             target_curve.freq.len()
         );
-        interpolate(&input_curve.freq, &target_curve.freq, &target_curve.spl)
+        read::interpolate(&input_curve.freq, &target_curve.freq, &target_curve.spl)
     } else {
         println!("✅ No target curve provided, using a flat 0 dB target.");
         Array1::zeros(input_curve.spl.len())
@@ -350,13 +269,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Inverted curve relative to base target
     let mut inverted = base_target.clone() - input_curve.spl.clone();
-    // Clamp only positive values to +max_db
-    inverted = clamp_positive_only(&inverted, args.max_db);
+    // Clip positive side only if HP+PK mode is disabled
+    if !args.iir_hp_pk {
+        inverted = read::clamp_positive_only(&inverted, args.max_db);
+    }
 
     // Optional smoothing regularization of the inverted curve
     let mut smoothed: Option<Array1<f64>> = None;
     if args.smooth {
-        smoothed = Some(smooth_one_over_n_octave(&input_curve.freq, &inverted, args.smooth_n));
+        smoothed = Some(read::smooth_one_over_n_octave(
+            &input_curve.freq,
+            &inverted,
+            args.smooth_n,
+        ));
     }
 
     // 3. Define the optimization target error (use smoothed if provided)
@@ -370,15 +295,25 @@ async fn main() -> Result<(), Box<dyn Error>> {
         spacing_weight: args.spacing_weight,
         max_db: args.max_db,
         min_db: args.min_db,
+        iir_hp_pk: args.iir_hp_pk,
     };
+
+    // If measurement is CEA2034 via API, compute score before optimization using score_peq_approx
+    let mut cea_metrics_before: Option<score::ScoreMetrics> = None;
+    let use_cea = matches!(args.measurement.as_deref(), Some(m) if m.eq_ignore_ascii_case("CEA2034"))
+        && args.speaker.is_some()
+        && args.version.is_some();
+    if use_cea {
+        let metrics =
+            compute_cea2034_metrics(&input_curve.freq, &args, &mut cea_plot_data, None).await?;
+        cea_metrics_before = Some(metrics);
+    }
 
     // Each filter has 3 parameters: frequency, Q, and gain.
     let num_params = args.num_filters * 3;
 
-    // Define the bounds for each parameter.
-    // [freq_min, q_min, gain_min, freq_min, q_min, gain_min, ...]
+    // Define the bounds for each parameter: [freq_min, q_min, gain_min, freq_min, q_min, gain_min, ...]
     let mut lower_bounds = Vec::with_capacity(num_params);
-    // [freq_max, q_max, gain_max, freq_max, q_max, gain_max, ...]
     let mut upper_bounds = Vec::with_capacity(num_params);
 
     let gain_lower = -6.0 * args.max_db; // No strict negative minimum; allow deeper cuts
@@ -398,8 +333,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     for i in 0..args.num_filters {
         // Distribute frequencies logarithmically
         let freq = (log_min + (i as f64 + 0.5) * log_range / args.num_filters as f64).exp();
-        // Initial gain respects minimum absolute amplitude if specified
-        let gain = if args.min_db > 0.0 { args.min_db.copysign(1.0) } else { 0.1 };
+        // Alternate initial gain signs and satisfy |gain| >= min_db (if > 0)
+        let sign = if i % 2 == 0 { 1.0 } else { -1.0 };
+        let mag = if args.min_db > 0.0 { args.min_db } else { 0.1 };
+        let gain = sign * mag.min(args.max_db);
         x.extend_from_slice(&[freq, 1.0, gain]);
     }
 
@@ -431,9 +368,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 println!("\n🔧 Starting local refinement with {}...", args.local_algo);
                 // Recreate objective data for the second stage
                 let mut inv2 = base_target.clone() - input_curve.spl.clone();
-                inv2 = clamp_positive_only(&inv2, args.max_db);
+                if !args.iir_hp_pk {
+                    inv2 = read::clamp_positive_only(&inv2, args.max_db);
+                }
                 let target_error2 = if args.smooth {
-                    smooth_one_over_n_octave(&input_curve.freq, &inv2, args.smooth_n)
+                    read::smooth_one_over_n_octave(&input_curve.freq, &inv2, args.smooth_n)
                 } else {
                     inv2
                 };
@@ -445,6 +384,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     spacing_weight: args.spacing_weight,
                     max_db: args.max_db,
                     min_db: args.min_db,
+                    iir_hp_pk: args.iir_hp_pk,
                 };
                 let local_maxeval: usize = (args.maxeval / 2).max(1);
                 let res2 = optim::refine_local(
@@ -472,7 +412,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 "Filter", "Freq (Hz)", "Q", "Gain (dB)", "Type"
             );
             println!("|-------|------------|------------|------------|----------|");
-            let rows = build_sorted_filters(&x);
+            let rows = iir::build_sorted_filters(&x, args.iir_hp_pk);
             for (i, r) in rows.iter().enumerate() {
                 println!(
                     "| {:<5} | {:<10.2} | {:<10.3} | {:<+10.3} | {:<8} |",
@@ -486,15 +426,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
             println!("----------------------------------------------------------------");
 
             // Spacing diagnostics in octaves
-            let (sorted_freqs, spacings) = compute_sorted_freqs_and_adjacent_octave_spacings(&x);
+            let (sorted_freqs, spacings) =
+                optim::compute_sorted_freqs_and_adjacent_octave_spacings(&x);
             if !sorted_freqs.is_empty() {
                 println!("\n--- Spacing diagnostics ---");
                 println!("Center freqs (Hz): {:?}", sorted_freqs);
                 if !spacings.is_empty() {
-                    let min_spacing = spacings
-                        .iter()
-                        .cloned()
-                        .fold(f64::INFINITY, f64::min);
+                    let min_spacing = spacings.iter().cloned().fold(f64::INFINITY, f64::min);
                     println!("Adjacent spacings (oct): {:?}", spacings);
                     println!("Min adjacent spacing: {:.3} oct", min_spacing);
                     if args.min_spacing_oct > 0.0 {
@@ -515,6 +453,35 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
             // Plot results if output file is specified
             if let Some(output_path) = &args.output {
+                // Extract CEA2034 curves if this is a CEA2034 measurement
+                let cea2034_curves = if use_cea {
+                    if let Some(ref plot_data) = cea_plot_data {
+                        match extract_cea2034_curves(
+                            plot_data,
+                            &args.measurement.as_ref().unwrap(),
+                            &input_curve.freq,
+                        ) {
+                            Ok(curves) => Some(curves),
+                            Err(e) => {
+                                eprintln!("⚠️  Failed to extract CEA2034 curves: {}", e);
+                                None
+                            }
+                        }
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+
+                // Compute EQ response for plotting
+                let eq_response = iir::compute_peq_response(
+                    &input_curve.freq,
+                    &x,
+                    args.sample_rate,
+                    args.iir_hp_pk,
+                );
+
                 plot::plot_results(
                     &input_curve,
                     &x,
@@ -525,8 +492,43 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     output_path,
                     args.speaker.as_deref(),
                     args.measurement.as_deref(),
+                    args.iir_hp_pk,
+                    cea2034_curves.as_ref(),
+                    Some(&eq_response),
                 )
                 .await?;
+            }
+
+            // If CEA2034, compute and print score after optimization using score_peq_approx
+            if use_cea {
+                let freq = &input_curve.freq;
+                let peq_after =
+                    iir::compute_peq_response(freq, &x, args.sample_rate, args.iir_hp_pk);
+                let metrics_after =
+                    compute_cea2034_metrics(freq, &args, &mut cea_plot_data, Some(&peq_after))
+                        .await?;
+                if let Some(before) = cea_metrics_before {
+                    println!(
+                        "\n📈  Pre-Optimization CEA2034 Score: pref={:.3} | nbd_on={:.3} nbd_pir={:.3} lfx={:.3} sm_pir={:.3}",
+                        before.pref_score, before.nbd_on, before.nbd_pir, before.lfx, before.sm_pir
+                    );
+                    println!(
+                        "   Δpref={:+.3} Δnbd_on={:+.3} Δnbd_pir={:+.3} Δlfx={:+.3} Δsm_pir={:+.3}",
+                        metrics_after.pref_score - before.pref_score,
+                        metrics_after.nbd_on - before.nbd_on,
+                        metrics_after.nbd_pir - before.nbd_pir,
+                        metrics_after.lfx - before.lfx,
+                        metrics_after.sm_pir - before.sm_pir,
+                    );
+                }
+                println!(
+                    "\n📈 Post-Optimization CEA2034 Score: pref={:.3} | nbd_on={:.3} nbd_pir={:.3} lfx={:.3} sm_pir={:.3}",
+                    metrics_after.pref_score,
+                    metrics_after.nbd_on,
+                    metrics_after.nbd_pir,
+                    metrics_after.lfx,
+                    metrics_after.sm_pir
+                );
             }
         }
         Err((e, final_value)) => {
@@ -537,5 +539,3 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     Ok(())
 }
-
-// Plotting moved to plot module

@@ -1,15 +1,25 @@
-use ndarray::{Array1, Array2, Axis};
-use ndarray::{s};
 use ndarray::concatenate;
-use numpy::{IntoPyArray, PyArray2, PyReadonlyArray1, PyReadonlyArray2};
-use numpy::{ToPyArray, PyArrayMethods};
-use pyo3::exceptions::PyValueError;
-use pyo3::prelude::*;
-use pyo3::types::PyDict;
+use ndarray::s;
+use ndarray::{Array1, Array2, Axis};
 
 fn spl2pressure(spl: &Array1<f64>) -> Array1<f64> {
     // 10^((spl-105)/20)
     spl.mapv(|v| 10f64.powf((v - 105.0) / 20.0))
+}
+
+fn pressure2spl(p: &Array1<f64>) -> Array1<f64> {
+    // 20*log10(p) + 105
+    p.mapv(|v| 20.0 * v.log10() + 105.0)
+}
+
+fn spl2pressure2(spl: &Array2<f64>) -> Array2<f64> {
+    // square(pressure) per row
+    let mut out = Array2::<f64>::zeros(spl.raw_dim());
+    for (mut row_out, row_in) in out.axis_iter_mut(Axis(0)).zip(spl.axis_iter(Axis(0))) {
+        let p = spl2pressure(&row_in.to_owned());
+        row_out.assign(&p.mapv(|x| x * x));
+    }
+    out
 }
 
 fn cea2034_array(spl: &Array2<f64>, idx: &[Vec<usize>], weights: &Array1<f64>) -> Array2<f64> {
@@ -46,28 +56,17 @@ fn cea2034_array(spl: &Array2<f64>, idx: &[Vec<usize>], weights: &Array1<f64>) -
     let er_p = spl2pressure(&cea.row(idx_er).to_owned());
     let sp_p = spl2pressure(&cea.row(idx_sp).to_owned());
     let mut pir = Array1::<f64>::zeros(len_spl);
-    for ((pir_v, lw), (er, sp)) in pir.iter_mut().zip(lw_p.iter()).zip(er_p.iter().zip(sp_p.iter())) {
+    for ((pir_v, lw), (er, sp)) in pir
+        .iter_mut()
+        .zip(lw_p.iter())
+        .zip(er_p.iter().zip(sp_p.iter()))
+    {
         *pir_v = (0.12 * lw * lw + 0.44 * er * er + 0.44 * sp * sp).sqrt();
     }
     let pir_spl = pressure2spl(&pir);
     cea.row_mut(idx_pir).assign(&pir_spl);
 
     cea
-}
-
-fn pressure2spl(p: &Array1<f64>) -> Array1<f64> {
-    // 20*log10(p) + 105
-    p.mapv(|v| 20.0 * v.log10() + 105.0)
-}
-
-fn spl2pressure2(spl: &Array2<f64>) -> Array2<f64> {
-    // square(pressure) per row
-    let mut out = Array2::<f64>::zeros(spl.raw_dim());
-    for (mut row_out, row_in) in out.axis_iter_mut(Axis(0)).zip(spl.axis_iter(Axis(0))) {
-        let p = spl2pressure(&row_in.to_owned());
-        row_out.assign(&p.mapv(|x| x * x));
-    }
-    out
 }
 
 fn apply_rms(p2: &Array2<f64>, idx: &[usize]) -> Array1<f64> {
@@ -124,7 +123,9 @@ fn consecutive_groups_first_group(indices: &[(usize, f64)]) -> Vec<(usize, f64)>
 fn r_squared(x: &Array1<f64>, y: &Array1<f64>) -> f64 {
     // Pearson correlation squared
     let n = x.len() as f64;
-    if n == 0.0 { return f64::NAN; }
+    if n == 0.0 {
+        return f64::NAN;
+    }
     let mx = x.mean().unwrap_or(0.0);
     let my = y.mean().unwrap_or(0.0);
     let mut num = 0.0;
@@ -137,315 +138,299 @@ fn r_squared(x: &Array1<f64>, y: &Array1<f64>) -> f64 {
         sxx += dx * dx;
         syy += dy * dy;
     }
-    if sxx == 0.0 || syy == 0.0 { return f64::NAN; }
+    if sxx == 0.0 || syy == 0.0 {
+        return f64::NAN;
+    }
     let r = num / (sxx.sqrt() * syy.sqrt());
     r * r
 }
 
-#[pyfunction]
-fn c_cea2034<'py>(
-    py: Python<'py>,
-    spl: PyReadonlyArray2<'_, f64>,
-    idx: Vec<Vec<usize>>, // list of index groups; last is SP group
-    weights: PyReadonlyArray1<'_, f64>,
-) -> PyResult<Bound<'py, PyArray2<f64>>> {
-    let spl = spl.as_array();
-    let weights = weights.as_array();
-    let len_spl = spl.shape()[1];
-    let p2 = spl2pressure2(&spl.to_owned());
+// ---------------- Pure Rust API below ----------------
 
-    let idx_sp = idx.len() - 1;
-    let idx_lw = 0usize;
-    let idx_er = 1usize;
-    let idx_pir = idx_sp + 1;
-
-    let mut cea = Array2::<f64>::zeros((idx.len() + 1, len_spl));
-
-    for i in 0..idx_sp {
-        let curve = apply_rms(&p2, &idx[i]);
-        cea.row_mut(i).assign(&curve);
-    }
-
-    // ER: indices 2..=6 per original logic
-    let mut er_p2 = Array1::<f64>::zeros(len_spl);
-    for i in 2..=6 {
-        let pres = spl2pressure(&cea.row(i).to_owned());
-        er_p2 = &er_p2 + &pres.mapv(|v| v * v);
-    }
-    let er = er_p2.mapv(|v| (v / 5.0).sqrt());
-    let er_spl = pressure2spl(&er);
-    cea.row_mut(idx_er).assign(&er_spl);
-
-    // SP weighted
-    let sp_curve = apply_weighted_rms(&p2, &idx[idx_sp], &weights.to_owned());
-    cea.row_mut(idx_sp).assign(&sp_curve);
-
-    // PIR
-    let lw_p = spl2pressure(&cea.row(idx_lw).to_owned());
-    let er_p = spl2pressure(&cea.row(idx_er).to_owned());
-    let sp_p = spl2pressure(&cea.row(idx_sp).to_owned());
-    let mut pir = Array1::<f64>::zeros(len_spl);
-    for ((pir_v, lw), (er, sp)) in pir.iter_mut().zip(lw_p.iter()).zip(er_p.iter().zip(sp_p.iter())) {
-        *pir_v = (0.12 * lw * lw + 0.44 * er * er + 0.44 * sp * sp).sqrt();
-    }
-    let pir_spl = pressure2spl(&pir);
-    cea.row_mut(idx_pir).assign(&pir_spl);
-
-    Ok(cea.into_pyarray(py))
+pub fn cea2034(spl: &Array2<f64>, idx: &[Vec<usize>], weights: &Array1<f64>) -> Array2<f64> {
+    cea2034_array(spl, idx, weights)
 }
 
-#[pyfunction]
-fn c_nbd(freq: PyReadonlyArray1<'_, f64>, intervals: Vec<(usize, usize)>, spl: PyReadonlyArray1<'_, f64>) -> PyResult<f64> {
-    let _ = freq; // unused but keep signature parity
-    let spl = spl.as_array();
-    let mut vals: Vec<f64> = Vec::with_capacity(intervals.len());
-    for (imin, imax) in intervals {
-        vals.push(mad(&spl.to_owned(), imin, imax));
+pub fn octave(count: usize) -> Vec<(f64, f64, f64)> {
+    assert!(count >= 2, "count (N) must be >= 2");
+    let reference = 1290.0_f64;
+    let p = 2.0_f64.powf(1.0 / count as f64);
+    let p_band = 2.0_f64.powf(1.0 / (2.0 * count as f64));
+    let o_iter: i32 = ((count as i32 * 10 + 1) / 2) as i32;
+    let mut centers: Vec<f64> = Vec::with_capacity((o_iter as usize) * 2 + 1);
+    for i in (1..=o_iter).rev() {
+        centers.push(reference / p.powi(i));
     }
-    // nanmean
+    centers.push(reference);
+    for i in 1..=o_iter {
+        centers.push(reference * p.powi(i));
+    }
+    centers
+        .into_iter()
+        .map(|c| (c / p_band, c, c * p_band))
+        .collect()
+}
+
+pub fn octave_intervals(count: usize, freq: &Array1<f64>) -> Vec<(usize, usize)> {
+    let bands = octave(count);
+    let mut out = Vec::with_capacity(bands.len());
+    for (low, _c, high) in bands.into_iter() {
+        let imin = freq.iter().position(|&f| f >= low).unwrap_or(freq.len());
+        let imax = freq.iter().position(|&f| f >= high).unwrap_or(freq.len());
+        out.push((imin, imax));
+    }
+    out
+}
+
+pub fn nbd(intervals: &[(usize, usize)], spl: &Array1<f64>) -> f64 {
     let mut sum = 0.0;
-    let mut count = 0.0;
-    for v in vals {
-        if v.is_finite() { sum += v; count += 1.0; }
+    let mut cnt = 0.0;
+    for &(imin, imax) in intervals.iter() {
+        let v = mad(spl, imin, imax);
+        if v.is_finite() {
+            sum += v;
+            cnt += 1.0;
+        }
     }
-    if count == 0.0 { Ok(f64::NAN) } else { Ok(sum / count) }
+    if cnt == 0.0 { f64::NAN } else { sum / cnt }
 }
 
-#[pyfunction]
-fn c_lfx(freq: PyReadonlyArray1<'_, f64>, lw: PyReadonlyArray1<'_, f64>, sp: PyReadonlyArray1<'_, f64>) -> PyResult<f64> {
-    let freq = freq.as_array();
-    let lw = lw.as_array();
-    let sp = sp.as_array();
-
-    // bounds
+pub fn lfx(freq: &Array1<f64>, lw: &Array1<f64>, sp: &Array1<f64>) -> f64 {
     let lw_min = freq.iter().position(|&f| f > 300.0).unwrap_or(freq.len());
-    let lw_max = freq.iter().position(|&f| f >= 10000.0).unwrap_or(freq.len());
-    if lw_min >= lw_max { return Ok((300.0f64).log10()); }
-
+    let lw_max = freq
+        .iter()
+        .position(|&f| f >= 10000.0)
+        .unwrap_or(freq.len());
+    if lw_min >= lw_max {
+        return (300.0_f64).log10();
+    }
     let lw_ref = lw.slice(s![lw_min..lw_max]).mean().unwrap_or(0.0) - 6.0;
     let mut lfx_range: Vec<(usize, f64)> = Vec::new();
-    for (i, (&f, &spv)) in freq.iter().take(lw_min).zip(sp.iter().take(lw_min)).enumerate() {
+    for (i, (&f, &spv)) in freq
+        .iter()
+        .take(lw_min)
+        .zip(sp.iter().take(lw_min))
+        .enumerate()
+    {
         if spv <= lw_ref {
             lfx_range.push((i, f));
         }
     }
     if lfx_range.is_empty() {
-        return Ok(freq[0].log10());
+        return freq[0].log10();
     }
     let group = consecutive_groups_first_group(&lfx_range);
     if group.len() <= 1 {
-        return Ok((300.0f64).log10());
+        return (300.0_f64).log10();
     }
     let mut pos = group.last().unwrap().0;
-    if freq.len() < pos - 1 { pos += 1; }
-    Ok(freq[pos].log10())
+    if freq.len() < pos - 1 {
+        pos += 1;
+    }
+    freq[pos].log10()
 }
 
-#[pyfunction]
-fn c_sm(freq: PyReadonlyArray1<'_, f64>, spl: PyReadonlyArray1<'_, f64>) -> PyResult<f64> {
-    let freq = freq.as_array();
-    let spl = spl.as_array();
-
-    // slice between 100..16000
+pub fn sm(freq: &Array1<f64>, spl: &Array1<f64>) -> f64 {
     let f_min = freq.iter().position(|&f| f > 100.0).unwrap_or(freq.len());
-    let f_max = freq.iter().position(|&f| f >= 16000.0).unwrap_or(freq.len());
-    if f_min >= f_max { return Err(PyValueError::new_err("invalid frequency range for c_sm")); }
-
+    let f_max = freq
+        .iter()
+        .position(|&f| f >= 16000.0)
+        .unwrap_or(freq.len());
+    if f_min >= f_max {
+        return f64::NAN;
+    }
     let x: Array1<f64> = freq.slice(s![f_min..f_max]).mapv(|v| v.log10());
     let y: Array1<f64> = spl.slice(s![f_min..f_max]).to_owned();
-    Ok(r_squared(&x, &y))
+    r_squared(&x, &y)
 }
 
-#[pyfunction]
-fn c_score(
-    freq: PyReadonlyArray1<'_, f64>,
-    intervals: Vec<(usize, usize)>,
-    on: PyReadonlyArray1<'_, f64>,
-    lw: PyReadonlyArray1<'_, f64>,
-    sp: PyReadonlyArray1<'_, f64>,
-    pir: PyReadonlyArray1<'_, f64>,
-) -> PyResult<PyObject> {
-    Python::with_gil(|py| {
-        let freq = freq.as_array();
-        let on = on.as_array();
-        let lw = lw.as_array();
-        let sp = sp.as_array();
-        let pir = pir.as_array();
-
-        // nbd_on, nbd_pir
-        let mut nbd_on = 0.0;
-        let mut nbd_pir = 0.0;
-        let mut cnt = 0.0;
-        for (imin, imax) in intervals.iter().copied() {
-            nbd_on += mad(&on.to_owned(), imin, imax);
-            nbd_pir += mad(&pir.to_owned(), imin, imax);
-            cnt += 1.0;
-        }
-        if cnt > 0.0 { nbd_on /= cnt; nbd_pir /= cnt; } else { nbd_on = f64::NAN; nbd_pir = f64::NAN; }
-
-        // sm_pir
-        let f_min = freq.iter().position(|&f| f > 100.0).unwrap_or(freq.len());
-        let f_max = freq.iter().position(|&f| f >= 16000.0).unwrap_or(freq.len());
-        if f_min >= f_max { return Err(PyValueError::new_err("invalid frequency range for c_score")); }
-        let x = freq.slice(s![f_min..f_max]).mapv(|v| v.log10());
-        let y = pir.slice(s![f_min..f_max]).to_owned();
-        let sm_pir = r_squared(&x, &y);
-
-        // lfx
-        let lw_min = freq.iter().position(|&f| f > 300.0).unwrap_or(freq.len());
-        let lw_max = freq.iter().position(|&f| f >= 10000.0).unwrap_or(freq.len());
-        let lf_x = if lw_min < lw_max {
-            let lw_ref = lw.slice(s![lw_min..lw_max]).mean().unwrap_or(0.0) - 6.0;
-            let mut lfx_range: Vec<(usize, f64)> = Vec::new();
-            for (i, (&f, &spv)) in freq.iter().take(lw_min).zip(sp.iter().take(lw_min)).enumerate() {
-                if spv <= lw_ref { lfx_range.push((i, f)); }
-            }
-            if lfx_range.is_empty() { freq[0].log10() } else {
-                let group = consecutive_groups_first_group(&lfx_range);
-                if group.len() <= 1 { (300.0f64).log10() } else {
-                    let mut pos = group.last().unwrap().0;
-                    if freq.len() < pos - 1 { pos += 1; }
-                    freq[pos].log10()
-                }
-            }
-        } else {
-            (300.0f64).log10()
-        };
-
-        let score = 12.69 - 2.49 * nbd_on - 2.99 * nbd_pir - 4.31 * lf_x + 2.32 * sm_pir;
-        let dict = PyDict::new(py);
-        dict.set_item("nbd_on", nbd_on)?;
-        dict.set_item("nbd_pir", nbd_pir)?;
-        dict.set_item("lfx", lf_x)?;
-        dict.set_item("sm_pir", sm_pir)?;
-        dict.set_item("pref_score", score)?;
-        Ok(dict.into())
-    })
+#[derive(Debug, Clone)]
+pub struct ScoreMetrics {
+    pub nbd_on: f64,
+    pub nbd_pir: f64,
+    pub lfx: f64,
+    pub sm_pir: f64,
+    pub pref_score: f64,
 }
 
-#[pyfunction]
-fn c_score_peq<'py>(
-    py: Python<'py>,
-    freq: PyReadonlyArray1<'_, f64>,
-    idx: Vec<Vec<usize>>,
-    intervals: Vec<(usize, usize)>,
-    weights: PyReadonlyArray1<'_, f64>,
-    spl_h: PyReadonlyArray2<'_, f64>,
-    spl_v: PyReadonlyArray2<'_, f64>,
-    peq: PyReadonlyArray1<'_, f64>,
-) -> PyResult<(Bound<'py, PyArray2<f64>>, PyObject)> {
-    let weights = weights.as_array();
-    let spl_h = spl_h.as_array();
-    let spl_v = spl_v.as_array();
-    let peq = peq.as_array();
-
-    if peq.len() != spl_h.shape()[1] || peq.len() != spl_v.shape()[1] {
-        return Err(PyValueError::new_err("peq length must match SPL columns"));
+pub fn score(
+    freq: &Array1<f64>,
+    intervals: &[(usize, usize)],
+    on: &Array1<f64>,
+    lw: &Array1<f64>,
+    sp: &Array1<f64>,
+    pir: &Array1<f64>,
+) -> ScoreMetrics {
+    let nbd_on = nbd(intervals, on);
+    let nbd_pir = nbd(intervals, pir);
+    let sm_pir = sm(freq, pir);
+    let lfx_val = lfx(freq, lw, sp);
+    let pref = 12.69 - 2.49 * nbd_on - 2.99 * nbd_pir - 4.31 * lfx_val + 2.32 * sm_pir;
+    ScoreMetrics {
+        nbd_on,
+        nbd_pir,
+        lfx: lfx_val,
+        sm_pir,
+        pref_score: pref,
     }
+}
+
+pub fn score_peq(
+    freq: &Array1<f64>,
+    idx: &[Vec<usize>],
+    intervals: &[(usize, usize)],
+    weights: &Array1<f64>,
+    spl_h: &Array2<f64>,
+    spl_v: &Array2<f64>,
+    peq: &Array1<f64>,
+) -> (Array2<f64>, ScoreMetrics) {
+    assert_eq!(
+        peq.len(),
+        spl_h.shape()[1],
+        "peq length must match SPL columns"
+    );
+    assert_eq!(
+        peq.len(),
+        spl_v.shape()[1],
+        "peq length must match SPL columns"
+    );
 
     // add PEQ to each row
     let mut spl_h_peq = Array2::<f64>::zeros(spl_h.raw_dim());
-    for (mut row_out, row_in) in spl_h_peq.axis_iter_mut(Axis(0)).zip(spl_h.axis_iter(Axis(0))) {
-        row_out.assign(&(&row_in.to_owned() + &peq));
+    for (mut row_out, row_in) in spl_h_peq
+        .axis_iter_mut(Axis(0))
+        .zip(spl_h.axis_iter(Axis(0)))
+    {
+        row_out.assign(&(&row_in.to_owned() + peq));
     }
     let mut spl_v_peq = Array2::<f64>::zeros(spl_v.raw_dim());
-    for (mut row_out, row_in) in spl_v_peq.axis_iter_mut(Axis(0)).zip(spl_v.axis_iter(Axis(0))) {
-        row_out.assign(&(&row_in.to_owned() + &peq));
+    for (mut row_out, row_in) in spl_v_peq
+        .axis_iter_mut(Axis(0))
+        .zip(spl_v.axis_iter(Axis(0)))
+    {
+        row_out.assign(&(&row_in.to_owned() + peq));
     }
 
-    let spl_full = concatenate(Axis(0), &[spl_h_peq.view(), spl_v_peq.view()])
-        .map_err(|e| PyValueError::new_err(format!("concatenate failed: {}", e)))?;
-    let spin_nd = cea2034_array(&spl_full, &idx, &weights.to_owned());
+    let spl_full =
+        concatenate(Axis(0), &[spl_h_peq.view(), spl_v_peq.view()]).expect("concatenate failed");
+    let spin_nd = cea2034_array(&spl_full, idx, weights);
 
     // Prepare rows for scoring
     let on = spl_h_peq.row(17).to_owned();
     let lw = spin_nd.row(0).to_owned();
-    let sp_row = spin_nd.row(spin_nd.shape()[0]-2).to_owned();
-    let pir = spin_nd.row(spin_nd.shape()[0]-1).to_owned();
+    let sp_row = spin_nd.row(spin_nd.shape()[0] - 2).to_owned();
+    let pir = spin_nd.row(spin_nd.shape()[0] - 1).to_owned();
 
-    // Compute score inline using c_score logic
-    let freq_arr = freq.as_array();
-    let mut nbd_on = 0.0;
-    let mut nbd_pir = 0.0;
-    let mut cnt = 0.0;
-    for (imin, imax) in intervals.iter().copied() {
-        nbd_on += mad(&on.to_owned(), imin, imax);
-        nbd_pir += mad(&pir.to_owned(), imin, imax);
-        cnt += 1.0;
+    let metrics = score(freq, intervals, &on, &lw, &sp_row, &pir);
+    (spin_nd, metrics)
+}
+
+pub fn score_peq_approx(
+    freq: &Array1<f64>,
+    intervals: &[(usize, usize)],
+    lw: &Array1<f64>,
+    sp: &Array1<f64>,
+    pir: &Array1<f64>,
+    on: &Array1<f64>,
+    peq: &Array1<f64>,
+) -> ScoreMetrics {
+    let on2 = on + peq;
+    score(freq, intervals, &on2, lw, sp, pir)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn octave_count_2_includes_reference_center() {
+        let bands = octave(2);
+        // find the center equal to 1290
+        assert!(bands.iter().any(|&(_l, c, _h)| (c - 1290.0).abs() < 1e-9));
     }
-    if cnt > 0.0 { nbd_on /= cnt; nbd_pir /= cnt; } else { nbd_on = f64::NAN; nbd_pir = f64::NAN; }
-    let f_min = freq_arr.iter().position(|&f| f > 100.0).unwrap_or(freq_arr.len());
-    let f_max = freq_arr.iter().position(|&f| f >= 16000.0).unwrap_or(freq_arr.len());
-    if f_min >= f_max { return Err(PyValueError::new_err("invalid frequency range for c_score_peq")); }
-    let x = freq_arr.slice(s![f_min..f_max]).mapv(|v| v.log10());
-    let y = pir.slice(s![f_min..f_max]).to_owned();
-    let sm_pir = r_squared(&x, &y);
-    let lw_min = freq_arr.iter().position(|&f| f > 300.0).unwrap_or(freq_arr.len());
-    let lw_max = freq_arr.iter().position(|&f| f >= 10000.0).unwrap_or(freq_arr.len());
-    let lf_x = if lw_min < lw_max {
-        let lw_ref = lw.slice(s![lw_min..lw_max]).mean().unwrap_or(0.0) - 6.0;
-        let mut lfx_range: Vec<(usize, f64)> = Vec::new();
-        for (i, (&f, &spv)) in freq_arr.iter().take(lw_min).zip(sp_row.iter().take(lw_min)).enumerate() {
-            if spv <= lw_ref { lfx_range.push((i, f)); }
-        }
-        if lfx_range.is_empty() { freq_arr[0].log10() } else {
-            let group = consecutive_groups_first_group(&lfx_range);
-            if group.len() <= 1 { (300.0f64).log10() } else {
-                let mut pos = group.last().unwrap().0;
-                if freq_arr.len() < pos - 1 { pos += 1; }
-                freq_arr[pos].log10()
-            }
-        }
-    } else { (300.0f64).log10() };
-    let score = 12.69 - 2.49 * nbd_on - 2.99 * nbd_pir - 4.31 * lf_x + 2.32 * sm_pir;
 
-    let dict = PyDict::new(py);
-    dict.set_item("nbd_on", nbd_on)?;
-    dict.set_item("nbd_pir", nbd_pir)?;
-    dict.set_item("lfx", lf_x)?;
-    dict.set_item("sm_pir", sm_pir)?;
-    dict.set_item("pref_score", score)?;
+    #[test]
+    fn nbd_simple_mean_of_mads() {
+        let spl = Array1::from(vec![0.0, 1.0, 2.0, 1.0, 0.0]);
+        // two intervals: [0..3) and [2..5)
+        let intervals = vec![(0, 3), (2, 5)];
+        let v = nbd(&intervals, &spl);
+        assert!(v.is_finite());
+    }
 
-    // Return spin as Bound PyArray2
-    let spin_py = numpy::PyArray2::from_owned_array(py, spin_nd);
-    Ok((spin_py, dict.into()))
+    #[test]
+    fn score_peq_approx_matches_score_when_peq_zero() {
+        // Simple synthetic data
+        let freq = Array1::from(vec![100.0, 1000.0, 10000.0]);
+        let intervals = vec![(0, 3)];
+        let on = Array1::from(vec![80.0, 85.0, 82.0]);
+        let lw = Array1::from(vec![81.0, 84.0, 83.0]);
+        let sp = Array1::from(vec![79.0, 83.0, 81.0]);
+        let pir = Array1::from(vec![80.5, 84.0, 82.0]);
+        let zero = Array1::zeros(freq.len());
+
+        let m1 = score(&freq, &intervals, &on, &lw, &sp, &pir);
+        let m2 = score_peq_approx(&freq, &intervals, &lw, &sp, &pir, &on, &zero);
+
+        assert!((m1.nbd_on - m2.nbd_on).abs() < 1e-12);
+        assert!((m1.nbd_pir - m2.nbd_pir).abs() < 1e-12);
+        assert!((m1.lfx - m2.lfx).abs() < 1e-12);
+        assert!((m1.sm_pir - m2.sm_pir).abs() < 1e-12);
+        assert!((m1.pref_score - m2.pref_score).abs() < 1e-12);
+    }
 }
 
-#[pyfunction]
-fn c_score_peq_approx(
-    freq: PyReadonlyArray1<'_, f64>,
-    intervals: Vec<(usize, usize)>,
-    spin: PyReadonlyArray2<'_, f64>,
-    on: PyReadonlyArray1<'_, f64>,
-    peq: PyReadonlyArray1<'_, f64>,
-) -> PyResult<PyObject> {
-    Python::with_gil(|py| {
-        let spin = spin.as_array();
-        let on = on.as_array();
-        let peq = peq.as_array();
-        let on2 = &on.to_owned() + &peq;
-        let lw = spin.row(0).to_owned();
-        let sp = spin.row(spin.shape()[0]-2).to_owned();
-        let pir = spin.row(spin.shape()[0]-1).to_owned();
-        c_score(
-            freq,
-            intervals,
-            on2.view().to_pyarray(py).readonly(),
-            lw.view().to_pyarray(py).readonly(),
-            sp.view().to_pyarray(py).readonly(),
-            pir.view().to_pyarray(py).readonly(),
-        )
-    })
+pub fn compute_pir_from_lw_er_sp(
+    lw: &Array1<f64>,
+    er: &Array1<f64>,
+    sp: &Array1<f64>,
+) -> Array1<f64> {
+    let lw_p = spl2pressure(lw);
+    let er_p = spl2pressure(er);
+    let sp_p = spl2pressure(sp);
+    let lw2 = lw_p.mapv(|v| v * v);
+    let er2 = er_p.mapv(|v| v * v);
+    let sp2 = sp_p.mapv(|v| v * v);
+    let pir_p2 = lw2.mapv(|v| 0.12 * v) + &er2.mapv(|v| 0.44 * v) + &sp2.mapv(|v| 0.44 * v);
+    let pir_p = pir_p2.mapv(|v| v.sqrt());
+    pressure2spl(&pir_p)
 }
 
-#[pymodule]
-fn compute_scores_rust(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
-    m.add_function(wrap_pyfunction!(c_cea2034, m)?)?;
-    m.add_function(wrap_pyfunction!(c_nbd, m)?)?;
-    m.add_function(wrap_pyfunction!(c_lfx, m)?)?;
-    m.add_function(wrap_pyfunction!(c_sm, m)?)?;
-    m.add_function(wrap_pyfunction!(c_score, m)?)?;
-    m.add_function(wrap_pyfunction!(c_score_peq, m)?)?;
-    m.add_function(wrap_pyfunction!(c_score_peq_approx, m)?)?;
-    Ok(())
+#[cfg(test)]
+mod pir_helpers_tests {
+    use super::{compute_pir_from_lw_er_sp, pressure2spl, spl2pressure};
+    use ndarray::Array1;
+
+    #[test]
+    fn spl_pressure_roundtrip_is_identity() {
+        let spl = Array1::from(vec![60.0, 80.0, 100.0]);
+        let p = spl2pressure(&spl);
+        let spl2 = pressure2spl(&p);
+        for (a, b) in spl.iter().zip(spl2.iter()) {
+            assert!((a - b).abs() < 1e-12);
+        }
+    }
+
+    #[test]
+    fn pir_equals_input_when_all_equal() {
+        let lw = Array1::from(vec![80.0, 80.0, 80.0]);
+        let er = Array1::from(vec![80.0, 80.0, 80.0]);
+        let sp = Array1::from(vec![80.0, 80.0, 80.0]);
+        let pir = compute_pir_from_lw_er_sp(&lw, &er, &sp);
+        for v in pir.iter() {
+            assert!((*v - 80.0).abs() < 1e-12);
+        }
+    }
+
+    #[test]
+    fn pir_reflects_er_sp_weighting() {
+        // ER and SP have higher weights than LW (0.44 each vs 0.12)
+        let lw = Array1::from(vec![70.0, 70.0, 70.0]);
+        let er = Array1::from(vec![80.0, 80.0, 80.0]);
+        let sp = Array1::from(vec![80.0, 80.0, 80.0]);
+        let pir = compute_pir_from_lw_er_sp(&lw, &er, &sp);
+        for v in pir.iter() {
+            assert!(*v > 75.0 && *v < 81.0);
+        }
+    }
 }

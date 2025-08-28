@@ -37,6 +37,17 @@ pub async fn fetch_curve_from_api(
     measurement: &str,
     curve_name: &str,
 ) -> Result<super::Curve, Box<dyn Error>> {
+    // Fetch the full measurement once, then extract the requested curve
+    let plot_data = fetch_measurement_plot_data(speaker, version, measurement).await?;
+    extract_curve_by_name(&plot_data, measurement, curve_name)
+}
+
+/// Fetch and parse the full Plotly JSON object for a given measurement (single HTTP GET).
+pub async fn fetch_measurement_plot_data(
+    speaker: &str,
+    version: &str,
+    measurement: &str,
+) -> Result<Value, Box<dyn Error>> {
     // URL-encode the parameters
     let encoded_speaker = urlencoding::encode(speaker);
     let encoded_version = urlencoding::encode(version);
@@ -50,20 +61,14 @@ pub async fn fetch_curve_from_api(
     println!("🔄 Fetching data from {}", url);
 
     let response = reqwest::get(&url).await?;
-
     if !response.status().is_success() {
         return Err(format!("API request failed with status: {}", response.status()).into());
     }
-
     let api_response: Value = response.json().await?;
-
-    // Extract frequency and SPL data from the Plotly JSON structure
-    let mut freqs = Vec::new();
-    let mut spls = Vec::new();
 
     // The API response is a list with a single element that is a JSON string
     let data_string = if let Some(array) = api_response.as_array() {
-        println!("API response array length: {}", array.len());
+        // println!("API response array length: {}", array.len());
         if let Some(first_element) = array.get(0) {
             first_element
                 .as_str()
@@ -76,10 +81,20 @@ pub async fn fetch_curve_from_api(
     };
 
     let plot_data: Value = serde_json::from_str(&data_string)?;
-
-    // Also print the list of trace names found for debugging/inspection
     let trace_names = collect_trace_names(&plot_data);
     println!("Trace names: {:?}", trace_names);
+    Ok(plot_data)
+}
+
+/// Extract a single curve from a previously-fetched Plotly JSON object.
+pub fn extract_curve_by_name(
+    plot_data: &Value,
+    measurement: &str,
+    curve_name: &str,
+) -> Result<super::Curve, Box<dyn Error>> {
+    // Extract frequency and SPL data from the Plotly JSON structure
+    let mut freqs = Vec::new();
+    let mut spls = Vec::new();
 
     // Look for the trace with the expected name and extract x and y data
     if let Some(data) = plot_data.get("data").and_then(|d| d.as_array()) {
@@ -92,8 +107,6 @@ pub async fn fetch_curve_from_api(
                 .unwrap_or(false);
 
             if is_spl_trace {
-                println!("Found SPL trace");
-
                 // Extract x and y data which are encoded as typed arrays
                 if let (Some(x_data), Some(y_data)) = (trace.get("x"), trace.get("y")) {
                     // Decode x values (frequency)
@@ -105,7 +118,7 @@ pub async fn fetch_curve_from_api(
                             {
                                 let decoded_x = decode_typed_array(bdata_str, dtype_str)?;
                                 freqs = decoded_x;
-                                println!("Decoded {} frequency values", freqs.len());
+                                // println!("Decoded {} frequency values", freqs.len());
                             }
                         }
                     }
@@ -119,7 +132,7 @@ pub async fn fetch_curve_from_api(
                             {
                                 let decoded_y = decode_typed_array(bdata_str, dtype_str)?;
                                 spls = decoded_y;
-                                println!("Decoded {} SPL values", spls.len());
+                                // println!("Decoded {} SPL values", spls.len());
                             }
                         }
                     }
@@ -131,10 +144,10 @@ pub async fn fetch_curve_from_api(
     }
 
     if freqs.is_empty() {
-        return Err("Failed to extract frequency and SPL data from API response".into());
+        return Err("Failed to extract frequency and SPL data from plot data".into());
     }
 
-    println!("Extracted {} frequency points", freqs.len());
+    // println!("Extracted {} frequency points", freqs.len());
 
     Ok(super::Curve {
         freq: Array1::from(freqs),
@@ -309,8 +322,57 @@ fn collect_trace_names(plot_data: &Value) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{collect_trace_names, is_target_trace_name};
+    use super::{collect_trace_names, extract_curve_by_name, is_target_trace_name};
     use serde_json::json;
+
+    fn le_f64_bytes(vals: &[f64]) -> Vec<u8> {
+        let mut out = Vec::with_capacity(vals.len() * 8);
+        for v in vals {
+            out.extend_from_slice(&v.to_bits().to_le_bytes());
+        }
+        out
+    }
+
+    fn base64_encode(bytes: &[u8]) -> String {
+        // Same alphabet as decoder
+        let alphabet = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        let mut out = String::new();
+        let mut i = 0usize;
+        while i < bytes.len() {
+            let b0 = bytes[i] as u32;
+            let b1 = if i + 1 < bytes.len() {
+                bytes[i + 1] as u32
+            } else {
+                0
+            };
+            let b2 = if i + 2 < bytes.len() {
+                bytes[i + 2] as u32
+            } else {
+                0
+            };
+
+            let idx0 = (b0 >> 2) & 0x3F;
+            let idx1 = ((b0 & 0x03) << 4) | ((b1 >> 4) & 0x0F);
+            let idx2 = ((b1 & 0x0F) << 2) | ((b2 >> 6) & 0x03);
+            let idx3 = b2 & 0x3F;
+
+            out.push(alphabet[idx0 as usize] as char);
+            out.push(alphabet[idx1 as usize] as char);
+            if i + 1 < bytes.len() {
+                out.push(alphabet[idx2 as usize] as char);
+            } else {
+                out.push('=');
+            }
+            if i + 2 < bytes.len() {
+                out.push(alphabet[idx3 as usize] as char);
+            } else {
+                out.push('=');
+            }
+
+            i += 3;
+        }
+        out
+    }
 
     #[test]
     fn collects_trace_names_from_data_array() {
@@ -336,17 +398,187 @@ mod tests {
 
     #[test]
     fn matches_target_name_for_cea2034() {
-        assert!(is_target_trace_name("CEA2034", "Listening Window", "Listening Window"));
+        assert!(is_target_trace_name(
+            "CEA2034",
+            "Listening Window",
+            "Listening Window"
+        ));
         assert!(is_target_trace_name("CEA2034", "On Axis", "On Axis"));
-        assert!(!is_target_trace_name("CEA2034", "On Axis", "Early Reflections"));
+        assert!(!is_target_trace_name(
+            "CEA2034",
+            "On Axis",
+            "Early Reflections"
+        ));
         // Substring fallback
-        assert!(is_target_trace_name("CEA2034", "Listening", "Listening Window"));
+        assert!(is_target_trace_name(
+            "CEA2034",
+            "Listening",
+            "Listening Window"
+        ));
     }
 
     #[test]
     fn fallback_for_non_cea_measurements() {
         assert!(is_target_trace_name("Other", "ignored", "On Axis"));
         assert!(is_target_trace_name("Other", "ignored", "SPL something"));
-        assert!(!is_target_trace_name("Other", "ignored", "Early Reflections DI"));
+        assert!(!is_target_trace_name(
+            "Other",
+            "ignored",
+            "Early Reflections DI"
+        ));
+    }
+
+    #[test]
+    fn extract_curve_by_name_decodes_typed_arrays() {
+        // Prepare typed arrays for two points
+        let xf = [100.0_f64, 1000.0_f64];
+        let yf = [80.0_f64, 85.0_f64];
+        let x_b64 = base64_encode(&le_f64_bytes(&xf));
+        let y_b64 = base64_encode(&le_f64_bytes(&yf));
+        let plot_data = json!({
+            "data": [
+                {
+                    "name": "Listening Window",
+                    "x": {"dtype": "f8", "bdata": x_b64},
+                    "y": {"dtype": "f8", "bdata": y_b64}
+                },
+                {
+                    "name": "On Axis",
+                    "x": {"dtype": "f8", "bdata": x_b64},
+                    "y": {"dtype": "f8", "bdata": y_b64}
+                }
+            ]
+        });
+
+        let curve = extract_curve_by_name(&plot_data, "CEA2034", "Listening Window").unwrap();
+        assert_eq!(curve.freq.len(), 2);
+        assert_eq!(curve.spl.len(), 2);
+        assert!((curve.freq[0] - 100.0).abs() < 1e-12);
+        assert!((curve.freq[1] - 1000.0).abs() < 1e-12);
+        assert!((curve.spl[0] - 80.0).abs() < 1e-12);
+        assert!((curve.spl[1] - 85.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn extract_curve_by_name_allows_substring_match_for_cea2034() {
+        let xf = [200.0_f64, 400.0_f64];
+        let yf = [70.0_f64, 72.0_f64];
+        let x_b64 = base64_encode(&le_f64_bytes(&xf));
+        let y_b64 = base64_encode(&le_f64_bytes(&yf));
+        let plot_data = json!({
+            "data": [
+                {
+                    "name": "Listening Window",
+                    "x": {"dtype": "f8", "bdata": x_b64},
+                    "y": {"dtype": "f8", "bdata": y_b64}
+                }
+            ]
+        });
+
+        let curve = extract_curve_by_name(&plot_data, "CEA2034", "Listening").unwrap();
+        assert_eq!(curve.freq.len(), 2);
+        assert!((curve.freq[0] - 200.0).abs() < 1e-12);
+    }
+}
+
+/// Linear interpolation function.
+pub fn interpolate(
+    target_freqs: &Array1<f64>,
+    source_freqs: &Array1<f64>,
+    source_spls: &Array1<f64>,
+) -> Array1<f64> {
+    let mut result = Array1::zeros(target_freqs.len());
+
+    for (i, &target_freq) in target_freqs.iter().enumerate() {
+        // Find the two nearest points in the source data
+        let mut left_idx = 0;
+        let mut right_idx = source_freqs.len() - 1;
+
+        // Binary search for the closest points
+        if target_freq <= source_freqs[0] {
+            // Target frequency is below the range, use the first point
+            result[i] = source_spls[0];
+        } else if target_freq >= source_freqs[source_freqs.len() - 1] {
+            // Target frequency is above the range, use the last point
+            result[i] = source_spls[source_freqs.len() - 1];
+        } else {
+            // Find the two points that bracket the target frequency
+            for j in 1..source_freqs.len() {
+                if source_freqs[j] >= target_freq {
+                    left_idx = j - 1;
+                    right_idx = j;
+                    break;
+                }
+            }
+
+            // Linear interpolation
+            let freq_left = source_freqs[left_idx];
+            let freq_right = source_freqs[right_idx];
+            let spl_left = source_spls[left_idx];
+            let spl_right = source_spls[right_idx];
+
+            let t = (target_freq - freq_left) / (freq_right - freq_left);
+            result[i] = spl_left + t * (spl_right - spl_left);
+        }
+    }
+
+    result
+}
+
+/// Clamp only positive dB values to +max_db, leave negatives unchanged.
+pub fn clamp_positive_only(arr: &Array1<f64>, max_db: f64) -> Array1<f64> {
+    arr.mapv(|v| if v > 0.0 { v.min(max_db) } else { v })
+}
+
+/// Simple 1/N-octave smoothing: for each frequency f_i, average values whose
+/// frequency lies within [f_i * 2^(-1/(2N)), f_i * 2^(1/(2N))].
+pub fn smooth_one_over_n_octave(
+    freqs: &Array1<f64>,
+    values: &Array1<f64>,
+    n: usize,
+) -> Array1<f64> {
+    let n = n.max(1);
+    let half_win = (2.0_f64).powf(1.0 / (2.0 * n as f64));
+    let mut out = Array1::zeros(values.len());
+    for i in 0..freqs.len() {
+        let f = freqs[i].max(1e-12);
+        let lo = f / half_win;
+        let hi = f * half_win;
+        let mut sum = 0.0;
+        let mut cnt = 0usize;
+        for j in 0..freqs.len() {
+            let fj = freqs[j];
+            if fj >= lo && fj <= hi {
+                sum += values[j];
+                cnt += 1;
+            }
+        }
+        out[i] = if cnt > 0 { sum / cnt as f64 } else { values[i] };
+    }
+    out
+}
+
+#[cfg(test)]
+mod clamp_and_smooth_tests {
+    use super::{clamp_positive_only, smooth_one_over_n_octave};
+    use ndarray::Array1;
+
+    #[test]
+    fn clamp_positive_only_clamps_only_positive_side() {
+        let arr = Array1::from(vec![-15.0, -1.0, 0.0, 1.0, 10.0, 25.0]);
+        let out = clamp_positive_only(&arr, 12.0);
+        assert_eq!(out.to_vec(), vec![-15.0, -1.0, 0.0, 1.0, 10.0, 12.0]);
+    }
+
+    #[test]
+    fn smooth_one_over_n_octave_basic_monotonic() {
+        // Simple check: with N large, window small -> output close to input
+        let freqs = Array1::from(vec![100.0, 200.0, 400.0, 800.0]);
+        let vals = Array1::from(vec![0.0, 1.0, 0.0, -1.0]);
+        let out = smooth_one_over_n_octave(&freqs, &vals, 24);
+        // Expect no drastic change
+        for (o, v) in out.iter().zip(vals.iter()) {
+            assert!((o - v).abs() <= 0.5);
+        }
     }
 }

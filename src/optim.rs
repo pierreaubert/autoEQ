@@ -11,6 +11,23 @@ pub struct ObjectiveData {
     pub spacing_weight: f64,
     pub max_db: f64,
     pub min_db: f64,
+    pub iir_hp_pk: bool,
+}
+
+// Enforce minimum absolute gain for each filter: |g_i| >= min_db (if min_db > 0)
+#[derive(Clone, Copy)]
+struct GainMinConstraintData {
+    index: usize, // filter index i
+    min_db: f64,
+}
+
+fn gain_min_abs_constraint(
+    x: &[f64],
+    _gradient: Option<&mut [f64]>,
+    data: &mut GainMinConstraintData,
+) -> f64 {
+    let gi = x[data.index * 3 + 2].abs();
+    data.min_db - gi
 }
 
 fn parse_algorithm(name: &str) -> Algorithm {
@@ -31,15 +48,18 @@ fn objective_function(x: &[f64], _gradient: Option<&mut [f64]>, data: &mut Objec
     let mut combined_spl = Array1::zeros(data.target_error.len());
 
     // Each filter is defined by 3 parameters: freq, Q, and gain.
-    // Determine which filter has the lowest frequency; make it Highpass, others Peak
-    let mut hp_index = 0usize;
-    if num_filters > 0 {
-        let mut min_f = x[0];
-        for i in 1..num_filters {
-            let f = x[i * 3];
-            if f < min_f {
-                min_f = f;
-                hp_index = i;
+    // If enabled, determine which filter has the lowest frequency; make it Highpass, others Peak
+    let mut hp_index = usize::MAX;
+    if data.iir_hp_pk {
+        hp_index = 0usize;
+        if num_filters > 0 {
+            let mut min_f = x[0];
+            for i in 1..num_filters {
+                let f = x[i * 3];
+                if f < min_f {
+                    min_f = f;
+                    hp_index = i;
+                }
             }
         }
     }
@@ -49,7 +69,7 @@ fn objective_function(x: &[f64], _gradient: Option<&mut [f64]>, data: &mut Objec
         let q = x[i * 3 + 1];
         let gain = x[i * 3 + 2];
 
-        let ftype = if i == hp_index {
+        let ftype = if data.iir_hp_pk && i == hp_index {
             BiquadFilterType::Highpass
         } else {
             BiquadFilterType::Peak
@@ -72,26 +92,23 @@ fn objective_function(x: &[f64], _gradient: Option<&mut [f64]>, data: &mut Objec
     let mut min_amp_penalty = 0.0;
     if data.min_db > 0.0 {
         let n = x.len() / 3;
-        //for i in 0..n {
-            // Skip the Highpass (lowest frequency index)
-            // Identify hp_index again to avoid passing it around
-            // (small overhead, but keeps code simple)
-            // Alternatively, we could have captured hp_index earlier.
-        //}
-        // Recompute hp_index
-        let mut hp_index = 0usize;
-        if n > 0 {
-            let mut min_f = x[0];
-            for i in 1..n {
-                let f = x[i * 3];
-                if f < min_f {
-                    min_f = f;
-                    hp_index = i;
+        // Recompute hp_index only if mode uses Highpass
+        let mut hp_index = usize::MAX;
+        if data.iir_hp_pk {
+            hp_index = 0usize;
+            if n > 0 {
+                let mut min_f = x[0];
+                for i in 1..n {
+                    let f = x[i * 3];
+                    if f < min_f {
+                        min_f = f;
+                        hp_index = i;
+                    }
                 }
             }
         }
         for i in 0..n {
-            if i == hp_index {
+            if data.iir_hp_pk && i == hp_index {
                 continue;
             }
             let g = x[i * 3 + 2].abs();
@@ -164,15 +181,18 @@ fn ceiling_constraint(x: &[f64], _gradient: Option<&mut [f64]>, data: &mut Objec
     let num_filters = x.len() / 3;
     let mut combined_spl = Array1::zeros(data.freqs.len());
 
-    // Determine lowest-frequency filter index for Highpass designation
-    let mut hp_index = 0usize;
-    if num_filters > 0 {
-        let mut min_f = x[0];
-        for i in 1..num_filters {
-            let f = x[i * 3];
-            if f < min_f {
-                min_f = f;
-                hp_index = i;
+    // Determine lowest-frequency filter index for Highpass designation if enabled
+    let mut hp_index = usize::MAX;
+    if data.iir_hp_pk {
+        hp_index = 0usize;
+        if num_filters > 0 {
+            let mut min_f = x[0];
+            for i in 1..num_filters {
+                let f = x[i * 3];
+                if f < min_f {
+                    min_f = f;
+                    hp_index = i;
+                }
             }
         }
     }
@@ -226,8 +246,27 @@ pub fn optimize_filters(
 
     // Enforce total response ceiling via nonlinear inequality constraint
     optimizer
-        .add_inequality_constraint(ceiling_constraint, objective_data, 1e-3)
+        .add_inequality_constraint(ceiling_constraint, objective_data.clone(), 1e-3)
         .unwrap();
+
+    // Enforce |g_i| >= min_db as hard constraints when min_db > 0
+    let n_filters = num_params / 3;
+    let min_abs = if objective_data.min_db > 0.0 {
+        Some(objective_data.min_db)
+    } else {
+        None
+    };
+    if let Some(min_abs) = min_abs {
+        for i in 0..n_filters {
+            let data = GainMinConstraintData {
+                index: i,
+                min_db: min_abs,
+            };
+            optimizer
+                .add_inequality_constraint(gain_min_abs_constraint, data, 1e-9)
+                .unwrap();
+        }
+    }
 
     if let Some(pop) = population {
         let _ = optimizer.set_population(pop);
@@ -263,9 +302,25 @@ pub fn refine_local(
     opt.set_lower_bounds(lower_bounds).unwrap();
     opt.set_upper_bounds(upper_bounds).unwrap();
     // Enforce total response ceiling during local refinement too
-    opt
-        .add_inequality_constraint(ceiling_constraint, objective_data, 1e-4)
+    opt.add_inequality_constraint(ceiling_constraint, objective_data.clone(), 1e-4)
         .unwrap();
+    // Enforce |g_i| >= min_db for local stage as well
+    let n_filters = num_params / 3;
+    let min_abs = if objective_data.min_db > 0.0 {
+        Some(objective_data.min_db)
+    } else {
+        None
+    };
+    if let Some(min_abs) = min_abs {
+        for i in 0..n_filters {
+            let data = GainMinConstraintData {
+                index: i,
+                min_db: min_abs,
+            };
+            opt.add_inequality_constraint(gain_min_abs_constraint, data, 1e-9)
+                .unwrap();
+        }
+    }
     let _ = opt.set_maxeval(maxeval.try_into().unwrap());
     opt.set_ftol_rel(1e-8).unwrap();
     opt.set_xtol_rel(1e-8).unwrap();
@@ -341,6 +396,7 @@ mod tests {
             spacing_weight: 1.0,
             max_db: 6.0,
             min_db: 0.0,
+            iir_hp_pk: true,
         };
         let v = ceiling_constraint(&x, None, &mut data.clone());
         assert!(v <= 1e-9, "constraint should be satisfied, got {}", v);
@@ -358,8 +414,80 @@ mod tests {
             spacing_weight: 1.0,
             max_db: 0.1, // very low ceiling to trigger violation
             min_db: 0.0,
+            iir_hp_pk: true,
         };
         let v = ceiling_constraint(&x, None, &mut data.clone());
         assert!(v > 0.0, "expected violation > 0, got {}", v);
+    }
+
+    #[test]
+    fn gain_min_abs_constraint_satisfied() {
+        // Three params per filter; index 1 (second filter) gain = -2.0 dB
+        let x = [500.0, 1.0, 0.0, 1000.0, 1.0, -2.0];
+        let mut d = GainMinConstraintData {
+            index: 1,
+            min_db: 1.0,
+        };
+        let c = gain_min_abs_constraint(&x, None, &mut d);
+        assert!(c <= 0.0, "constraint should be satisfied (<=0), got {}", c);
+    }
+
+    #[test]
+    fn gain_min_abs_constraint_violated() {
+        // index 0 gain = +0.5 dB, min_db = 1.0 => violation 0.5
+        let x = [500.0, 1.0, 0.5, 2000.0, 1.0, -3.0];
+        let mut d = GainMinConstraintData {
+            index: 0,
+            min_db: 1.0,
+        };
+        let c = gain_min_abs_constraint(&x, None, &mut d);
+        assert!(
+            c > 0.0 && (c - 0.5).abs() < 1e-12,
+            "expected 0.5, got {}",
+            c
+        );
+    }
+}
+
+/// Extract sorted center frequencies from parameter vector and compute adjacent spacings in octaves.
+pub fn compute_sorted_freqs_and_adjacent_octave_spacings(x: &[f64]) -> (Vec<f64>, Vec<f64>) {
+    let n = x.len() / 3;
+    let mut freqs: Vec<f64> = Vec::with_capacity(n);
+    for i in 0..n {
+        freqs.push(x[i * 3]);
+    }
+    freqs.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let spacings: Vec<f64> = if freqs.len() < 2 {
+        Vec::new()
+    } else {
+        freqs
+            .windows(2)
+            .map(|w| (w[1].max(1e-9) / w[0].max(1e-9)).log2().abs())
+            .collect()
+    };
+    (freqs, spacings)
+}
+
+#[cfg(test)]
+mod spacing_diag_tests {
+    use super::compute_sorted_freqs_and_adjacent_octave_spacings;
+
+    #[test]
+    fn adjacent_octave_spacings_basic() {
+        // x: [f,q,g, f,q,g, f,q,g]
+        let x = [100.0, 1.0, 0.0, 200.0, 1.0, 0.0, 400.0, 1.0, 0.0];
+        let (freqs, spacings) = compute_sorted_freqs_and_adjacent_octave_spacings(&x);
+        assert_eq!(freqs, vec![100.0, 200.0, 400.0]);
+        assert!((spacings[0] - 1.0).abs() < 1e-12);
+        assert!((spacings[1] - 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn adjacent_octave_spacings_two_filters() {
+        let x = [1000.0, 1.0, 0.0, 1100.0, 1.0, 0.0];
+        let (_freqs, spacings) = compute_sorted_freqs_and_adjacent_octave_spacings(&x);
+        // log2(1100/1000) ~ 0.1375 octaves
+        assert!(spacings.len() == 1);
+        assert!((spacings[0] - (1100.0_f64 / 1000.0).log2().abs()).abs() < 1e-12);
     }
 }
