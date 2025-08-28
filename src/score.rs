@@ -173,8 +173,16 @@ pub fn octave(count: usize) -> Vec<(f64, f64, f64)> {
 
 pub fn octave_intervals(count: usize, freq: &Array1<f64>) -> Vec<(usize, usize)> {
     let bands = octave(count);
-    let mut out = Vec::with_capacity(bands.len());
-    for (low, _c, high) in bands.into_iter() {
+
+    // Python logic: band_min_freq = max(100, min_freq)
+    let min_freq = freq[0];
+    let band_min_freq = 100.0_f64.max(min_freq);
+
+    let mut out = Vec::new();
+    for (low, center, high) in bands.into_iter() {
+        if center < band_min_freq || center > 12000.0 {
+            continue; // skip bands outside desired range
+        }
         let imin = freq.iter().position(|&f| f >= low).unwrap_or(freq.len());
         let imax = freq.iter().position(|&f| f >= high).unwrap_or(freq.len());
         out.push((imin, imax));
@@ -205,7 +213,8 @@ pub fn lfx(freq: &Array1<f64>, lw: &Array1<f64>, sp: &Array1<f64>) -> f64 {
         return (300.0_f64).log10();
     }
     let lw_ref = lw.slice(s![lw_min..lw_max]).mean().unwrap_or(0.0) - 6.0;
-    let mut lfx_range: Vec<(usize, f64)> = Vec::new();
+    // Collect indices where freq <= 300 Hz and SP level is at least 6 dB below LW reference
+    let mut indices: Vec<usize> = Vec::new();
     for (i, (&f, &spv)) in freq
         .iter()
         .take(lw_min)
@@ -213,21 +222,32 @@ pub fn lfx(freq: &Array1<f64>, lw: &Array1<f64>, sp: &Array1<f64>) -> f64 {
         .enumerate()
     {
         if spv <= lw_ref {
-            lfx_range.push((i, f));
+            indices.push(i);
         }
     }
-    if lfx_range.is_empty() {
+    if indices.is_empty() {
+        // No frequency bin meets the -6 dB criterion → fall back to lowest frequency
         return freq[0].log10();
     }
-    let group = consecutive_groups_first_group(&lfx_range);
-    if group.len() <= 1 {
-        return (300.0_f64).log10();
+
+    // Identify the first contiguous group of indices (as in Python implementation)
+    let mut last_idx = indices[0];
+    for &idx in indices.iter().skip(1) {
+        if idx == last_idx + 1 {
+            last_idx = idx;
+        } else {
+            break; // stop at the end of the first consecutive block
+        }
     }
-    let mut pos = group.last().unwrap().0;
-    if freq.len() < pos - 1 {
-        pos += 1;
-    }
-    freq[pos].log10()
+
+    // Use the *next* frequency bin (pos + 1) to align with the Python behaviour
+    let next_idx = if last_idx + 1 < freq.len() {
+        last_idx + 1
+    } else {
+        last_idx // fallback to last_idx if we are already at the end
+    };
+
+    freq[next_idx].log10()
 }
 
 pub fn sm(freq: &Array1<f64>, spl: &Array1<f64>) -> f64 {
