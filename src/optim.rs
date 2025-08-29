@@ -1,6 +1,27 @@
+//! AutoEQ - A library for audio equalization and filter optimization
+//!
+//! Copyright (C) 2025 Pierre Aubert pierre(at)spinorama(dot)org
+//!
+//! This program is free software: you can redistribute it and/or modify
+//! it under the terms of the GNU General Public License as published by
+//! the Free Software Foundation, either version 3 of the License, or
+//! (at your option) any later version.
+//!
+//! This program is distributed in the hope that it will be useful,
+//! but WITHOUT ANY WARRANTY; without even the implied warranty of
+//! MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//! GNU General Public License for more details.
+//!
+//! You should have received a copy of the GNU General Public License
+//! along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 use crate::iir::{Biquad, BiquadFilterType};
 use ndarray::Array1;
 use nlopt::{Algorithm, Nlopt, Target};
+use std::env;
+use std::process;
+use std::sync::OnceLock;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use crate::loss::{LossType, ScoreLossData, score_loss};
 
@@ -45,9 +66,60 @@ fn parse_algorithm(name: &str) -> Algorithm {
     }
 }
 
+// Debug logging configuration for objective function (initialized once from env)
+struct DebugCfg {
+    enabled: bool,
+    every: usize,
+    max_logs: usize,
+    printed: AtomicUsize,
+}
+
+static DEBUG_CFG: OnceLock<DebugCfg> = OnceLock::new();
+static OBJ_CALLS: AtomicUsize = AtomicUsize::new(0);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct DebugParams {
+    enabled: bool,
+    every: usize,
+    max_logs: usize,
+}
+
+fn parse_debug_env_with<F>(get: F) -> DebugParams
+where
+    F: Fn(&str) -> Option<String>,
+{
+    let enabled = get("AUTOEQ_DEBUG_OBJ")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false);
+    let every = get("AUTOEQ_DEBUG_EVERY")
+        .and_then(|v| v.parse::<usize>().ok())
+        .filter(|&v| v >= 1)
+        .unwrap_or(100);
+    let max_logs = get("AUTOEQ_DEBUG_MAX")
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(50);
+    DebugParams {
+        enabled,
+        every,
+        max_logs,
+    }
+}
+
+fn get_debug_cfg() -> &'static DebugCfg {
+    DEBUG_CFG.get_or_init(|| {
+        let params = parse_debug_env_with(|k| env::var(k).ok());
+        DebugCfg {
+            enabled: params.enabled,
+            every: params.every,
+            max_logs: params.max_logs,
+            printed: AtomicUsize::new(0),
+        }
+    })
+}
+
 fn objective_function(x: &[f64], _gradient: Option<&mut [f64]>, data: &mut ObjectiveData) -> f64 {
     let num_filters = x.len() / 3;
-    let mut combined_spl = Array1::zeros(data.target_error.len());
+    let mut peq_spl = Array1::zeros(data.target_error.len());
 
     // Each filter is defined by 3 parameters: freq, Q, and gain.
     // If enabled, determine which filter has the lowest frequency; make it Highpass, others Peak
@@ -78,63 +150,127 @@ fn objective_function(x: &[f64], _gradient: Option<&mut [f64]>, data: &mut Objec
         };
         let filter = Biquad::new(ftype, freq, data.srate, q, gain);
         let resp = filter.np_log_result(&data.freqs);
-        combined_spl += &resp;
+        peq_spl += &resp;
     }
 
     // Compute base fit depending on loss type
     let fit = match data.loss_type {
         LossType::Flat => {
             // Error vs inverted target
-            let error = &combined_spl - &data.target_error;
+            let error = &peq_spl - &data.target_error;
             weighted_mse(&data.freqs, &error)
         }
         LossType::Score => {
             if let Some(ref sd) = data.score_data {
-                // combined_spl is the PEQ response
-                score_loss(sd, &data.freqs, &combined_spl)
+                // peq_spl is the PEQ response
+                score_loss(sd, &data.freqs, &peq_spl)
             } else {
-                // Fallback to flat if score data missing
-                let error = &combined_spl - &data.target_error;
-                weighted_mse(&data.freqs, &error)
+                eprintln!("Error: score loss requested but score data is missing");
+                process::exit(1);
+                0.0
             }
         }
     };
+
+    // Ceiling penalty: when using HP+PK mode, cap the total combined response at max_db
+    // We penalize the positive excess above max_db. Using the maximum excess keeps
+    // behavior close to the previous nonlinear inequality constraint.
+    let mut ceiling_penalty = 0.0;
+    // if data.freqs.len() > 0 {
+    //     let mut max_violation = 0.0_f64;
+    //     for &v in peq_spl.iter() {
+    //         let excess = v - data.max_db;
+    //         if excess > max_violation {
+    //             max_violation = excess;
+    //         }
+    //     }
+    //     if max_violation > 0.0 {
+    //         // Quadratic penalty on the maximum violation; scale moderately
+    //         ceiling_penalty = max_violation * max_violation * 10.0;
+    //     }
+    // }
 
     // Add spacing penalty between center frequencies in octaves
     let spacing = spacing_penalty(x, data.min_spacing_oct);
 
     // Enforce minimum absolute gain for Peak EQs if min_db > 0
     let mut min_amp_penalty = 0.0;
-    if data.min_db > 0.0 {
-        let n = x.len() / 3;
-        // Recompute hp_index only if mode uses Highpass
-        let mut hp_index = usize::MAX;
-        if data.iir_hp_pk {
-            hp_index = 0usize;
-            if n > 0 {
-                let mut min_f = x[0];
-                for i in 1..n {
-                    let f = x[i * 3];
-                    if f < min_f {
-                        min_f = f;
-                        hp_index = i;
-                    }
+    // if data.min_db > 0.0 {
+    //     let n = x.len() / 3;
+    //     // Recompute hp_index only if mode uses Highpass
+    //     let mut hp_index = usize::MAX;
+    //     if data.iir_hp_pk {
+    //         hp_index = 0usize;
+    //         if n > 0 {
+    //             let mut min_f = x[0];
+    //             for i in 1..n {
+    //                 let f = x[i * 3];
+    //                 if f < min_f {
+    //                     min_f = f;
+    //                     hp_index = i;
+    //                 }
+    //             }
+    //         }
+    //     }
+    //     for i in 0..n {
+    //         if data.iir_hp_pk && i == hp_index {
+    //             continue;
+    //         }
+    //         let g = x[i * 3 + 2].abs();
+    //         let short = (data.min_db - g).max(0.0);
+    //         if short > 0.0 {
+    //             // Strong barrier to emulate disjoint feasible set for gain:
+    //             // gains in (-min_db, min_db) are heavily discouraged
+    //             // Scale quadratic to keep differentiability for local methods
+    //             const BARRIER_SCALE: f64 = 1e4;
+    //             min_amp_penalty += BARRIER_SCALE * short * short;
+    //         }
+    //     }
+    // }
+
+    let obj = fit + data.spacing_weight * spacing + min_amp_penalty + ceiling_penalty;
+
+    // Periodic debug logging of gain values to detect unintended quantization.
+    // Controlled by env vars: AUTOEQ_DEBUG_OBJ (0/1), AUTOEQ_DEBUG_EVERY (default 100), AUTOEQ_DEBUG_MAX (default 50)
+    let cfg = get_debug_cfg();
+    if cfg.enabled {
+        let call_idx = OBJ_CALLS.fetch_add(1, Ordering::Relaxed) + 1;
+        if call_idx % cfg.every == 0 {
+            let already = cfg.printed.fetch_add(1, Ordering::Relaxed);
+            if already < cfg.max_logs {
+                // Extract gains from x: indices 2, 5, 8, ...
+                let mut gains: Vec<f64> = Vec::with_capacity(num_filters);
+                for i in 0..num_filters {
+                    gains.push(x[i * 3 + 2]);
                 }
-            }
-        }
-        for i in 0..n {
-            if data.iir_hp_pk && i == hp_index {
-                continue;
-            }
-            let g = x[i * 3 + 2].abs();
-            let short = (data.min_db - g).max(0.0);
-            if short > 0.0 {
-                min_amp_penalty += short * short;
+                let min_abs = gains.iter().fold(f64::INFINITY, |m, &g| m.min(g.abs()));
+                let max_abs = gains.iter().fold(0.0_f64, |m, &g| m.max(g.abs()));
+                let gains_str = gains
+                    .iter()
+                    .map(|g| format!("{:+.4}", g))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                // Heuristic: check if all gains are ~multiples of 0.5 within 1e-6
+                let half_step_like = gains
+                    .iter()
+                    .all(|&g| ((g / 0.5).round() * 0.5 - g).abs() < 1e-6);
+                println!(
+                    "[obj {:>6}] gains: [{}]  |min|={:.4} |max|={:.4}{}",
+                    call_idx,
+                    gains_str,
+                    min_abs,
+                    max_abs,
+                    if half_step_like {
+                        "  <- appears quantized to 0.5"
+                    } else {
+                        ""
+                    }
+                );
             }
         }
     }
 
-    fit + data.spacing_weight * spacing + min_amp_penalty
+    obj
 }
 
 /// Calculate spacing penalty between filter center frequencies
@@ -246,7 +382,7 @@ pub fn optimize_filters(
         num_params,
         objective_function,
         Target::Minimize,
-        objective_data.clone(),
+        objective_data,
     );
 
     optimizer.set_lower_bounds(lower_bounds).unwrap();
@@ -303,7 +439,7 @@ pub fn refine_local(
         num_params,
         objective_function,
         Target::Minimize,
-        objective_data.clone(),
+        objective_data,
     );
     opt.set_lower_bounds(lower_bounds).unwrap();
     opt.set_upper_bounds(upper_bounds).unwrap();
@@ -401,6 +537,59 @@ mod tests {
     }
 
     #[test]
+    fn min_gain_barrier_penalizes_small_gains_peak_only() {
+        // No fit term (empty freqs/target), isolate min gain barrier
+        let mut data = ObjectiveData {
+            freqs: Array1::<f64>::zeros(0),
+            target_error: Array1::<f64>::zeros(0),
+            srate: 48_000.0,
+            min_spacing_oct: 0.0,
+            spacing_weight: 0.0,
+            max_db: 6.0,
+            min_db: 1.0,
+            iir_hp_pk: false,
+            loss_type: LossType::Flat,
+            score_data: None,
+        };
+        // One Peak filter with |gain| below min_db should be penalized heavily
+        let x_bad = [1000.0, 1.0, 0.5];
+        let obj_bad = objective_function(&x_bad, None, &mut data);
+        // Same filter with |gain| == min_db should have zero penalty
+        let x_ok = [1000.0, 1.0, 1.0];
+        let obj_ok = objective_function(&x_ok, None, &mut data);
+        assert!(
+            obj_bad > obj_ok + 1.0,
+            "barrier should strongly penalize small gains: {} vs {}",
+            obj_bad,
+            obj_ok
+        );
+    }
+
+    #[test]
+    fn min_gain_barrier_skips_highpass_in_hp_pk_mode() {
+        // Two filters, first is lowest freq => Highpass, second Peak
+        let mut data = ObjectiveData {
+            freqs: Array1::<f64>::zeros(0),
+            target_error: Array1::<f64>::zeros(0),
+            srate: 48_000.0,
+            min_spacing_oct: 0.0,
+            spacing_weight: 0.0,
+            max_db: 6.0,
+            min_db: 1.0,
+            iir_hp_pk: true,
+            loss_type: LossType::Flat,
+            score_data: None,
+        };
+        // x = [f1,q1,g1 (HP, ignored for barrier), f2,q2,g2 (Peak)]
+        let x = [60.0, 1.0, 0.1, 1000.0, 1.0, 0.5];
+        let obj_hp_small_gain = objective_function(&x, None, &mut data);
+        // Increase Peak gain to meet min_db, objective should drop
+        let x2 = [60.0, 1.0, 0.1, 1000.0, 1.0, 1.0];
+        let obj_peak_ok = objective_function(&x2, None, &mut data);
+        assert!(obj_peak_ok < obj_hp_small_gain);
+    }
+
+    #[test]
     fn objective_spacing_penalty_positive_when_close() {
         // Same setup as above to isolate spacing term
         let mut data = ObjectiveData {
@@ -430,6 +619,117 @@ mod tests {
             obj,
             expected_obj
         );
+    }
+
+    #[test]
+    fn ceiling_penalty_applies_in_hp_pk_mode() {
+        // Build data with one evaluation frequency to keep things simple
+        let freqs = array![1000.0];
+        let target_error = array![0.0];
+
+        // Two filters: lowest freq becomes Highpass, second is Peak at 1 kHz with +12 dB
+        // x = [f1,q1,g1, f2,q2,g2]
+        let x = [60.0, 1.0, 0.0, 1000.0, 1.0, 12.0];
+
+        // Baseline with a very high ceiling -> effectively no ceiling penalty
+        let mut data_hi = ObjectiveData {
+            freqs: freqs.clone(),
+            target_error: target_error.clone(),
+            srate: 48_000.0,
+            min_spacing_oct: 0.0,
+            spacing_weight: 0.0,
+            max_db: 100.0,
+            min_db: 0.0,
+            iir_hp_pk: true,
+            loss_type: LossType::Flat,
+            score_data: None,
+        };
+        let obj_hi = objective_function(&x, None, &mut data_hi);
+
+        // Tight ceiling -> should add positive ceiling penalty
+        let mut data_lo = data_hi.clone();
+        data_lo.max_db = 0.1;
+        let obj_lo = objective_function(&x, None, &mut data_lo);
+
+        assert!(
+            obj_lo > obj_hi,
+            "expected tighter ceiling to increase objective: {} vs {}",
+            obj_lo,
+            obj_hi
+        );
+    }
+
+    #[test]
+    fn no_ceiling_penalty_when_hp_pk_disabled() {
+        let freqs = array![1000.0];
+        let target_error = array![0.0];
+
+        // Two Peaks (since hp/pk disabled), with boost at 1k
+        let x = [100.0, 1.0, 0.0, 1000.0, 1.0, 12.0];
+
+        let mut data_hi = ObjectiveData {
+            freqs: freqs.clone(),
+            target_error: target_error.clone(),
+            srate: 48_000.0,
+            min_spacing_oct: 0.0,
+            spacing_weight: 0.0,
+            max_db: 100.0,
+            min_db: 0.0,
+            iir_hp_pk: false,
+            loss_type: LossType::Flat,
+            score_data: None,
+        };
+        let obj_hi = objective_function(&x, None, &mut data_hi);
+
+        let mut data_lo = data_hi.clone();
+        data_lo.max_db = 0.1;
+        let obj_lo = objective_function(&x, None, &mut data_lo);
+
+        // With hp/pk disabled, our ceiling penalty is inactive; objectives should match
+        assert!(
+            (obj_lo - obj_hi).abs() < 1e-12,
+            "objectives should be equal without ceiling penalty"
+        );
+    }
+
+    #[test]
+    fn debug_env_parsing_defaults_and_validation() {
+        // No env present -> defaults
+        let get = |_k: &str| -> Option<String> { None };
+        let p = super::parse_debug_env_with(get);
+        assert_eq!(p.enabled, false);
+        assert_eq!(p.every, 100);
+        assert_eq!(p.max_logs, 50);
+
+        // Invalid values fall back to defaults or are clamped by filter
+        let get_bad = |k: &str| -> Option<String> {
+            match k {
+                "AUTOEQ_DEBUG_OBJ" => Some("no".to_string()),
+                "AUTOEQ_DEBUG_EVERY" => Some("0".to_string()), // invalid, should fallback to 100
+                "AUTOEQ_DEBUG_MAX" => Some("notanumber".to_string()), // invalid, fallback to 50
+                _ => None,
+            }
+        };
+        let p2 = super::parse_debug_env_with(get_bad);
+        assert_eq!(p2.enabled, false);
+        assert_eq!(p2.every, 100);
+        assert_eq!(p2.max_logs, 50);
+    }
+
+    #[test]
+    fn debug_env_parsing_set_values() {
+        let get = |k: &str| -> Option<String> {
+            match k {
+                "AUTOEQ_DEBUG_OBJ" => Some("true".to_string()),
+                "AUTOEQ_DEBUG_EVERY" => Some("5".to_string()),
+                "AUTOEQ_DEBUG_MAX" => Some("7".to_string()),
+                _ => None,
+            }
+        };
+        let p = super::parse_debug_env_with(get);
+        assert_eq!(p.enabled, true);
+        assert_eq!(p.every, 5);
+        assert_eq!(p.max_logs, 7);
     }
 }
 

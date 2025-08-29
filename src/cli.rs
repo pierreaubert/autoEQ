@@ -1,9 +1,24 @@
+//! AutoEQ - A library for audio equalization and filter optimization
 //! Common command-line interface definitions shared across binaries
-
-use clap::Parser;
-use std::path::PathBuf;
+//!
+//! Copyright (C) 2025 Pierre Aubert pierre(at)spinorama(dot)org
+//!
+//! This program is free software: you can redistribute it and/or modify
+//! it under the terms of the GNU General Public License as published by
+//! the Free Software Foundation, either version 3 of the License, or
+//! (at your option) any later version.
+//!
+//! This program is distributed in the hope that it will be useful,
+//! but WITHOUT ANY WARRANTY; without even the implied warranty of
+//! MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//! GNU General Public License for more details.
+//!
+//! You should have received a copy of the GNU General Public License
+//! along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 use crate::LossType;
+use clap::Parser;
+use std::path::PathBuf;
 
 /// Shared CLI arguments for AutoEQ binaries.
 #[derive(Parser, Debug, Clone)]
@@ -28,11 +43,11 @@ pub struct Args {
     pub sample_rate: f64,
 
     /// Maximum absolute dB gain allowed for each filter.
-    #[arg(long, default_value_t = 6.0)]
+    #[arg(long, default_value_t = 6.0, value_parser = parse_nonnegative_f64)]
     pub max_db: f64,
 
     /// Minimum absolute dB gain allowed for each filter.
-    #[arg(long, default_value_t = 0.5)]
+    #[arg(long, default_value_t = 1.0, value_parser = parse_strictly_positive_f64)]
     pub min_db: f64,
 
     /// Maximum Q factor allowed for each filter.
@@ -93,11 +108,11 @@ pub struct Args {
     pub local_algo: String,
 
     /// Minimum spacing between filter center frequencies in octaves (0 disables)
-    #[arg(long, default_value_t = 0.4)]
+    #[arg(long, default_value_t = 0.5)]
     pub min_spacing_oct: f64,
 
     /// Weight for the spacing penalty in the objective function
-    #[arg(long, default_value_t = 1.0)]
+    #[arg(long, default_value_t = 20.0)]
     pub spacing_weight: f64,
 
     /// Enable smoothing (regularization) of the inverted target curve
@@ -125,12 +140,56 @@ mod tests {
     #[test]
     fn parse_defaults() {
         // Simulate no CLI args: use default values
-        use clap::Parser as _;
         let args = Args::parse_from(["autoeq-test"]);
         assert_eq!(args.num_filters, 6);
         assert_eq!(args.sample_rate, 48000.0);
         assert_eq!(args.maxeval, 10_000);
         assert_eq!(args.curve_name, "Listening Window");
         assert!(!args.iir_hp_pk);
+    }
+
+    #[test]
+    fn min_db_must_be_strictly_positive_zero_rejected() {
+        let res = Args::try_parse_from(["autoeq-test", "--min-db", "0.0"]);
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn min_db_must_be_strictly_positive_negative_rejected() {
+        let res = Args::try_parse_from(["autoeq-test", "--min-db", "-0.1"]);
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn max_db_allows_zero() {
+        let res = Args::try_parse_from(["autoeq-test", "--max-db", "0.0"]);
+        assert!(res.is_ok());
+        assert_eq!(res.unwrap().max_db, 0.0);
+    }
+
+    #[test]
+    fn max_db_rejects_negative() {
+        let res = Args::try_parse_from(["autoeq-test", "--max-db", "-1.0"]);
+        assert!(res.is_err());
+    }
+}
+
+// Custom value parser to enforce strictly positive f64
+fn parse_strictly_positive_f64(s: &str) -> Result<f64, String> {
+    let v: f64 = s.parse().map_err(|_| format!("invalid float: {s}"))?;
+    if v > 0.0 {
+        Ok(v)
+    } else {
+        Err("value must be strictly positive (> 0)".to_string())
+    }
+}
+
+// Custom value parser to enforce non-negative f64 (>= 0)
+fn parse_nonnegative_f64(s: &str) -> Result<f64, String> {
+    let v: f64 = s.parse().map_err(|_| format!("invalid float: {s}"))?;
+    if v >= 0.0 {
+        Ok(v)
+    } else {
+        Err("value must be non-negative (>= 0)".to_string())
     }
 }

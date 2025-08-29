@@ -1,3 +1,20 @@
+//! AutoEQ - A library for audio equalization and filter optimization
+//!
+//! Copyright (C) 2025 Pierre Aubert pierre(at)spinorama(dot)org
+//!
+//! This program is free software: you can redistribute it and/or modify
+//! it under the terms of the GNU General Public License as published by
+//! the Free Software Foundation, either version 3 of the License, or
+//! (at your option) any later version.
+//!
+//! This program is distributed in the hope that it will be useful,
+//! but WITHOUT ANY WARRANTY; without even the implied warranty of
+//! MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//! GNU General Public License for more details.
+//!
+//! You should have received a copy of the GNU General Public License
+//! along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 use std::collections::HashMap;
 use std::error::Error;
 
@@ -524,7 +541,10 @@ pub fn score_peq_approx(
     peq: &Array1<f64>,
 ) -> ScoreMetrics {
     let on2 = on + peq;
-    score(freq, intervals, &on2, lw, sp, pir)
+    let lw2 = lw + peq;
+    let sp2 = sp + peq;
+    let pir2 = pir + peq;
+    score(freq, intervals, &on2, &lw2, &sp2, &pir2)
 }
 
 #[cfg(test)]
@@ -675,7 +695,7 @@ mod pir_helpers_tests {
     use std::collections::HashMap;
 
     // Helpers to encode f64 arrays into the Plotly-typed array base64 format used in read.rs
-    fn le_f64_bytes(vals: &[f64]) -> Vec<u8> {
+    fn _le_f64_bytes(vals: &[f64]) -> Vec<u8> {
         let mut out = Vec::with_capacity(vals.len() * 8);
         for v in vals {
             out.extend_from_slice(&v.to_bits().to_le_bytes());
@@ -683,7 +703,7 @@ mod pir_helpers_tests {
         out
     }
 
-    fn base64_encode(bytes: &[u8]) -> String {
+    fn _base64_encode(bytes: &[u8]) -> String {
         let alphabet = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
         let mut out = String::new();
         let mut i = 0usize;
@@ -809,6 +829,80 @@ mod pir_helpers_tests {
         // Build expected
         let intervals = octave_intervals(2, &freq);
         let expected = score(&freq, &intervals, &on_vals, &lw_vals, &sp_vals, &pir_vals);
+
+        assert!((got.nbd_on - expected.nbd_on).abs() < 1e-12);
+        assert!((got.nbd_pir - expected.nbd_pir).abs() < 1e-12);
+        assert!((got.lfx - expected.lfx).abs() < 1e-12);
+        if got.sm_pir.is_nan() && expected.sm_pir.is_nan() {
+            // ok
+        } else {
+            assert!((got.sm_pir - expected.sm_pir).abs() < 1e-12);
+        }
+        if got.pref_score.is_nan() && expected.pref_score.is_nan() {
+            // ok
+        } else {
+            assert!((got.pref_score - expected.pref_score).abs() < 1e-12);
+        }
+    }
+
+    #[tokio::test]
+    async fn metrics_with_precomputed_curves_and_peq_matches_approx() {
+        use super::{compute_cea2034_metrics, octave_intervals, score_peq_approx};
+
+        // Simple two-point dataset
+        let freq = Array1::from(vec![100.0, 1000.0]);
+        let on_vals = Array1::from(vec![80.0_f64, 85.0_f64]);
+        let lw_vals = Array1::from(vec![81.0_f64, 84.0_f64]);
+        let er_vals = Array1::from(vec![79.0_f64, 83.0_f64]);
+        let sp_vals = Array1::from(vec![78.0_f64, 82.0_f64]);
+
+        // Precompute PIR from LW/ER/SP
+        let pir_vals = compute_pir_from_lw_er_sp(&lw_vals, &er_vals, &sp_vals);
+
+        // Build CEA2034 data map expected by the helper
+        let mut cea2034_data: HashMap<String, Curve> = HashMap::new();
+        cea2034_data.insert(
+            "On Axis".to_string(),
+            Curve {
+                freq: freq.clone(),
+                spl: on_vals.clone(),
+            },
+        );
+        cea2034_data.insert(
+            "Listening Window".to_string(),
+            Curve {
+                freq: freq.clone(),
+                spl: lw_vals.clone(),
+            },
+        );
+        cea2034_data.insert(
+            "Sound Power".to_string(),
+            Curve {
+                freq: freq.clone(),
+                spl: sp_vals.clone(),
+            },
+        );
+        cea2034_data.insert(
+            "Estimated In-Room Response".to_string(),
+            Curve {
+                freq: freq.clone(),
+                spl: pir_vals.clone(),
+            },
+        );
+
+        // A simple PEQ response
+        let peq = Array1::from(vec![1.0_f64, -1.0_f64]);
+
+        // Compute using the async helper with PEQ
+        let got = compute_cea2034_metrics(&freq, &cea2034_data, Some(&peq))
+            .await
+            .expect("metrics with peq");
+
+        // Build expected using the approximation helper
+        let intervals = octave_intervals(2, &freq);
+        let expected = score_peq_approx(
+            &freq, &intervals, &lw_vals, &sp_vals, &pir_vals, &on_vals, &peq,
+        );
 
         assert!((got.nbd_on - expected.nbd_on).abs() < 1e-12);
         assert!((got.nbd_pir - expected.nbd_pir).abs() < 1e-12);

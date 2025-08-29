@@ -1,3 +1,20 @@
+//! AutoEQ - A library for audio equalization and filter optimization
+//!
+//! Copyright (C) 2025 Pierre Aubert pierre(at)spinorama(dot)org
+//!
+//! This program is free software: you can redistribute it and/or modify
+//! it under the terms of the GNU General Public License as published by
+//! the Free Software Foundation, either version 3 of the License, or
+//! (at your option) any later version.
+//!
+//! This program is distributed in the hope that it will be useful,
+//! but WITHOUT ANY WARRANTY; without even the implied warranty of
+//! MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//! GNU General Public License for more details.
+//!
+//! You should have received a copy of the GNU General Public License
+//! along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 use std::collections::HashMap;
 use std::error::Error;
 use std::path::PathBuf;
@@ -155,37 +172,31 @@ fn create_cea2034_with_eq_traces(
 /// Generate and save an HTML plot comparing the input curve with the optimized EQ response.
 ///
 /// # Arguments
-/// * `input_curve_name` - The name of the original frequency response curve
+/// * `args` - The list of args from the command line
 /// * `input_curve` - The original frequency response curve
+/// * `smoothed_curve` - Optional smoothed inverted target curve
+/// * `target_curve` - The target curve
 /// * `optimized_params` - The optimized filter parameters
-/// * `num_filters` - The number of filters used in optimization
-/// * `sample_rate` - The sample rate in Hz
-/// * `max_db` - Maximum absolute dB value
-/// * `smoothed` - Optional smoothed inverted target curve
 /// * `output_path` - The path to save the HTML output file
-/// * `speaker` - Optional speaker name
-/// * `measurement` - Optional measurement name
-/// * `iir_hp_pk` - Whether to use a high-pass filter for the lowest frequency
 /// * `cea2034_curves` - Optional CEA2034 curves to include in the plot
 /// * `eq_response` - Optional EQ response to include in the plot
 ///
 /// # Returns
 /// * Result indicating success or failure
 pub async fn plot_results(
-    input_curve_name: &str,
+    args: &super::Args,
     input_curve: &super::Curve,
+    smoothed_curve: Option<&super::Curve>,
+    target_curve: &Array1<f64>,
     optimized_params: &[f64],
-    num_filters: usize,
-    sample_rate: f64,
-    _max_db: f64,
-    smoothed: Option<&Array1<f64>>,
     output_path: &PathBuf,
-    speaker: Option<&str>,
-    measurement: Option<&str>,
-    iir_hp_pk: bool,
     cea2034_curves: Option<&HashMap<String, super::Curve>>,
     eq_response: Option<&Array1<f64>>,
 ) -> Result<(), Box<dyn Error>> {
+    let num_filters = args.num_filters;
+    let sample_rate = args.sample_rate;
+    let speaker = args.speaker.as_deref();
+    let iir_hp_pk = args.iir_hp_pk;
     // Create a dense frequency vector for smooth plotting
     let mut freqs = Vec::new();
     let mut freq = 20.0;
@@ -268,11 +279,6 @@ pub async fn plot_results(
         .line(plotly::common::Line::new().color("#000000").width(2.0));
     plot.add_trace(total_trace);
 
-    // ----------------------------------------------------------------------
-    // Second subplot: Input curve and IIR response (not inverted) (y2 axis)
-    // ----------------------------------------------------------------------
-    let measurement_name = measurement.unwrap_or("Input Curve");
-
     let iir_trace = Scatter::new(plot_freqs.to_vec(), combined_response.to_vec())
         .mode(Mode::Lines)
         .name("IIR Response")
@@ -281,9 +287,12 @@ pub async fn plot_results(
         .line(plotly::common::Line::new().color("#2ca02c"));
     plot.add_trace(iir_trace);
 
+    // ----------------------------------------------------------------------
+    // Second subplot: inverted target curve (possibly smoothed)
+    // ----------------------------------------------------------------------
     // If smoothing enabled, add the smoothed inverted target curve trace
-    if let Some(sm) = smoothed {
-        let smoothed_trace = Scatter::new(input_curve.freq.to_vec(), sm.to_vec())
+    if let Some(sm) = smoothed_curve {
+        let smoothed_trace = Scatter::new(sm.freq.to_vec(), sm.spl.to_vec())
             .mode(Mode::Lines)
             .name("Smoothed Inverted Target")
             .x_axis("x2")
@@ -291,22 +300,22 @@ pub async fn plot_results(
             .line(plotly::common::Line::new().color("#9467bd"));
         plot.add_trace(smoothed_trace);
     } else {
-        let input_trace = Scatter::new(input_curve.freq.to_vec(), input_curve.spl.to_vec())
+        let target_trace = Scatter::new(input_curve.freq.to_vec(), target_curve.to_vec())
             .mode(Mode::Lines)
-            .name(measurement_name)
+            .name("Inverted Target")
             .x_axis("x2")
             .y_axis("y2")
             .line(plotly::common::Line::new().color("#1f77b4"));
-        plot.add_trace(input_trace);
+        plot.add_trace(target_trace);
     }
 
     // ----------------------------------------------------------------------
     // Add CEA2034 curves if provided
     // ----------------------------------------------------------------------
-    let mut x_axis3_title = "ON -- Frequency (Hz)".to_string();
-    let mut x_axis4_title = "LW -- Frequency (Hz)".to_string();
-    let mut x_axis5_title = "ER -- Frequency (Hz)".to_string();
-    let mut x_axis6_title = "SP -- Frequency (Hz)".to_string();
+    let mut x_axis3_title = "On Axis".to_string();
+    let mut x_axis4_title = "Listening Window".to_string();
+    let mut x_axis5_title = "Early Reflections".to_string();
+    let mut x_axis6_title = "Sound Power".to_string();
     if let Some(curves) = cea2034_curves {
         // Create CEA2034 traces
         let cea2034_traces = create_cea2034_traces(curves);
@@ -323,8 +332,8 @@ pub async fn plot_results(
         }
     } else {
         // No CEA2034 data: show input curve (left) and input + PEQ (right) on second row
-        x_axis3_title = format!("{} -- Frequency (Hz)", input_curve_name).to_string();
-        x_axis4_title = format!("{} EQ -- Frequency (Hz)", input_curve_name).to_string();
+        x_axis3_title = format!("{} -- Frequency (Hz)", args.curve_name);
+        x_axis4_title = format!("{} EQ -- Frequency (Hz)", args.curve_name);
         x_axis5_title = "unused".to_string();
         x_axis6_title = "unused".to_string();
         // Interpolate input to plotting freqs to align with combined_response
@@ -334,7 +343,7 @@ pub async fn plot_results(
         // Left subplot (x3/y3): Input Curve
         let input_second_row = Scatter::new(plot_freqs.to_vec(), input_on_plot.to_vec())
             .mode(Mode::Lines)
-            .name(input_curve_name)
+            .name(args.curve_name.clone())
             .x_axis("x3")
             .y_axis("y3")
             .line(plotly::common::Line::new().color("#1f77b4"));
@@ -344,19 +353,19 @@ pub async fn plot_results(
         let input_plus_peq = &input_on_plot + &combined_response;
         let input_plus_peq_trace = Scatter::new(plot_freqs.to_vec(), input_plus_peq.to_vec())
             .mode(Mode::Lines)
-            .name(format!("{} + EQ", input_curve_name))
+            .name(format!("{} + EQ", args.curve_name))
             .x_axis("x4")
             .y_axis("y4")
             .line(plotly::common::Line::new().color("#2ca02c"));
         plot.add_trace(input_plus_peq_trace);
+    }
 
-        // Add reference lines y=1 and y=-1 from x=100 to x=10000 (black) on both subplots
-        for t in make_ref_lines("x3", "y3") {
-            plot.add_trace(Box::new(t));
-        }
-        for t in make_ref_lines("x4", "y4") {
-            plot.add_trace(Box::new(t));
-        }
+    // Add reference lines y=1 and y=-1 from x=100 to x=10000 (black) on both subplots
+    for t in make_ref_lines("x3", "y3") {
+        plot.add_trace(Box::new(t));
+    }
+    for t in make_ref_lines("x4", "y4") {
+        plot.add_trace(Box::new(t));
     }
 
     // ----------------------------------------------------------------------

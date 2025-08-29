@@ -161,6 +161,11 @@ impl Biquad {
             }
         }
 
+        // Safety clamp: ensure strictly positive Q to avoid division by zero in alpha = sn/(2*q)
+        if biquad.q <= 0.0 {
+            biquad.q = 1.0e-6;
+        }
+
         biquad.compute_coeffs();
         biquad
     }
@@ -426,6 +431,17 @@ mod tests {
             assert!(v.is_finite(), "response at idx {} not finite: {}", i, v);
         }
     }
+
+    #[test]
+    fn peak_with_zero_q_is_safely_clamped() {
+        // q==0 for Peak should be clamped internally to a small positive value
+        let bq = Biquad::new(BiquadFilterType::Peak, 1_000.0, 48_000.0, 0.0, 3.0);
+        let freqs = array![20.0, 100.0, 1_000.0, 10_000.0, 20_000.0];
+        let resp = bq.np_log_result(&freqs);
+        for (i, v) in resp.iter().enumerate() {
+            assert!(v.is_finite(), "response at idx {} not finite: {}", i, v);
+        }
+    }
 }
 #[cfg(test)]
 mod peq_response_tests {
@@ -496,25 +512,25 @@ pub fn build_sorted_filters(x: &[f64], iir_hp_pk: bool) -> Vec<FilterRow> {
 /// shown first, followed by Peak filters sorted by frequency.
 pub fn peq_print(x: &[f64], iir_hp_pk: bool) {
     let rows = build_sorted_filters(x, iir_hp_pk);
-    println!("+ -------------- Global: Optimal IIR Filters -------------+");
+    println!("+ --------------- Optimal IIR Filters -----------------+");
     println!(
-        "| {:<5} | {:<10} | {:<10} | {:<10} | {:<8} |",
-        "Filter", "Freq (Hz)", "Q", "Gain (dB)", "Type"
+        "| {:<2} | {:<10} | {:<10} | {:<10} | {:<8} |",
+        "#", "Freq (Hz)", "Q", "Gain (dB)", "Type"
     );
-    println!("|-------|------------|------------|------------|----------|");
+    println!("|----|------------|------------|------------|----------|");
 
     // If there is a non-Peak first (Highpass), print it before the rest.
     if iir_hp_pk {
         if let Some(first) = rows.first() {
             if first.kind != "Peak" {
                 println!(
-                    "| {:<5} | {:<10.2} | {:<10.3} | {:<+10.3} | {:<8} |",
+                    "| {:<2} | {:<10.2} | {:<10.3} | {:<+10.3} | {:<8} |",
                     1, first.freq, first.q, first.gain, first.kind
                 );
                 // Print the remaining Peak filters with correct numbering
                 for (idx, r) in rows.iter().enumerate().skip(1) {
                     println!(
-                        "| {:<5} | {:<10.2} | {:<10.3} | {:<+10.3} | {:<8} |",
+                        "| {:<2} | {:<10.2} | {:<10.3} | {:<+10.3} | {:<8} |",
                         idx + 1,
                         r.freq,
                         r.q,
@@ -522,7 +538,7 @@ pub fn peq_print(x: &[f64], iir_hp_pk: bool) {
                         r.kind
                     );
                 }
-                println!("+-------|------------|------------|------------|----------+");
+                println!("+----|------------|------------|------------|----------+");
                 return;
             }
         }
@@ -531,7 +547,7 @@ pub fn peq_print(x: &[f64], iir_hp_pk: bool) {
     // Default: print all rows in order
     for (i, r) in rows.iter().enumerate() {
         println!(
-            "| {:<5} | {:<10.2} | {:<10.3} | {:<+10.3} | {:<8} |",
+            "| {:<2} | {:<10.2} | {:<10.3} | {:<+10.3} | {:<8} |",
             i + 1,
             r.freq,
             r.q,
@@ -539,7 +555,7 @@ pub fn peq_print(x: &[f64], iir_hp_pk: bool) {
             r.kind
         );
     }
-    println!("+-------|------------|------------|------------|----------+");
+    println!("+----|------------|------------|------------|----------+");
 }
 
 #[cfg(test)]

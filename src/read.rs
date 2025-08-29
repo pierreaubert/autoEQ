@@ -1,3 +1,20 @@
+//! AutoEQ - A library for audio equalization and filter optimization
+//!
+//! Copyright (C) 2025 Pierre Aubert pierre(at)spinorama(dot)org
+//!
+//! This program is free software: you can redistribute it and/or modify
+//! it under the terms of the GNU General Public License as published by
+//! the Free Software Foundation, either version 3 of the License, or
+//! (at your option) any later version.
+//!
+//! This program is distributed in the hope that it will be useful,
+//! but WITHOUT ANY WARRANTY; without even the implied warranty of
+//! MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//! GNU General Public License for more details.
+//!
+//! You should have received a copy of the GNU General Public License
+//! along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 use std::collections::HashMap;
 use std::error::Error;
 use std::path::PathBuf;
@@ -329,13 +346,16 @@ fn is_target_trace_name(measurement: &str, curve_name: &str, candidate: &str) ->
     if measurement.eq_ignore_ascii_case("CEA2034") {
         // For CEA2034 data, select the specific curve provided by the user
         // Prefer exact match; allow substring match as a fallback
-        candidate == curve_name || candidate.contains(curve_name)
+        candidate == curve_name
     } else {
         // Fallback heuristic for other measurement types
+        eprintln!(
+            "⚠️  Warning: unable to determine if trace name {} is a target for curve {}, using heuristic",
+            candidate, curve_name
+        );
         candidate.contains("Listening Window")
-            || candidate.contains("CEA2034")
             || candidate.contains("On Axis")
-            || candidate.contains("SPL")
+            || candidate.contains("Estimated In-Room Response")
     }
 }
 
@@ -419,91 +439,6 @@ pub fn extract_cea2034_curves(
     );
 
     Ok(curves)
-}
-
-/// Try to extract a PIR curve directly from plot data and interpolate it to target freq
-///
-/// Attempts several common trace names used for predicted/estimated in-room responses.
-/// Returns None if no such trace is present in the plot data.
-pub fn extract_pir_interpolated(plot_data: &Value, freq: &Array1<f64>) -> Option<Array1<f64>> {
-    let names = [
-        "Estimated In-Room Response",
-        "Predicted In-Room Response",
-        "In-Room Response",
-        "In-Room",
-        "Estimated In-Room",
-    ];
-
-    let data = plot_data.get("data")?.as_array()?;
-
-    // Find the first trace whose name matches any of the PIR aliases
-    for alias in names.iter() {
-        if let Some(trace) = data.iter().find(|t| {
-            t.get("name")
-                .and_then(|n| n.as_str())
-                .map(|s| s.contains(alias))
-                .unwrap_or(false)
-        }) {
-            // Decode x/y typed arrays
-            if let (Some(x_obj), Some(y_obj)) = (trace.get("x"), trace.get("y")) {
-                if let (Some(xo), Some(yo)) = (x_obj.as_object(), y_obj.as_object()) {
-                    if let (Some(dx), Some(bx), Some(dy), Some(by)) = (
-                        xo.get("dtype"),
-                        xo.get("bdata"),
-                        yo.get("dtype"),
-                        yo.get("bdata"),
-                    ) {
-                        if let (Some(dx), Some(bx), Some(dy), Some(by)) =
-                            (dx.as_str(), bx.as_str(), dy.as_str(), by.as_str())
-                        {
-                            if let (Ok(x_vals), Ok(y_vals)) =
-                                (decode_typed_array(bx, dx), decode_typed_array(by, dy))
-                            {
-                                let x = Array1::from(x_vals);
-                                let y = Array1::from(y_vals);
-                                let yi = interpolate(freq, &x, &y);
-                                return Some(yi);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // As a very loose fallback, search any trace whose name includes "Room"
-    if let Some(trace) = data.iter().find(|t| {
-        t.get("name")
-            .and_then(|n| n.as_str())
-            .map(|s| s.contains("Room"))
-            .unwrap_or(false)
-    }) {
-        if let (Some(x_obj), Some(y_obj)) = (trace.get("x"), trace.get("y")) {
-            if let (Some(xo), Some(yo)) = (x_obj.as_object(), y_obj.as_object()) {
-                if let (Some(dx), Some(bx), Some(dy), Some(by)) = (
-                    xo.get("dtype"),
-                    xo.get("bdata"),
-                    yo.get("dtype"),
-                    yo.get("bdata"),
-                ) {
-                    if let (Some(dx), Some(bx), Some(dy), Some(by)) =
-                        (dx.as_str(), bx.as_str(), dy.as_str(), by.as_str())
-                    {
-                        if let (Ok(x_vals), Ok(y_vals)) =
-                            (decode_typed_array(bx, dx), decode_typed_array(by, dy))
-                        {
-                            let x = Array1::from(x_vals);
-                            let y = Array1::from(y_vals);
-                            let yi = interpolate(freq, &x, &y);
-                            return Some(yi);
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    None
 }
 
 #[cfg(test)]
