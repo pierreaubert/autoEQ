@@ -17,8 +17,10 @@
 //! along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 use crate::score;
+use crate::Curve;
 use clap::ValueEnum;
 use ndarray::Array1;
+use std::collections::HashMap;
 
 /// The type of loss function to use during optimization
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
@@ -40,33 +42,35 @@ pub struct ScoreLossData {
     pub sp: Array1<f64>,
     /// Predicted in-room SPL measurements
     pub pir: Array1<f64>,
-    /// Octave band intervals for NBD calculations
-    pub intervals: Vec<(usize, usize)>,
 }
 
 impl ScoreLossData {
     /// Create a new ScoreLossData instance
     ///
     /// # Arguments
-    /// * `on` - On-axis SPL measurements
-    /// * `lw` - Listening window SPL measurements
-    /// * `sp` - Sound power SPL measurements
-    /// * `pir` - Predicted in-room SPL measurements
-    /// * `intervals` - Octave band intervals for NBD calculations
-    pub fn new(
-        on: Array1<f64>,
-        lw: Array1<f64>,
-        sp: Array1<f64>,
-        pir: Array1<f64>,
-        intervals: Vec<(usize, usize)>,
-    ) -> Self {
-        Self {
-            on,
-            lw,
-            sp,
-            pir,
-            intervals,
-        }
+    /// * `spin` - Map of CEA2034 curves by name ("On Axis", "Listening Window", "Sound Power", "Estimated In-Room Response")
+    pub fn new(spin: &HashMap<String, Curve>) -> Self {
+        let on = spin
+            .get("On Axis")
+            .expect("Missing 'On Axis' in CEA2034 spin data")
+            .spl
+            .clone();
+        let lw = spin
+            .get("Listening Window")
+            .expect("Missing 'Listening Window' in CEA2034 spin data")
+            .spl
+            .clone();
+        let sp = spin
+            .get("Sound Power")
+            .expect("Missing 'Sound Power' in CEA2034 spin data")
+            .spl
+            .clone();
+        let pir = spin
+            .get("Estimated In-Room Response")
+            .expect("Missing 'Estimated In-Room Response' in CEA2034 spin data")
+            .spl
+            .clone();
+        Self { on, lw, sp, pir }
     }
 }
 
@@ -82,9 +86,11 @@ pub fn score_loss(
     freq: &Array1<f64>,
     peq_response: &Array1<f64>,
 ) -> f64 {
+    // Compute 1/2-octave intervals on the fly using the provided frequency grid
+    let intervals = score::octave_intervals(2, freq);
     let metrics = score::score_peq_approx(
         freq,
-        &score_data.intervals,
+        &intervals,
         &score_data.lw,
         &score_data.sp,
         &score_data.pir,
@@ -93,3 +99,61 @@ pub fn score_loss(
     );
     -metrics.pref_score
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ndarray::Array1;
+    use std::collections::HashMap;
+
+    #[test]
+    fn score_loss_matches_score_when_peq_zero() {
+        // Simple synthetic data
+        let freq = Array1::from(vec![100.0, 1000.0]);
+        let on = Array1::from(vec![80.0_f64, 85.0_f64]);
+        let lw = Array1::from(vec![81.0_f64, 84.0_f64]);
+        let sp = Array1::from(vec![78.0_f64, 82.0_f64]);
+        let pir = Array1::from(vec![80.5_f64, 84.0_f64]);
+
+        // Build spin map expected by constructor
+        let mut spin: HashMap<String, Curve> = HashMap::new();
+        spin.insert(
+            "On Axis".to_string(),
+            Curve {
+                freq: freq.clone(),
+                spl: on.clone(),
+            },
+        );
+        spin.insert(
+            "Listening Window".to_string(),
+            Curve {
+                freq: freq.clone(),
+                spl: lw.clone(),
+            },
+        );
+        spin.insert(
+            "Sound Power".to_string(),
+            Curve {
+                freq: freq.clone(),
+                spl: sp.clone(),
+            },
+        );
+        spin.insert(
+            "Estimated In-Room Response".to_string(),
+            Curve {
+                freq: freq.clone(),
+                spl: pir.clone(),
+            },
+        );
+
+        let sd = ScoreLossData::new(&spin);
+        let zero = Array1::zeros(freq.len());
+
+        // Expected preference using score() with zero PEQ (i.e., base curves)
+        let intervals = score::octave_intervals(2, &freq);
+        let expected = score::score(&freq, &intervals, &on, &lw, &sp, &pir);
+        let got = score_loss(&sd, &freq, &zero);
+        assert!((got + expected.pref_score).abs() < 1e-12);
+    }
+}
+

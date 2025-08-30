@@ -45,6 +45,8 @@ pub enum BiquadFilterType {
     Lowpass,
     /// High-pass filter
     Highpass,
+    /// High-pass filter
+    HighpassVariableQ,
     /// Band-pass filter
     Bandpass,
     /// Peaking filter
@@ -63,6 +65,7 @@ impl BiquadFilterType {
         match self {
             BiquadFilterType::Lowpass => "LP",
             BiquadFilterType::Highpass => "HP",
+            BiquadFilterType::HighpassVariableQ => "HPQ",
             BiquadFilterType::Bandpass => "BP",
             BiquadFilterType::Peak => "PK",
             BiquadFilterType::Notch => "NO",
@@ -76,6 +79,7 @@ impl BiquadFilterType {
         match self {
             BiquadFilterType::Lowpass => "Lowpass",
             BiquadFilterType::Highpass => "Highpass",
+            BiquadFilterType::HighpassVariableQ => "HighpassVariableQ",
             BiquadFilterType::Bandpass => "Bandpass",
             BiquadFilterType::Peak => "Peak",
             BiquadFilterType::Notch => "Notch",
@@ -163,7 +167,7 @@ impl Biquad {
 
         // Safety clamp: ensure strictly positive Q to avoid division by zero in alpha = sn/(2*q)
         if biquad.q <= 0.0 {
-            biquad.q = 1.0e-6;
+            biquad.q = 1.0e-2;
         }
 
         biquad.compute_coeffs();
@@ -191,7 +195,7 @@ impl Biquad {
                 a1 = -2.0 * cs;
                 a2 = 1.0 - alpha;
             }
-            BiquadFilterType::Highpass => {
+            BiquadFilterType::Highpass | BiquadFilterType::HighpassVariableQ => {
                 b0 = (1.0 + cs) / 2.0;
                 b1 = -(1.0 + cs);
                 b2 = (1.0 + cs) / 2.0;
@@ -387,7 +391,7 @@ pub fn compute_peq_response(
         let q = x[i * 3 + 1];
         let gain = x[i * 3 + 2];
         let ftype = if iir_hp_pk && i == hp_index {
-            BiquadFilterType::Highpass
+            BiquadFilterType::HighpassVariableQ
         } else {
             BiquadFilterType::Peak
         };
@@ -501,7 +505,7 @@ pub fn build_sorted_filters(x: &[f64], iir_hp_pk: bool) -> Vec<FilterRow> {
     });
     // If enabled, mark the lowest-frequency filter as Highpass for display purposes
     if iir_hp_pk && !rows.is_empty() {
-        rows[0].kind = "Highpass";
+        rows[0].kind = "HighpassVariableQ";
     }
     rows
 }
@@ -588,7 +592,7 @@ mod filter_tests {
         let rows = build_sorted_filters(&x, true);
         let freqs: Vec<f64> = rows.iter().map(|r| r.freq).collect();
         assert_eq!(freqs, vec![100.0, 500.0, 1000.0]);
-        assert!(rows[0].kind == "Highpass");
+        assert!(rows[0].kind == "HighpassVariableQ");
         assert!(rows.iter().skip(1).all(|r| r.kind == "Peak"));
         assert!((rows[0].q - 2.0).abs() < 1e-12 && (rows[0].gain - 1.0).abs() < 1e-12);
         assert!((rows[1].q - 0.5).abs() < 1e-12 && (rows[1].gain + 1.0).abs() < 1e-12);

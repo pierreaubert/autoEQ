@@ -92,11 +92,11 @@ pub struct Args {
     pub algo: String,
 
     /// Optional population size for population-based algorithms (e.g., ISRES)
-    #[arg(long)]
-    pub population: Option<usize>,
+    #[arg(long, default_value_t = 3_000)]
+    pub population: usize,
 
     /// Maximum number of evaluations for the optimizer
-    #[arg(long, default_value_t = 10_000)]
+    #[arg(long, default_value_t = 20_000)]
     pub maxeval: usize,
 
     /// Whether to run a local refinement after global optimization

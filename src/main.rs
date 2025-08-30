@@ -22,6 +22,7 @@ use autoeq::optim::ObjectiveData;
 use autoeq::plot;
 use autoeq::read;
 use autoeq::score;
+use autoeq::loss::ScoreLossData;
 use clap::Parser;
 use ndarray::Array1;
 use std::collections::HashMap;
@@ -136,9 +137,22 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // ----------------------------------------------------------------------
     // 3. Define the optimization target error (use smoothed if provided)
     // ----------------------------------------------------------------------
+    // Determine if we have CEA2034 measurement data available (speaker+version+measurement provided and measurement is CEA2034)
+    let use_cea = matches!(args.measurement.as_deref(), Some(m) if m.eq_ignore_ascii_case("CEA2034"))
+        && args.speaker.is_some()
+        && args.version.is_some()
+        && spin_data.is_some();
+
     let target_curve = smoothed_curve
         .clone()
         .unwrap_or_else(|| inverted_curve.clone());
+
+    // Build optional score_data only when CEA2034 data is available and requested
+    let score_data_opt = if use_cea {
+        Some(ScoreLossData::new(spin_data.as_ref().expect("spin_data must be Some when use_cea")))
+    } else {
+        None
+    };
 
     let objective_data = ObjectiveData {
         freqs: input_curve.freq.clone(),
@@ -150,14 +164,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         min_db: args.min_db,
         iir_hp_pk: args.iir_hp_pk,
         loss_type: args.loss,
-        score_data: None,
+        score_data: score_data_opt,
     };
-
-    // Determine if we have CEA2034 measurement data available (speaker+version+measurement provided and measurement is CEA2034)
-    let use_cea = matches!(args.measurement.as_deref(), Some(m) if m.eq_ignore_ascii_case("CEA2034"))
-        && args.speaker.is_some()
-        && args.version.is_some()
-        && spin_data.is_some();
 
     // If measurement is CEA2034 via API, compute score before optimization
     let mut cea_metrics_before: Option<score::ScoreMetrics> = None;
@@ -185,6 +193,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
         upper_bounds.extend_from_slice(&[args.max_freq, args.max_q, args.max_db]);
     }
 
+    if args.iir_hp_pk {
+	    lower_bounds[0] = 20.0;
+	    upper_bounds[0] = 120.0;
+	    lower_bounds[1] = 1.0;
+	    upper_bounds[1] = 1.5;
+	    lower_bounds[2] = 0.0;
+	    upper_bounds[2] = 0.0;
+    }
+
     // Initial guess for the parameters.
     // Distribute filters logarithmically across the frequency spectrum
     // and give them small non-zero initial gains to encourage better distribution
@@ -193,8 +210,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let log_max = args.max_freq.ln();
     let log_range = log_max - log_min;
 
-    let q_vec = distribute_qs(args.num_filters, args.min_q, args.max_q);
-    let g_mags = distribute_gain_magnitudes(args.num_filters, args.min_db, args.max_db);
+    let q_vec = distribute_qs(args.num_filters, args.min_q, args.max_q / 2.0);
+    let g_mags = distribute_gain_magnitudes(args.num_filters, args.min_db, args.max_db / 2.0);
     for i in 0..args.num_filters {
         // Distribute frequencies logarithmically
         let freq = (log_min + (i as f64 + 0.5) * log_range / args.num_filters as f64).exp();
@@ -207,6 +224,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
         x.extend_from_slice(&[freq, q, gain]);
     }
 
+    if args.iir_hp_pk {
+	x[0] = 80.0;
+	x[1] = 1.1;
+	x[2] = 0.0;
+    }
+
+    iir::peq_print(&x, args.iir_hp_pk);
+
     let result = optim::optimize_filters(
         &mut x,
         &lower_bounds,
@@ -216,8 +241,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         args.population,
         args.maxeval,
     );
-
-    iir::peq_print(&x, args.iir_hp_pk);
 
     match result {
         Ok((status, val)) => {
@@ -247,6 +270,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             } else {
                 println!("  - Not enough filters to compute spacing.");
             }
+            iir::peq_print(&x, args.iir_hp_pk);
 
             // 5. Optional local refinement
             if args.refine {
@@ -260,7 +284,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 );
                 match local_result {
                     Ok((local_status, local_val)) => {
-                        iir::peq_print(&x, args.iir_hp_pk);
                         println!(
                             "* Running local refinement with {}... completed {} objective {:.6}",
                             args.local_algo, local_status, local_val
@@ -288,6 +311,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         } else {
                             println!("  - Not enough filters to compute spacing.");
                         }
+                        iir::peq_print(&x, args.iir_hp_pk);
                     }
                     Err((e, final_value)) => {
                         eprintln!("⚠️  Local refinement failed: {:?}", e);

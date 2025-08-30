@@ -47,6 +47,88 @@ fn filter_color(index: usize) -> &'static str {
     COLORS[index % COLORS.len()]
 }
 
+/// Create CEA2034 combined traces for a single subplot, including DI on a secondary y-axis
+///
+/// # Arguments
+/// * `curves` - HashMap of curve names to Curve data
+/// * `x_axis` - Axis id for x (e.g. "x7")
+/// * `y_axis` - Axis id for primary y (left) (e.g. "y7")
+/// * `y_axis_di` - Axis id for secondary y (right) (e.g. "y9")
+fn create_cea2034_combined_traces(
+    curves: &HashMap<String, super::Curve>,
+    x_axis: &str,
+    y_axis: &str,
+    y_axis_di: &str,
+) -> Vec<Scatter<f64, f64>> {
+    let mut traces = Vec::new();
+    for (i, curve_name) in CEA2034_CURVE_NAMES.iter().enumerate() {
+        if let Some(curve) = curves.get(*curve_name) {
+            let trace = Scatter::new(curve.freq.to_vec(), curve.spl.to_vec())
+                .mode(Mode::Lines)
+                .name(curve_name)
+                .x_axis(x_axis)
+                .y_axis(y_axis)
+                .line(plotly::common::Line::new().color(filter_color(i)));
+            traces.push(*trace);
+        }
+    }
+    // DI curves on secondary y-axis
+    for (j, curve_name) in CEA2034_CURVE_NAMES_DI.iter().enumerate() {
+        if let Some(curve) = curves.get(*curve_name) {
+            let trace = Scatter::new(curve.freq.to_vec(), curve.spl.to_vec())
+                .mode(Mode::Lines)
+                .name(curve_name)
+                .x_axis(x_axis)
+                .y_axis(y_axis_di)
+                .line(plotly::common::Line::new().color(filter_color(j + 6)));
+            traces.push(*trace);
+        }
+    }
+    traces
+}
+
+/// Create CEA2034 combined traces with EQ applied on a single subplot
+///
+/// # Arguments
+/// * `curves` - HashMap of curve names to Curve data
+/// * `eq_response` - EQ response to apply to the primary CEA2034 curves
+/// * `x_axis` - Axis id for x (e.g. "x8")
+/// * `y_axis` - Axis id for primary y (left) (e.g. "y8")
+/// * `y_axis_di` - Axis id for secondary y (right) (e.g. "y10")
+fn create_cea2034_with_eq_combined_traces(
+    curves: &HashMap<String, super::Curve>,
+    eq_response: &Array1<f64>,
+    x_axis: &str,
+    y_axis: &str,
+    y_axis_di: &str,
+) -> Vec<Scatter<f64, f64>> {
+    let mut traces = Vec::new();
+    for (i, curve_name) in CEA2034_CURVE_NAMES.iter().enumerate() {
+        if let Some(curve) = curves.get(*curve_name) {
+            let trace = Scatter::new(curve.freq.to_vec(), (&curve.spl + eq_response).to_vec())
+                .mode(Mode::Lines)
+                .name(&format!("{} w/EQ", curve_name))
+                .x_axis(x_axis)
+                .y_axis(y_axis)
+                .line(plotly::common::Line::new().color(filter_color(i + 4)));
+            traces.push(*trace);
+        }
+    }
+    // DI curves unchanged, on secondary y-axis
+    for (j, curve_name) in CEA2034_CURVE_NAMES_DI.iter().enumerate() {
+        if let Some(curve) = curves.get(*curve_name) {
+            let trace = Scatter::new(curve.freq.to_vec(), curve.spl.to_vec())
+                .mode(Mode::Lines)
+                .name(curve_name)
+                .x_axis(x_axis)
+                .y_axis(y_axis_di)
+                .line(plotly::common::Line::new().color(filter_color(j + 6)));
+            traces.push(*trace);
+        }
+    }
+    traces
+}
+
 // Create two horizontal reference lines at y=1 and y=-1 spanning x=100..10000 for a given subplot axes
 fn make_ref_lines(x_axis: &str, y_axis: &str) -> Vec<Scatter<f64, f64>> {
     let x_ref = vec![100.0_f64, 10000.0_f64];
@@ -69,6 +151,16 @@ fn make_ref_lines(x_axis: &str, y_axis: &str) -> Vec<Scatter<f64, f64>> {
     vec![ref_pos, ref_neg]
 }
 
+// List of curve names
+const CEA2034_CURVE_NAMES: [&str; 4] = [
+    "On Axis",
+    "Listening Window",
+    "Early Reflections",
+    "Sound Power",
+];
+
+const CEA2034_CURVE_NAMES_DI: [&str; 2] = ["Early Reflections DI", "Sound Power DI"];
+
 /// Create CEA2034 traces for the combined plot
 ///
 /// # Arguments
@@ -78,35 +170,21 @@ fn make_ref_lines(x_axis: &str, y_axis: &str) -> Vec<Scatter<f64, f64>> {
 /// * Vector of Scatter traces for CEA2034 curves
 ///
 /// # Details
-/// Creates traces for standard CEA2034 curves (On Axis, Listening Window,
-/// Early Reflections, Sound Power) with appropriate fallback aliases
-/// for variations in dataset labels.
+/// Creates traces for standard CEA2034 curves
 fn create_cea2034_traces(curves: &HashMap<String, super::Curve>) -> Vec<Scatter<f64, f64>> {
     let mut traces = Vec::new();
 
-    // Primary curve names with possible fallback aliases to handle variations in dataset labels
-    let curve_aliases: [&[&str]; 4] = [
-        &["On Axis"],
-        &["Listening Window", "Lateral"],
-        &["Early Reflections", "Vertical"],
-        &["Sound Power", "Estimated In-Room Response"],
-    ];
     let axes = ["x3y3", "x4y4", "x5y5", "x6y6"];
 
-    for (i, (aliases, axis)) in curve_aliases.iter().zip(axes.iter()).enumerate() {
-        // Find the first alias present in the curves map
-        if let Some((name, curve)) = aliases
-            .iter()
-            .find_map(|candidate| curves.get_key_value(*candidate))
-        {
-            let trace = Scatter::new(curve.freq.to_vec(), curve.spl.to_vec())
-                .mode(Mode::Lines)
-                .name(name.as_str())
-                .x_axis(&axis[..2])
-                .y_axis(&axis[2..])
-                .line(plotly::common::Line::new().color(filter_color(i)));
-            traces.push(*trace);
-        }
+    for (i, (curve_name, axis)) in CEA2034_CURVE_NAMES.iter().zip(axes.iter()).enumerate() {
+        let curve = curves.get(*curve_name).unwrap();
+        let trace = Scatter::new(curve.freq.to_vec(), curve.spl.to_vec())
+            .mode(Mode::Lines)
+            .name(curve_name)
+            .x_axis(&axis[..2])
+            .y_axis(&axis[2..])
+            .line(plotly::common::Line::new().color(filter_color(i)));
+        traces.push(*trace);
     }
 
     traces
@@ -130,40 +208,17 @@ fn create_cea2034_with_eq_traces(
 ) -> Vec<Scatter<f64, f64>> {
     let mut traces = Vec::new();
 
-    // Same alias mapping as create_cea2034_traces
-    let curve_aliases: [&[&str]; 4] = [
-        &["On Axis"],
-        &["Listening Window", "Lateral"],
-        &["Early Reflections", "Vertical"],
-        &["Sound Power", "Estimated In-Room Response"],
-    ];
     let axes = ["x3y3", "x4y4", "x5y5", "x6y6"];
 
-    for (i, (aliases, axis)) in curve_aliases.iter().zip(axes.iter()).enumerate() {
-        if let Some((name, curve)) = aliases
-            .iter()
-            .find_map(|candidate| curves.get_key_value(*candidate))
-        {
-            // Apply EQ response to the curve
-            let eq_applied: Vec<f64> = curve
-                .spl
-                .iter()
-                .zip(eq_response.iter())
-                .map(|(spl, eq)| spl + eq)
-                .collect();
-
-            let trace = Scatter::new(curve.freq.to_vec(), eq_applied)
-                .mode(Mode::Lines)
-                .name(format!("{} + EQ", name))
-                .x_axis(&axis[..2])
-                .y_axis(&axis[2..])
-                .line(
-                    plotly::common::Line::new()
-                        .color(filter_color(i + curve_aliases.len()))
-                        .width(2.0),
-                );
-            traces.push(*trace);
-        }
+    for (i, (curve_name, axis)) in CEA2034_CURVE_NAMES.iter().zip(axes.iter()).enumerate() {
+        let curve = curves.get(*curve_name).unwrap();
+        let trace = Scatter::new(curve.freq.to_vec(), (&curve.spl + eq_response).to_vec())
+            .mode(Mode::Lines)
+            .name(&format!("{} w/EQ", curve_name))
+            .x_axis(&axis[..2])
+            .y_axis(&axis[2..])
+            .line(plotly::common::Line::new().color(filter_color(i + 4)));
+        traces.push(*trace);
     }
 
     traces
@@ -310,20 +365,19 @@ pub async fn plot_results(
     }
 
     // ----------------------------------------------------------------------
-    // Add CEA2034 curves if provided
+    // Add each CEA2034 curves if provided
     // ----------------------------------------------------------------------
     let mut x_axis3_title = "On Axis".to_string();
     let mut x_axis4_title = "Listening Window".to_string();
     let mut x_axis5_title = "Early Reflections".to_string();
     let mut x_axis6_title = "Sound Power".to_string();
     if let Some(curves) = cea2034_curves {
-        // Create CEA2034 traces
+        // Show standard CEA2034 subplots on row 2/3: x3..x6
         let cea2034_traces = create_cea2034_traces(curves);
         for trace in cea2034_traces {
             plot.add_trace(Box::new(trace));
         }
-
-        // If EQ response is provided, create CEA2034 with EQ traces
+        // Also plot the EQ-applied variants if provided
         if let Some(eq_resp) = eq_response {
             let cea2034_eq_traces = create_cea2034_with_eq_traces(curves, eq_resp);
             for trace in cea2034_eq_traces {
@@ -369,6 +423,36 @@ pub async fn plot_results(
     }
 
     // ----------------------------------------------------------------------
+    // Add CEA2034 if provided with and without EQ
+    // ----------------------------------------------------------------------
+    let x_axis7_title = "CEA2034".to_string();
+    let x_axis8_title = "CEA2034 + EQ".to_string();
+    if let Some(curves) = cea2034_curves {
+        let cea2034_traces = create_cea2034_combined_traces(
+    	    curves,
+    	    "x7",
+    	    "y7",
+    	    "y7",
+    	);
+         for trace in cea2034_traces {
+            plot.add_trace(Box::new(trace));
+        }
+
+        if let Some(eq_resp) = eq_response {
+            let cea2034_traces = create_cea2034_with_eq_combined_traces(
+    		curves,
+		eq_resp,
+    		"x8",
+    		"y8",
+    		"y8",
+    	    );
+            for trace in cea2034_traces {
+		plot.add_trace(Box::new(trace));
+            }
+        }
+    }
+
+    // ----------------------------------------------------------------------
     // Title with optional speaker name
     // ----------------------------------------------------------------------
     let title_text = match speaker {
@@ -380,14 +464,14 @@ pub async fn plot_results(
     let layout = Layout::new()
         .grid(
             LayoutGrid::new()
-                .rows(3)
+                .rows(4)
                 .columns(2)
                 .pattern(GridPattern::Independent)
                 .row_order(RowOrder::BottomToTop),
         )
         .title(Title::with_text(&title_text))
         .width(1024)
-        .height(1000)
+        .height(1260)
         .x_axis(
             plotly::layout::Axis::new()
                 .title(plotly::common::Title::with_text("Frequency (Hz)"))
@@ -398,8 +482,8 @@ pub async fn plot_results(
         .y_axis(
             plotly::layout::Axis::new()
                 .title(plotly::common::Title::with_text("SPL (dB)"))
-                .range(vec![-5.0, 10.0]) // limit filter subplot range per request
-                .domain(&[0.8, 1.0]),
+                .range(vec![-5.0, 10.0])
+                .domain(&[0.80, 1.0]),
         )
         .x_axis2(
             plotly::layout::Axis::new()
@@ -412,7 +496,7 @@ pub async fn plot_results(
             plotly::layout::Axis::new()
                 .title(plotly::common::Title::with_text("SPL (dB)"))
                 .range(vec![-5.0, 10.0])
-                .domain(&[0.8, 1.0]),
+                .domain(&[0.80, 1.0]),
         )
         // CEA2034 subplot axes
         .x_axis3(
@@ -426,7 +510,7 @@ pub async fn plot_results(
             plotly::layout::Axis::new()
                 .title(plotly::common::Title::with_text("SPL (dB)"))
                 .range(vec![-10.0, 10.0])
-                .domain(&[0.4, 0.75]),
+                .domain(&[0.55, 0.70]),
         )
         .x_axis4(
             plotly::layout::Axis::new()
@@ -439,7 +523,7 @@ pub async fn plot_results(
             plotly::layout::Axis::new()
                 .title(plotly::common::Title::with_text("SPL (dB)"))
                 .range(vec![-10.0, 10.0])
-                .domain(&[0.4, 0.75]),
+                .domain(&[0.55, 0.70]),
         )
         .x_axis5(
             plotly::layout::Axis::new()
@@ -452,7 +536,7 @@ pub async fn plot_results(
             plotly::layout::Axis::new()
                 .title(plotly::common::Title::with_text("SPL (dB)"))
                 .range(vec![-15.0, 5.0])
-                .domain(&[0., 0.35]),
+                .domain(&[0.30, 0.5]),
         )
         .x_axis6(
             plotly::layout::Axis::new()
@@ -465,7 +549,34 @@ pub async fn plot_results(
             plotly::layout::Axis::new()
                 .title(plotly::common::Title::with_text("SPL (dB)"))
                 .range(vec![-15.0, 5.0])
-                .domain(&[0., 0.35]),
+                .domain(&[0.3, 0.5]),
+        )
+        // Row 4: Combined CEA2034 (left) and CEA2034+EQ (right)
+        .x_axis7(
+            plotly::layout::Axis::new()
+                .title(plotly::common::Title::with_text(&x_axis7_title))
+                .type_(AxisType::Log)
+                .range(vec![1.301, 4.301])
+                .domain(&[0., 0.45]),
+        )
+        .y_axis7(
+            plotly::layout::Axis::new()
+                .title(plotly::common::Title::with_text("SPL (dB)"))
+                .range(vec![-40.0, 10.0])
+                .domain(&[0.0, 0.25]),
+        )
+        .x_axis8(
+            plotly::layout::Axis::new()
+                .title(plotly::common::Title::with_text(&x_axis8_title))
+                .type_(AxisType::Log)
+                .range(vec![1.301, 4.301])
+                .domain(&[0.55, 1.0]),
+        )
+        .y_axis8(
+            plotly::layout::Axis::new()
+                .title(plotly::common::Title::with_text("SPL (dB)"))
+                .range(vec![-40.0, 10.0])
+                .domain(&[0.0, 0.25]),
         );
     plot.set_layout(layout);
 
@@ -477,7 +588,9 @@ pub async fn plot_results(
 #[cfg(test)]
 mod tests {
     use super::{
-        create_cea2034_traces, create_cea2034_with_eq_traces, filter_color, make_ref_lines,
+        create_cea2034_combined_traces, create_cea2034_traces,
+        create_cea2034_with_eq_combined_traces, create_cea2034_with_eq_traces, filter_color,
+        make_ref_lines,
     };
     use ndarray::Array1;
     use serde_json::json;
@@ -557,5 +670,130 @@ mod tests {
         assert_eq!(v1["x"], json!([100.0, 10000.0]));
         assert_eq!(v0["y"], json!([1.0, 1.0]));
         assert_eq!(v1["y"], json!([-1.0, -1.0]));
+    }
+
+    #[test]
+    fn test_create_cea2034_combined_traces_counts_and_axes() {
+        // Build minimal curves covering names used by combined function
+        let mut curves = HashMap::new();
+        let freq = Array1::from(vec![100.0, 1000.0, 10000.0]);
+        let spl_primary = Array1::from(vec![80.0, 85.0, 82.0]);
+        let spl_di = Array1::from(vec![5.0, 6.0, 7.0]);
+
+        // Primary curves
+        curves.insert(
+            "On Axis".to_string(),
+            super::super::Curve {
+                freq: freq.clone(),
+                spl: spl_primary.clone(),
+            },
+        );
+        curves.insert(
+            "Listening Window".to_string(),
+            super::super::Curve {
+                freq: freq.clone(),
+                spl: spl_primary.clone(),
+            },
+        );
+        curves.insert(
+            "Early Reflections".to_string(),
+            super::super::Curve { freq: freq.clone(), spl: spl_primary.clone() },
+        );
+        curves.insert(
+            "Sound Power".to_string(),
+            super::super::Curve { freq: freq.clone(), spl: spl_primary.clone() },
+        );
+
+        // DI curves
+        curves.insert(
+            "Early Reflections DI".to_string(),
+            super::super::Curve { freq: freq.clone(), spl: spl_di.clone() },
+        );
+        curves.insert(
+            "Sound Power DI".to_string(),
+            super::super::Curve { freq: freq.clone(), spl: spl_di.clone() },
+        );
+
+        let traces = create_cea2034_combined_traces(&curves, "x7", "y7", "y9");
+        assert_eq!(traces.len(), 6);
+
+        // Check that DI traces target the secondary axis
+        let v = to_json(&traces).unwrap();
+        let names: Vec<String> = v
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|t| t["name"].as_str().unwrap().to_string())
+            .collect();
+        assert!(names.contains(&"Early Reflections DI".to_string()));
+        assert!(names.contains(&"Sound Power DI".to_string()));
+
+        // Find DI entries and ensure yaxis is y9
+        for t in v.as_array().unwrap() {
+            let n = t["name"].as_str().unwrap();
+            if n.ends_with(" DI") {
+                assert_eq!(t["yaxis"], json!("y9"));
+            }
+        }
+    }
+
+    #[test]
+    fn test_create_cea2034_with_eq_combined_traces_counts_and_names() {
+        let mut curves = HashMap::new();
+        let freq = Array1::from(vec![100.0, 1000.0, 10000.0]);
+        let spl_primary = Array1::from(vec![80.0, 85.0, 82.0]);
+        let spl_di = Array1::from(vec![5.0, 6.0, 7.0]);
+
+        // Primary curves
+        curves.insert(
+            "On Axis".to_string(),
+            super::super::Curve { freq: freq.clone(), spl: spl_primary.clone() },
+        );
+        curves.insert(
+            "Listening Window".to_string(),
+            super::super::Curve { freq: freq.clone(), spl: spl_primary.clone() },
+        );
+        curves.insert(
+            "Early Reflections".to_string(),
+            super::super::Curve { freq: freq.clone(), spl: spl_primary.clone() },
+        );
+        curves.insert(
+            "Sound Power".to_string(),
+            super::super::Curve { freq: freq.clone(), spl: spl_primary.clone() },
+        );
+        // DI
+        curves.insert(
+            "Early Reflections DI".to_string(),
+            super::super::Curve { freq: freq.clone(), spl: spl_di.clone() },
+        );
+        curves.insert(
+            "Sound Power DI".to_string(),
+            super::super::Curve { freq: freq.clone(), spl: spl_di.clone() },
+        );
+
+        let eq = Array1::from(vec![1.0, -1.0, 0.5]);
+        let traces = create_cea2034_with_eq_combined_traces(&curves, &eq, "x8", "y8", "y10");
+        assert_eq!(traces.len(), 6);
+        let v = to_json(&traces).unwrap();
+        // Primary names should have suffix w/EQ, DI should not
+        let names: Vec<String> = v
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|t| t["name"].as_str().unwrap().to_string())
+            .collect();
+        assert!(names.iter().any(|n| n == "On Axis w/EQ"));
+        assert!(names.iter().any(|n| n == "Listening Window w/EQ"));
+        assert!(names.iter().any(|n| n == "Early Reflections w/EQ"));
+        assert!(names.iter().any(|n| n == "Sound Power w/EQ"));
+        assert!(names.iter().any(|n| n == "Early Reflections DI"));
+        assert!(names.iter().any(|n| n == "Sound Power DI"));
+        // DI yaxis should be y10
+        for t in v.as_array().unwrap() {
+            let n = t["name"].as_str().unwrap();
+            if n.ends_with(" DI") {
+                assert_eq!(t["yaxis"], json!("y10"));
+            }
+        }
     }
 }

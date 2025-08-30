@@ -55,13 +55,19 @@ pub struct ObjectiveData {
 
 fn parse_algorithm(name: &str) -> Algorithm {
     match name.to_lowercase().as_str() {
-        "isres" => Algorithm::Isres,
-        "cobyla" => Algorithm::Cobyla,
-        "neldermead" | "nm" => Algorithm::Neldermead,
         "bobyqa" => Algorithm::Bobyqa,
-        "sbplx" | "subplex" => Algorithm::Sbplx,
-        "crs2lm" | "crs" => Algorithm::Crs2Lm,
+        "cobyla" => Algorithm::Cobyla,
+        "crs2lm" => Algorithm::Crs2Lm,
+        "direct" => Algorithm::Direct,
+        "directl" => Algorithm::DirectL,
+        "gmlsl" => Algorithm::GMlsl,
+        "gmlsllds" => Algorithm::GMlslLds,
+        "isres" => Algorithm::Isres,
+        "neldermead" => Algorithm::Neldermead,
+        "sbplx" => Algorithm::Sbplx,
         "slsqp" => Algorithm::Slsqp,
+        "stogo" => Algorithm::StoGo,
+        "stogorand" => Algorithm::StoGoRand,
         _ => Algorithm::Isres,
     }
 }
@@ -144,7 +150,7 @@ fn objective_function(x: &[f64], _gradient: Option<&mut [f64]>, data: &mut Objec
         let gain = x[i * 3 + 2];
 
         let ftype = if data.iir_hp_pk && i == hp_index {
-            BiquadFilterType::Highpass
+            BiquadFilterType::HighpassVariableQ
         } else {
             BiquadFilterType::Peak
         };
@@ -176,59 +182,59 @@ fn objective_function(x: &[f64], _gradient: Option<&mut [f64]>, data: &mut Objec
     // We penalize the positive excess above max_db. Using the maximum excess keeps
     // behavior close to the previous nonlinear inequality constraint.
     let mut ceiling_penalty = 0.0;
-    // if data.freqs.len() > 0 {
-    //     let mut max_violation = 0.0_f64;
-    //     for &v in peq_spl.iter() {
-    //         let excess = v - data.max_db;
-    //         if excess > max_violation {
-    //             max_violation = excess;
-    //         }
-    //     }
-    //     if max_violation > 0.0 {
-    //         // Quadratic penalty on the maximum violation; scale moderately
-    //         ceiling_penalty = max_violation * max_violation * 10.0;
-    //     }
-    // }
+    if data.freqs.len() > 0 {
+        let mut max_violation = 0.0_f64;
+        for &v in peq_spl.iter() {
+            let excess = v - data.max_db;
+            if excess > max_violation {
+                max_violation = excess;
+            }
+        }
+        if max_violation > 0.0 {
+            // Quadratic penalty on the maximum violation; scale moderately
+            ceiling_penalty = max_violation * max_violation * 10.0;
+        }
+    }
 
     // Add spacing penalty between center frequencies in octaves
     let spacing = spacing_penalty(x, data.min_spacing_oct);
 
     // Enforce minimum absolute gain for Peak EQs if min_db > 0
     let mut min_amp_penalty = 0.0;
-    // if data.min_db > 0.0 {
-    //     let n = x.len() / 3;
-    //     // Recompute hp_index only if mode uses Highpass
-    //     let mut hp_index = usize::MAX;
-    //     if data.iir_hp_pk {
-    //         hp_index = 0usize;
-    //         if n > 0 {
-    //             let mut min_f = x[0];
-    //             for i in 1..n {
-    //                 let f = x[i * 3];
-    //                 if f < min_f {
-    //                     min_f = f;
-    //                     hp_index = i;
-    //                 }
-    //             }
-    //         }
-    //     }
-    //     for i in 0..n {
-    //         if data.iir_hp_pk && i == hp_index {
-    //             continue;
-    //         }
-    //         let g = x[i * 3 + 2].abs();
-    //         let short = (data.min_db - g).max(0.0);
-    //         if short > 0.0 {
-    //             // Strong barrier to emulate disjoint feasible set for gain:
-    //             // gains in (-min_db, min_db) are heavily discouraged
-    //             // Scale quadratic to keep differentiability for local methods
-    //             const BARRIER_SCALE: f64 = 1e4;
-    //             min_amp_penalty += BARRIER_SCALE * short * short;
-    //         }
-    //     }
-    // }
+    if data.min_db > 0.0 {
+        let n = x.len() / 3;
+        // Recompute hp_index only if mode uses Highpass
+        let mut hp_index2 = usize::MAX;
+        if data.iir_hp_pk {
+            hp_index2 = 0usize;
+            if n > 0 {
+                let mut min_f = x[0];
+                for i in 1..n {
+                    let f = x[i * 3];
+                    if f < min_f {
+                        min_f = f;
+                        hp_index2 = i;
+                    }
+                }
+            }
+        }
+        for i in 0..n {
+            if data.iir_hp_pk && i == hp_index2 {
+                continue;
+            }
+            let g = x[i * 3 + 2].abs();
+            let short = (data.min_db - g).max(0.0);
+            if short > 0.0 {
+                // Strong barrier to emulate disjoint feasible set for gain:
+                // gains in (-min_db, min_db) are heavily discouraged
+                // Scale quadratic to keep differentiability for local methods
+                const BARRIER_SCALE: f64 = 1e4;
+                min_amp_penalty += BARRIER_SCALE * short * short;
+            }
+        }
+    }
 
-    let obj = fit + data.spacing_weight * spacing + min_amp_penalty + ceiling_penalty;
+    let obj = fit*100.0 + data.spacing_weight * spacing + min_amp_penalty + ceiling_penalty;
 
     // Periodic debug logging of gain values to detect unintended quantization.
     // Controlled by env vars: AUTOEQ_DEBUG_OBJ (0/1), AUTOEQ_DEBUG_EVERY (default 100), AUTOEQ_DEBUG_MAX (default 50)
@@ -373,7 +379,7 @@ pub fn optimize_filters(
     upper_bounds: &[f64],
     objective_data: ObjectiveData,
     algo: &str,
-    population: Option<usize>,
+    population: usize,
     maxeval: usize,
 ) -> Result<(String, f64), (String, f64)> {
     let num_params = x.len();
@@ -394,13 +400,11 @@ pub fn optimize_filters(
     // Enforce |g_i| >= min_db as hard constraints when min_db > 0
     // Note: Constraint functionality removed due to nlopt API changes
 
-    if let Some(pop) = population {
-        let _ = optimizer.set_population(pop);
-    }
-    let _ = optimizer.set_maxeval(maxeval.try_into().unwrap());
-    optimizer.set_stopval(1e-4).unwrap();
-    optimizer.set_ftol_rel(1e-6).unwrap();
-    optimizer.set_xtol_rel(1e-6).unwrap();
+    optimizer.set_population(population);
+    optimizer.set_maxeval(maxeval as u32);
+    optimizer.set_stopval(1e-6).unwrap();
+    optimizer.set_ftol_rel(1e-5).unwrap();
+    optimizer.set_xtol_rel(1e-5).unwrap();
 
     let result = optimizer.optimize(x);
     match result {
@@ -443,11 +447,14 @@ pub fn refine_local(
     );
     opt.set_lower_bounds(lower_bounds).unwrap();
     opt.set_upper_bounds(upper_bounds).unwrap();
+    opt.set_maxeval(maxeval as u32);
+
     // Enforce total response ceiling during local refinement too
     // Note: Constraint functionality removed due to nlopt API changes
+
     // Enforce |g_i| >= min_db for local stage as well
     // Note: Constraint functionality removed due to nlopt API changes
-    let _ = opt.set_maxeval(maxeval.try_into().unwrap());
+
     opt.set_ftol_rel(1e-8).unwrap();
     opt.set_xtol_rel(1e-8).unwrap();
 
