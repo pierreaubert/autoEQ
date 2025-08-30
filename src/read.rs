@@ -118,7 +118,7 @@ pub async fn fetch_measurement_plot_data(
 
     // The API response is a list with a single element that is a JSON string
     let data_string = if let Some(array) = api_response.as_array() {
-        if let Some(first_element) = array.get(0) {
+        if let Some(first_element) = array.first() {
             first_element
                 .as_str()
                 .ok_or("First element is not a string")?
@@ -129,7 +129,7 @@ pub async fn fetch_measurement_plot_data(
         return Err("API response is not an array".into());
     };
 
-    let plot_data: Value = serde_json::from_str(&data_string)?;
+    let plot_data: Value = serde_json::from_str(data_string)?;
     let trace_names = collect_trace_names(&plot_data);
     println!(" Trace names: {:?}", trace_names);
     Ok(plot_data)

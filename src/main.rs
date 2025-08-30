@@ -17,12 +17,12 @@
 
 use autoeq::Curve;
 use autoeq::iir;
+use autoeq::loss::ScoreLossData;
 use autoeq::optim;
 use autoeq::optim::ObjectiveData;
 use autoeq::plot;
 use autoeq::read;
 use autoeq::score;
-use autoeq::loss::ScoreLossData;
 use clap::Parser;
 use ndarray::Array1;
 use std::collections::HashMap;
@@ -67,21 +67,16 @@ fn distribute_gain_magnitudes(num_filters: usize, min_db: f64, max_db: f64) -> V
         .collect()
 }
 
-/// A command-line tool to find optimal IIR filters to match a frequency curve.
+// New helper functions
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
-    let args = autoeq::cli::Args::parse();
+async fn load_input_curve(
+    args: &autoeq::cli::Args,
+) -> Result<(Curve, Option<HashMap<String, Curve>>), Box<dyn Error>> {
     let mut spin_data: Option<HashMap<String, Curve>> = None;
 
-    // ----------------------------------------------------------------------
-    // 1. Load the input curve (the one we want to match).
-    // Use API data if speaker, version, and measurement are provided, otherwise use CSV file
-    // ----------------------------------------------------------------------
     let input_curve = if let (Some(speaker), Some(version), Some(measurement)) =
         (&args.speaker, &args.version, &args.measurement)
     {
-        // Fetch full measurement once and cache it
         let plot_data = read::fetch_measurement_plot_data(speaker, version, measurement).await?;
         let extracted_curve =
             read::extract_curve_by_name(&plot_data, measurement, &args.curve_name)?;
@@ -101,12 +96,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
         read::read_curve_from_csv(curve_path)?
     };
 
-    // ----------------------------------------------------------------------
-    // 2. Build inverted target from the selected curve, with positive-only clamp and optional smoothing.
-    // Base target is flat 0 dB unless a target file was provided (we still invert the selected curve relative to it).
-    // ----------------------------------------------------------------------
+    Ok((input_curve, spin_data))
+}
+
+fn build_target_curve(
+    args: &autoeq::cli::Args,
+    input_curve: &Curve,
+) -> (Array1<f64>, Option<Array1<f64>>) {
     let base_target = if let Some(ref target_path) = args.target {
-        let target_curve = read::read_curve_from_csv(&target_path)?;
+        let target_curve = read::read_curve_from_csv(target_path).unwrap();
         println!(
             "* Loaded target curve with {} points.",
             target_curve.freq.len()
@@ -117,14 +115,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
         Array1::zeros(input_curve.spl.len())
     };
 
-    // Inverted curve relative to base target
-    let mut inverted_curve = base_target.clone() - input_curve.spl.clone();
-    // Clip positive side only if HP+PK mode is disabled
+    let mut inverted_curve = base_target - input_curve.spl.clone();
     if !args.iir_hp_pk {
         inverted_curve = read::clamp_positive_only(&inverted_curve, args.max_db);
     }
 
-    // Optional smoothing regularization of the inverted_curve curve
     let mut smoothed_curve: Option<Array1<f64>> = None;
     if args.smooth {
         smoothed_curve = Some(read::smooth_one_over_n_octave(
@@ -134,22 +129,22 @@ async fn main() -> Result<(), Box<dyn Error>> {
         ));
     }
 
-    // ----------------------------------------------------------------------
-    // 3. Define the optimization target error (use smoothed if provided)
-    // ----------------------------------------------------------------------
-    // Determine if we have CEA2034 measurement data available (speaker+version+measurement provided and measurement is CEA2034)
+    (inverted_curve, smoothed_curve)
+}
+
+fn setup_objective_data(
+    args: &autoeq::cli::Args,
+    input_curve: &Curve,
+    target_curve: &Array1<f64>,
+    spin_data: &Option<HashMap<String, Curve>>,
+) -> (ObjectiveData, bool) {
     let use_cea = matches!(args.measurement.as_deref(), Some(m) if m.eq_ignore_ascii_case("CEA2034"))
         && args.speaker.is_some()
         && args.version.is_some()
         && spin_data.is_some();
 
-    let target_curve = smoothed_curve
-        .clone()
-        .unwrap_or_else(|| inverted_curve.clone());
-
-    // Build optional score_data only when CEA2034 data is available and requested
     let score_data_opt = if use_cea {
-        Some(ScoreLossData::new(spin_data.as_ref().expect("spin_data must be Some when use_cea")))
+        Some(ScoreLossData::new(spin_data.as_ref().unwrap()))
     } else {
         None
     };
@@ -167,44 +162,33 @@ async fn main() -> Result<(), Box<dyn Error>> {
         score_data: score_data_opt,
     };
 
-    // If measurement is CEA2034 via API, compute score before optimization
-    let mut cea_metrics_before: Option<score::ScoreMetrics> = None;
-    if use_cea {
-        let metrics =
-            score::compute_cea2034_metrics(&input_curve.freq, spin_data.as_ref().unwrap(), None)
-                .await?;
-        cea_metrics_before = Some(metrics);
-    }
+    (objective_data, use_cea)
+}
 
-    // ----------------------------------------------------------------------
-    // 4. optimisation
-    // ----------------------------------------------------------------------
-    // Each filter has 3 parameters: frequency, Q, and gain.
+fn perform_optimization(
+    args: &autoeq::cli::Args,
+    objective_data: &ObjectiveData,
+) -> Result<Vec<f64>, Box<dyn Error>> {
     let num_params = args.num_filters * 3;
-
-    // Define the bounds for each parameter: [freq_min, q_min, gain_min, freq_min, q_min, gain_min, ...]
     let mut lower_bounds = Vec::with_capacity(num_params);
     let mut upper_bounds = Vec::with_capacity(num_params);
 
-    let gain_lower = -6.0 * args.max_db; // No strict negative minimum; allow deeper cuts
+    let gain_lower = -6.0 * args.max_db;
     let q_lower = args.min_q.max(1.0e-6);
     for _ in 0..args.num_filters {
-        lower_bounds.extend_from_slice(&[args.min_freq, q_lower, gain_lower]); // Freq, Q, Gain
+        lower_bounds.extend_from_slice(&[args.min_freq, q_lower, gain_lower]);
         upper_bounds.extend_from_slice(&[args.max_freq, args.max_q, args.max_db]);
     }
 
     if args.iir_hp_pk {
-	    lower_bounds[0] = 20.0;
-	    upper_bounds[0] = 120.0;
-	    lower_bounds[1] = 1.0;
-	    upper_bounds[1] = 1.5;
-	    lower_bounds[2] = 0.0;
-	    upper_bounds[2] = 0.0;
+        lower_bounds[0] = 20.0;
+        upper_bounds[0] = 120.0;
+        lower_bounds[1] = 1.0;
+        upper_bounds[1] = 1.5;
+        lower_bounds[2] = 0.0;
+        upper_bounds[2] = 0.0;
     }
 
-    // Initial guess for the parameters.
-    // Distribute filters logarithmically across the frequency spectrum
-    // and give them small non-zero initial gains to encourage better distribution
     let mut x = vec![];
     let log_min = args.min_freq.ln();
     let log_max = args.max_freq.ln();
@@ -213,21 +197,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let q_vec = distribute_qs(args.num_filters, args.min_q, args.max_q / 2.0);
     let g_mags = distribute_gain_magnitudes(args.num_filters, args.min_db, args.max_db / 2.0);
     for i in 0..args.num_filters {
-        // Distribute frequencies logarithmically
         let freq = (log_min + (i as f64 + 0.5) * log_range / args.num_filters as f64).exp();
-
         let q = q_vec[i];
-
-        // Alternate initial gain signs and satisfy |gain| >= min_db (if > 0)
         let sign = if i % 2 == 0 { 1.0 } else { -1.0 };
         let gain = sign * g_mags[i];
         x.extend_from_slice(&[freq, q, gain]);
     }
 
     if args.iir_hp_pk {
-	x[0] = 80.0;
-	x[1] = 1.1;
-	x[2] = 0.0;
+        x[0] = 80.0;
+        x[1] = 1.1;
+        x[2] = 0.0;
     }
 
     iir::peq_print(&x, args.iir_hp_pk);
@@ -249,7 +229,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 status, val
             );
 
-            // Spacing diagnostics after global stage
             let (sorted_freqs, adj_spacings) =
                 optim::compute_sorted_freqs_and_adjacent_octave_spacings(&x);
             let min_adj = adj_spacings.iter().cloned().fold(f64::INFINITY, f64::min);
@@ -272,14 +251,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
             }
             iir::peq_print(&x, args.iir_hp_pk);
 
-            // 5. Optional local refinement
             if args.refine {
-                let local_result = optim::refine_local(
+                let local_result = optim::optimize_filters(
                     &mut x,
                     &lower_bounds,
                     &upper_bounds,
                     objective_data.clone(),
                     &args.local_algo,
+                    args.population,
                     args.maxeval,
                 );
                 match local_result {
@@ -289,7 +268,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
                             args.local_algo, local_status, local_val
                         );
 
-                        // Spacing diagnostics after local refinement
                         let (sorted_freqs, adj_spacings) =
                             optim::compute_sorted_freqs_and_adjacent_octave_spacings(&x);
                         let min_adj = adj_spacings.iter().cloned().fold(f64::INFINITY, f64::min);
@@ -320,71 +298,123 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 }
             }
 
-            // 6. Plot results if output path is provided
-            if let Some(ref output_path) = args.output {
-                // Compute EQ response for plotting
-                let eq_response = iir::compute_peq_response(
-                    &input_curve.freq,
-                    &x,
-                    args.sample_rate,
-                    args.iir_hp_pk,
-                );
-
-                // Create a Curve from smoothed_curve if it exists
-                let smoothed_curve_opt = smoothed_curve.as_ref().map(|smoothed| crate::Curve {
-                    freq: input_curve.freq.clone(),
-                    spl: smoothed.clone(),
-                });
-
-                plot::plot_results(
-                    &args,
-                    &input_curve,
-                    smoothed_curve_opt.as_ref(),
-                    &target_curve,
-                    &x,
-                    output_path,
-                    spin_data.as_ref(),
-                    Some(&eq_response),
-                )
-                .await?;
-            }
-
-            // 7. Compute and print CEA2034 scores after applying EQ (when available)
-            if use_cea {
-                let freq = &input_curve.freq;
-                let peq_after =
-                    iir::compute_peq_response(freq, &x, args.sample_rate, args.iir_hp_pk);
-                let metrics_after = score::compute_cea2034_metrics(
-                    freq,
-                    spin_data.as_ref().unwrap(),
-                    Some(&peq_after),
-                )
-                .await?;
-                if let Some(before) = cea_metrics_before {
-                    println!(
-                        "*  Pre-Optimization CEA2034 Score: pref={:.3} | nbd_on={:.3} nbd_pir={:.3} lfx={:.0}Hz sm_pir={:.3}",
-                        before.pref_score,
-                        before.nbd_on,
-                        before.nbd_pir,
-                        10f64.powf(before.lfx),
-                        before.sm_pir
-                    );
-                }
-                println!(
-                    "* Post-Optimization CEA2034 Score: pref={:.3} | nbd_on={:.3} nbd_pir={:.3} lfx={:.0}hz sm_pir={:.3}",
-                    metrics_after.pref_score,
-                    metrics_after.nbd_on,
-                    metrics_after.nbd_pir,
-                    10f64.powf(metrics_after.lfx),
-                    metrics_after.sm_pir
-                );
-            }
+            Ok(x)
         }
         Err((e, final_value)) => {
             eprintln!("\n❌ Optimization failed: {:?}", e);
             eprintln!("   - Final Mean Squared Error: {:.6}", final_value);
+            Err(e.into())
         }
     }
+}
+
+async fn handle_results(
+    args: &autoeq::cli::Args,
+    x: &Vec<f64>,
+    _objective_data: &ObjectiveData,
+    input_curve: &Curve,
+    spin_data: &Option<HashMap<String, Curve>>,
+    target_curve: &Array1<f64>,
+    smoothed_curve: &Option<Array1<f64>>,
+    cea_metrics_before: Option<score::ScoreMetrics>,
+    use_cea: bool,
+) -> Result<(), Box<dyn Error>> {
+    if let Some(ref output_path) = args.output {
+        let eq_response =
+            iir::compute_peq_response(&input_curve.freq, x, args.sample_rate, args.iir_hp_pk);
+
+        let smoothed_curve_opt = smoothed_curve.as_ref().map(|smoothed| crate::Curve {
+            freq: input_curve.freq.clone(),
+            spl: smoothed.clone(),
+        });
+
+        let args_cloned = args.clone();
+        let input_curve_cloned = input_curve.clone();
+        let smoothed_curve_cloned = smoothed_curve_opt.as_ref().map(|c| c.clone());
+        let target_curve_cloned = target_curve.clone();
+        let x_cloned = x.clone();
+        let output_path_cloned = output_path.clone();
+        let spin_data_cloned = spin_data.clone();
+        let eq_response_cloned = eq_response.clone();
+
+        let plot_handle = std::thread::spawn(move || {
+            let _ = plot::plot_results(
+                &args_cloned,
+                &input_curve_cloned,
+                smoothed_curve_cloned.as_ref(),
+                &target_curve_cloned,
+                &x_cloned,
+                &output_path_cloned,
+                spin_data_cloned.as_ref(),
+                Some(&eq_response_cloned),
+            );
+        });
+
+        plot_handle.join().expect("Plotting thread panicked");
+    }
+
+    if use_cea {
+        let freq = &input_curve.freq;
+        let peq_after = iir::compute_peq_response(freq, x, args.sample_rate, args.iir_hp_pk);
+        let metrics_after =
+            score::compute_cea2034_metrics(freq, spin_data.as_ref().unwrap(), Some(&peq_after))
+                .await?;
+        if let Some(before) = cea_metrics_before {
+            println!(
+                "*  Pre-Optimization CEA2034 Score: pref={:.3} | nbd_on={:.3} nbd_pir={:.3} lfx={:.0}Hz sm_pir={:.3}",
+                before.pref_score,
+                before.nbd_on,
+                before.nbd_pir,
+                10f64.powf(before.lfx),
+                before.sm_pir
+            );
+        }
+        println!(
+            "* Post-Optimization CEA2034 Score: pref={:.3} | nbd_on={:.3} nbd_pir={:.3} lfx={:.0}hz sm_pir={:.3}",
+            metrics_after.pref_score,
+            metrics_after.nbd_on,
+            metrics_after.nbd_pir,
+            10f64.powf(metrics_after.lfx),
+            metrics_after.sm_pir
+        );
+    }
+
+    Ok(())
+}
+
+/// A command-line tool to find optimal IIR filters to match a frequency curve.
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error>> {
+    let args = autoeq::cli::Args::parse();
+    let (input_curve, spin_data) = load_input_curve(&args).await?;
+    let (inverted_curve, smoothed_curve) = build_target_curve(&args, &input_curve);
+    let target_curve = smoothed_curve.as_ref().unwrap_or(&inverted_curve);
+    let (objective_data, use_cea) =
+        setup_objective_data(&args, &input_curve, target_curve, &spin_data);
+
+    let mut cea_metrics_before: Option<score::ScoreMetrics> = None;
+    if use_cea {
+        let metrics =
+            score::compute_cea2034_metrics(&input_curve.freq, spin_data.as_ref().unwrap(), None)
+                .await?;
+        cea_metrics_before = Some(metrics);
+    }
+
+    let x = perform_optimization(&args, &objective_data)?;
+
+    handle_results(
+        &args,
+        &x,
+        &objective_data,
+        &input_curve,
+        &spin_data,
+        target_curve,
+        &smoothed_curve,
+        cea_metrics_before,
+        use_cea,
+    )
+    .await?;
 
     Ok(())
 }

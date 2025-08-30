@@ -310,13 +310,11 @@ impl Biquad {
 
         // Clip to a minimum value to avoid log(0), then calculate dB
         let min_val = 1.0e-20;
-        let db = r
-            .mapv(|val| val.max(min_val))
+
+        r.mapv(|val| val.max(min_val))
             .mapv(f64::sqrt)
             .mapv(f64::log10)
-            * 20.0;
-
-        db
+            * 20.0
     }
 
     /// Returns the filter coefficients as a tuple.
@@ -396,7 +394,7 @@ pub fn compute_peq_response(
             BiquadFilterType::Peak
         };
         let filter = Biquad::new(ftype, f0, sample_rate, q, gain);
-        peq = peq + &filter.np_log_result(freqs);
+        peq += &filter.np_log_result(freqs);
     }
     peq
 }

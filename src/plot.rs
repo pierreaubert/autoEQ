@@ -22,7 +22,7 @@ use std::path::PathBuf;
 use ndarray::Array1;
 use plotly::common::{Mode, Title};
 use plotly::layout::{AxisType, GridPattern, LayoutGrid, RowOrder};
-use plotly::{Layout, Plot, Scatter, ImageFormat};
+use plotly::{ImageFormat, Layout, Plot, Scatter};
 // use plotly::plotly_static::{ImageFormat, StaticExporterBuilder};
 
 use crate::{Biquad, BiquadFilterType};
@@ -58,7 +58,7 @@ fn create_cea2034_combined_traces(
     curves: &HashMap<String, super::Curve>,
     x_axis: &str,
     y_axis: &str,
-    y_axis_di: &str,
+    _y_axis_di: &str,
 ) -> Vec<Scatter<f64, f64>> {
     let mut traces = Vec::new();
     for (i, curve_name) in CEA2034_CURVE_NAMES_FULL.iter().enumerate() {
@@ -75,7 +75,7 @@ fn create_cea2034_combined_traces(
     // DI curves on secondary y-axis
     for (j, curve_name) in CEA2034_CURVE_NAMES_DI.iter().enumerate() {
         if let Some(curve) = curves.get(*curve_name) {
-            let trace = Scatter::new(curve.freq.to_vec(), (&curve.spl-35.0).to_vec())
+            let trace = Scatter::new(curve.freq.to_vec(), (&curve.spl - 35.0).to_vec())
                 .mode(Mode::Lines)
                 .name(curve_name)
                 .x_axis(x_axis)
@@ -99,14 +99,14 @@ fn create_cea2034_with_eq_combined_traces(
     eq_response: &Array1<f64>,
     x_axis: &str,
     y_axis: &str,
-    y_axis_di: &str,
+    _y_axis_di: &str,
 ) -> Vec<Scatter<f64, f64>> {
     let mut traces = Vec::new();
     for (i, curve_name) in CEA2034_CURVE_NAMES_FULL.iter().enumerate() {
         if let Some(curve) = curves.get(*curve_name) {
             let trace = Scatter::new(curve.freq.to_vec(), (&curve.spl + eq_response).to_vec())
                 .mode(Mode::Lines)
-                .name(&format!("{} w/EQ", curve_name))
+                .name(format!("{} w/EQ", curve_name))
                 .x_axis(x_axis)
                 .y_axis(y_axis)
                 .line(plotly::common::Line::new().color(filter_color(i)));
@@ -116,12 +116,12 @@ fn create_cea2034_with_eq_combined_traces(
     // DI curves unchanged, on secondary y-axis
     for (j, curve_name) in CEA2034_CURVE_NAMES_DI.iter().enumerate() {
         if let Some(curve) = curves.get(*curve_name) {
-            let trace = Scatter::new(curve.freq.to_vec(), (&curve.spl-35.0).to_vec())
+            let trace = Scatter::new(curve.freq.to_vec(), (&curve.spl - 35.0).to_vec())
                 .mode(Mode::Lines)
                 .name(curve_name)
                 .x_axis(x_axis)
                 .y_axis(y_axis)
-                .line(plotly::common::Line::new().color(filter_color(j+2)));
+                .line(plotly::common::Line::new().color(filter_color(j + 2)));
             traces.push(*trace);
         }
     }
@@ -221,7 +221,7 @@ fn create_cea2034_with_eq_traces(
         let curve = curves.get(*curve_name).unwrap();
         let trace = Scatter::new(curve.freq.to_vec(), (&curve.spl + eq_response).to_vec())
             .mode(Mode::Lines)
-            .name(&format!("{} w/EQ", curve_name))
+            .name(format!("{} w/EQ", curve_name))
             .x_axis(&axis[..2])
             .y_axis(&axis[2..])
             .line(plotly::common::Line::new().color(filter_color(i + 4)));
@@ -313,7 +313,7 @@ pub fn plot_results(
         };
         let filter = Biquad::new(ftype, f0, sample_rate, q, gain);
         let filter_response = filter.np_log_result(&plot_freqs);
-        combined_response = combined_response + &filter_response;
+        combined_response += &filter_response;
 
         let label = if iir_hp_pk && orig_i == hp_index {
             "Highpass"
@@ -322,7 +322,7 @@ pub fn plot_results(
         };
         let individual_trace = Scatter::new(plot_freqs.to_vec(), filter_response.to_vec())
             .mode(Mode::Lines)
-            .name(&format!("{} {} at {:5.0}Hz", label, orig_i + 1, f0))
+            .name(format!("{} {} at {:5.0}Hz", label, orig_i + 1, f0))
             .y_axis("y")
             .marker(
                 plotly::common::Marker::new()
@@ -432,35 +432,25 @@ pub fn plot_results(
     // ----------------------------------------------------------------------
     // Add CEA2034 if provided with and without EQ
     // ----------------------------------------------------------------------
-//    let y_axis_di = plotly::layout::Axis::new()
-//	.title(plotly::common::Title::with_text("DI (dB)"))
-//	.range(vec![-5.0, 45.0])
-//	.auto_range(false)
-//    .overlaying("y")
-//                .side(AxisSide::Right)
+    //    let y_axis_di = plotly::layout::Axis::new()
+    //	.title(plotly::common::Title::with_text("DI (dB)"))
+    //	.range(vec![-5.0, 45.0])
+    //	.auto_range(false)
+    //    .overlaying("y")
+    //                .side(AxisSide::Right)
     let x_axis7_title = "CEA2034".to_string();
     let x_axis8_title = "CEA2034 + EQ".to_string();
     if let Some(curves) = cea2034_curves {
-        let cea2034_traces = create_cea2034_combined_traces(
-    	    curves,
-    	    "x7",
-    	    "y7",
-    	    "y7",
-    	);
-         for trace in cea2034_traces {
+        let cea2034_traces = create_cea2034_combined_traces(curves, "x7", "y7", "y7");
+        for trace in cea2034_traces {
             plot.add_trace(Box::new(trace));
         }
 
         if let Some(eq_resp) = eq_response {
-            let cea2034_traces = create_cea2034_with_eq_combined_traces(
-    		curves,
-		eq_resp,
-    		"x8",
-    		"y8",
-    		"y8",
-    	    );
+            let cea2034_traces =
+                create_cea2034_with_eq_combined_traces(curves, eq_resp, "x8", "y8", "y8");
             for trace in cea2034_traces {
-		plot.add_trace(Box::new(trace));
+                plot.add_trace(Box::new(trace));
             }
         }
     }
@@ -496,7 +486,7 @@ pub fn plot_results(
             plotly::layout::Axis::new()
                 .title(plotly::common::Title::with_text("SPL (dB)"))
                 .range(vec![-5.0, 10.0])
-                .domain(&[0.80, 1.0]),
+                .domain(&[0.75, 0.95]),
         )
         .x_axis2(
             plotly::layout::Axis::new()
@@ -509,7 +499,7 @@ pub fn plot_results(
             plotly::layout::Axis::new()
                 .title(plotly::common::Title::with_text("SPL (dB)"))
                 .range(vec![-5.0, 10.0])
-                .domain(&[0.80, 1.0]),
+                .domain(&[0.75, 0.95]),
         )
         // CEA2034 subplot axes
         .x_axis3(
@@ -523,7 +513,7 @@ pub fn plot_results(
             plotly::layout::Axis::new()
                 .title(plotly::common::Title::with_text("SPL (dB)"))
                 .range(vec![-10.0, 10.0])
-                .domain(&[0.55, 0.70]),
+                .domain(&[0.5, 0.7]),
         )
         .x_axis4(
             plotly::layout::Axis::new()
@@ -536,7 +526,7 @@ pub fn plot_results(
             plotly::layout::Axis::new()
                 .title(plotly::common::Title::with_text("SPL (dB)"))
                 .range(vec![-10.0, 10.0])
-                .domain(&[0.55, 0.70]),
+                .domain(&[0.5, 0.7]),
         )
         .x_axis5(
             plotly::layout::Axis::new()
@@ -549,7 +539,7 @@ pub fn plot_results(
             plotly::layout::Axis::new()
                 .title(plotly::common::Title::with_text("SPL (dB)"))
                 .range(vec![-15.0, 5.0])
-                .domain(&[0.30, 0.5]),
+                .domain(&[0.25, 0.45]),
         )
         .x_axis6(
             plotly::layout::Axis::new()
@@ -562,7 +552,7 @@ pub fn plot_results(
             plotly::layout::Axis::new()
                 .title(plotly::common::Title::with_text("SPL (dB)"))
                 .range(vec![-15.0, 5.0])
-                .domain(&[0.3, 0.5]),
+                .domain(&[0.25, 0.45]),
         )
         // Row 4: Combined CEA2034 (left) and CEA2034+EQ (right)
         .x_axis7(
@@ -576,7 +566,7 @@ pub fn plot_results(
             plotly::layout::Axis::new()
                 .title(plotly::common::Title::with_text("SPL (dB)"))
                 .range(vec![-40.0, 10.0])
-                .domain(&[0.0, 0.25]),
+                .domain(&[0.0, 0.2]),
         )
         .x_axis8(
             plotly::layout::Axis::new()
@@ -589,20 +579,20 @@ pub fn plot_results(
             plotly::layout::Axis::new()
                 .title(plotly::common::Title::with_text("SPL (dB)"))
                 .range(vec![-40.0, 10.0])
-                .domain(&[0.0, 0.25]),
+                .domain(&[0.0, 0.2]),
         );
     plot.set_layout(layout);
 
-    plot.write_html(
-	output_path.with_extension("html"),
-    );
+    plot.write_html(output_path.with_extension("html"));
 
-    // plot.write_image(
-    // 	&output_path.with_extension("png"),
-    // 	plotly::ImageFormat::PNG,
-    // 	1024, 1280, 1.0
-    // ).expect("Failed to export plot");
-
+    plot.write_image(
+        &output_path.with_extension("png"),
+        plotly::ImageFormat::PNG,
+        1280,
+        1280,
+        1.0,
+    )
+    .expect("Failed to export plot");
 
     Ok(())
 }
@@ -719,21 +709,33 @@ mod tests {
         );
         curves.insert(
             "Early Reflections".to_string(),
-            super::super::Curve { freq: freq.clone(), spl: spl_primary.clone() },
+            super::super::Curve {
+                freq: freq.clone(),
+                spl: spl_primary.clone(),
+            },
         );
         curves.insert(
             "Sound Power".to_string(),
-            super::super::Curve { freq: freq.clone(), spl: spl_primary.clone() },
+            super::super::Curve {
+                freq: freq.clone(),
+                spl: spl_primary.clone(),
+            },
         );
 
         // DI curves
         curves.insert(
             "Early Reflections DI".to_string(),
-            super::super::Curve { freq: freq.clone(), spl: spl_di.clone() },
+            super::super::Curve {
+                freq: freq.clone(),
+                spl: spl_di.clone(),
+            },
         );
         curves.insert(
             "Sound Power DI".to_string(),
-            super::super::Curve { freq: freq.clone(), spl: spl_di.clone() },
+            super::super::Curve {
+                freq: freq.clone(),
+                spl: spl_di.clone(),
+            },
         );
 
         let traces = create_cea2034_combined_traces(&curves, "x7", "y7", "y9");
@@ -769,28 +771,46 @@ mod tests {
         // Primary curves
         curves.insert(
             "On Axis".to_string(),
-            super::super::Curve { freq: freq.clone(), spl: spl_primary.clone() },
+            super::super::Curve {
+                freq: freq.clone(),
+                spl: spl_primary.clone(),
+            },
         );
         curves.insert(
             "Listening Window".to_string(),
-            super::super::Curve { freq: freq.clone(), spl: spl_primary.clone() },
+            super::super::Curve {
+                freq: freq.clone(),
+                spl: spl_primary.clone(),
+            },
         );
         curves.insert(
             "Early Reflections".to_string(),
-            super::super::Curve { freq: freq.clone(), spl: spl_primary.clone() },
+            super::super::Curve {
+                freq: freq.clone(),
+                spl: spl_primary.clone(),
+            },
         );
         curves.insert(
             "Sound Power".to_string(),
-            super::super::Curve { freq: freq.clone(), spl: spl_primary.clone() },
+            super::super::Curve {
+                freq: freq.clone(),
+                spl: spl_primary.clone(),
+            },
         );
         // DI
         curves.insert(
             "Early Reflections DI".to_string(),
-            super::super::Curve { freq: freq.clone(), spl: spl_di.clone() },
+            super::super::Curve {
+                freq: freq.clone(),
+                spl: spl_di.clone(),
+            },
         );
         curves.insert(
             "Sound Power DI".to_string(),
-            super::super::Curve { freq: freq.clone(), spl: spl_di.clone() },
+            super::super::Curve {
+                freq: freq.clone(),
+                spl: spl_di.clone(),
+            },
         );
 
         let eq = Array1::from(vec![1.0, -1.0, 0.5]);

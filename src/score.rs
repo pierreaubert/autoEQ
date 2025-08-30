@@ -264,7 +264,7 @@ pub fn octave(count: usize) -> Vec<(f64, f64, f64)> {
     let reference = 1290.0_f64;
     let p = 2.0_f64.powf(1.0 / count as f64);
     let p_band = 2.0_f64.powf(1.0 / (2.0 * count as f64));
-    let o_iter: i32 = ((count as i32 * 10 + 1) / 2) as i32;
+    let o_iter: i32 = (count as i32 * 10 + 1) / 2;
     let mut centers: Vec<f64> = Vec::with_capacity((o_iter as usize) * 2 + 1);
     for i in (1..=o_iter).rev() {
         centers.push(reference / p.powi(i));
@@ -678,12 +678,10 @@ pub async fn compute_cea2034_metrics(
     let intervals = octave_intervals(2, freq);
 
     // Use provided PEQ or assume zero PEQ
-    let peq_arr = peq
-        .map(|p| p.clone())
-        .unwrap_or_else(|| Array1::zeros(freq.len()));
+    let peq_arr = peq.cloned().unwrap_or_else(|| Array1::zeros(freq.len()));
 
     Ok(score_peq_approx(
-        freq, &intervals, &lw, &sp, &pir, &on, &peq_arr,
+        freq, &intervals, lw, sp, pir, on, &peq_arr,
     ))
 }
 

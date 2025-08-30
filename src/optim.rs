@@ -182,7 +182,7 @@ fn objective_function(x: &[f64], _gradient: Option<&mut [f64]>, data: &mut Objec
     // We penalize the positive excess above max_db. Using the maximum excess keeps
     // behavior close to the previous nonlinear inequality constraint.
     let mut ceiling_penalty = 0.0;
-    if data.freqs.len() > 0 {
+    if !data.freqs.is_empty() {
         let mut max_violation = 0.0_f64;
         for &v in peq_spl.iter() {
             let excess = v - data.max_db;
@@ -234,7 +234,7 @@ fn objective_function(x: &[f64], _gradient: Option<&mut [f64]>, data: &mut Objec
         }
     }
 
-    let obj = fit*100.0 + data.spacing_weight * spacing + min_amp_penalty + ceiling_penalty;
+    let obj = fit + data.spacing_weight * spacing; // + min_amp_penalty + ceiling_penalty;
 
     // Periodic debug logging of gain values to detect unintended quantization.
     // Controlled by env vars: AUTOEQ_DEBUG_OBJ (0/1), AUTOEQ_DEBUG_EVERY (default 100), AUTOEQ_DEBUG_MAX (default 50)
@@ -400,65 +400,13 @@ pub fn optimize_filters(
     // Enforce |g_i| >= min_db as hard constraints when min_db > 0
     // Note: Constraint functionality removed due to nlopt API changes
 
-    optimizer.set_population(population);
-    optimizer.set_maxeval(maxeval as u32);
+    let _ = optimizer.set_population(population);
+    let _ = optimizer.set_maxeval(maxeval as u32);
     optimizer.set_stopval(1e-6).unwrap();
     optimizer.set_ftol_rel(1e-5).unwrap();
     optimizer.set_xtol_rel(1e-5).unwrap();
 
     let result = optimizer.optimize(x);
-    match result {
-        Ok((status, val)) => Ok((format!("{:?}", status), val)),
-        Err((e, val)) => Err((format!("{:?}", e), val)),
-    }
-}
-
-/// Refine filter parameters using local optimization algorithms
-///
-/// # Arguments
-/// * `x` - Initial parameter vector to optimize (modified in place)
-/// * `lower_bounds` - Lower bounds for each parameter
-/// * `upper_bounds` - Upper bounds for each parameter
-/// * `objective_data` - Data structure containing optimization parameters
-/// * `local_algo` - Local optimization algorithm name
-/// * `maxeval` - Maximum number of function evaluations
-///
-/// # Returns
-/// * Result containing (status, optimal value) or (error, value)
-///
-/// # Details
-/// Uses the NLopt library to perform local optimization of filter parameters.
-/// This function is typically called after global optimization to fine-tune results.
-pub fn refine_local(
-    x: &mut [f64],
-    lower_bounds: &[f64],
-    upper_bounds: &[f64],
-    objective_data: ObjectiveData,
-    local_algo: &str,
-    maxeval: usize,
-) -> Result<(String, f64), (String, f64)> {
-    let num_params = x.len();
-    let mut opt = Nlopt::new(
-        parse_algorithm(local_algo),
-        num_params,
-        objective_function,
-        Target::Minimize,
-        objective_data,
-    );
-    opt.set_lower_bounds(lower_bounds).unwrap();
-    opt.set_upper_bounds(upper_bounds).unwrap();
-    opt.set_maxeval(maxeval as u32);
-
-    // Enforce total response ceiling during local refinement too
-    // Note: Constraint functionality removed due to nlopt API changes
-
-    // Enforce |g_i| >= min_db for local stage as well
-    // Note: Constraint functionality removed due to nlopt API changes
-
-    opt.set_ftol_rel(1e-8).unwrap();
-    opt.set_xtol_rel(1e-8).unwrap();
-
-    let result = opt.optimize(x);
     match result {
         Ok((status, val)) => Ok((format!("{:?}", status), val)),
         Err((e, val)) => Err((format!("{:?}", e), val)),

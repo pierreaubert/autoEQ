@@ -16,8 +16,8 @@
 //! You should have received a copy of the GNU General Public License
 //! along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-use crate::score;
 use crate::Curve;
+use crate::score;
 use clap::ValueEnum;
 use ndarray::Array1;
 use std::collections::HashMap;
@@ -156,4 +156,3 @@ mod tests {
         assert!((got + expected.pref_score).abs() < 1e-12);
     }
 }
-
