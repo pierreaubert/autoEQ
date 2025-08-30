@@ -96,7 +96,7 @@ pub struct Args {
     pub population: usize,
 
     /// Maximum number of evaluations for the optimizer
-    #[arg(long, default_value_t = 20_000)]
+    #[arg(long, default_value_t = 10_000)]
     pub maxeval: usize,
 
     /// Whether to run a local refinement after global optimization

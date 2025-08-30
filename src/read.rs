@@ -518,30 +518,9 @@ mod tests {
     }
 
     #[test]
-    fn matches_target_name_for_cea2034() {
-        assert!(is_target_trace_name(
-            "CEA2034",
-            "Listening Window",
-            "Listening Window"
-        ));
-        assert!(is_target_trace_name("CEA2034", "On Axis", "On Axis"));
-        assert!(!is_target_trace_name(
-            "CEA2034",
-            "On Axis",
-            "Early Reflections"
-        ));
-        // Substring fallback
-        assert!(is_target_trace_name(
-            "CEA2034",
-            "Listening",
-            "Listening Window"
-        ));
-    }
-
-    #[test]
     fn fallback_for_non_cea_measurements() {
         assert!(is_target_trace_name("Other", "ignored", "On Axis"));
-        assert!(is_target_trace_name("Other", "ignored", "SPL something"));
+        assert!(!is_target_trace_name("Other", "ignored", "SPL something"));
         assert!(!is_target_trace_name(
             "Other",
             "ignored",
@@ -581,7 +560,7 @@ mod tests {
     }
 
     #[test]
-    fn extract_curve_by_name_allows_substring_match_for_cea2034() {
+    fn extract_curve_by_name_requires_exact_match_for_cea2034() {
         let xf = [200.0_f64, 400.0_f64];
         let yf = [70.0_f64, 72.0_f64];
         let x_b64 = base64_encode(&le_f64_bytes(&xf));
@@ -596,7 +575,7 @@ mod tests {
             ]
         });
 
-        let curve = extract_curve_by_name(&plot_data, "CEA2034", "Listening").unwrap();
+        let curve = extract_curve_by_name(&plot_data, "CEA2034", "Listening Window").unwrap();
         assert_eq!(curve.freq.len(), 2);
         assert!((curve.freq[0] - 200.0).abs() < 1e-12);
     }

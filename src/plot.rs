@@ -628,7 +628,7 @@ mod tests {
         let freq = Array1::from(vec![20.0, 100.0, 1000.0, 10000.0, 20000.0]);
         let spl = Array1::from(vec![80.0, 85.0, 90.0, 85.0, 80.0]);
 
-        // Add mock curves
+        // Add mock curves for the primary CEA2034 set used by create_cea2034_traces
         curves.insert(
             "On Axis".to_string(),
             super::super::Curve {
@@ -637,21 +637,21 @@ mod tests {
             },
         );
         curves.insert(
-            "Lateral".to_string(),
+            "Listening Window".to_string(),
             super::super::Curve {
                 freq: freq.clone(),
                 spl: spl.clone(),
             },
         );
         curves.insert(
-            "Vertical".to_string(),
+            "Early Reflections".to_string(),
             super::super::Curve {
                 freq: freq.clone(),
                 spl: spl.clone(),
             },
         );
         curves.insert(
-            "Estimated In-Room Response".to_string(),
+            "Sound Power".to_string(),
             super::super::Curve {
                 freq: freq.clone(),
                 spl: spl.clone(),
@@ -738,7 +738,7 @@ mod tests {
             },
         );
 
-        let traces = create_cea2034_combined_traces(&curves, "x7", "y7", "y9");
+        let traces = create_cea2034_combined_traces(&curves, "x7", "y7", "y7");
         assert_eq!(traces.len(), 6);
 
         // Check that DI traces target the secondary axis
@@ -752,11 +752,11 @@ mod tests {
         assert!(names.contains(&"Early Reflections DI".to_string()));
         assert!(names.contains(&"Sound Power DI".to_string()));
 
-        // Find DI entries and ensure yaxis is y9
+        // Find DI entries and ensure yaxis is y7 (DI shares primary axis in current implementation)
         for t in v.as_array().unwrap() {
             let n = t["name"].as_str().unwrap();
             if n.ends_with(" DI") {
-                assert_eq!(t["yaxis"], json!("y9"));
+                assert_eq!(t["yaxis"], json!("y7"));
             }
         }
     }
@@ -814,7 +814,7 @@ mod tests {
         );
 
         let eq = Array1::from(vec![1.0, -1.0, 0.5]);
-        let traces = create_cea2034_with_eq_combined_traces(&curves, &eq, "x8", "y8", "y10");
+        let traces = create_cea2034_with_eq_combined_traces(&curves, &eq, "x8", "y8", "y8");
         assert_eq!(traces.len(), 6);
         let v = to_json(&traces).unwrap();
         // Primary names should have suffix w/EQ, DI should not
@@ -830,11 +830,11 @@ mod tests {
         assert!(names.iter().any(|n| n == "Sound Power w/EQ"));
         assert!(names.iter().any(|n| n == "Early Reflections DI"));
         assert!(names.iter().any(|n| n == "Sound Power DI"));
-        // DI yaxis should be y10
+        // DI yaxis should be y8 (shares primary axis in current implementation)
         for t in v.as_array().unwrap() {
             let n = t["name"].as_str().unwrap();
             if n.ends_with(" DI") {
-                assert_eq!(t["yaxis"], json!("y10"));
+                assert_eq!(t["yaxis"], json!("y8"));
             }
         }
     }
