@@ -22,7 +22,8 @@ use std::path::PathBuf;
 use ndarray::Array1;
 use plotly::common::{Mode, Title};
 use plotly::layout::{AxisType, GridPattern, LayoutGrid, RowOrder};
-use plotly::{Layout, Plot, Scatter};
+use plotly::{Layout, Plot, Scatter, ImageFormat};
+// use plotly::plotly_static::{ImageFormat, StaticExporterBuilder};
 
 use crate::{Biquad, BiquadFilterType};
 
@@ -53,7 +54,6 @@ fn filter_color(index: usize) -> &'static str {
 /// * `curves` - HashMap of curve names to Curve data
 /// * `x_axis` - Axis id for x (e.g. "x7")
 /// * `y_axis` - Axis id for primary y (left) (e.g. "y7")
-/// * `y_axis_di` - Axis id for secondary y (right) (e.g. "y9")
 fn create_cea2034_combined_traces(
     curves: &HashMap<String, super::Curve>,
     x_axis: &str,
@@ -61,7 +61,7 @@ fn create_cea2034_combined_traces(
     y_axis_di: &str,
 ) -> Vec<Scatter<f64, f64>> {
     let mut traces = Vec::new();
-    for (i, curve_name) in CEA2034_CURVE_NAMES.iter().enumerate() {
+    for (i, curve_name) in CEA2034_CURVE_NAMES_FULL.iter().enumerate() {
         if let Some(curve) = curves.get(*curve_name) {
             let trace = Scatter::new(curve.freq.to_vec(), curve.spl.to_vec())
                 .mode(Mode::Lines)
@@ -75,12 +75,12 @@ fn create_cea2034_combined_traces(
     // DI curves on secondary y-axis
     for (j, curve_name) in CEA2034_CURVE_NAMES_DI.iter().enumerate() {
         if let Some(curve) = curves.get(*curve_name) {
-            let trace = Scatter::new(curve.freq.to_vec(), curve.spl.to_vec())
+            let trace = Scatter::new(curve.freq.to_vec(), (&curve.spl-35.0).to_vec())
                 .mode(Mode::Lines)
                 .name(curve_name)
                 .x_axis(x_axis)
-                .y_axis(y_axis_di)
-                .line(plotly::common::Line::new().color(filter_color(j + 6)));
+                .y_axis(y_axis)
+                .line(plotly::common::Line::new().color(filter_color(j + 2)));
             traces.push(*trace);
         }
     }
@@ -94,7 +94,6 @@ fn create_cea2034_combined_traces(
 /// * `eq_response` - EQ response to apply to the primary CEA2034 curves
 /// * `x_axis` - Axis id for x (e.g. "x8")
 /// * `y_axis` - Axis id for primary y (left) (e.g. "y8")
-/// * `y_axis_di` - Axis id for secondary y (right) (e.g. "y10")
 fn create_cea2034_with_eq_combined_traces(
     curves: &HashMap<String, super::Curve>,
     eq_response: &Array1<f64>,
@@ -103,26 +102,26 @@ fn create_cea2034_with_eq_combined_traces(
     y_axis_di: &str,
 ) -> Vec<Scatter<f64, f64>> {
     let mut traces = Vec::new();
-    for (i, curve_name) in CEA2034_CURVE_NAMES.iter().enumerate() {
+    for (i, curve_name) in CEA2034_CURVE_NAMES_FULL.iter().enumerate() {
         if let Some(curve) = curves.get(*curve_name) {
             let trace = Scatter::new(curve.freq.to_vec(), (&curve.spl + eq_response).to_vec())
                 .mode(Mode::Lines)
                 .name(&format!("{} w/EQ", curve_name))
                 .x_axis(x_axis)
                 .y_axis(y_axis)
-                .line(plotly::common::Line::new().color(filter_color(i + 4)));
+                .line(plotly::common::Line::new().color(filter_color(i)));
             traces.push(*trace);
         }
     }
     // DI curves unchanged, on secondary y-axis
     for (j, curve_name) in CEA2034_CURVE_NAMES_DI.iter().enumerate() {
         if let Some(curve) = curves.get(*curve_name) {
-            let trace = Scatter::new(curve.freq.to_vec(), curve.spl.to_vec())
+            let trace = Scatter::new(curve.freq.to_vec(), (&curve.spl-35.0).to_vec())
                 .mode(Mode::Lines)
                 .name(curve_name)
                 .x_axis(x_axis)
-                .y_axis(y_axis_di)
-                .line(plotly::common::Line::new().color(filter_color(j + 6)));
+                .y_axis(y_axis)
+                .line(plotly::common::Line::new().color(filter_color(j+2)));
             traces.push(*trace);
         }
     }
@@ -157,6 +156,14 @@ const CEA2034_CURVE_NAMES: [&str; 4] = [
     "Listening Window",
     "Early Reflections",
     "Sound Power",
+];
+
+const CEA2034_CURVE_NAMES_FULL: [&str; 5] = [
+    "On Axis",
+    "Listening Window",
+    "Early Reflections",
+    "Sound Power",
+    "Estimated In-Room Response",
 ];
 
 const CEA2034_CURVE_NAMES_DI: [&str; 2] = ["Early Reflections DI", "Sound Power DI"];
@@ -238,7 +245,7 @@ fn create_cea2034_with_eq_traces(
 ///
 /// # Returns
 /// * Result indicating success or failure
-pub async fn plot_results(
+pub fn plot_results(
     args: &super::Args,
     input_curve: &super::Curve,
     smoothed_curve: Option<&super::Curve>,
@@ -425,6 +432,12 @@ pub async fn plot_results(
     // ----------------------------------------------------------------------
     // Add CEA2034 if provided with and without EQ
     // ----------------------------------------------------------------------
+//    let y_axis_di = plotly::layout::Axis::new()
+//	.title(plotly::common::Title::with_text("DI (dB)"))
+//	.range(vec![-5.0, 45.0])
+//	.auto_range(false)
+//    .overlaying("y")
+//                .side(AxisSide::Right)
     let x_axis7_title = "CEA2034".to_string();
     let x_axis8_title = "CEA2034 + EQ".to_string();
     if let Some(curves) = cea2034_curves {
@@ -580,7 +593,16 @@ pub async fn plot_results(
         );
     plot.set_layout(layout);
 
-    plot.write_html(output_path);
+    plot.write_html(
+	output_path.with_extension("html"),
+    );
+
+    // plot.write_image(
+    // 	&output_path.with_extension("png"),
+    // 	plotly::ImageFormat::PNG,
+    // 	1024, 1280, 1.0
+    // ).expect("Failed to export plot");
+
 
     Ok(())
 }
