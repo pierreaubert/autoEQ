@@ -29,6 +29,8 @@ pub enum LossType {
     Flat,
     /// Score-based loss function (maximize preference score)
     Score,
+    /// keep LW and PIR as flat as possible
+    Mixed,
 }
 
 /// Data required for computing score-based loss
@@ -97,7 +99,138 @@ pub fn score_loss(
         &score_data.on,
         peq_response,
     );
-    -metrics.pref_score
+    if metrics.pref_score.is_nan() {
+        return f64::INFINITY;
+    }
+    // some nlopt algorithms stops for negative values
+    100.0 - metrics.pref_score
+}
+
+/// Compute a mixed loss based on flatness on lw and pir
+pub fn mixed_loss(
+    score_data: &ScoreLossData,
+    freq: &Array1<f64>,
+    peq_response: &Array1<f64>,
+) -> f64 {
+    let lw2 = &score_data.lw + peq_response;
+    let pir2 = &score_data.pir + peq_response;
+    // Compute slopes in dB per octave over 100 Hz .. 10 kHz
+    let lw2_slope = regression_slope_per_octave_in_range(freq, &lw2, 100.0, 10000.0);
+    let pir1_slope = regression_slope_per_octave_in_range(freq, &score_data.pir, 100.0, 10000.0);
+    let pir2_slope = regression_slope_per_octave_in_range(freq, &pir2, 100.0, 10000.0);
+    if let (Some(lw2eq), Some(pir2og), Some(pir2eq)) = (lw2_slope, pir_og_slope, pir2_slope) {
+        // some nlopt algorithms stop for negative values; keep result positive-ish
+        let lw_ideal = 0.50 - lw2_slope;
+        let pir_ideal = pir1_slope - pir2_slope;
+        lw_ideal * lw_ideal + pir_ideal + pir_ideal
+    } else {
+        f64::INFINITY
+    }
+}
+
+/// Compute the slope of the linear regression y ~ a*x + b within a frequency range [fmin, fmax].
+///
+/// - `freq`: frequency array in Hz
+/// - `y`: corresponding values (e.g., SPL in dB)
+/// - Returns `Some(slope)` in units of y-per-Hz, or `None` if fewer than 2 points in range
+pub fn regression_slope_in_range(
+    freq: &Array1<f64>,
+    y: &Array1<f64>,
+    fmin: f64,
+    fmax: f64,
+) -> Option<f64> {
+    assert_eq!(freq.len(), y.len(), "freq and y must have same length");
+    if !(fmax > fmin) {
+        return None;
+    }
+
+    let mut n: usize = 0;
+    let mut sum_x = 0.0;
+    let mut sum_y = 0.0;
+    let mut sum_xy = 0.0;
+    let mut sum_x2 = 0.0;
+
+    for i in 0..freq.len() {
+        let f = freq[i];
+        if f >= fmin && f <= fmax {
+            let xi = f;
+            let yi = y[i];
+            n += 1;
+            sum_x += xi;
+            sum_y += yi;
+            sum_xy += xi * yi;
+            sum_x2 += xi * xi;
+        }
+    }
+
+    if n < 2 {
+        return None;
+    }
+    let n_f = n as f64;
+    let cov_xy = sum_xy - (sum_x * sum_y) / n_f;
+    let var_x = sum_x2 - (sum_x * sum_x) / n_f;
+    if var_x == 0.0 {
+        return None;
+    }
+    Some(cov_xy / var_x)
+}
+
+/// Convenience wrapper for computing the regression slope on a `Curve`.
+pub fn curve_slope_in_range(curve: &crate::Curve, fmin: f64, fmax: f64) -> Option<f64> {
+    regression_slope_in_range(&curve.freq, &curve.spl, fmin, fmax)
+}
+
+/// Compute the slope (per octave) using linear regression of y against log2(f).
+///
+/// - `freq`: frequency array in Hz
+/// - `y`: corresponding values (e.g., SPL in dB)
+/// - Range is defined in Hz as [fmin, fmax]; only f > 0 are considered
+/// - Returns `Some(slope_db_per_octave)` or `None` if insufficient data
+pub fn regression_slope_per_octave_in_range(
+    freq: &Array1<f64>,
+    y: &Array1<f64>,
+    fmin: f64,
+    fmax: f64,
+) -> Option<f64> {
+    assert_eq!(freq.len(), y.len(), "freq and y must have same length");
+    if !(fmax > fmin) {
+        return None;
+    }
+
+    let mut n: usize = 0;
+    let mut sum_x = 0.0;
+    let mut sum_y = 0.0;
+    let mut sum_xy = 0.0;
+    let mut sum_x2 = 0.0;
+
+    for i in 0..freq.len() {
+        let f = freq[i];
+        if f > 0.0 && f >= fmin && f <= fmax {
+            let xi = f.log2();
+            let yi = y[i];
+            n += 1;
+            sum_x += xi;
+            sum_y += yi;
+            sum_xy += xi * yi;
+            sum_x2 += xi * xi;
+        }
+    }
+
+    if n < 2 {
+        return None;
+    }
+    let n_f = n as f64;
+    let cov_xy = sum_xy - (sum_x * sum_y) / n_f;
+    let var_x = sum_x2 - (sum_x * sum_x) / n_f;
+    if var_x == 0.0 {
+        return None;
+    }
+    Some(cov_xy / var_x)
+}
+
+/// Convenience wrapper for slope per octave on a `Curve`.
+pub fn curve_slope_per_octave_in_range(curve: &crate::Curve, fmin: f64, fmax: f64) -> Option<f64> {
+    regression_slope_per_octave_in_range(&curve.freq, &curve.spl, fmin, fmax)
 }
 
 #[cfg(test)]
@@ -158,5 +291,99 @@ mod tests {
         } else {
             assert!((got + expected.pref_score).abs() < 1e-12);
         }
+    }
+
+    #[test]
+    fn regression_slope_linear_data_full_range() {
+        // y = 0.01 * f + 2.0
+        let freq = Array1::from(vec![100.0, 200.0, 300.0, 400.0, 500.0]);
+        let y = freq.mapv(|f| 0.01 * f + 2.0);
+        let slope = regression_slope_in_range(&freq, &y, 100.0, 500.0).unwrap();
+        assert!((slope - 0.01).abs() < 1e-12);
+    }
+
+    #[test]
+    fn regression_slope_linear_data_sub_range() {
+        // Same linear relation but compute on sub-range
+        let freq = Array1::from(vec![100.0, 200.0, 300.0, 400.0, 500.0]);
+        let y = freq.mapv(|f| 0.5 * f - 10.0);
+        let slope = regression_slope_in_range(&freq, &y, 200.0, 400.0).unwrap();
+        assert!((slope - 0.5).abs() < 1e-12);
+    }
+
+    #[test]
+    fn regression_slope_insufficient_points_returns_none() {
+        let freq = Array1::from(vec![100.0, 200.0, 300.0]);
+        let y = Array1::from(vec![1.0, 2.0, 3.0]);
+        // Range capturing only one point
+        let slope = regression_slope_in_range(&freq, &y, 250.0, 260.0);
+        assert!(slope.is_none());
+    }
+
+    #[test]
+    fn regression_slope_per_octave_linear_log_relation_full_range() {
+        // y = 3 * log2(f) + 1
+        let freq = Array1::from(vec![100.0, 200.0, 400.0, 800.0]);
+        let y = freq.mapv(|f| 3.0 * f.log2() + 1.0);
+        let slope = regression_slope_per_octave_in_range(&freq, &y, 100.0, 800.0).unwrap();
+        assert!((slope - 3.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn regression_slope_per_octave_sub_range() {
+        // Same log-linear relation, sub-range 200..=800
+        let freq = Array1::from(vec![100.0, 200.0, 400.0, 800.0]);
+        let y = freq.mapv(|f| -2.5 * f.log2() + 4.0);
+        let slope = regression_slope_per_octave_in_range(&freq, &y, 200.0, 800.0).unwrap();
+        assert!((slope + 2.5).abs() < 1e-12);
+    }
+
+    #[test]
+    fn mixed_loss_finite_with_zero_peq() {
+        // Frequency grid
+        let freq = Array1::from(vec![
+            100.0, 200.0, 400.0, 800.0, 1600.0, 3200.0, 6400.0, 10000.0,
+        ]);
+        // Zero curves
+        let on = Array1::zeros(freq.len());
+        let lw = Array1::zeros(freq.len());
+        let sp = Array1::zeros(freq.len());
+        let pir = Array1::zeros(freq.len());
+
+        // Build spin map
+        let mut spin: HashMap<String, Curve> = HashMap::new();
+        spin.insert(
+            "On Axis".to_string(),
+            Curve {
+                freq: freq.clone(),
+                spl: on,
+            },
+        );
+        spin.insert(
+            "Listening Window".to_string(),
+            Curve {
+                freq: freq.clone(),
+                spl: lw,
+            },
+        );
+        spin.insert(
+            "Sound Power".to_string(),
+            Curve {
+                freq: freq.clone(),
+                spl: sp,
+            },
+        );
+        spin.insert(
+            "Estimated In-Room Response".to_string(),
+            Curve {
+                freq: freq.clone(),
+                spl: pir,
+            },
+        );
+
+        let sd = ScoreLossData::new(&spin);
+        let peq = Array1::zeros(freq.len());
+        let v = mixed_loss(&sd, &freq, &peq);
+        assert!(v.is_finite(), "mixed_loss should be finite, got {}", v);
     }
 }
