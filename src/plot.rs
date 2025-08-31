@@ -22,7 +22,7 @@ use std::path::PathBuf;
 use ndarray::Array1;
 use plotly::common::{Mode, Title};
 use plotly::layout::{AxisType, GridPattern, LayoutGrid, RowOrder};
-use plotly::{ImageFormat, Layout, Plot, Scatter};
+use plotly::{Layout, Plot, Scatter};
 // use plotly::plotly_static::{ImageFormat, StaticExporterBuilder};
 
 use crate::{Biquad, BiquadFilterType};

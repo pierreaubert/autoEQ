@@ -308,7 +308,7 @@ fn perform_optimization(
     }
 }
 
-async fn handle_results(
+async fn plot_results(
     args: &autoeq::cli::Args,
     x: &Vec<f64>,
     _objective_data: &ObjectiveData,
@@ -403,7 +403,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let x = perform_optimization(&args, &objective_data)?;
 
-    handle_results(
+    plot_results(
         &args,
         &x,
         &objective_data,

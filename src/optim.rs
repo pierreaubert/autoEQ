@@ -23,7 +23,7 @@ use std::process;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use crate::loss::{LossType, ScoreLossData, score_loss};
+use crate::loss::{LossType, ScoreLossData, mixed_loss, score_loss};
 
 /// Data structure for holding objective function parameters
 ///
@@ -51,6 +51,150 @@ pub struct ObjectiveData {
     pub loss_type: LossType,
     /// Optional score data for Score loss type
     pub score_data: Option<ScoreLossData>,
+}
+
+/// Data needed by the nonlinear ceiling constraint callback.
+#[derive(Clone)]
+struct CeilingConstraintData {
+    freqs: Array1<f64>,
+    srate: f64,
+    max_db: f64,
+    iir_hp_pk: bool,
+}
+
+/// Data needed by the nonlinear minimum gain constraint callback.
+#[derive(Clone, Copy)]
+struct MinGainConstraintData {
+    min_db: f64,
+    iir_hp_pk: bool,
+}
+
+/// Data needed by the nonlinear spacing constraint callback.
+#[derive(Clone, Copy)]
+struct SpacingConstraintData {
+    min_spacing_oct: f64,
+}
+
+/// Inequality constraint: combined response must not exceed max_db when HP+PK is enabled.
+/// Returns fc(x) = max_i (peq_spl[i] - max_db). Feasible when <= 0.
+fn constraint_ceiling(
+    x: &[f64],
+    _grad: Option<&mut [f64]>,
+    data: &mut CeilingConstraintData,
+) -> f64 {
+    if !data.iir_hp_pk || data.freqs.is_empty() {
+        return 0.0;
+    }
+    let num_filters = x.len() / 3;
+    let mut peq_spl = Array1::<f64>::zeros(data.freqs.len());
+    // Determine HP index for HP+PK mode
+    let mut hp_index = usize::MAX;
+    if num_filters > 0 {
+        hp_index = 0usize;
+        let mut min_f = x[0];
+        for i in 1..num_filters {
+            let f = x[i * 3];
+            if f < min_f {
+                min_f = f;
+                hp_index = i;
+            }
+        }
+    }
+    for i in 0..num_filters {
+        let freq = x[i * 3];
+        let q = x[i * 3 + 1];
+        let gain = x[i * 3 + 2];
+        let ftype = if data.iir_hp_pk && i == hp_index {
+            BiquadFilterType::HighpassVariableQ
+        } else {
+            BiquadFilterType::Peak
+        };
+        let filter = Biquad::new(ftype, freq, data.srate, q, gain);
+        peq_spl += &filter.np_log_result(&data.freqs);
+    }
+    // return max excess (can be negative if no violation)
+    let mut max_excess = f64::NEG_INFINITY;
+    for &v in peq_spl.iter() {
+        let excess = v - data.max_db;
+        if excess > max_excess {
+            max_excess = excess;
+        }
+    }
+    if max_excess.is_finite() {
+        max_excess
+    } else {
+        0.0
+    }
+}
+
+/// Inequality constraint: spacing between any pair of center freqs must be at least min_spacing_oct.
+/// Returns fc(x) = min_spacing_oct - min_pair_distance. Feasible when <= 0.
+fn constraint_spacing(
+    x: &[f64],
+    _grad: Option<&mut [f64]>,
+    data: &mut SpacingConstraintData,
+) -> f64 {
+    let n = x.len() / 3;
+    if n <= 1 || data.min_spacing_oct <= 0.0 {
+        return 0.0;
+    }
+    let mut min_dist = f64::INFINITY;
+    for i in 0..n {
+        let fi = x[i * 3].max(1e-6);
+        for j in (i + 1)..n {
+            let fj = x[j * 3].max(1e-6);
+            let d_oct = (fj / fi).log2().abs();
+            if d_oct < min_dist {
+                min_dist = d_oct;
+            }
+        }
+    }
+    if min_dist.is_finite() {
+        data.min_spacing_oct - min_dist
+    } else {
+        0.0
+    }
+}
+
+/// Inequality constraint: for Peak filters, require |gain| >= min_db (skip HP in HP+PK mode).
+/// Returns fc(x) = max_i (min_db - |g_i|) over applicable filters. Feasible when <= 0.
+fn constraint_min_gain(
+    x: &[f64],
+    _grad: Option<&mut [f64]>,
+    data: &mut MinGainConstraintData,
+) -> f64 {
+    if data.min_db <= 0.0 {
+        return 0.0;
+    }
+    let n = x.len() / 3;
+    if n == 0 {
+        return 0.0;
+    }
+    // Determine HP index when applicable
+    let mut hp_index = usize::MAX;
+    if data.iir_hp_pk {
+        hp_index = 0usize;
+        let mut min_f = x[0];
+        for i in 1..n {
+            let f = x[i * 3];
+            if f < min_f {
+                min_f = f;
+                hp_index = i;
+            }
+        }
+    }
+    let mut worst = f64::NEG_INFINITY;
+    for i in 0..n {
+        if data.iir_hp_pk && i == hp_index {
+            continue;
+        }
+        let g_abs = x[i * 3 + 2].abs();
+        let short = data.min_db - g_abs; // can be negative when satisfied
+        if short > worst {
+            worst = short;
+        }
+    }
+    if worst.is_finite() { worst } else { 0.0 }
 }
 
 fn parse_algorithm(name: &str) -> Algorithm {
@@ -164,77 +308,59 @@ fn objective_function(x: &[f64], _gradient: Option<&mut [f64]>, data: &mut Objec
         LossType::Flat => {
             // Error vs inverted target
             let error = &peq_spl - &data.target_error;
-            weighted_mse(&data.freqs, &error)
+            let f = weighted_mse(&data.freqs, &error);
+            println!("Flat fit: {}", f);
+            f
+        }
+        LossType::Mixed => {
+            if let Some(ref sd) = data.score_data {
+                let s = mixed_loss(sd, &data.freqs, &peq_spl);
+                println!("Mixed: {:5.2} ", s);
+                s
+            } else {
+                eprintln!("Error: mixed loss requested but score data is missing");
+                process::exit(1);
+            }
         }
         LossType::Score => {
             if let Some(ref sd) = data.score_data {
-                // peq_spl is the PEQ response
-                score_loss(sd, &data.freqs, &peq_spl)
+                let error = &peq_spl - &data.target_error;
+                let s = score_loss(sd, &data.freqs, &peq_spl);
+                let p = weighted_mse(&data.freqs, &error) / 3.0;
+                println!("Score: {:5.2} Flatness: {:6.2}", -100.0 + s, p);
+                s + p
             } else {
                 eprintln!("Error: score loss requested but score data is missing");
                 process::exit(1);
-                0.0
             }
+        }
+        _ => {
+            eprintln!("Error: unknown loss type");
+            process::exit(1);
         }
     };
 
-    // Ceiling penalty: when using HP+PK mode, cap the total combined response at max_db
-    // We penalize the positive excess above max_db. Using the maximum excess keeps
-    // behavior close to the previous nonlinear inequality constraint.
-    let mut ceiling_penalty = 0.0;
-    if !data.freqs.is_empty() {
-        let mut max_violation = 0.0_f64;
-        for &v in peq_spl.iter() {
-            let excess = v - data.max_db;
-            if excess > max_violation {
-                max_violation = excess;
-            }
-        }
-        if max_violation > 0.0 {
-            // Quadratic penalty on the maximum violation; scale moderately
-            ceiling_penalty = max_violation * max_violation * 10.0;
-        }
-    }
-
-    // Add spacing penalty between center frequencies in octaves
+    // Constraint-style computations (reusable):
+    // - ceiling_violation: max positive excess over max_db when HP+PK mode is enabled
+    // - min_gain_violation: max shortfall of |gain| relative to min_db for Peak filters
+    // - spacing_penalty: keep as soft objective penalty for smoother search
+    let ceiling_v = ceiling_violation(&peq_spl, data.max_db, data.iir_hp_pk);
     let spacing = spacing_penalty(x, data.min_spacing_oct);
+    let min_gain_v = min_gain_violation(x, data.min_db, data.iir_hp_pk);
 
-    // Enforce minimum absolute gain for Peak EQs if min_db > 0
-    let mut min_amp_penalty = 0.0;
-    if data.min_db > 0.0 {
-        let n = x.len() / 3;
-        // Recompute hp_index only if mode uses Highpass
-        let mut hp_index2 = usize::MAX;
-        if data.iir_hp_pk {
-            hp_index2 = 0usize;
-            if n > 0 {
-                let mut min_f = x[0];
-                for i in 1..n {
-                    let f = x[i * 3];
-                    if f < min_f {
-                        min_f = f;
-                        hp_index2 = i;
-                    }
-                }
-            }
-        }
-        for i in 0..n {
-            if data.iir_hp_pk && i == hp_index2 {
-                continue;
-            }
-            let g = x[i * 3 + 2].abs();
-            let short = (data.min_db - g).max(0.0);
-            if short > 0.0 {
-                // Strong barrier to emulate disjoint feasible set for gain:
-                // gains in (-min_db, min_db) are heavily discouraged
-                // Scale quadratic to keep differentiability for local methods
-                const BARRIER_SCALE: f64 = 1e4;
-                min_amp_penalty += BARRIER_SCALE * short * short;
-            }
-        }
-    }
+    // Convert violations to penalties for objective mixing until hard constraints are (re)available
+    let ceiling_penalty = if ceiling_v > 0.0 {
+        10.0 * ceiling_v * ceiling_v
+    } else {
+        0.0
+    };
+    let min_amp_penalty = if min_gain_v > 0.0 {
+        1e4 * min_gain_v * min_gain_v
+    } else {
+        0.0
+    };
 
-    let obj = fit + data.spacing_weight * spacing; // + min_amp_penalty + ceiling_penalty;
+    let obj = fit + data.spacing_weight * spacing + min_amp_penalty + ceiling_penalty;
 
     // Periodic debug logging of gain values to detect unintended quantization.
     // Controlled by env vars: AUTOEQ_DEBUG_OBJ (0/1), AUTOEQ_DEBUG_EVERY (default 100), AUTOEQ_DEBUG_MAX (default 50)
@@ -313,6 +439,87 @@ fn spacing_penalty(x: &[f64], min_spacing_oct: f64) -> f64 {
     penalty
 }
 
+/// Compute maximum violation of the ceiling constraint.
+/// When `hp_pk_enabled` is true, the combined PEQ response should not exceed `max_db`.
+/// Returns the maximum positive excess (>= 0). This maps naturally to an inequality
+/// constraint of the form: ceiling_violation(x) <= 0.
+fn ceiling_violation(peq_spl: &Array1<f64>, max_db: f64, hp_pk_enabled: bool) -> f64 {
+    if !hp_pk_enabled || peq_spl.is_empty() {
+        return 0.0;
+    }
+    let mut max_violation = 0.0_f64;
+    for &v in peq_spl.iter() {
+        let excess = v - max_db;
+        if excess > max_violation {
+            max_violation = excess;
+        }
+    }
+    max_violation.max(0.0)
+}
+
+/// Compute minimum-spacing shortfall in octaves across all filter center frequencies.
+/// Returns max(0, min_spacing_oct - min_pair_distance).
+fn spacing_min_shortfall(x: &[f64], min_spacing_oct: f64) -> f64 {
+    let n = x.len() / 3;
+    if n <= 1 || min_spacing_oct <= 0.0 {
+        return 0.0;
+    }
+    let mut min_dist = f64::INFINITY;
+    for i in 0..n {
+        let fi = x[i * 3].max(1e-6);
+        for j in (i + 1)..n {
+            let fj = x[j * 3].max(1e-6);
+            let d_oct = (fj / fi).log2().abs();
+            if d_oct < min_dist {
+                min_dist = d_oct;
+            }
+        }
+    }
+    if min_dist.is_finite() {
+        (min_spacing_oct - min_dist).max(0.0)
+    } else {
+        0.0
+    }
+}
+
+/// Compute the maximum shortfall of |gain| relative to `min_db` for Peak filters.
+/// In HP+PK mode, the lowest-frequency filter is considered Highpass and excluded.
+/// Returns max(0, min_db - |gain|) across relevant filters.
+fn min_gain_violation(x: &[f64], min_db: f64, hp_pk_enabled: bool) -> f64 {
+    if min_db <= 0.0 {
+        return 0.0;
+    }
+    let n = x.len() / 3;
+    if n == 0 {
+        return 0.0;
+    }
+    // Determine HP index when applicable
+    let mut hp_index = usize::MAX;
+    if hp_pk_enabled {
+        hp_index = 0usize;
+        let mut min_f = x[0];
+        for i in 1..n {
+            let f = x[i * 3];
+            if f < min_f {
+                min_f = f;
+                hp_index = i;
+            }
+        }
+    }
+    let mut worst = 0.0_f64;
+    for i in 0..n {
+        if hp_pk_enabled && i == hp_index {
+            continue; // skip HP filter
+        }
+        let g_abs = x[i * 3 + 2].abs();
+        let short = (min_db - g_abs).max(0.0);
+        if short > worst {
+            worst = short;
+        }
+    }
+    worst
+}
+
 /// Compute weighted mean squared error with frequency-dependent weighting
 ///
 /// # Arguments
@@ -383,6 +590,22 @@ pub fn optimize_filters(
     maxeval: usize,
 ) -> Result<(String, f64), (String, f64)> {
     let num_params = x.len();
+    // Prepare constraint data BEFORE moving objective_data into NLopt
+    let ceiling_data = CeilingConstraintData {
+        freqs: objective_data.freqs.clone(),
+        srate: objective_data.srate,
+        max_db: objective_data.max_db,
+        iir_hp_pk: objective_data.iir_hp_pk,
+    };
+    let spacing_data = SpacingConstraintData {
+        min_spacing_oct: objective_data.min_spacing_oct,
+    };
+    let min_gain_data = MinGainConstraintData {
+        min_db: objective_data.min_db,
+        iir_hp_pk: objective_data.iir_hp_pk,
+    };
+
+    // Now create optimizer and move objective_data
     let mut optimizer = Nlopt::new(
         parse_algorithm(algo),
         num_params,
@@ -394,11 +617,10 @@ pub fn optimize_filters(
     optimizer.set_lower_bounds(lower_bounds).unwrap();
     optimizer.set_upper_bounds(upper_bounds).unwrap();
 
-    // Enforce total response ceiling via nonlinear inequality constraint
-    // Note: Constraint functionality removed due to nlopt API changes
-
-    // Enforce |g_i| >= min_db as hard constraints when min_db > 0
-    // Note: Constraint functionality removed due to nlopt API changes
+    // Register inequality constraints supported by chosen algorithms.
+    let _ = optimizer.add_inequality_constraint(constraint_ceiling, ceiling_data, 1e-6);
+    let _ = optimizer.add_inequality_constraint(constraint_spacing, spacing_data, 1e-9);
+    let _ = optimizer.add_inequality_constraint(constraint_min_gain, min_gain_data, 1e-6);
 
     let _ = optimizer.set_population(population);
     let _ = optimizer.set_maxeval(maxeval as u32);
@@ -685,6 +907,57 @@ mod tests {
         assert_eq!(p.enabled, true);
         assert_eq!(p.every, 5);
         assert_eq!(p.max_logs, 7);
+    }
+
+    #[test]
+    fn ceiling_violation_behaviour() {
+        let peq = array![-3.0, 0.0, 2.0, 7.5];
+        // No violation with generous ceiling
+        let v0 = super::ceiling_violation(&peq.to_owned(), 10.0, true);
+        assert!((v0 - 0.0).abs() < 1e-12);
+        // Touching the ceiling is not a violation
+        let v1 = super::ceiling_violation(&peq.to_owned(), 7.5, true);
+        assert!((v1 - 0.0).abs() < 1e-12);
+        // With tighter ceiling -> max excess 7.5 - 5.0 = 2.5
+        let v2 = super::ceiling_violation(&peq.to_owned(), 5.0, true);
+        assert!((v2 - 2.5).abs() < 1e-12, "got {}", v2);
+        // Disabled in non HP+PK mode
+        let v3 = super::ceiling_violation(&peq.to_owned(), 5.0, false);
+        assert!((v3 - 0.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn spacing_min_shortfall_behaviour() {
+        // Two close filters
+        let x_close = [1000.0, 1.0, 0.0, 1100.0, 1.0, 0.0];
+        let d = (1100.0_f64 / 1000.0).log2().abs();
+        let short = super::spacing_min_shortfall(&x_close, 0.25);
+        let expected = (0.25 - d).max(0.0);
+        assert!(
+            (short - expected).abs() < 1e-12,
+            "{} vs {}",
+            short,
+            expected
+        );
+
+        // Well-spaced filters -> no shortfall
+        let x_far = [1000.0, 1.0, 0.0, 2000.0, 1.0, 0.0];
+        let short2 = super::spacing_min_shortfall(&x_far, 0.5);
+        assert!((short2 - 0.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn min_gain_violation_peak_and_hp_pk() {
+        let x = [60.0, 1.0, 0.1, 1000.0, 1.0, 0.5];
+        // Peak-only mode: consider both gains
+        let v_peak = super::min_gain_violation(&x, 1.0, false);
+        assert!((v_peak - 0.9).abs() < 1e-12, "got {}", v_peak);
+        // HP+PK mode: skip the lowest-freq (HP), consider only Peak at 1kHz
+        let v_hp_pk = super::min_gain_violation(&x, 1.0, true);
+        assert!((v_hp_pk - 0.5).abs() < 1e-12, "got {}", v_hp_pk);
+        // Disabled when min_db <= 0
+        let v_none = super::min_gain_violation(&x, 0.0, true);
+        assert!((v_none - 0.0).abs() < 1e-12);
     }
 }
 

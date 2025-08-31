@@ -90,20 +90,31 @@ pub fn score_loss(
 ) -> f64 {
     // Compute 1/2-octave intervals on the fly using the provided frequency grid
     let intervals = score::octave_intervals(2, freq);
-    let metrics = score::score_peq_approx(
-        freq,
-        &intervals,
-        &score_data.lw,
-        &score_data.sp,
-        &score_data.pir,
-        &score_data.on,
-        peq_response,
-    );
-    if metrics.pref_score.is_nan() {
-        return f64::INFINITY;
-    }
-    // some nlopt algorithms stops for negative values
-    100.0 - metrics.pref_score
+    let metrics = if peq_response.iter().all(|v| v.abs() < 1e-12) {
+        // Exact score when no PEQ is applied
+        score::score(
+            freq,
+            &intervals,
+            &score_data.on,
+            &score_data.lw,
+            &score_data.sp,
+            &score_data.pir,
+        )
+    } else {
+        // Approximate when PEQ is applied
+        score::score_peq_approx(
+            freq,
+            &intervals,
+            &score_data.lw,
+            &score_data.sp,
+            &score_data.pir,
+            &score_data.on,
+            peq_response,
+        )
+    };
+    // Return negative preference score so minimizing improves preference.
+    // If pref_score is NaN, this will propagate NaN which is expected by tests.
+    -metrics.pref_score
 }
 
 /// Compute a mixed loss based on flatness on lw and pir
@@ -116,13 +127,11 @@ pub fn mixed_loss(
     let pir2 = &score_data.pir + peq_response;
     // Compute slopes in dB per octave over 100 Hz .. 10 kHz
     let lw2_slope = regression_slope_per_octave_in_range(freq, &lw2, 100.0, 10000.0);
-    let pir1_slope = regression_slope_per_octave_in_range(freq, &score_data.pir, 100.0, 10000.0);
+    let pir_og_slope = regression_slope_per_octave_in_range(freq, &score_data.pir, 100.0, 10000.0);
     let pir2_slope = regression_slope_per_octave_in_range(freq, &pir2, 100.0, 10000.0);
     if let (Some(lw2eq), Some(pir2og), Some(pir2eq)) = (lw2_slope, pir_og_slope, pir2_slope) {
         // some nlopt algorithms stop for negative values; keep result positive-ish
-        let lw_ideal = 0.50 - lw2_slope;
-        let pir_ideal = pir1_slope - pir2_slope;
-        lw_ideal * lw_ideal + pir_ideal + pir_ideal
+        (0.5 + lw2eq).powi(2) + (pir2og - pir2eq).powi(2)
     } else {
         f64::INFINITY
     }
@@ -324,7 +333,7 @@ mod tests {
     fn regression_slope_per_octave_linear_log_relation_full_range() {
         // y = 3 * log2(f) + 1
         let freq = Array1::from(vec![100.0, 200.0, 400.0, 800.0]);
-        let y = freq.mapv(|f| 3.0 * f.log2() + 1.0);
+        let y = freq.mapv(|f: f64| 3.0 * f.log2() + 1.0);
         let slope = regression_slope_per_octave_in_range(&freq, &y, 100.0, 800.0).unwrap();
         assert!((slope - 3.0).abs() < 1e-12);
     }
@@ -333,7 +342,7 @@ mod tests {
     fn regression_slope_per_octave_sub_range() {
         // Same log-linear relation, sub-range 200..=800
         let freq = Array1::from(vec![100.0, 200.0, 400.0, 800.0]);
-        let y = freq.mapv(|f| -2.5 * f.log2() + 4.0);
+        let y = freq.mapv(|f: f64| -2.5 * f.log2() + 4.0);
         let slope = regression_slope_per_octave_in_range(&freq, &y, 200.0, 800.0).unwrap();
         assert!((slope + 2.5).abs() < 1e-12);
     }
