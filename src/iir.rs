@@ -370,25 +370,12 @@ pub fn compute_peq_response(
     if n == 0 {
         return Array1::zeros(freqs.len());
     }
-    // Determine HP index if enabled
-    let mut hp_index = usize::MAX;
-    if iir_hp_pk {
-        hp_index = 0usize;
-        let mut min_f = x[0];
-        for i in 1..n {
-            let f = x[i * 3];
-            if f < min_f {
-                min_f = f;
-                hp_index = i;
-            }
-        }
-    }
     let mut peq = Array1::zeros(freqs.len());
     for i in 0..n {
-        let f0 = x[i * 3];
+        let f0 = 10f64.powf(x[i * 3]);
         let q = x[i * 3 + 1];
         let gain = x[i * 3 + 2];
-        let ftype = if iir_hp_pk && i == hp_index {
+        let ftype = if iir_hp_pk && i == 0 {
             BiquadFilterType::HighpassVariableQ
         } else {
             BiquadFilterType::Peak
@@ -486,14 +473,14 @@ mod peq_response_tests {
 pub fn build_sorted_filters(x: &[f64], iir_hp_pk: bool) -> Vec<FilterRow> {
     let mut rows: Vec<FilterRow> = Vec::with_capacity(x.len() / 3);
     for i in 0..(x.len() / 3) {
-        let freq = x[i * 3];
+        let freq = 10f64.powf(x[i * 3]);
         let q = x[i * 3 + 1];
         let gain = x[i * 3 + 2];
         rows.push(FilterRow {
             freq,
             q,
             gain,
-            kind: "Peak",
+            kind: "PK",
         });
     }
     rows.sort_by(|a, b| {
@@ -503,7 +490,8 @@ pub fn build_sorted_filters(x: &[f64], iir_hp_pk: bool) -> Vec<FilterRow> {
     });
     // If enabled, mark the lowest-frequency filter as Highpass for display purposes
     if iir_hp_pk && !rows.is_empty() {
-        rows[0].kind = "HighpassVariableQ";
+        rows[0].kind = "HPQ";
+        rows[0].gain = 0.0;
     }
     rows
 }
@@ -514,39 +502,7 @@ pub fn build_sorted_filters(x: &[f64], iir_hp_pk: bool) -> Vec<FilterRow> {
 /// shown first, followed by Peak filters sorted by frequency.
 pub fn peq_print(x: &[f64], iir_hp_pk: bool) {
     let rows = build_sorted_filters(x, iir_hp_pk);
-    println!("+ --------------- Optimal IIR Filters -----------------+");
-    println!(
-        "| {:<2} | {:<10} | {:<10} | {:<10} | {:<8} |",
-        "#", "Freq (Hz)", "Q", "Gain (dB)", "Type"
-    );
-    println!("|----|------------|------------|------------|----------|");
-
-    // If there is a non-Peak first (Highpass), print it before the rest.
-    if iir_hp_pk {
-        if let Some(first) = rows.first() {
-            if first.kind != "Peak" {
-                println!(
-                    "| {:<2} | {:<10.2} | {:<10.3} | {:<+10.3} | {:<8} |",
-                    1, first.freq, first.q, first.gain, first.kind
-                );
-                // Print the remaining Peak filters with correct numbering
-                for (idx, r) in rows.iter().enumerate().skip(1) {
-                    println!(
-                        "| {:<2} | {:<10.2} | {:<10.3} | {:<+10.3} | {:<8} |",
-                        idx + 1,
-                        r.freq,
-                        r.q,
-                        r.gain,
-                        r.kind
-                    );
-                }
-                println!("+----|------------|------------|------------|----------+");
-                return;
-            }
-        }
-    }
-
-    // Default: print all rows in order
+    println!("+-# -|-Freq (Hz)--|-Q ---------|-Gain (dB)--|-Type-----+");
     for (i, r) in rows.iter().enumerate() {
         println!(
             "| {:<2} | {:<10.2} | {:<10.3} | {:<+10.3} | {:<8} |",

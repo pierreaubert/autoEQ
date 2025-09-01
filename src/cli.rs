@@ -100,7 +100,7 @@ pub struct Args {
     pub maxeval: usize,
 
     /// Whether to run a local refinement after global optimization
-    #[arg(long, default_value_t = true)]
+    #[arg(long, default_value_t = false)]
     pub refine: bool,
 
     /// Local optimizer to use for refinement (e.g., cobyla)

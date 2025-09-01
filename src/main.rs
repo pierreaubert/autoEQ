@@ -165,10 +165,8 @@ fn setup_objective_data(
     (objective_data, use_cea)
 }
 
-fn perform_optimization(
-    args: &autoeq::cli::Args,
-    objective_data: &ObjectiveData,
-) -> Result<Vec<f64>, Box<dyn Error>> {
+/// Build optimization parameter bounds for the optimizer
+fn setup_bounds(args: &autoeq::cli::Args) -> (Vec<f64>, Vec<f64>) {
     let num_params = args.num_filters * 3;
     let mut lower_bounds = Vec::with_capacity(num_params);
     let mut upper_bounds = Vec::with_capacity(num_params);
@@ -176,28 +174,33 @@ fn perform_optimization(
     let gain_lower = -6.0 * args.max_db;
     let q_lower = args.min_q.max(1.0e-6);
     for _ in 0..args.num_filters {
-        lower_bounds.extend_from_slice(&[args.min_freq, q_lower, gain_lower]);
-        upper_bounds.extend_from_slice(&[args.max_freq, args.max_q, args.max_db]);
+        lower_bounds.extend_from_slice(&[args.min_freq.log10(), q_lower, gain_lower]);
+        upper_bounds.extend_from_slice(&[args.max_freq.log10(), args.max_q, args.max_db]);
     }
 
     if args.iir_hp_pk {
-        lower_bounds[0] = 20.0;
-        upper_bounds[0] = 120.0;
+        lower_bounds[0] = 20.0_f64.log10();
+        upper_bounds[0] = 120.0_f64.log10();
         lower_bounds[1] = 1.0;
         upper_bounds[1] = 1.5;
         lower_bounds[2] = 0.0;
         upper_bounds[2] = 0.0;
     }
 
+    (lower_bounds, upper_bounds)
+}
+
+/// Build an initial guess vector [f, Q, g] for each filter
+fn initial_guess(args: &autoeq::cli::Args) -> Vec<f64> {
     let mut x = vec![];
-    let log_min = args.min_freq.ln();
-    let log_max = args.max_freq.ln();
+    let log_min = args.min_freq.log10();
+    let log_max = args.max_freq.log10();
     let log_range = log_max - log_min;
 
     let q_vec = distribute_qs(args.num_filters, args.min_q, args.max_q / 2.0);
     let g_mags = distribute_gain_magnitudes(args.num_filters, args.min_db, args.max_db / 2.0);
     for i in 0..args.num_filters {
-        let freq = (log_min + (i as f64 + 0.5) * log_range / args.num_filters as f64).exp();
+        let freq = log_min + (i as f64 + 0.5) * log_range / args.num_filters as f64;
         let q = q_vec[i];
         let sign = if i % 2 == 0 { 1.0 } else { -1.0 };
         let gain = sign * g_mags[i];
@@ -205,10 +208,44 @@ fn perform_optimization(
     }
 
     if args.iir_hp_pk {
-        x[0] = 80.0;
+        x[0] = 80.0_f64.log10();
         x[1] = 1.1;
         x[2] = 0.0;
     }
+
+    x
+}
+
+/// Print frequency spacing diagnostics and PEQ listing
+fn print_freq_spacing(x: &Vec<f64>, args: &autoeq::cli::Args, label: &str) {
+    let (sorted_freqs, adj_spacings) = optim::compute_sorted_freqs_and_adjacent_octave_spacings(x);
+    let min_adj = adj_spacings.iter().cloned().fold(f64::INFINITY, f64::min);
+    println!("* Spacing diagnostics ({}):", label);
+    let freqs_fmt: Vec<String> = sorted_freqs.iter().map(|f| format!("{:.0}", f)).collect();
+    let spacings_fmt: Vec<String> = adj_spacings.iter().map(|s| format!("{:.2}", s)).collect();
+    println!("  - Sorted center freqs (Hz): [{}]", freqs_fmt.join(", "));
+    println!(
+        "  - Adjacent spacings (oct):   [{}]",
+        spacings_fmt.join(", ")
+    );
+    if min_adj.is_finite() {
+        println!(
+            "  - Min adjacent spacing: {:.4} oct (constraint {:.4} oct)",
+            min_adj, args.min_spacing_oct
+        );
+    } else {
+        println!("  - Not enough filters to compute spacing.");
+    }
+    iir::peq_print(x, args.iir_hp_pk);
+}
+
+fn perform_optimization(
+    args: &autoeq::cli::Args,
+    objective_data: &ObjectiveData,
+) -> Result<Vec<f64>, Box<dyn Error>> {
+    let (lower_bounds, upper_bounds) = setup_bounds(args);
+
+    let mut x = initial_guess(args);
 
     iir::peq_print(&x, args.iir_hp_pk);
 
@@ -229,83 +266,44 @@ fn perform_optimization(
                 status, val
             );
 
-            let (sorted_freqs, adj_spacings) =
-                optim::compute_sorted_freqs_and_adjacent_octave_spacings(&x);
-            let min_adj = adj_spacings.iter().cloned().fold(f64::INFINITY, f64::min);
-            println!("* Spacing diagnostics (global):");
-            let freqs_fmt: Vec<String> = sorted_freqs.iter().map(|f| format!("{:.0}", f)).collect();
-            let spacings_fmt: Vec<String> =
-                adj_spacings.iter().map(|s| format!("{:.2}", s)).collect();
-            println!("  - Sorted center freqs (Hz): [{}]", freqs_fmt.join(", "));
-            println!(
-                "  - Adjacent spacings (oct):   [{}]",
-                spacings_fmt.join(", ")
-            );
-            if min_adj.is_finite() {
-                println!(
-                    "  - Min adjacent spacing: {:.4} oct (constraint {:.4} oct)",
-                    min_adj, args.min_spacing_oct
-                );
-            } else {
-                println!("  - Not enough filters to compute spacing.");
-            }
-            iir::peq_print(&x, args.iir_hp_pk);
-
-            if args.refine {
-                let local_result = optim::optimize_filters(
-                    &mut x,
-                    &lower_bounds,
-                    &upper_bounds,
-                    objective_data.clone(),
-                    &args.local_algo,
-                    args.population,
-                    args.maxeval,
-                );
-                match local_result {
-                    Ok((local_status, local_val)) => {
-                        println!(
-                            "* Running local refinement with {}... completed {} objective {:.6}",
-                            args.local_algo, local_status, local_val
-                        );
-
-                        let (sorted_freqs, adj_spacings) =
-                            optim::compute_sorted_freqs_and_adjacent_octave_spacings(&x);
-                        let min_adj = adj_spacings.iter().cloned().fold(f64::INFINITY, f64::min);
-                        println!("* Spacing diagnostics (local):");
-                        let freqs_fmt: Vec<String> =
-                            sorted_freqs.iter().map(|f| format!("{:.0}", f)).collect();
-                        let spacings_fmt: Vec<String> =
-                            adj_spacings.iter().map(|s| format!("{:.2}", s)).collect();
-                        println!("  - Sorted center freqs (Hz): [{}]", freqs_fmt.join(", "));
-                        println!(
-                            "  - Adjacent spacings (oct):   [{}]",
-                            spacings_fmt.join(", ")
-                        );
-                        if min_adj.is_finite() {
-                            println!(
-                                "  - Min adjacent spacing: {:.4} oct (constraint {:.4} oct)",
-                                min_adj, args.min_spacing_oct
-                            );
-                        } else {
-                            println!("  - Not enough filters to compute spacing.");
-                        }
-                        iir::peq_print(&x, args.iir_hp_pk);
-                    }
-                    Err((e, final_value)) => {
-                        eprintln!("⚠️  Local refinement failed: {:?}", e);
-                        eprintln!("   - Final Mean Squared Error: {:.6}", final_value);
-                    }
-                }
-            }
-
-            Ok(x)
+            print_freq_spacing(&x, args, "global");
         }
         Err((e, final_value)) => {
             eprintln!("\n❌ Optimization failed: {:?}", e);
             eprintln!("   - Final Mean Squared Error: {:.6}", final_value);
-            Err(e.into())
+            return Err(std::io::Error::new(std::io::ErrorKind::Other, e).into());
         }
-    }
+    };
+
+    if args.refine {
+        let local_result = optim::optimize_filters(
+            &mut x,
+            &lower_bounds,
+            &upper_bounds,
+            objective_data.clone(),
+            &args.local_algo,
+            args.population,
+            args.maxeval,
+        );
+        match local_result {
+            Ok((local_status, local_val)) => {
+                println!(
+                    "* Running local refinement with {}... completed {} objective {:.6}",
+                    args.local_algo, local_status, local_val
+                );
+
+                print_freq_spacing(&x, args, "local");
+                iir::peq_print(&x, args.iir_hp_pk);
+            }
+            Err((e, final_value)) => {
+                eprintln!("⚠️  Local refinement failed: {:?}", e);
+                eprintln!("   - Final Mean Squared Error: {:.6}", final_value);
+                return Err(std::io::Error::new(std::io::ErrorKind::Other, e).into());
+            }
+        }
+    };
+
+    Ok(x)
 }
 
 async fn plot_results(
@@ -328,6 +326,7 @@ async fn plot_results(
             spl: smoothed.clone(),
         });
 
+        let freqs = &input_curve.freq.map(|f| 10f64.powf(*f) as f64);
         let args_cloned = args.clone();
         let input_curve_cloned = input_curve.clone();
         let smoothed_curve_cloned = smoothed_curve_opt.as_ref().map(|c| c.clone());
@@ -421,7 +420,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 #[cfg(test)]
 mod tests {
-    use super::{distribute_gain_magnitudes, distribute_qs};
+    use super::{
+        distribute_gain_magnitudes, distribute_qs, initial_guess, print_freq_spacing, setup_bounds,
+    };
+    use autoeq::cli::Args;
+    use clap::Parser;
 
     #[test]
     fn q_distribution_within_bounds_and_spread() {
@@ -482,5 +485,130 @@ mod tests {
         assert!((mags.first().unwrap() - 0.1 * max_db).abs() < 1e-12);
         assert!((mags.last().unwrap() - max_db).abs() < 1e-12);
         assert!(mags.windows(2).all(|w| w[0] <= w[1]));
+    }
+
+    #[test]
+    fn setup_bounds_standard_mode() {
+        let mut args = Args::parse_from(["autoeq-test"]);
+        args.num_filters = 2;
+        args.min_freq = 50.0;
+        args.max_freq = 1000.0;
+        args.min_q = 0.5;
+        args.max_q = 6.0;
+        args.max_db = 10.0;
+        args.iir_hp_pk = false;
+
+        let (lb, ub) = setup_bounds(&args);
+        assert_eq!(lb.len(), args.num_filters * 3);
+        assert_eq!(ub.len(), args.num_filters * 3);
+
+        let gain_lower = -6.0 * args.max_db;
+        let q_lower = args.min_q.max(1.0e-6);
+        let expected_lb = vec![
+            args.min_freq,
+            q_lower,
+            gain_lower,
+            args.min_freq,
+            q_lower,
+            gain_lower,
+        ];
+        let expected_ub = vec![
+            args.max_freq,
+            args.max_q,
+            args.max_db,
+            args.max_freq,
+            args.max_q,
+            args.max_db,
+        ];
+        assert_eq!(lb, expected_lb);
+        assert_eq!(ub, expected_ub);
+    }
+
+    #[test]
+    fn setup_bounds_hp_pk_mode_overrides_first_triplet() {
+        let mut args = Args::parse_from(["autoeq-test"]);
+        args.num_filters = 2;
+        args.min_freq = 30.0;
+        args.max_freq = 2000.0;
+        args.min_q = 0.3;
+        args.max_q = 8.0;
+        args.max_db = 12.0;
+        args.iir_hp_pk = true;
+
+        let (lb, ub) = setup_bounds(&args);
+        assert_eq!(lb.len(), args.num_filters * 3);
+        assert_eq!(ub.len(), args.num_filters * 3);
+
+        // First triplet should be overridden for HP
+        assert!((lb[0] - 20.0).abs() < 1e-12);
+        assert!((ub[0] - 120.0).abs() < 1e-12);
+        assert!((lb[1] - 1.0).abs() < 1e-12);
+        assert!((ub[1] - 1.5).abs() < 1e-12);
+        assert!((lb[2] - 0.0).abs() < 1e-12);
+        assert!((ub[2] - 0.0).abs() < 1e-12);
+
+        // Second filter should follow the general pattern
+        let gain_lower = -6.0 * args.max_db;
+        let q_lower = args.min_q.max(1.0e-6);
+        assert!((lb[3] - args.min_freq).abs() < 1e-12);
+        assert!((lb[4] - q_lower).abs() < 1e-12);
+        assert!((lb[5] - gain_lower).abs() < 1e-12);
+        assert!((ub[3] - args.max_freq).abs() < 1e-12);
+        assert!((ub[4] - args.max_q).abs() < 1e-12);
+        assert!((ub[5] - args.max_db).abs() < 1e-12);
+    }
+
+    #[test]
+    fn initial_guess_standard_mode_shapes_and_values() {
+        let mut args = Args::parse_from(["autoeq-test"]);
+        args.num_filters = 4;
+        args.min_freq = 50.0;
+        args.max_freq = 5000.0;
+        args.min_q = 0.5;
+        args.max_q = 6.0;
+        args.max_db = 9.0;
+        args.min_db = 1.0;
+        args.iir_hp_pk = false;
+
+        let x = initial_guess(&args);
+        assert_eq!(x.len(), args.num_filters * 3);
+
+        let q_vec = distribute_qs(args.num_filters, args.min_q, args.max_q / 2.0);
+        let g_mags = distribute_gain_magnitudes(args.num_filters, args.min_db, args.max_db / 2.0);
+        for i in 0..args.num_filters {
+            let q = x[i * 3 + 1];
+            let g = x[i * 3 + 2];
+            assert!((q - q_vec[i]).abs() < 1e-9);
+            let expected_sign = if i % 2 == 0 { 1.0 } else { -1.0 };
+            assert!((g - expected_sign * g_mags[i]).abs() < 1e-9);
+        }
+    }
+
+    #[test]
+    fn initial_guess_hp_pk_overrides_first_triplet() {
+        let mut args = Args::parse_from(["autoeq-test"]);
+        args.num_filters = 3;
+        args.iir_hp_pk = true;
+        let x = initial_guess(&args);
+        assert!(x.len() >= 3);
+        assert!((x[0] - 80.0).abs() < 1e-12);
+        assert!((x[1] - 1.1).abs() < 1e-12);
+        assert!((x[2] - 0.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn print_freq_spacing_runs_without_panic() {
+        let mut args = Args::parse_from(["autoeq-test"]);
+        args.num_filters = 2;
+        args.min_freq = 50.0;
+        args.max_freq = 1000.0;
+        args.min_q = 0.5;
+        args.max_q = 6.0;
+        args.max_db = 10.0;
+        args.min_db = 1.0;
+        args.iir_hp_pk = false;
+
+        let x = initial_guess(&args);
+        print_freq_spacing(&x, &args, "test");
     }
 }

@@ -274,22 +274,6 @@ pub fn plot_results(
     // Create a single plot with subplots
     let mut plot = Plot::new();
 
-    // If enabled: lowest-frequency filter index -> Highpass; otherwise all Peak
-    let mut hp_index = usize::MAX;
-    if iir_hp_pk {
-        hp_index = 0usize;
-        if num_filters > 0 {
-            let mut min_f = optimized_params[0];
-            for i in 1..num_filters {
-                let f = optimized_params[i * 3];
-                if f < min_f {
-                    min_f = f;
-                    hp_index = i;
-                }
-            }
-        }
-    }
-
     // ----------------------------------------------------------------------
     // First subplot: Individual filters (y axis)
     // ----------------------------------------------------------------------
@@ -298,7 +282,7 @@ pub fn plot_results(
         .map(|i| {
             (
                 i,
-                optimized_params[i * 3],
+                10f64.powf(optimized_params[i * 3]),
                 optimized_params[i * 3 + 1],
                 optimized_params[i * 3 + 2],
             )
@@ -306,7 +290,7 @@ pub fn plot_results(
         .collect();
     filters.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
     for (display_idx, (orig_i, f0, q, gain)) in filters.into_iter().enumerate() {
-        let ftype = if iir_hp_pk && orig_i == hp_index {
+        let ftype = if iir_hp_pk && orig_i == 0 {
             BiquadFilterType::Highpass
         } else {
             BiquadFilterType::Peak
@@ -315,10 +299,10 @@ pub fn plot_results(
         let filter_response = filter.np_log_result(&plot_freqs);
         combined_response += &filter_response;
 
-        let label = if iir_hp_pk && orig_i == hp_index {
-            "Highpass"
+        let label = if iir_hp_pk && orig_i == 0 {
+            "HPQ"
         } else {
-            "Peak"
+            "PK"
         };
         let individual_trace = Scatter::new(plot_freqs.to_vec(), filter_response.to_vec())
             .mode(Mode::Lines)

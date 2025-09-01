@@ -76,9 +76,9 @@ impl ScoreLossData {
     }
 }
 
-/// Compute the flat (current) loss which is already implemented in optim::weighted_mse etc.
-pub fn flat_loss(weighted_err: f64) -> f64 {
-    weighted_err
+/// Compute the flat (current) loss
+pub fn flat_loss(freqs: &Array1<f64>, error: &Array1<f64>) -> f64 {
+    weighted_mse(freqs, error)
 }
 
 /// Compute the score-based loss. Returns -pref_score so that minimizing it maximizes the preference score.
@@ -114,7 +114,7 @@ pub fn score_loss(
     };
     // Return negative preference score so minimizing improves preference.
     // If pref_score is NaN, this will propagate NaN which is expected by tests.
-    -metrics.pref_score
+    100.0 - metrics.pref_score
 }
 
 /// Compute a mixed loss based on flatness on lw and pir
@@ -137,56 +137,47 @@ pub fn mixed_loss(
     }
 }
 
-/// Compute the slope of the linear regression y ~ a*x + b within a frequency range [fmin, fmax].
+/// Compute weighted mean squared error with frequency-dependent weighting
 ///
-/// - `freq`: frequency array in Hz
-/// - `y`: corresponding values (e.g., SPL in dB)
-/// - Returns `Some(slope)` in units of y-per-Hz, or `None` if fewer than 2 points in range
-pub fn regression_slope_in_range(
-    freq: &Array1<f64>,
-    y: &Array1<f64>,
-    fmin: f64,
-    fmax: f64,
-) -> Option<f64> {
-    assert_eq!(freq.len(), y.len(), "freq and y must have same length");
-    if !(fmax > fmin) {
-        return None;
-    }
+/// # Arguments
+/// * `freqs` - Frequency points
+/// * `error` - Error values at each frequency point
+///
+/// # Returns
+/// * Weighted error value
+///
+/// # Details
+/// Computes RMS error separately for frequencies below and above 3000 Hz,
+/// with higher weight given to the lower frequency band.
+fn weighted_mse(freqs: &Array1<f64>, error: &Array1<f64>) -> f64 {
+    debug_assert_eq!(freqs.len(), error.len());
+    let mut ss1 = 0.0; // sum of squares for f < 3000
+    let mut n1: usize = 0;
+    let mut ss2 = 0.0; // sum of squares for f >= 3000
+    let mut n2: usize = 0;
 
-    let mut n: usize = 0;
-    let mut sum_x = 0.0;
-    let mut sum_y = 0.0;
-    let mut sum_xy = 0.0;
-    let mut sum_x2 = 0.0;
-
-    for i in 0..freq.len() {
-        let f = freq[i];
-        if f >= fmin && f <= fmax {
-            let xi = f;
-            let yi = y[i];
-            n += 1;
-            sum_x += xi;
-            sum_y += yi;
-            sum_xy += xi * yi;
-            sum_x2 += xi * xi;
+    for i in 0..freqs.len() {
+        let e = error[i];
+        if freqs[i] < 3000.0 {
+            ss1 += e * e;
+            n1 += 1;
+        } else {
+            ss2 += e * e;
+            n2 += 1;
         }
     }
-
-    if n < 2 {
-        return None;
-    }
-    let n_f = n as f64;
-    let cov_xy = sum_xy - (sum_x * sum_y) / n_f;
-    let var_x = sum_x2 - (sum_x * sum_x) / n_f;
-    if var_x == 0.0 {
-        return None;
-    }
-    Some(cov_xy / var_x)
-}
-
-/// Convenience wrapper for computing the regression slope on a `Curve`.
-pub fn curve_slope_in_range(curve: &crate::Curve, fmin: f64, fmax: f64) -> Option<f64> {
-    regression_slope_in_range(&curve.freq, &curve.spl, fmin, fmax)
+    // RMS in each band: sqrt(mean of squares)
+    let err1 = if n1 > 0 {
+        (ss1 / n1 as f64).sqrt()
+    } else {
+        0.0
+    };
+    let err2 = if n2 > 0 {
+        (ss2 / n2 as f64).sqrt()
+    } else {
+        0.0
+    };
+    err1 + err2 / 3.0
 }
 
 /// Compute the slope (per octave) using linear regression of y against log2(f).
@@ -246,6 +237,7 @@ pub fn curve_slope_per_octave_in_range(curve: &crate::Curve, fmin: f64, fmax: f6
 mod tests {
     use super::*;
     use ndarray::Array1;
+    use ndarray::array;
     use std::collections::HashMap;
 
     #[test]
@@ -300,33 +292,6 @@ mod tests {
         } else {
             assert!((got + expected.pref_score).abs() < 1e-12);
         }
-    }
-
-    #[test]
-    fn regression_slope_linear_data_full_range() {
-        // y = 0.01 * f + 2.0
-        let freq = Array1::from(vec![100.0, 200.0, 300.0, 400.0, 500.0]);
-        let y = freq.mapv(|f| 0.01 * f + 2.0);
-        let slope = regression_slope_in_range(&freq, &y, 100.0, 500.0).unwrap();
-        assert!((slope - 0.01).abs() < 1e-12);
-    }
-
-    #[test]
-    fn regression_slope_linear_data_sub_range() {
-        // Same linear relation but compute on sub-range
-        let freq = Array1::from(vec![100.0, 200.0, 300.0, 400.0, 500.0]);
-        let y = freq.mapv(|f| 0.5 * f - 10.0);
-        let slope = regression_slope_in_range(&freq, &y, 200.0, 400.0).unwrap();
-        assert!((slope - 0.5).abs() < 1e-12);
-    }
-
-    #[test]
-    fn regression_slope_insufficient_points_returns_none() {
-        let freq = Array1::from(vec![100.0, 200.0, 300.0]);
-        let y = Array1::from(vec![1.0, 2.0, 3.0]);
-        // Range capturing only one point
-        let slope = regression_slope_in_range(&freq, &y, 250.0, 260.0);
-        assert!(slope.is_none());
     }
 
     #[test]
@@ -394,5 +359,35 @@ mod tests {
         let peq = Array1::zeros(freq.len());
         let v = mixed_loss(&sd, &freq, &peq);
         assert!(v.is_finite(), "mixed_loss should be finite, got {}", v);
+    }
+
+    #[test]
+    fn test_weighted_mse_basic() {
+        // Two points below 3k, two points above 3k with unit error
+        let freqs = array![1000.0, 2000.0, 4000.0, 8000.0];
+        let err = array![1.0, 1.0, 1.0, 1.0];
+        let v = weighted_mse(&freqs, &err);
+        // RMS below = 1, RMS above = 1 -> total = 1 + 1/3 = 1.333...
+        assert!((v - (1.0 + 1.0 / 3.0)).abs() < 1e-12, "got {}", v);
+    }
+
+    #[test]
+    fn test_weighted_mse_empty_upper_segment() {
+        // All freqs below 3k -> upper RMS = 0
+        let freqs = array![100.0, 200.0, 500.0];
+        let err = array![2.0, 2.0, 2.0]; // squares: 4,4,4 -> mean=4 -> rms=2
+        let v = weighted_mse(&freqs, &err);
+        assert!((v - 2.0).abs() < 1e-12, "got {}", v);
+    }
+
+    #[test]
+    fn test_weighted_mse_scaling() {
+        // Different errors below and above to verify weighting
+        let freqs = array![1000.0, 1500.0, 4000.0, 6000.0];
+        let err = array![2.0, 2.0, 3.0, 3.0];
+        // below RMS = sqrt((4+4)/2)=2, above RMS = sqrt((9+9)/2)=3
+        let v = weighted_mse(&freqs, &err);
+        let expected = 2.0 + 3.0 / 3.0; // 3.0
+        assert!((v - expected).abs() < 1e-12, "got {}", v);
     }
 }
