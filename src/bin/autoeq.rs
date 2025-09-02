@@ -68,7 +68,7 @@ fn build_target_curve(
     let base_target = if let Some(ref target_path) = args.target {
         let target_curve = read::read_curve_from_csv(target_path).unwrap();
         println!(
-            "* Loaded target curve with {} points.",
+            "✅ Loaded target curve with {} points.",
             target_curve.freq.len()
         );
         read::interpolate(&input_curve.freq, &target_curve.freq, &target_curve.spl)
@@ -79,7 +79,7 @@ fn build_target_curve(
                 let log_f_min = 1000.0_f64.log10();
                 let log_f_max = 20000.0_f64.log10();
                 let denom = log_f_max - log_f_min;
-		println!("* Target curve is {}", args.curve_name);
+		println!("✅ Target curve is {}", args.curve_name);
                 Array1::from_shape_fn(input_curve.freq.len(), |i| {
                     let f_hz = input_curve.freq[i].max(1e-12);
                     let fl = f_hz.log10();
@@ -101,7 +101,7 @@ fn build_target_curve(
                 let lo = 100.0_f64;
                 let hi = 20000.0_f64;
                 let hi_val = slope * (hi / lo).log2();
-		println!("* Target curve is {} slope {:.2} db/oct", args.curve_name, slope);
+		println!("✅ Target curve is {} slope {:.2} db/oct", args.curve_name, slope);
                 Array1::from_shape_fn(input_curve.freq.len(), |i| {
                     let f = input_curve.freq[i].max(1e-12);
                     if f < lo {
@@ -114,16 +114,14 @@ fn build_target_curve(
                 })
             }
             _ => {
-		println!("* No target curve provided, using a flat 0 dB target.");
+		println!("✅ No target curve provided, using a flat 0 dB target.");
 		Array1::zeros(input_curve.spl.len())
 	    }
         }
     };
 
-    let mut inverted_curve = base_target - input_curve.spl.clone();
-    if !args.iir_hp_pk {
-        inverted_curve = read::clamp_positive_only(&inverted_curve, args.max_db);
-    }
+    let target_curve = base_target - input_curve.spl.clone();
+    let inverted_curve = read::clamp_positive_only(&target_curve, args.max_db);
 
     let mut smoothed_curve: Option<Array1<f64>> = None;
     if args.smooth {
@@ -188,8 +186,8 @@ fn setup_bounds(args: &autoeq::cli::Args) -> (Vec<f64>, Vec<f64>) {
 	// start with a freq in range
 	let f = args.min_freq.log10() + (i as f64) * range;
 	// compute a low and high bounds
-	let f_low : f64;
-	let f_high : f64;
+	let mut f_low : f64;
+	let mut f_high : f64;
 	if i == 0 {
 	    // first one is bounded by min_freq and into the next band
 	    f_low = args.min_freq.log10();
@@ -202,13 +200,17 @@ fn setup_bounds(args: &autoeq::cli::Args) -> (Vec<f64>, Vec<f64>) {
 	    f_low  = (f - spacing *range).max(args.min_freq.log10());
 	    f_high = (f + spacing *range).min(args.max_freq.log10());
 	}
-        lower_bounds.extend_from_slice(&[f_low, q_lower, gain_lower]);
+	if i>0 && f_low == lower_bounds[(i-1)*3] {
+	    f_low += 20f64.log10();
+	    f_high += 20f64.log10();
+	}
+	lower_bounds.extend_from_slice(&[f_low, q_lower, gain_lower]);
         upper_bounds.extend_from_slice(&[f_high, args.max_q, args.max_db]);
     }
 
     if args.iir_hp_pk {
-        lower_bounds[0] = 20.0_f64.log10();
-        upper_bounds[0] = 120.0_f64.log10();
+        lower_bounds[0] = 20.0_f64.max(args.min_freq).log10();
+        upper_bounds[0] = 120.0_f64.min(args.min_freq+20.0).log10();
         lower_bounds[1] = 1.0;
         upper_bounds[1] = 1.5; // should be computed as a function of max_db
         lower_bounds[2] = 0.0;
@@ -248,9 +250,13 @@ fn initial_guess(args: &autoeq::cli::Args, lower_bounds: &Vec<f64>, upper_bounds
 fn print_freq_spacing(x: &Vec<f64>, args: &autoeq::cli::Args, label: &str) {
     let (sorted_freqs, adj_spacings) = optim::compute_sorted_freqs_and_adjacent_octave_spacings(x);
     let min_adj = adj_spacings.iter().cloned().fold(f64::INFINITY, f64::min);
-    println!("* Spacing diagnostics ({}):", label);
     let freqs_fmt: Vec<String> = sorted_freqs.iter().map(|f| format!("{:.0}", f)).collect();
     let spacings_fmt: Vec<String> = adj_spacings.iter().map(|s| format!("{:.2}", s)).collect();
+    if min_adj >= args.min_spacing_oct {
+	println!("✅ Spacing diagnostics ({}):", label);
+    } else {
+	println!("⚠️ Spacing diagnostics ({}):", label);
+    }
     println!("  - Sorted center freqs (Hz): [{}]", freqs_fmt.join(", "));
     println!(
         "  - Adjacent spacings (oct):   [{}]",
@@ -275,9 +281,7 @@ fn perform_optimization(
 
     let mut x = initial_guess(args, &lower_bounds, &upper_bounds);
 
-    println!("{:?}", x);
-
-    iir::peq_print(&x, args.iir_hp_pk);
+    // iir::peq_print(&x, args.iir_hp_pk);
 
     let result = optim::optimize_filters(
         &mut x,
@@ -292,7 +296,7 @@ fn perform_optimization(
     match result {
         Ok((status, val)) => {
             println!(
-                "* Global optimization completed with status: {}. Objective function value: {:.6}",
+                "✅ Global optimization completed with status: {}. Objective function value: {:.6}",
                 status, val
             );
 
@@ -318,7 +322,7 @@ fn perform_optimization(
         match local_result {
             Ok((local_status, local_val)) => {
                 println!(
-                    "* Running local refinement with {}... completed {} objective {:.6}",
+                    "✅ Running local refinement with {}... completed {} objective {:.6}",
                     args.local_algo, local_status, local_val
                 );
 
@@ -389,7 +393,7 @@ async fn plot_results(
                 .await?;
         if let Some(before) = cea_metrics_before {
             println!(
-                "*  Pre-Optimization CEA2034 Score: pref={:.3} | nbd_on={:.3} nbd_pir={:.3} lfx={:.0}Hz sm_pir={:.3}",
+                "✅  Pre-Optimization CEA2034 Score: pref={:.3} | nbd_on={:.3} nbd_pir={:.3} lfx={:.0}Hz sm_pir={:.3}",
                 before.pref_score,
                 before.nbd_on,
                 before.nbd_pir,
@@ -398,7 +402,7 @@ async fn plot_results(
             );
         }
         println!(
-            "* Post-Optimization CEA2034 Score: pref={:.3} | nbd_on={:.3} nbd_pir={:.3} lfx={:.0}hz sm_pir={:.3}",
+            "✅ Post-Optimization CEA2034 Score: pref={:.3} | nbd_on={:.3} nbd_pir={:.3} lfx={:.0}hz sm_pir={:.3}",
             metrics_after.pref_score,
             metrics_after.nbd_on,
             metrics_after.nbd_pir,

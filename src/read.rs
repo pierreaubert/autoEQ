@@ -25,6 +25,7 @@ use reqwest;
 use serde::Deserialize;
 use serde_json::Value;
 use urlencoding;
+use tokio::fs;
 
 use crate::Curve;
 use crate::score;
@@ -33,6 +34,64 @@ use crate::score;
 struct CsvRecord {
     frequency: f64,
     spl: f64,
+}
+
+// --- Helpers for caching and JSON normalization ---
+
+fn sanitize_dir_name(name: &str) -> String {
+    // Keep alnum, space, dash, underscore; replace others with underscore.
+    let mut out = String::with_capacity(name.len());
+    for ch in name.chars() {
+        if ch.is_ascii_alphanumeric() || ch == ' ' || ch == '-' || ch == '_' {
+            out.push(ch);
+        } else {
+            out.push('_');
+        }
+    }
+    // Trim leading/trailing spaces and underscores
+    out.trim().trim_matches('_').to_string()
+}
+
+fn measurement_filename(measurement: &str) -> String {
+    // Only neutralize path separators; keep the name otherwise to match saved files.
+    let safe = measurement.replace(['/', '\\'], "-");
+    format!("{}.json", safe)
+}
+
+fn normalize_plotly_value(v: &Value) -> Result<Value, Box<dyn Error>> {
+    // API format is ["{...plotly json...}"]
+    if let Some(arr) = v.as_array() {
+        if let Some(first) = arr.first() {
+            if let Some(s) = first.as_str() {
+                let parsed: Value = serde_json::from_str(s)?;
+                return Ok(parsed);
+            } else {
+                return Err("First element is not a string".into());
+            }
+        } else {
+            return Err("Empty API response".into());
+        }
+    }
+    Err("API response is not an array".into())
+}
+
+fn normalize_plotly_json_from_str(content: &str) -> Result<Value, Box<dyn Error>> {
+    // Content could be one of:
+    // - Already a Plotly JSON object with "data" key
+    // - A JSON array with one string (API response)
+    // - A bare JSON string containing the Plotly JSON
+    let v: Value = serde_json::from_str(content)?;
+    if v.is_object() {
+        return Ok(v);
+    }
+    if let Ok(parsed) = normalize_plotly_value(&v) {
+        return Ok(parsed);
+    }
+    if let Some(s) = v.as_str() {
+        let inner: Value = serde_json::from_str(s)?;
+        return Ok(inner);
+    }
+    Err("Unrecognized cached JSON format".into())
 }
 
 /// Read a frequency response curve from a CSV file
@@ -98,6 +157,22 @@ pub async fn fetch_measurement_plot_data(
     version: &str,
     measurement: &str,
 ) -> Result<Value, Box<dyn Error>> {
+    // 1) Try local cache first: data/{sanitized_speaker}/{measurement}.json
+    // We keep filename identical to measurement name when possible (with path separators replaced).
+    let cache_dir = PathBuf::from("data").join(sanitize_dir_name(speaker));
+    let cache_file = cache_dir.join(measurement_filename(measurement));
+
+    if let Ok(content) = fs::read_to_string(&cache_file).await {
+        if let Ok(plot_data) = normalize_plotly_json_from_str(&content) {
+            return Ok(plot_data);
+        } else {
+            eprintln!(
+                "⚠️  Cache file exists but could not be parsed as Plotly JSON: {:?}",
+                &cache_file
+            );
+        }
+    }
+
     // URL-encode the parameters
     let encoded_speaker = urlencoding::encode(speaker);
     let encoded_version = urlencoding::encode(version);
@@ -108,7 +183,7 @@ pub async fn fetch_measurement_plot_data(
         encoded_speaker, encoded_version, encoded_measurement
     );
 
-    println!("* Fetching data from {}", url);
+    // println!("* Fetching data from {}", url);
 
     let response = reqwest::get(&url).await?;
     if !response.status().is_success() {
@@ -116,22 +191,23 @@ pub async fn fetch_measurement_plot_data(
     }
     let api_response: Value = response.json().await?;
 
-    // The API response is a list with a single element that is a JSON string
-    let data_string = if let Some(array) = api_response.as_array() {
-        if let Some(first_element) = array.first() {
-            first_element
-                .as_str()
-                .ok_or("First element is not a string")?
-        } else {
-            return Err("Empty API response".into());
-        }
-    } else {
-        return Err("API response is not an array".into());
-    };
+    // Normalize from API response (array-of-string JSON) to Plotly JSON object
+    let plot_data = normalize_plotly_value(&api_response)?;
 
-    let plot_data: Value = serde_json::from_str(data_string)?;
-    let trace_names = collect_trace_names(&plot_data);
-    println!(" Trace names: {:?}", trace_names);
+    // 2) Save normalized Plotly JSON to cache for future use
+    if let Err(e) = fs::create_dir_all(&cache_dir).await {
+        eprintln!("⚠️  Failed to create cache dir {:?}: {}", &cache_dir, e);
+    } else {
+        match serde_json::to_string(&plot_data) {
+            Ok(serialized) => {
+                if let Err(e) = fs::write(&cache_file, serialized).await {
+                    eprintln!("⚠️  Failed to write cache file {:?}: {}", &cache_file, e);
+                }
+            }
+            Err(e) => eprintln!("⚠️  Failed to serialize plot data for cache: {}", e),
+        }
+    }
+
     Ok(plot_data)
 }
 
@@ -445,7 +521,10 @@ pub fn extract_cea2034_curves(
 
 #[cfg(test)]
 mod tests {
-    use super::{collect_trace_names, extract_curve_by_name, is_target_trace_name};
+    use super::{
+        collect_trace_names, extract_curve_by_name, is_target_trace_name,
+        normalize_plotly_json_from_str,
+    };
     use serde_json::json;
 
     fn le_f64_bytes(vals: &[f64]) -> Vec<u8> {
@@ -580,6 +659,28 @@ mod tests {
         let curve = extract_curve_by_name(&plot_data, "CEA2034", "Listening Window").unwrap();
         assert_eq!(curve.freq.len(), 2);
         assert!((curve.freq[0] - 200.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn normalize_plotly_handles_object_array_and_string() {
+        // Case 1: already a Plotly object
+        let obj = json!({"data": [{"name": "On Axis"}]});
+        let s1 = serde_json::to_string(&obj).unwrap();
+        let p1 = normalize_plotly_json_from_str(&s1).unwrap();
+        assert!(p1.get("data").is_some());
+
+        // Case 2: API array-of-string format
+        let inner = json!({"data": [{"name": "Listening Window"}]});
+        let s_inner = serde_json::to_string(&inner).unwrap();
+        let api = json!([s_inner]);
+        let s2 = serde_json::to_string(&api).unwrap();
+        let p2 = normalize_plotly_json_from_str(&s2).unwrap();
+        assert!(p2.get("data").is_some());
+
+        // Case 3: bare JSON string containing the Plotly JSON
+        let s3 = serde_json::to_string(&s_inner).unwrap();
+        let p3 = normalize_plotly_json_from_str(&s3).unwrap();
+        assert!(p3.get("data").is_some());
     }
 }
 

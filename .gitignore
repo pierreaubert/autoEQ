@@ -1,3 +1,9 @@
 /target
+/data
+plot*.*
+*~
+.*~
+src/unused.rs
+
 
 

@@ -211,7 +211,7 @@ fn objective_function(x: &[f64], _gradient: Option<&mut [f64]>, data: &mut Objec
         LossType::Mixed => {
             if let Some(ref sd) = data.score_data {
                 let s = mixed_loss(sd, &data.freqs, &peq_spl);
-                println!("Mixed: {:5.2} ", s);
+                // println!("Mixed: {:5.2} ", s);
                 s
             } else {
                 eprintln!("Error: mixed loss requested but score data is missing");
@@ -223,7 +223,7 @@ fn objective_function(x: &[f64], _gradient: Option<&mut [f64]>, data: &mut Objec
                 let error = &peq_spl - &data.target_error;
                 let s = score_loss(sd, &data.freqs, &peq_spl);
                 let p = flat_loss(&data.freqs, &error) / 3.0;
-                println!("Score: {:5.2} Flatness: {:6.2}", -100.0 + s, p);
+                // println!("Score: {:5.2} Flatness: {:6.2}", -100.0 + s, p);
                 s + p
             } else {
                 eprintln!("Error: score loss requested but score data is missing");
@@ -297,7 +297,7 @@ pub fn optimize_filters(
     let _ = optimizer.set_population(population);
     let _ = optimizer.set_maxeval(maxeval as u32);
     let _ = optimizer.set_stopval(1e-4).unwrap();
-    let _ = optimizer.set_ftol_rel(1e-4).unwrap();
+    let _ = optimizer.set_ftol_rel(1e-6).unwrap();
     let _ = optimizer.set_xtol_rel(1e-4).unwrap();
 
     let result = optimizer.optimize(x);

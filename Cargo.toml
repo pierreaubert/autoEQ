@@ -1,7 +1,7 @@
 [package]
 name = "autoeq"
-version = "0.1.0"
-edition = "2021"
+version = "0.2.0"
+edition = "2024"
 description = "A library and tool for audio equalization and filter optimization"
 repository = "https://github.com/pierreaubert/autoeq"
 license = "GPL-3.0-or-later"
@@ -12,7 +12,11 @@ path = "src/lib.rs"
 
 [[bin]]
 name = "autoeq"
-path = "src/main.rs"
+path = "src/bin/autoeq.rs"
+
+[[bin]]
+name = "download"
+path = "src/bin/download.rs"
 
 [dependencies]
 base64 = "0.21"
