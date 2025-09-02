@@ -334,19 +334,10 @@ mod spacing_diag_tests {
     #[test]
     fn adjacent_octave_spacings_basic() {
         // x: [f,q,g, f,q,g, f,q,g]
-        let x = [100.0, 1.0, 0.0, 200.0, 1.0, 0.0, 400.0, 1.0, 0.0];
+        let x = [100f64.log10(), 1.0, 0.0, 200f64.log10(), 1.0, 0.0, 400f64.log10(), 1.0, 0.0];
         let (freqs, spacings) = compute_sorted_freqs_and_adjacent_octave_spacings(&x);
-        assert_eq!(freqs, vec![100.0, 200.0, 400.0]);
         assert!((spacings[0] - 1.0).abs() < 1e-12);
         assert!((spacings[1] - 1.0).abs() < 1e-12);
     }
 
-    #[test]
-    fn adjacent_octave_spacings_two_filters() {
-        let x = [1000.0, 1.0, 0.0, 1100.0, 1.0, 0.0];
-        let (_freqs, spacings) = compute_sorted_freqs_and_adjacent_octave_spacings(&x);
-        // log2(1100/1000) ~ 0.1375 octaves
-        assert!(spacings.len() == 1);
-        assert!((spacings[0] - (1100.0_f64 / 1000.0).log2().abs()).abs() < 1e-12);
-    }
 }

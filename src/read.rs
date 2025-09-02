@@ -526,7 +526,7 @@ mod tests {
         assert!(!is_target_trace_name(
             "Other",
             "ignored",
-            "Early Reflections DI"
+            "PIR"
         ));
     }
 

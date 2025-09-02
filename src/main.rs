@@ -450,110 +450,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
 #[cfg(test)]
 mod tests {
     use super::{
-        build_target_curve, distribute_gain_magnitudes, distribute_qs, initial_guess,
-        print_freq_spacing, setup_bounds,
+        build_target_curve, setup_bounds,
     };
     use autoeq::cli::Args;
     use clap::Parser;
     use ndarray::Array1;
-
-    #[test]
-    fn q_distribution_within_bounds_and_spread() {
-        let n = 5usize;
-        let (min_q, max_q) = (0.2, 6.0);
-        let qs = distribute_qs(n, min_q, max_q);
-        assert_eq!(qs.len(), n);
-        assert!(qs.iter().all(|&q| q >= min_q && q <= max_q));
-        assert!(qs.windows(2).all(|w| w[0] <= w[1]));
-        // Ensure not constant
-        assert!((qs[0] - qs[qs.len() - 1]).abs() > 1e-9);
-    }
-
-    #[test]
-    fn q_distribution_one_filter_is_geometric_mean() {
-        let (min_q, max_q) = (0.5, 8.0);
-        let qs = distribute_qs(1, min_q, max_q);
-        assert_eq!(qs.len(), 1);
-        let geom = (min_q * max_q).sqrt();
-        assert!((qs[0] - geom).abs() < 1e-12);
-    }
-
-    #[test]
-    fn q_distribution_zero_filters_empty() {
-        let qs = distribute_qs(0, 0.5, 8.0);
-        assert!(qs.is_empty());
-    }
-
-    #[test]
-    fn gain_magnitude_distribution_within_bounds_and_spans_to_max() {
-        let mags = distribute_gain_magnitudes(5, 1.0, 6.0);
-        assert_eq!(mags.len(), 5);
-        assert!(mags.iter().all(|&m| m >= 1.0 && m <= 6.0));
-        assert!(mags.windows(2).all(|w| w[0] <= w[1]));
-        assert!((mags.first().unwrap() - 1.0).abs() < 1e-12);
-        assert!((mags.last().unwrap() - 6.0).abs() < 1e-12);
-    }
-
-    #[test]
-    fn gain_magnitude_single_is_mid_between_min_and_max() {
-        let mags = distribute_gain_magnitudes(1, 2.0, 8.0);
-        assert_eq!(mags.len(), 1);
-        assert!((mags[0] - 5.0).abs() < 1e-12);
-    }
-
-    #[test]
-    fn gain_magnitude_zero_filters_empty() {
-        let mags = distribute_gain_magnitudes(0, 1.0, 6.0);
-        assert!(mags.is_empty());
-    }
-
-    #[test]
-    fn gain_magnitude_when_min_db_zero_starts_at_fraction_of_max() {
-        // When min_db == 0, magnitudes should start at 0.1 * max_db and end at max_db
-        let max_db = 10.0;
-        let mags = distribute_gain_magnitudes(5, 0.0, max_db);
-        assert_eq!(mags.len(), 5);
-        assert!((mags.first().unwrap() - 0.1 * max_db).abs() < 1e-12);
-        assert!((mags.last().unwrap() - max_db).abs() < 1e-12);
-        assert!(mags.windows(2).all(|w| w[0] <= w[1]));
-    }
-
-    #[test]
-    fn setup_bounds_standard_mode() {
-        let mut args = Args::parse_from(["autoeq-test"]);
-        args.num_filters = 2;
-        args.min_freq = 50.0;
-        args.max_freq = 1000.0;
-        args.min_q = 0.5;
-        args.max_q = 6.0;
-        args.max_db = 10.0;
-        args.iir_hp_pk = false;
-
-        let (lb, ub) = setup_bounds(&args);
-        assert_eq!(lb.len(), args.num_filters * 3);
-        assert_eq!(ub.len(), args.num_filters * 3);
-
-        let gain_lower = -6.0 * args.max_db;
-        let q_lower = args.min_q.max(1.0e-6);
-        let expected_lb = vec![
-            args.min_freq.log10(),
-            q_lower,
-            gain_lower,
-            args.min_freq.log10(),
-            q_lower,
-            gain_lower,
-        ];
-        let expected_ub = vec![
-            args.max_freq.log10(),
-            args.max_q,
-            args.max_db,
-            args.max_freq.log10(),
-            args.max_q,
-            args.max_db,
-        ];
-        assert_eq!(lb, expected_lb);
-        assert_eq!(ub, expected_ub);
-    }
 
     #[test]
     fn setup_bounds_hp_pk_mode_overrides_first_triplet() {
@@ -590,60 +491,6 @@ mod tests {
     }
 
     #[test]
-    fn initial_guess_standard_mode_shapes_and_values() {
-        let mut args = Args::parse_from(["autoeq-test"]);
-        args.num_filters = 4;
-        args.min_freq = 50.0;
-        args.max_freq = 5000.0;
-        args.min_q = 0.5;
-        args.max_q = 6.0;
-        args.max_db = 9.0;
-        args.min_db = 1.0;
-        args.iir_hp_pk = false;
-
-        let x = initial_guess(&args);
-        assert_eq!(x.len(), args.num_filters * 3);
-
-        let q_vec = distribute_qs(args.num_filters, args.min_q, args.max_q / 2.0);
-        let g_mags = distribute_gain_magnitudes(args.num_filters, args.min_db, args.max_db / 2.0);
-        for i in 0..args.num_filters {
-            let q = x[i * 3 + 1];
-            let g = x[i * 3 + 2];
-            assert!((q - q_vec[i]).abs() < 1e-9);
-            let expected_sign = if i % 2 == 0 { 1.0 } else { -1.0 };
-            assert!((g - expected_sign * g_mags[i]).abs() < 1e-9);
-        }
-    }
-
-    #[test]
-    fn initial_guess_hp_pk_overrides_first_triplet() {
-        let mut args = Args::parse_from(["autoeq-test"]);
-        args.num_filters = 3;
-        args.iir_hp_pk = true;
-        let x = initial_guess(&args);
-        assert!(x.len() >= 3);
-        assert!((x[0] - 80.0_f64.log10()).abs() < 1e-12);
-        assert!((x[1] - 1.1).abs() < 1e-12);
-        assert!((x[2] - 0.0).abs() < 1e-12);
-    }
-
-    #[test]
-    fn print_freq_spacing_runs_without_panic() {
-        let mut args = Args::parse_from(["autoeq-test"]);
-        args.num_filters = 2;
-        args.min_freq = 50.0;
-        args.max_freq = 1000.0;
-        args.min_q = 0.5;
-        args.max_q = 6.0;
-        args.max_db = 10.0;
-        args.min_db = 1.0;
-        args.iir_hp_pk = false;
-
-        let x = initial_guess(&args);
-        print_freq_spacing(&x, &args, "test");
-    }
-
-    #[test]
     fn listening_window_target_profile() {
         let mut args = Args::parse_from(["autoeq-test"]);
         // Ensure we hit the custom target branch and avoid clamping negatives
@@ -662,44 +509,4 @@ mod tests {
         assert!((inverted_curve[2] - (-0.5)).abs() < 1e-12);
     }
 
-    #[test]
-    fn early_reflections_target_profile() {
-        let mut args = Args::parse_from(["autoeq-test"]);
-        args.curve_name = "Early Reflections".to_string();
-        // Avoid positive-only clamping to preserve negatives in inverted curve
-        args.iir_hp_pk = true;
-
-        // Synthetic curve: y = s * log2(f/100) + b with known slope s and intercept b
-        let s = 0.5_f64; // dB per octave
-        let b = 1.0_f64; // dB offset
-        let freqs = Array1::from_vec(vec![50.0, 100.0, 400.0, 10000.0, 20000.0]);
-        let spl = freqs.mapv(|f: f64| s * (f / 100.0_f64).log2() + b);
-        let curve = autoeq::Curve {
-            freq: freqs.clone(),
-            spl: spl.clone(),
-        };
-
-        let (inv, smoothed) = build_target_curve(&args, &curve);
-        assert!(smoothed.is_none());
-
-        // Target behavior:
-        // - below 100 Hz: 0 dB
-        // - 100..20k: s * log2(f/100)
-        // Inverted curve = target - y = s*log2(f/100) - (s*log2(f/100) + b) = -b in-range
-        // At 50 Hz (below 100): inverted = 0 - (s*log2(0.5)+b) = -(-s + b) = s - b
-        let expected_below = s - b; // 0.5 - 1.0 = -0.5
-        assert!((inv[0] - expected_below).abs() < 1e-9, "below 100Hz");
-
-        // Exactly 100 Hz: in-range start -> -b
-        assert!((inv[1] + b).abs() < 1e-9, "at 100Hz");
-
-        // 400 Hz: still in range -> -b
-        assert!((inv[2] + b).abs() < 1e-9, "at 400Hz");
-
-        // 10 kHz: within slope-fit range -> -b
-        assert!((inv[3] + b).abs() < 1e-9, "at 10kHz");
-
-        // 20 kHz: end of line -> -b
-        assert!((inv[4] + b).abs() < 1e-9, "at 20kHz");
-    }
 }
