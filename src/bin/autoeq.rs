@@ -476,8 +476,8 @@ mod tests {
         assert_eq!(ub.len(), args.num_filters * 3);
 
         // First triplet should be overridden for HP
-        assert!((lb[0] - 20.0_f64.log10()).abs() < 1e-12);
-        assert!((ub[0] - 120.0_f64.log10()).abs() < 1e-12);
+        assert!((lb[0] - 20.0_f64.max(args.min_freq).log10()).abs() < 1e-12);
+        assert!((ub[0] - 120.0_f64.min(args.min_freq + 20.0).log10()).abs() < 1e-12);
         assert!((lb[1] - 1.0).abs() < 1e-12);
         assert!((ub[1] - 1.5).abs() < 1e-12);
         assert!((lb[2] - 0.0).abs() < 1e-12);
