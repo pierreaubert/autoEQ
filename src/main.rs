@@ -36,10 +36,13 @@ async fn load_input_curve(
     let input_curve = if let (Some(speaker), Some(version), Some(measurement)) =
         (&args.speaker, &args.version, &args.measurement)
     {
-        let plot_data = read::fetch_measurement_plot_data(speaker, version, measurement).await?;
+        let mut plot_data = read::fetch_measurement_plot_data(speaker, version, measurement).await?;
         let extracted_curve =
             read::extract_curve_by_name(&plot_data, measurement, &args.curve_name)?;
-        if measurement == "CEA2034" {
+	if measurement == "Estimated In-Room Response" {
+            plot_data = read::fetch_measurement_plot_data(speaker, version, "CEA2034").await?;
+	}
+        if measurement == "CEA2034" || measurement == "Estimated In-Room Response" {
             spin_data = Some(read::extract_cea2034_curves(
                 &plot_data,
                 "CEA2034",
@@ -76,6 +79,7 @@ fn build_target_curve(
                 let log_f_min = 1000.0_f64.log10();
                 let log_f_max = 20000.0_f64.log10();
                 let denom = log_f_max - log_f_min;
+		println!("* Target curve is {}", args.curve_name);
                 Array1::from_shape_fn(input_curve.freq.len(), |i| {
                     let f_hz = input_curve.freq[i].max(1e-12);
                     let fl = f_hz.log10();
@@ -94,7 +98,6 @@ fn build_target_curve(
                 // equal to the curve's slope (dB/octave) between 100..10k.
                 let slope = autoeq::loss::curve_slope_per_octave_in_range(input_curve, 100.0, 10000.0)
                     .unwrap_or(-1.2)-0.2;
-		println!("* Curve slope = {:.3} dB/octave", slope);
                 let lo = 100.0_f64;
                 let hi = 20000.0_f64;
                 let hi_val = slope * (hi / lo).log2();
@@ -140,7 +143,11 @@ fn setup_objective_data(
     target_curve: &Array1<f64>,
     spin_data: &Option<HashMap<String, Curve>>,
 ) -> (ObjectiveData, bool) {
-    let use_cea = matches!(args.measurement.as_deref(), Some(m) if m.eq_ignore_ascii_case("CEA2034"))
+    let use_cea =
+	(matches!(args.measurement.as_deref(), Some(m) if m.eq_ignore_ascii_case("CEA2034"))
+	 ||
+	 matches!(args.measurement.as_deref(), Some(m) if m.eq_ignore_ascii_case("Estimated In-Room Response"))
+	 )
         && args.speaker.is_some()
         && args.version.is_some()
         && spin_data.is_some();
@@ -208,17 +215,17 @@ fn setup_bounds(args: &autoeq::cli::Args) -> (Vec<f64>, Vec<f64>) {
         upper_bounds[2] = 0.0;
     }
 
-    for i in 0..args.num_filters {
-	println!("{:2} Freq {:7.2} -- {:7.2}", i, 10f64.powf(lower_bounds[i*3]), 10f64.powf(upper_bounds[i*3]));
-    }
+    // for i in 0..args.num_filters {
+    // 	println!("{:2} Freq {:7.2} -- {:7.2}", i, 10f64.powf(lower_bounds[i*3]), 10f64.powf(upper_bounds[i*3]));
+    // }
 
-    for i in 0..args.num_filters {
-	println!("{:2} Q    {:7.2} -- {:7.2}", i, lower_bounds[i*3+1], upper_bounds[i*3+1]);
-    }
+    // for i in 0..args.num_filters {
+    // 	println!("{:2} Q    {:7.2} -- {:7.2}", i, lower_bounds[i*3+1], upper_bounds[i*3+1]);
+    // }
 
-    for i in 0..args.num_filters {
-	println!("{:2} Gain {:7.2} -- {:7.2}", i, lower_bounds[i*3+2], upper_bounds[i*3+2]);
-    }
+    // for i in 0..args.num_filters {
+    // 	println!("{:2} Gain {:7.2} -- {:7.2}", i, lower_bounds[i*3+2], upper_bounds[i*3+2]);
+    // }
 
     (lower_bounds, upper_bounds)
 }

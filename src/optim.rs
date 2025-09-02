@@ -313,7 +313,7 @@ pub fn compute_sorted_freqs_and_adjacent_octave_spacings(x: &[f64]) -> (Vec<f64>
     let n = x.len() / 3;
     let mut freqs: Vec<f64> = Vec::with_capacity(n);
     for i in 0..n {
-        freqs.push(x[i * 3]);
+        freqs.push(10f64.powf(x[i * 3]));
     }
     freqs.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
     let spacings: Vec<f64> = if freqs.len() < 2 {

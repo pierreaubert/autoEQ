@@ -343,7 +343,7 @@ fn decode_typed_array(bdata: &str, dtype: &str) -> Result<Vec<f64>, Box<dyn Erro
 }
 
 fn is_target_trace_name(measurement: &str, curve_name: &str, candidate: &str) -> bool {
-    if measurement.eq_ignore_ascii_case("CEA2034") {
+    if measurement.eq_ignore_ascii_case("CEA2034") || measurement.eq("Estimated In-Room Response") {
         // For CEA2034 data, select the specific curve provided by the user
         // Prefer exact match; allow substring match as a fallback
         candidate == curve_name
@@ -355,6 +355,8 @@ fn is_target_trace_name(measurement: &str, curve_name: &str, candidate: &str) ->
         );
         candidate.contains("Listening Window")
             || candidate.contains("On Axis")
+            || candidate.contains("Sound Power")
+            || candidate.contains("Early Reflections")
             || candidate.contains("Estimated In-Room Response")
     }
 }

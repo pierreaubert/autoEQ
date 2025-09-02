@@ -101,7 +101,6 @@ pub fn score_loss(
             &score_data.pir,
         )
     } else {
-        // Approximate when PEQ is applied
         score::score_peq_approx(
             freq,
             &intervals,
@@ -113,8 +112,7 @@ pub fn score_loss(
         )
     };
     // Return negative preference score so minimizing improves preference.
-    // If pref_score is NaN, this will propagate NaN which is expected by tests.
-    100.0 - metrics.pref_score
+    100.0-metrics.pref_score
 }
 
 /// Compute a mixed loss based on flatness on lw and pir
