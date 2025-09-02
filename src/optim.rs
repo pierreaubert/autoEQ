@@ -73,6 +73,24 @@ struct SpacingConstraintData {
     min_spacing_oct: f64,
 }
 
+fn x2peq(freqs: &Array1::<f64>, x: &[f64], srate: f64, iir_hp_pk: bool) -> Array1::<f64> {
+    let num_filters = x.len() / 3;
+    let mut peq_spl = Array1::<f64>::zeros(freqs.len());
+    for i in 0..num_filters {
+        let freq = 10f64.powf(x[i * 3]);
+        let q = x[i * 3 + 1];
+        let gain = x[i * 3 + 2];
+        let ftype = if iir_hp_pk && i == 0 {
+            BiquadFilterType::HighpassVariableQ
+        } else {
+            BiquadFilterType::Peak
+        };
+        let filter = Biquad::new(ftype, freq, srate, q, gain);
+        peq_spl += &filter.np_log_result(&freqs);
+    }
+    peq_spl
+}
+
 /// Inequality constraint: combined response must not exceed max_db when HP+PK is enabled.
 /// Returns fc(x) = max_i (peq_spl[i] - max_db). Feasible when <= 0.
 fn constraint_ceiling(
@@ -80,23 +98,7 @@ fn constraint_ceiling(
     _grad: Option<&mut [f64]>,
     data: &mut CeilingConstraintData,
 ) -> f64 {
-    if !data.iir_hp_pk || data.freqs.is_empty() {
-        return 0.0;
-    }
-    let num_filters = x.len() / 3;
-    let mut peq_spl = Array1::<f64>::zeros(data.freqs.len());
-    for i in 0..num_filters {
-        let freq = 10f64.powf(x[i * 3]);
-        let q = x[i * 3 + 1];
-        let gain = x[i * 3 + 2];
-        let ftype = if data.iir_hp_pk && i == 0 {
-            BiquadFilterType::HighpassVariableQ
-        } else {
-            BiquadFilterType::Peak
-        };
-        let filter = Biquad::new(ftype, freq, data.srate, q, gain);
-        peq_spl += &filter.np_log_result(&data.freqs);
-    }
+    let peq_spl = x2peq(&data.freqs, x, data.srate, data.iir_hp_pk);
     // return max excess (can be negative if no violation)
     let mut max_excess = f64::NEG_INFINITY;
     for &v in peq_spl.iter() {
@@ -171,42 +173,31 @@ fn constraint_min_gain(
 
 fn parse_algorithm(name: &str) -> Algorithm {
     match name.to_lowercase().as_str() {
+	// local
         "bobyqa" => Algorithm::Bobyqa,
         "cobyla" => Algorithm::Cobyla,
+        "neldermead" => Algorithm::Neldermead,
+	// global with inequality support
+        "isres" => Algorithm::Isres,
+        "ags" => Algorithm::Ags,
+	"origdirect" => Algorithm::OrigDirect,
+	// global without inequality support
         "crs2lm" => Algorithm::Crs2Lm,
         "direct" => Algorithm::Direct,
         "directl" => Algorithm::DirectL,
         "gmlsl" => Algorithm::GMlsl,
         "gmlsllds" => Algorithm::GMlslLds,
-        "isres" => Algorithm::Isres,
-        "neldermead" => Algorithm::Neldermead,
         "sbplx" => Algorithm::Sbplx,
         "slsqp" => Algorithm::Slsqp,
         "stogo" => Algorithm::StoGo,
         "stogorand" => Algorithm::StoGoRand,
+	// default to
         _ => Algorithm::Isres,
     }
 }
 
 fn objective_function(x: &[f64], _gradient: Option<&mut [f64]>, data: &mut ObjectiveData) -> f64 {
-    let num_filters = x.len() / 3;
-    let mut peq_spl = Array1::zeros(data.target_error.len());
-
-    // Each filter is defined by 3 parameters: freq, Q, and gain.
-    for i in 0..num_filters {
-        let freq = 10f64.powf(x[i * 3]);
-        let q = x[i * 3 + 1];
-        let gain = x[i * 3 + 2];
-
-        let ftype = if data.iir_hp_pk && i == 0 {
-            BiquadFilterType::HighpassVariableQ
-        } else {
-            BiquadFilterType::Peak
-        };
-        let filter = Biquad::new(ftype, freq, data.srate, q, gain);
-        let resp = filter.np_log_result(&data.freqs);
-        peq_spl += &resp;
-    }
+    let peq_spl = x2peq(&data.freqs, x, data.srate, data.iir_hp_pk);
 
     // Compute base fit depending on loss type
     let fit = match data.loss_type {
@@ -214,7 +205,7 @@ fn objective_function(x: &[f64], _gradient: Option<&mut [f64]>, data: &mut Objec
             // Error vs inverted target
             let error = &peq_spl - &data.target_error;
             let f = flat_loss(&data.freqs, &error);
-            println!("Flat fit: {}", f);
+            // println!("Flat fit: {}", f);
             f
         }
         LossType::Mixed => {
@@ -295,21 +286,22 @@ pub fn optimize_filters(
         objective_data,
     );
 
-    optimizer.set_lower_bounds(lower_bounds).unwrap();
-    optimizer.set_upper_bounds(upper_bounds).unwrap();
+    let _ = optimizer.set_lower_bounds(lower_bounds).unwrap();
+    let _ = optimizer.set_upper_bounds(upper_bounds).unwrap();
 
     // Register inequality constraints supported by chosen algorithms.
     let _ = optimizer.add_inequality_constraint(constraint_ceiling, ceiling_data, 1e-6);
-    let _ = optimizer.add_inequality_constraint(constraint_spacing, spacing_data, 1e-9);
+    // let _ = optimizer.add_inequality_constraint(constraint_spacing, spacing_data, 1e-9);
     let _ = optimizer.add_inequality_constraint(constraint_min_gain, min_gain_data, 1e-6);
 
     let _ = optimizer.set_population(population);
     let _ = optimizer.set_maxeval(maxeval as u32);
-    optimizer.set_stopval(1e-6).unwrap();
-    optimizer.set_ftol_rel(1e-5).unwrap();
-    optimizer.set_xtol_rel(1e-5).unwrap();
+    let _ = optimizer.set_stopval(1e-4).unwrap();
+    let _ = optimizer.set_ftol_rel(1e-4).unwrap();
+    let _ = optimizer.set_xtol_rel(1e-4).unwrap();
 
     let result = optimizer.optimize(x);
+
     match result {
         Ok((status, val)) => Ok((format!("{:?}", status), val)),
         Err((e, val)) => Err((format!("{:?}", e), val)),

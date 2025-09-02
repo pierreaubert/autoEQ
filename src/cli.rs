@@ -55,7 +55,7 @@ pub struct Args {
     pub max_q: f64,
 
     /// Minimum Q factor allowed for each filter.
-    #[arg(long, default_value_t = 0.2)]
+    #[arg(long, default_value_t = 1.0)]
     pub min_q: f64,
 
     /// Minimum frequency allowed for each filter.

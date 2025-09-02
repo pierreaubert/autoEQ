@@ -28,47 +28,6 @@ use ndarray::Array1;
 use std::collections::HashMap;
 use std::error::Error;
 
-// Helper to distribute Q values across [min_q, max_q] in log-space
-fn distribute_qs(num_filters: usize, min_q: f64, max_q: f64) -> Vec<f64> {
-    if num_filters == 0 {
-        return Vec::new();
-    }
-
-    if num_filters == 1 {
-        return vec![(min_q * max_q).sqrt()];
-    }
-    let qmin = min_q.max(1e-6);
-    let qmax = max_q.max(qmin * 1.000001);
-    (0..num_filters)
-        .map(|i| {
-            let t = i as f64 / (num_filters as f64 - 1.0);
-            (qmin.ln() + t * (qmax.ln() - qmin.ln())).exp()
-        })
-        .collect()
-}
-
-// Helper to distribute initial gain magnitudes across [mag_min, max_db]
-// - If min_db > 0, mag_min = min_db (to satisfy barrier from the start)
-// - If min_db == 0, mag_min = 0.1 * max_db (small but non-zero)
-// Returned values are magnitudes (>=0), caller applies alternating signs.
-fn distribute_gain_magnitudes(num_filters: usize, min_db: f64, max_db: f64) -> Vec<f64> {
-    if num_filters == 0 {
-        return Vec::new();
-    }
-    let mag_min = if min_db > 0.0 { min_db } else { 0.1 * max_db };
-    if num_filters == 1 {
-        return vec![(mag_min + max_db) * 0.5];
-    }
-    (0..num_filters)
-        .map(|i| {
-            let t = i as f64 / (num_filters as f64 - 1.0);
-            mag_min + t * (max_db - mag_min)
-        })
-        .collect()
-}
-
-// New helper functions
-
 async fn load_input_curve(
     args: &autoeq::cli::Args,
 ) -> Result<(Curve, Option<HashMap<String, Curve>>), Box<dyn Error>> {
@@ -111,8 +70,51 @@ fn build_target_curve(
         );
         read::interpolate(&input_curve.freq, &target_curve.freq, &target_curve.spl)
     } else {
-        println!("* No target curve provided, using a flat 0 dB target.");
-        Array1::zeros(input_curve.spl.len())
+        match args.curve_name.as_str() {
+            "Listening Window" => {
+                // input_curve.freq is in Hz; use log10(Hz) to form a ramp from 1k to 20k
+                let log_f_min = 1000.0_f64.log10();
+                let log_f_max = 20000.0_f64.log10();
+                let denom = log_f_max - log_f_min;
+                Array1::from_shape_fn(input_curve.freq.len(), |i| {
+                    let f_hz = input_curve.freq[i].max(1e-12);
+                    let fl = f_hz.log10();
+                    if fl < log_f_min {
+                        0.0
+                    } else if fl >= log_f_max {
+                        -0.5
+                    } else {
+                        let t = (fl - log_f_min) / denom; // 0..1 across 1k..20k in log10 domain
+                        -0.5 * t
+                    }
+                })
+            }
+            "Sound Power" | "Early Reflections" | "Estimated In-Room Response" => {
+                // 0 dB below 100 Hz; from 100..20k use straight line in log2(f) with slope
+                // equal to the curve's slope (dB/octave) between 100..10k.
+                let slope = autoeq::loss::curve_slope_per_octave_in_range(input_curve, 100.0, 10000.0)
+                    .unwrap_or(-1.2)-0.2;
+		println!("* Curve slope = {:.3} dB/octave", slope);
+                let lo = 100.0_f64;
+                let hi = 20000.0_f64;
+                let hi_val = slope * (hi / lo).log2();
+		println!("* Target curve is {} slope {:.2} db/oct", args.curve_name, slope);
+                Array1::from_shape_fn(input_curve.freq.len(), |i| {
+                    let f = input_curve.freq[i].max(1e-12);
+                    if f < lo {
+                        0.0
+                    } else if f >= hi {
+                        hi_val
+                    } else {
+                        slope * (f / lo).log2()
+                    }
+                })
+            }
+            _ => {
+		println!("* No target curve provided, using a flat 0 dB target.");
+		Array1::zeros(input_curve.spl.len())
+	    }
+        }
     };
 
     let mut inverted_curve = base_target - input_curve.spl.clone();
@@ -171,46 +173,65 @@ fn setup_bounds(args: &autoeq::cli::Args) -> (Vec<f64>, Vec<f64>) {
     let mut lower_bounds = Vec::with_capacity(num_params);
     let mut upper_bounds = Vec::with_capacity(num_params);
 
+    let spacing = 1.0;
     let gain_lower = -6.0 * args.max_db;
-    let q_lower = args.min_q.max(1.0e-6);
-    for _ in 0..args.num_filters {
-        lower_bounds.extend_from_slice(&[args.min_freq.log10(), q_lower, gain_lower]);
-        upper_bounds.extend_from_slice(&[args.max_freq.log10(), args.max_q, args.max_db]);
+    let q_lower = args.min_q.max(0.1);
+    let range = (args.max_freq.log10()-args.min_freq.log10()) / (args.num_filters as f64);
+    for i in 0..args.num_filters {
+	// start with a freq in range
+	let f = args.min_freq.log10() + (i as f64) * range;
+	// compute a low and high bounds
+	let f_low : f64;
+	let f_high : f64;
+	if i == 0 {
+	    // first one is bounded by min_freq and into the next band
+	    f_low = args.min_freq.log10();
+	    f_high = (f + spacing *range).min(args.max_freq.log10());
+	} else if i == args.num_filters - 1 {
+	    // last one same patter
+	    f_low =  (f - spacing *range).max(args.min_freq.log10());
+	    f_high = args.max_freq.log10();
+	} else {
+	    f_low  = (f - spacing *range).max(args.min_freq.log10());
+	    f_high = (f + spacing *range).min(args.max_freq.log10());
+	}
+        lower_bounds.extend_from_slice(&[f_low, q_lower, gain_lower]);
+        upper_bounds.extend_from_slice(&[f_high, args.max_q, args.max_db]);
     }
 
     if args.iir_hp_pk {
         lower_bounds[0] = 20.0_f64.log10();
         upper_bounds[0] = 120.0_f64.log10();
         lower_bounds[1] = 1.0;
-        upper_bounds[1] = 1.5;
+        upper_bounds[1] = 1.5; // should be computed as a function of max_db
         lower_bounds[2] = 0.0;
         upper_bounds[2] = 0.0;
+    }
+
+    for i in 0..args.num_filters {
+	println!("{:2} Freq {:7.2} -- {:7.2}", i, 10f64.powf(lower_bounds[i*3]), 10f64.powf(upper_bounds[i*3]));
+    }
+
+    for i in 0..args.num_filters {
+	println!("{:2} Q    {:7.2} -- {:7.2}", i, lower_bounds[i*3+1], upper_bounds[i*3+1]);
+    }
+
+    for i in 0..args.num_filters {
+	println!("{:2} Gain {:7.2} -- {:7.2}", i, lower_bounds[i*3+2], upper_bounds[i*3+2]);
     }
 
     (lower_bounds, upper_bounds)
 }
 
 /// Build an initial guess vector [f, Q, g] for each filter
-fn initial_guess(args: &autoeq::cli::Args) -> Vec<f64> {
+fn initial_guess(args: &autoeq::cli::Args, lower_bounds: &Vec<f64>, upper_bounds: &Vec<f64>) -> Vec<f64> {
     let mut x = vec![];
-    let log_min = args.min_freq.log10();
-    let log_max = args.max_freq.log10();
-    let log_range = log_max - log_min;
-
-    let q_vec = distribute_qs(args.num_filters, args.min_q, args.max_q / 2.0);
-    let g_mags = distribute_gain_magnitudes(args.num_filters, args.min_db, args.max_db / 2.0);
     for i in 0..args.num_filters {
-        let freq = log_min + (i as f64 + 0.5) * log_range / args.num_filters as f64;
-        let q = q_vec[i];
-        let sign = if i % 2 == 0 { 1.0 } else { -1.0 };
-        let gain = sign * g_mags[i];
+        let freq = lower_bounds[i*3].min(args.max_freq.log10());
+        let q = (upper_bounds[i*3+1]*lower_bounds[i*3+1]).sqrt();
+        let sign = if i % 2 == 0 { 0.5 } else { -0.5 };
+        let gain = sign * upper_bounds[i*3+2].max(args.min_db);
         x.extend_from_slice(&[freq, q, gain]);
-    }
-
-    if args.iir_hp_pk {
-        x[0] = 80.0_f64.log10();
-        x[1] = 1.1;
-        x[2] = 0.0;
     }
 
     x
@@ -245,7 +266,9 @@ fn perform_optimization(
 ) -> Result<Vec<f64>, Box<dyn Error>> {
     let (lower_bounds, upper_bounds) = setup_bounds(args);
 
-    let mut x = initial_guess(args);
+    let mut x = initial_guess(args, &lower_bounds, &upper_bounds);
+
+    println!("{:?}", x);
 
     iir::peq_print(&x, args.iir_hp_pk);
 
@@ -326,7 +349,6 @@ async fn plot_results(
             spl: smoothed.clone(),
         });
 
-        let freqs = &input_curve.freq.map(|f| 10f64.powf(*f) as f64);
         let args_cloned = args.clone();
         let input_curve_cloned = input_curve.clone();
         let smoothed_curve_cloned = smoothed_curve_opt.as_ref().map(|c| c.clone());
@@ -421,10 +443,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
 #[cfg(test)]
 mod tests {
     use super::{
-        distribute_gain_magnitudes, distribute_qs, initial_guess, print_freq_spacing, setup_bounds,
+        build_target_curve, distribute_gain_magnitudes, distribute_qs, initial_guess,
+        print_freq_spacing, setup_bounds,
     };
     use autoeq::cli::Args;
     use clap::Parser;
+    use ndarray::Array1;
 
     #[test]
     fn q_distribution_within_bounds_and_spread() {
@@ -505,18 +529,18 @@ mod tests {
         let gain_lower = -6.0 * args.max_db;
         let q_lower = args.min_q.max(1.0e-6);
         let expected_lb = vec![
-            args.min_freq,
+            args.min_freq.log10(),
             q_lower,
             gain_lower,
-            args.min_freq,
+            args.min_freq.log10(),
             q_lower,
             gain_lower,
         ];
         let expected_ub = vec![
-            args.max_freq,
+            args.max_freq.log10(),
             args.max_q,
             args.max_db,
-            args.max_freq,
+            args.max_freq.log10(),
             args.max_q,
             args.max_db,
         ];
@@ -540,8 +564,8 @@ mod tests {
         assert_eq!(ub.len(), args.num_filters * 3);
 
         // First triplet should be overridden for HP
-        assert!((lb[0] - 20.0).abs() < 1e-12);
-        assert!((ub[0] - 120.0).abs() < 1e-12);
+        assert!((lb[0] - 20.0_f64.log10()).abs() < 1e-12);
+        assert!((ub[0] - 120.0_f64.log10()).abs() < 1e-12);
         assert!((lb[1] - 1.0).abs() < 1e-12);
         assert!((ub[1] - 1.5).abs() < 1e-12);
         assert!((lb[2] - 0.0).abs() < 1e-12);
@@ -550,10 +574,10 @@ mod tests {
         // Second filter should follow the general pattern
         let gain_lower = -6.0 * args.max_db;
         let q_lower = args.min_q.max(1.0e-6);
-        assert!((lb[3] - args.min_freq).abs() < 1e-12);
+        assert!((lb[3] - args.min_freq.log10()).abs() < 1e-12);
         assert!((lb[4] - q_lower).abs() < 1e-12);
         assert!((lb[5] - gain_lower).abs() < 1e-12);
-        assert!((ub[3] - args.max_freq).abs() < 1e-12);
+        assert!((ub[3] - args.max_freq.log10()).abs() < 1e-12);
         assert!((ub[4] - args.max_q).abs() < 1e-12);
         assert!((ub[5] - args.max_db).abs() < 1e-12);
     }
@@ -591,7 +615,7 @@ mod tests {
         args.iir_hp_pk = true;
         let x = initial_guess(&args);
         assert!(x.len() >= 3);
-        assert!((x[0] - 80.0).abs() < 1e-12);
+        assert!((x[0] - 80.0_f64.log10()).abs() < 1e-12);
         assert!((x[1] - 1.1).abs() < 1e-12);
         assert!((x[2] - 0.0).abs() < 1e-12);
     }
@@ -610,5 +634,65 @@ mod tests {
 
         let x = initial_guess(&args);
         print_freq_spacing(&x, &args, "test");
+    }
+
+    #[test]
+    fn listening_window_target_profile() {
+        let mut args = Args::parse_from(["autoeq-test"]);
+        // Ensure we hit the custom target branch and avoid clamping negatives
+        args.curve_name = "Listening Window".to_string();
+        args.iir_hp_pk = true;
+
+        let freqs = Array1::from_vec(vec![500.0_f64, 1000.0_f64, 20000.0_f64]);
+        let spl = Array1::<f64>::zeros(freqs.len());
+        let curve = autoeq::Curve { freq: freqs, spl };
+
+        let (inverted_curve, smoothed) = build_target_curve(&args, &curve);
+        assert!(smoothed.is_none());
+        // Since SPL is zero, inverted_curve == base_target
+        assert!((inverted_curve[0] - 0.0).abs() < 1e-12);
+        assert!((inverted_curve[1] - 0.0).abs() < 1e-12);
+        assert!((inverted_curve[2] - (-0.5)).abs() < 1e-12);
+    }
+
+    #[test]
+    fn early_reflections_target_profile() {
+        let mut args = Args::parse_from(["autoeq-test"]);
+        args.curve_name = "Early Reflections".to_string();
+        // Avoid positive-only clamping to preserve negatives in inverted curve
+        args.iir_hp_pk = true;
+
+        // Synthetic curve: y = s * log2(f/100) + b with known slope s and intercept b
+        let s = 0.5_f64; // dB per octave
+        let b = 1.0_f64; // dB offset
+        let freqs = Array1::from_vec(vec![50.0, 100.0, 400.0, 10000.0, 20000.0]);
+        let spl = freqs.mapv(|f: f64| s * (f / 100.0_f64).log2() + b);
+        let curve = autoeq::Curve {
+            freq: freqs.clone(),
+            spl: spl.clone(),
+        };
+
+        let (inv, smoothed) = build_target_curve(&args, &curve);
+        assert!(smoothed.is_none());
+
+        // Target behavior:
+        // - below 100 Hz: 0 dB
+        // - 100..20k: s * log2(f/100)
+        // Inverted curve = target - y = s*log2(f/100) - (s*log2(f/100) + b) = -b in-range
+        // At 50 Hz (below 100): inverted = 0 - (s*log2(0.5)+b) = -(-s + b) = s - b
+        let expected_below = s - b; // 0.5 - 1.0 = -0.5
+        assert!((inv[0] - expected_below).abs() < 1e-9, "below 100Hz");
+
+        // Exactly 100 Hz: in-range start -> -b
+        assert!((inv[1] + b).abs() < 1e-9, "at 100Hz");
+
+        // 400 Hz: still in range -> -b
+        assert!((inv[2] + b).abs() < 1e-9, "at 400Hz");
+
+        // 10 kHz: within slope-fit range -> -b
+        assert!((inv[3] + b).abs() < 1e-9, "at 10kHz");
+
+        // 20 kHz: end of line -> -b
+        assert!((inv[4] + b).abs() < 1e-9, "at 20kHz");
     }
 }

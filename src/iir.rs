@@ -449,7 +449,7 @@ mod peq_response_tests {
     #[test]
     fn one_peak_is_finite() {
         let freqs = array![100.0, 1000.0, 10000.0];
-        let x = vec![1000.0, 1.0, 6.0];
+        let x = vec![1000.0_f64.log10(), 1.0, 6.0];
         let peq = compute_peq_response(&freqs, &x, 48_000.0, false);
         for v in peq.iter() {
             assert!(v.is_finite());
@@ -488,6 +488,7 @@ pub fn build_sorted_filters(x: &[f64], iir_hp_pk: bool) -> Vec<FilterRow> {
             .partial_cmp(&b.freq)
             .unwrap_or(std::cmp::Ordering::Equal)
     });
+
     // If enabled, mark the lowest-frequency filter as Highpass for display purposes
     if iir_hp_pk && !rows.is_empty() {
         rows[0].kind = "HPQ";
@@ -523,9 +524,9 @@ mod peq_print_tests {
     #[test]
     fn peq_print_does_not_panic() {
         let x = vec![
-            1000.0, 1.0, 2.0, // Peak
-            80.0, 0.707, 0.0, // Candidate HP when iir_hp_pk=true
-            5000.0, 2.0, -3.0, // Peak
+            1000.0_f64.log10(), 1.0, 2.0, // Peak
+            80.0_f64.log10(), 0.707, 0.0,  // Candidate HP when iir_hp_pk=true
+            5000.0_f64.log10(), 2.0, -3.0, // Peak
         ];
         // Ensure helper runs without panicking (output captured by test harness)
         peq_print(&x, true);
@@ -542,13 +543,21 @@ mod filter_tests {
 
     #[test]
     fn sorts_by_freq_and_sets_type() {
-        let x = vec![1000.0, 1.0, 0.0, 100.0, 2.0, 1.0, 500.0, 0.5, -1.0];
+        let x = vec![
+            1000.0_f64.log10(), 1.0, 0.0, // Peak at 1k
+            100.0_f64.log10(), 2.0, 1.0,  // Will become HPQ (lowest freq)
+            500.0_f64.log10(), 0.5, -1.0, // Peak at 500
+        ];
         let rows = build_sorted_filters(&x, true);
         let freqs: Vec<f64> = rows.iter().map(|r| r.freq).collect();
-        assert_eq!(freqs, vec![100.0, 500.0, 1000.0]);
-        assert!(rows[0].kind == "HighpassVariableQ");
-        assert!(rows.iter().skip(1).all(|r| r.kind == "Peak"));
-        assert!((rows[0].q - 2.0).abs() < 1e-12 && (rows[0].gain - 1.0).abs() < 1e-12);
+        let expected = [100.0, 500.0, 1000.0];
+        for (i, f) in freqs.iter().enumerate() {
+            assert!((f - expected[i]).abs() < 1e-9, "freq idx {}: got {}, expected {}", i, f, expected[i]);
+        }
+        assert!(rows[0].kind == "HPQ");
+        assert!(rows.iter().skip(1).all(|r| r.kind == "PK"));
+        // Lowest-frequency row becomes HPQ and its gain is forced to 0.0
+        assert!((rows[0].q - 2.0).abs() < 1e-12 && (rows[0].gain - 0.0).abs() < 1e-12);
         assert!((rows[1].q - 0.5).abs() < 1e-12 && (rows[1].gain + 1.0).abs() < 1e-12);
         assert!((rows[2].q - 1.0).abs() < 1e-12 && (rows[2].gain - 0.0).abs() < 1e-12);
     }
