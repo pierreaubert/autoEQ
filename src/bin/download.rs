@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 use std::{error::Error, io};
 
+use autoeq::read;
 use reqwest::Client;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
@@ -45,7 +46,7 @@ async fn process_speaker(client: &Client, speaker: &str) -> Result<(), Box<dyn E
 
     // 3. if CEA2034 present, download CEA2034 and Estimated In-Room Response and metadata
     if measurements.iter().any(|m| m == "CEA2034") {
-        let dir = data_dir_for(speaker);
+        let dir = read::data_dir_for(speaker);
         fs::create_dir_all(&dir).await?;
 
         // metadata
@@ -53,13 +54,10 @@ async fn process_speaker(client: &Client, speaker: &str) -> Result<(), Box<dyn E
         let metadata: Value = fetch_json(client, &metadata_url).await?;
         write_json(&dir.join("metadata.json"), &metadata).await?;
 
-        // CEA2034
-        let cea = fetch_measurement(client, speaker, version, "CEA2034").await?;
-        write_json(&dir.join("CEA2034.json"), &cea).await?;
-
-        // Estimated In-Room Response
-        let eirr = fetch_measurement(client, speaker, version, "Estimated In-Room Response").await?;
-        write_json(&dir.join("Estimated In-Room Response.json"), &eirr).await?;
+        // Measurements: leverage shared cache-aware fetcher, which also saves to disk
+        let _ = read::fetch_measurement_plot_data(speaker, version, "CEA2034").await?;
+        let _ = read::fetch_measurement_plot_data(speaker, version, "Estimated In-Room Response")
+            .await?;
 
         println!(
             "Saved CEA2034, Estimated In-Room Response and metadata for '{}' (version '{}')",
@@ -70,26 +68,13 @@ async fn process_speaker(client: &Client, speaker: &str) -> Result<(), Box<dyn E
     Ok(())
 }
 
-async fn fetch_measurement(
-    client: &Client,
-    speaker: &str,
-    version: &str,
-    measurement: &str,
-) -> Result<Value, Box<dyn Error>> {
-    let enc_speaker = urlencoding::encode(speaker);
-    let enc_version = urlencoding::encode(version);
-    let enc_measure = urlencoding::encode(measurement);
-    let url = format!(
-        "{}/v1/speaker/{}/version/{}/measurements/{}",
-        BASE_URL, enc_speaker, enc_version, enc_measure
-    );
-    fetch_json(client, &url).await
-}
-
 async fn fetch_json<T: DeserializeOwned>(client: &Client, url: &str) -> Result<T, Box<dyn Error>> {
     let resp = client.get(url).send().await?;
     if !resp.status().is_success() {
-        let err = io::Error::new(io::ErrorKind::Other, format!("HTTP {} for {}", resp.status(), url));
+        let err = io::Error::new(
+            io::ErrorKind::Other,
+            format!("HTTP {} for {}", resp.status(), url),
+        );
         return Err(Box::new(err));
     }
     let val = resp.json::<T>().await?;
@@ -102,35 +87,18 @@ async fn write_json(path: &PathBuf, value: &Value) -> Result<(), Box<dyn Error>>
     Ok(())
 }
 
-fn data_dir_for(speaker: &str) -> PathBuf {
-    let mut p = PathBuf::from("data");
-    p.push(sanitize_dir_component(speaker));
-    p
-}
-
-fn sanitize_dir_component(name: &str) -> String {
-    let mut s = String::with_capacity(name.len());
-    for ch in name.chars() {
-        match ch {
-            '/' | '\\' | ':' | '|' | '?' | '*' => s.push('_'),
-            _ => s.push(ch),
-        }
-    }
-    s.trim().to_string()
-}
-
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use autoeq::read;
 
     #[test]
     fn sanitize_replaces_forbidden() {
-        assert_eq!(sanitize_dir_component("A/B\\C|D?E*F: G"), "A_B_C_D_E_F_ G");
+        assert_eq!(read::sanitize_dir_name("A/B\\C|D?E*F: G"), "A_B_C_D_E_F_ G");
     }
 
     #[test]
     fn data_dir_builds_expected_path() {
-        let p = data_dir_for("KEF LS50 Meta");
+        let p = read::data_dir_for("KEF LS50 Meta");
         assert!(p.ends_with("data/KEF LS50 Meta"));
     }
 }

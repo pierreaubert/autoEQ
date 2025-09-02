@@ -48,6 +48,8 @@ pub mod plot;
 pub mod read;
 /// Audio quality scoring functions
 pub mod score;
+/// Shared workflow steps used by binaries
+pub mod workflow;
 
 // Re-export commonly used items
 pub use cli::*;
@@ -57,3 +59,4 @@ pub use optim::*;
 pub use plot::*;
 pub use read::*;
 pub use score::*;
+pub use workflow::*;

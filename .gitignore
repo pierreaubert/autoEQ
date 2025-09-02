@@ -3,6 +3,7 @@
 plot*.*
 *~
 .*~
+*.csv
 src/unused.rs
 
 

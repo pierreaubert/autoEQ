@@ -112,7 +112,7 @@ pub fn score_loss(
         )
     };
     // Return negative preference score so minimizing improves preference.
-    100.0-metrics.pref_score
+    100.0 - metrics.pref_score
 }
 
 /// Compute a mixed loss based on flatness on lw and pir

@@ -73,7 +73,7 @@ struct SpacingConstraintData {
     min_spacing_oct: f64,
 }
 
-fn x2peq(freqs: &Array1::<f64>, x: &[f64], srate: f64, iir_hp_pk: bool) -> Array1::<f64> {
+fn x2peq(freqs: &Array1<f64>, x: &[f64], srate: f64, iir_hp_pk: bool) -> Array1<f64> {
     let num_filters = x.len() / 3;
     let mut peq_spl = Array1::<f64>::zeros(freqs.len());
     for i in 0..num_filters {
@@ -173,15 +173,15 @@ fn constraint_min_gain(
 
 fn parse_algorithm(name: &str) -> Algorithm {
     match name.to_lowercase().as_str() {
-	// local
+        // local
         "bobyqa" => Algorithm::Bobyqa,
         "cobyla" => Algorithm::Cobyla,
         "neldermead" => Algorithm::Neldermead,
-	// global with inequality support
+        // global with inequality support
         "isres" => Algorithm::Isres,
         "ags" => Algorithm::Ags,
-	"origdirect" => Algorithm::OrigDirect,
-	// global without inequality support
+        "origdirect" => Algorithm::OrigDirect,
+        // global without inequality support
         "crs2lm" => Algorithm::Crs2Lm,
         "direct" => Algorithm::Direct,
         "directl" => Algorithm::DirectL,
@@ -191,7 +191,7 @@ fn parse_algorithm(name: &str) -> Algorithm {
         "slsqp" => Algorithm::Slsqp,
         "stogo" => Algorithm::StoGo,
         "stogorand" => Algorithm::StoGoRand,
-	// default to
+        // default to
         _ => Algorithm::Isres,
     }
 }
@@ -334,10 +334,19 @@ mod spacing_diag_tests {
     #[test]
     fn adjacent_octave_spacings_basic() {
         // x: [f,q,g, f,q,g, f,q,g]
-        let x = [100f64.log10(), 1.0, 0.0, 200f64.log10(), 1.0, 0.0, 400f64.log10(), 1.0, 0.0];
+        let x = [
+            100f64.log10(),
+            1.0,
+            0.0,
+            200f64.log10(),
+            1.0,
+            0.0,
+            400f64.log10(),
+            1.0,
+            0.0,
+        ];
         let (freqs, spacings) = compute_sorted_freqs_and_adjacent_octave_spacings(&x);
         assert!((spacings[0] - 1.0).abs() < 1e-12);
         assert!((spacings[1] - 1.0).abs() < 1e-12);
     }
-
 }

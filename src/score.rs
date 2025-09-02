@@ -271,10 +271,10 @@ pub fn octave(count: usize) -> Vec<(f64, f64, f64)> {
     }
     centers.push(reference);
     for i in 1..=o_iter {
-	let center = reference * p.powi(i);
-	if (center / p_band) <= 20000.0 {
+        let center = reference * p.powi(i);
+        if (center / p_band) <= 20000.0 {
             centers.push(reference * p.powi(i));
-	}
+        }
     }
     centers
         .into_iter()

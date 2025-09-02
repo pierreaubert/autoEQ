@@ -24,8 +24,8 @@ use ndarray::Array1;
 use reqwest;
 use serde::Deserialize;
 use serde_json::Value;
-use urlencoding;
 use tokio::fs;
+use urlencoding;
 
 use crate::Curve;
 use crate::score;
@@ -36,9 +36,19 @@ struct CsvRecord {
     spl: f64,
 }
 
+/// Return the cache directory for a given speaker under `data/` using sanitized name
+pub fn data_dir_for(speaker: &str) -> PathBuf {
+    let mut p = PathBuf::from("data");
+    p.push(sanitize_dir_name(speaker));
+    p
+}
+
 // --- Helpers for caching and JSON normalization ---
 
-fn sanitize_dir_name(name: &str) -> String {
+/// Sanitize a single path component by replacing non-alphanumeric characters
+/// (except space, dash and underscore) with underscores. This is used to map
+/// user-provided speaker names to safe directory names inside `data/`.
+pub fn sanitize_dir_name(name: &str) -> String {
     // Keep alnum, space, dash, underscore; replace others with underscore.
     let mut out = String::with_capacity(name.len());
     for ch in name.chars() {
@@ -52,7 +62,10 @@ fn sanitize_dir_name(name: &str) -> String {
     out.trim().trim_matches('_').to_string()
 }
 
-fn measurement_filename(measurement: &str) -> String {
+/// Return the cache filename for a measurement, neutralizing any path
+/// separators. For example, "Estimated In-Room Response" becomes
+/// "Estimated In-Room Response.json" and "A/B" becomes "A-B.json".
+pub fn measurement_filename(measurement: &str) -> String {
     // Only neutralize path separators; keep the name otherwise to match saved files.
     let safe = measurement.replace(['/', '\\'], "-");
     format!("{}.json", safe)
@@ -602,11 +615,7 @@ mod tests {
     fn fallback_for_non_cea_measurements() {
         assert!(is_target_trace_name("Other", "ignored", "On Axis"));
         assert!(!is_target_trace_name("Other", "ignored", "SPL something"));
-        assert!(!is_target_trace_name(
-            "Other",
-            "ignored",
-            "PIR"
-        ));
+        assert!(!is_target_trace_name("Other", "ignored", "PIR"));
     }
 
     #[test]
