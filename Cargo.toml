@@ -18,6 +18,10 @@ path = "src/bin/autoeq.rs"
 name = "download"
 path = "src/bin/download.rs"
 
+[[bin]]
+name = "bench"
+path = "src/bin/benchmark.rs"
+
 [dependencies]
 base64 = "0.21"
 blas-src = { version = "0.8", features = ["accelerate"] }

@@ -512,14 +512,45 @@ pub fn extract_cea2034_curves(
                 );
             }
             Err(e) => {
-                eprintln!("⚠️  Could not extract curve '{}': {}", name, e);
+                let available = collect_trace_names(plot_data);
+                return Err(format!(
+                    "Could not extract curve '{}' for measurement '{}': {}. Available traces: {:?}",
+                    name, measurement, e, available
+                )
+                .into());
             }
         }
     }
 
-    let lw = &curves.get("Listening Window").unwrap().spl;
-    let er = &curves.get("Early Reflections").unwrap().spl;
-    let sp = &curves.get("Sound Power").unwrap().spl;
+    // Ensure required curves exist for PIR computation
+    let lw_curve = curves
+        .get("Listening Window")
+        .ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Missing 'Listening Window' curve after extraction",
+            )
+        })?;
+    let er_curve = curves
+        .get("Early Reflections")
+        .ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Missing 'Early Reflections' curve after extraction",
+            )
+        })?;
+    let sp_curve = curves
+        .get("Sound Power")
+        .ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Missing 'Sound Power' curve after extraction",
+            )
+        })?;
+
+    let lw = &lw_curve.spl;
+    let er = &er_curve.spl;
+    let sp = &sp_curve.spl;
     let pir = score::compute_pir_from_lw_er_sp(lw, er, sp);
     curves.insert(
         "Estimated In-Room Response".to_string(),
@@ -535,10 +566,11 @@ pub fn extract_cea2034_curves(
 #[cfg(test)]
 mod tests {
     use super::{
-        collect_trace_names, extract_curve_by_name, is_target_trace_name,
+        collect_trace_names, extract_cea2034_curves, extract_curve_by_name, is_target_trace_name,
         normalize_plotly_json_from_str,
     };
     use serde_json::json;
+    use ndarray::Array1;
 
     fn le_f64_bytes(vals: &[f64]) -> Vec<u8> {
         let mut out = Vec::with_capacity(vals.len() * 8);
@@ -668,6 +700,80 @@ mod tests {
         let curve = extract_curve_by_name(&plot_data, "CEA2034", "Listening Window").unwrap();
         assert_eq!(curve.freq.len(), 2);
         assert!((curve.freq[0] - 200.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn extract_cea2034_curves_errors_when_curve_missing() {
+        // Only provide Listening Window trace; others are missing -> should error on first missing (On Axis)
+        let xf = [100.0_f64, 1000.0_f64];
+        let yf = [80.0_f64, 85.0_f64];
+        let x_b64 = base64_encode(&le_f64_bytes(&xf));
+        let y_b64 = base64_encode(&le_f64_bytes(&yf));
+
+        let plot_data = json!({
+            "data": [
+                {
+                    "name": "Listening Window",
+                    "x": {"dtype": "f8", "bdata": x_b64},
+                    "y": {"dtype": "f8", "bdata": y_b64}
+                }
+            ]
+        });
+
+        let target_freq = Array1::from(vec![100.0, 500.0, 1000.0]);
+        let res = extract_cea2034_curves(&plot_data, "CEA2034", &target_freq);
+        assert!(res.is_err());
+        let err = format!("{}", res.unwrap_err());
+        assert!(err.contains("Could not extract curve") || err.contains("Failed to extract"));
+    }
+
+    #[test]
+    fn extract_cea2034_curves_success_and_contains_pir() {
+        // Provide all required curves so extraction succeeds and PIR is computed
+        let xf = [100.0_f64, 1000.0_f64, 2000.0_f64];
+        let on = [80.0_f64, 82.0_f64, 84.0_f64];
+        let lw = [79.0_f64, 81.0_f64, 83.0_f64];
+        let er = [78.0_f64, 80.0_f64, 82.0_f64];
+        let sp = [77.0_f64, 79.0_f64, 81.0_f64];
+        let er_di = [1.0_f64, 1.0_f64, 1.0_f64];
+        let sp_di = [2.0_f64, 2.0_f64, 2.0_f64];
+
+        let x_b64 = base64_encode(&le_f64_bytes(&xf));
+        let on_b64 = base64_encode(&le_f64_bytes(&on));
+        let lw_b64 = base64_encode(&le_f64_bytes(&lw));
+        let er_b64 = base64_encode(&le_f64_bytes(&er));
+        let sp_b64 = base64_encode(&le_f64_bytes(&sp));
+        let er_di_b64 = base64_encode(&le_f64_bytes(&er_di));
+        let sp_di_b64 = base64_encode(&le_f64_bytes(&sp_di));
+
+        let plot_data = json!({
+            "data": [
+                {"name": "On Axis",              "x": {"dtype": "f8", "bdata": x_b64}, "y": {"dtype": "f8", "bdata": on_b64}},
+                {"name": "Listening Window",      "x": {"dtype": "f8", "bdata": x_b64}, "y": {"dtype": "f8", "bdata": lw_b64}},
+                {"name": "Early Reflections",     "x": {"dtype": "f8", "bdata": x_b64}, "y": {"dtype": "f8", "bdata": er_b64}},
+                {"name": "Sound Power",           "x": {"dtype": "f8", "bdata": x_b64}, "y": {"dtype": "f8", "bdata": sp_b64}},
+                {"name": "Early Reflections DI",  "x": {"dtype": "f8", "bdata": x_b64}, "y": {"dtype": "f8", "bdata": er_di_b64}},
+                {"name": "Sound Power DI",        "x": {"dtype": "f8", "bdata": x_b64}, "y": {"dtype": "f8", "bdata": sp_di_b64}}
+            ]
+        });
+
+        let target_freq = Array1::from(vec![100.0, 250.0, 1000.0, 1500.0, 2000.0]);
+        let curves = extract_cea2034_curves(&plot_data, "CEA2034", &target_freq).unwrap();
+
+        // Required keys + PIR
+        for key in [
+            "On Axis",
+            "Listening Window",
+            "Early Reflections",
+            "Sound Power",
+            "Early Reflections DI",
+            "Sound Power DI",
+            "Estimated In-Room Response",
+        ] {
+            assert!(curves.contains_key(key), "missing key: {}", key);
+            assert_eq!(curves[key].freq.len(), target_freq.len());
+            assert_eq!(curves[key].spl.len(), target_freq.len());
+        }
     }
 
     #[test]
