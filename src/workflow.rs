@@ -143,6 +143,10 @@ pub fn setup_objective_data(
         iir_hp_pk: args.iir_hp_pk,
         loss_type: args.loss,
         score_data: score_data_opt,
+        // Penalties default to zero; configured per algorithm in optimize_filters
+        penalty_w_ceiling: 0.0,
+        penalty_w_spacing: 0.0,
+        penalty_w_mingain: 0.0,
     };
 
     (objective_data, use_cea)
