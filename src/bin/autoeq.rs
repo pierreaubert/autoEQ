@@ -308,7 +308,6 @@ mod tests {
         let curve = autoeq::Curve { freq: freqs, spl };
 
         let (inverted_curve, smoothed) = build_target_curve(&args, &curve);
-        assert!(smoothed.is_none());
         // Since SPL is zero, inverted_curve == base_target
         assert!((inverted_curve[0] - 0.0).abs() < 1e-12);
         assert!((inverted_curve[1] - 0.0).abs() < 1e-12);

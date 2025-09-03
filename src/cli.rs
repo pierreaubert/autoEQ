@@ -25,7 +25,7 @@ use std::path::PathBuf;
 #[command(author, about, long_about = None)]
 pub struct Args {
     /// Number of IIR filters to use for optimization.
-    #[arg(short = 'n', long, default_value_t = 6)]
+    #[arg(short = 'n', long, default_value_t = 7)]
     pub num_filters: usize,
 
     /// Path to the input curve CSV file (format: frequency,spl).
@@ -43,7 +43,7 @@ pub struct Args {
     pub sample_rate: f64,
 
     /// Maximum absolute dB gain allowed for each filter.
-    #[arg(long, default_value_t = 6.0, value_parser = parse_nonnegative_f64)]
+    #[arg(long, default_value_t = 3.0, value_parser = parse_nonnegative_f64)]
     pub max_db: f64,
 
     /// Minimum absolute dB gain allowed for each filter.
@@ -51,7 +51,7 @@ pub struct Args {
     pub min_db: f64,
 
     /// Maximum Q factor allowed for each filter.
-    #[arg(long, default_value_t = 6.0)]
+    #[arg(long, default_value_t = 3.0)]
     pub max_q: f64,
 
     /// Minimum Q factor allowed for each filter.
@@ -141,9 +141,9 @@ mod tests {
     fn parse_defaults() {
         // Simulate no CLI args: use default values
         let args = Args::parse_from(["autoeq-test"]);
-        assert_eq!(args.num_filters, 6);
+        assert_eq!(args.num_filters, 7);
         assert_eq!(args.sample_rate, 48000.0);
-        assert_eq!(args.maxeval, 10_000);
+        assert_eq!(args.maxeval, 200_000);
         assert_eq!(args.curve_name, "Listening Window");
         assert!(!args.iir_hp_pk);
     }
