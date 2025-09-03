@@ -59,11 +59,11 @@ pub struct Args {
     pub min_q: f64,
 
     /// Minimum frequency allowed for each filter.
-    #[arg(long, default_value_t = 20.0)]
+    #[arg(long, default_value_t = 60.0)]
     pub min_freq: f64,
 
     /// Maximum frequency allowed for each filter.
-    #[arg(long, default_value_t = 20000.0)]
+    #[arg(long, default_value_t = 16000.0)]
     pub max_freq: f64,
 
     /// Output PNG file for plotting results.
@@ -92,11 +92,11 @@ pub struct Args {
     pub algo: String,
 
     /// Optional population size for population-based algorithms (e.g., ISRES)
-    #[arg(long, default_value_t = 3_000)]
+    #[arg(long, default_value_t = 30_000)]
     pub population: usize,
 
     /// Maximum number of evaluations for the optimizer
-    #[arg(long, default_value_t = 10_000)]
+    #[arg(long, default_value_t = 200_000)]
     pub maxeval: usize,
 
     /// Whether to run a local refinement after global optimization
@@ -116,11 +116,11 @@ pub struct Args {
     pub spacing_weight: f64,
 
     /// Enable smoothing (regularization) of the inverted target curve
-    #[arg(long, default_value_t = false)]
+    #[arg(long, default_value_t = true)]
     pub smooth: bool,
 
     /// Smoothing level as 1/N octave (N in [1..24]). Example: N=6 => 1/6 octave smoothing
-    #[arg(long, default_value_t = 6)]
+    #[arg(long, default_value_t = 2)]
     pub smooth_n: usize,
 
     /// Loss function to optimize (flat or score).

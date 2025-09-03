@@ -123,6 +123,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
         "metadata_pref",
     ])?;
 
+    // Collect deltas (scenario - metadata) for end-of-run statistics
+    let mut deltas_s1: Vec<f64> = Vec::new();
+    let mut deltas_s2: Vec<f64> = Vec::new();
+    let mut deltas_s3: Vec<f64> = Vec::new();
+
     while let Some((speaker, s1, s2, s3, meta_pref)) = rx.recv().await {
         wtr.write_record([
             speaker.as_str(),
@@ -131,6 +136,23 @@ async fn main() -> Result<(), Box<dyn Error>> {
             fmt_opt_f64(s3).as_str(),
             fmt_opt_f64(meta_pref).as_str(),
         ])?;
+
+        // Accumulate deltas vs metadata when both values are present and finite
+        if let (Some(v), Some(m)) = (s1, meta_pref) {
+            if v.is_finite() && m.is_finite() {
+                deltas_s1.push(v - m);
+            }
+        }
+        if let (Some(v), Some(m)) = (s2, meta_pref) {
+            if v.is_finite() && m.is_finite() {
+                deltas_s2.push(v - m);
+            }
+        }
+        if let (Some(v), Some(m)) = (s3, meta_pref) {
+            if v.is_finite() && m.is_finite() {
+                deltas_s3.push(v - m);
+            }
+        }
     }
     wtr.flush()?;
 
@@ -139,6 +161,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
         // ignore task result; errors are reflected as empty row fields
     }
 
+    // Print end-of-run statistics comparing scenarios to metadata
+    eprintln!("\n=== Benchmark statistics (scenario - metadata) ===");
+    print_stats("flat_cea2034_lw", &deltas_s1);
+    print_stats("flat_eir", &deltas_s2);
+    print_stats("score_cea2034", &deltas_s3);
+
     Ok(())
 }
 
@@ -146,6 +174,36 @@ fn fmt_opt_f64(v: Option<f64>) -> String {
     match v {
         Some(x) if x.is_finite() => format!("{:.6}", x),
         _ => String::from(""),
+    }
+}
+
+/// Compute mean and sample standard deviation of a slice.
+/// Returns (mean, std). For n == 0 returns None. For n == 1, std = 0.0.
+fn mean_std(data: &[f64]) -> Option<(f64, f64)> {
+    let n = data.len();
+    if n == 0 {
+        return None;
+    }
+    let mean = data.iter().sum::<f64>() / (n as f64);
+    if n == 1 {
+        return Some((mean, 0.0));
+    }
+    let var_num: f64 = data.iter().map(|&x| {
+        let dx = x - mean;
+        dx * dx
+    }).sum();
+    let std = (var_num / ((n - 1) as f64)).sqrt();
+    Some((mean, std))
+}
+
+fn print_stats(name: &str, data: &[f64]) {
+    match mean_std(data) {
+        Some((m, s)) => {
+            eprintln!("{:>20}: N={:>4}, mean={:+.4}, std={:.4}", name, data.len(), m, s);
+        }
+        None => {
+            eprintln!("{:>20}: N=   0", name);
+        }
     }
 }
 
@@ -272,5 +330,14 @@ mod tests {
         let got = extract_pref_from_metadata_value(&v);
         assert!(got.is_some());
         assert!((got.unwrap() - 6.789).abs() < 1e-12);
+    }
+
+    #[test]
+    fn mean_std_basic() {
+        let d = vec![1.0, 2.0, 3.0, 4.0];
+        let (m, s) = super::mean_std(&d).unwrap();
+        assert!((m - 2.5).abs() < 1e-12, "mean got {}", m);
+        let expected_std = (5.0_f64 / 3.0).sqrt(); // sample std
+        assert!((s - expected_std).abs() < 1e-12, "std got {}", s);
     }
 }
