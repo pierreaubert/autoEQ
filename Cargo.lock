@@ -203,6 +203,7 @@ version = "0.2.0"
 dependencies = [
  "base64 0.21.7",
  "blas-src",
+ "build_html",
  "clap",
  "cmake",
  "csv",
@@ -297,6 +298,12 @@ checksum = "3078c7629b62d3f0439517fa394996acacc5cbc91c5a20d8c658e77abd503a71"
 dependencies = [
  "generic-array",
 ]
+
+[[package]]
+name = "build_html"
+version = "2.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "10b322c8c13b6b775e5befd834d2a27c683506f1100b56a7b39d33c28024ba54"
 
 [[package]]
 name = "bumpalo"

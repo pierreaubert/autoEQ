@@ -19,7 +19,7 @@ name = "download"
 path = "src/bin/download.rs"
 
 [[bin]]
-name = "bench"
+name = "benchmark"
 path = "src/bin/benchmark.rs"
 
 [dependencies]
@@ -39,6 +39,7 @@ serde_json = "1.0"
 tokio = { version = "1", features = ["full"] }
 urlencoding = "2.1"
 num_cpus = "1.16"
+build_html = "2.7.0"
 
 [build-dependencies]
 cmake = "0.1.54"

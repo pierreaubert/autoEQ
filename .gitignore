@@ -1,10 +1,9 @@
 /target
 /data
-plot*.*
+# Ignore generated plot files (but not src/plot.rs)
+plot*.html
+plot*.png
 *~
 .*~
 *.csv
 src/unused.rs
-
-
-

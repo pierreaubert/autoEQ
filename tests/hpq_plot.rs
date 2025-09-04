@@ -60,8 +60,7 @@ fn plot_highpass_variable_q_responses() {
                 .range(vec![1.301, 4.301]), // log10(20)..log10(20000)
         )
         .y_axis(
-            plotly::layout::Axis::new()
-                .title(plotly::common::Title::with_text("Magnitude (dB)")),
+            plotly::layout::Axis::new().title(plotly::common::Title::with_text("Magnitude (dB)")),
         );
     plot.set_layout(layout);
 

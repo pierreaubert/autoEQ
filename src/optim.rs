@@ -60,8 +60,11 @@ pub struct ObjectiveData {
     pub score_data: Option<ScoreLossData>,
     /// Penalty weights used when the optimizer does not support nonlinear constraints
     /// If zero, penalties are disabled and true constraints (if any) are used.
+    /// Penalty for ceiling constraint
     pub penalty_w_ceiling: f64,
+    /// Penalty for spacing constraint
     pub penalty_w_spacing: f64,
+    /// Penalty for min gain constraint
     pub penalty_w_mingain: f64,
 }
 
@@ -153,7 +156,11 @@ fn viol_spacing_from_xs(xs: &[f64], min_spacing_oct: f64) -> f64 {
             }
         }
     }
-    if !min_dist.is_finite() { 0.0 } else { (min_spacing_oct - min_dist).max(0.0) }
+    if !min_dist.is_finite() {
+        0.0
+    } else {
+        (min_spacing_oct - min_dist).max(0.0)
+    }
 }
 
 fn viol_min_gain_from_xs(xs: &[f64], iir_hp_pk: bool, min_db: f64) -> f64 {
@@ -501,7 +508,8 @@ pub fn optimize_filters(
     // Decide whether to use penalties (for algorithms lacking inequality constraints)
     let use_penalties = match algo.to_lowercase().as_str() {
         // Likely to ignore general nonlinear constraints -> fall back to penalties
-        "crs2lm" | "direct" | "directl" | "gmlsl" | "gmlsllds" | "sbplx" | "stogo" | "stogorand" | "neldermead" => true,
+        "crs2lm" | "direct" | "directl" | "gmlsl" | "gmlsllds" | "sbplx" | "stogo"
+        | "stogorand" | "neldermead" => true,
         _ => false,
     };
 

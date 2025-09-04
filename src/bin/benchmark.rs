@@ -188,10 +188,13 @@ fn mean_std(data: &[f64]) -> Option<(f64, f64)> {
     if n == 1 {
         return Some((mean, 0.0));
     }
-    let var_num: f64 = data.iter().map(|&x| {
-        let dx = x - mean;
-        dx * dx
-    }).sum();
+    let var_num: f64 = data
+        .iter()
+        .map(|&x| {
+            let dx = x - mean;
+            dx * dx
+        })
+        .sum();
     let std = (var_num / ((n - 1) as f64)).sqrt();
     Some((mean, std))
 }
@@ -199,7 +202,13 @@ fn mean_std(data: &[f64]) -> Option<(f64, f64)> {
 fn print_stats(name: &str, data: &[f64]) {
     match mean_std(data) {
         Some((m, s)) => {
-            eprintln!("{:>20}: N={:>4}, mean={:+.4}, std={:.4}", name, data.len(), m, s);
+            eprintln!(
+                "{:>20}: N={:>4}, mean={:+.4}, std={:.4}",
+                name,
+                data.len(),
+                m,
+                s
+            );
         }
         None => {
             eprintln!("{:>20}: N=   0", name);

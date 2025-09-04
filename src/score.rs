@@ -63,15 +63,13 @@ fn pressure2spl(p: &Array1<f64>) -> Array1<f64> {
 /// * 2D array of squared pressure values
 ///
 /// # Details
-/// Computes pressure values from SPL and then squares them for each row
+/// Computes pressure values from SPL and then squares them using vectorized operations
 fn spl2pressure2(spl: &Array2<f64>) -> Array2<f64> {
-    // square(pressure) per row
-    let mut out = Array2::<f64>::zeros(spl.raw_dim());
-    for (mut row_out, row_in) in out.axis_iter_mut(Axis(0)).zip(spl.axis_iter(Axis(0))) {
-        let p = spl2pressure(&row_in.to_owned());
-        row_out.assign(&p.mapv(|x| x * x));
-    }
-    out
+    // Vectorized: 10^((spl-105)/20) then square
+    spl.mapv(|v| {
+        let p = 10f64.powf((v - 105.0) / 20.0);
+        p * p
+    })
 }
 
 /// Compute the CEA2034 spinorama from SPL data (internal implementation)
@@ -102,32 +100,31 @@ fn cea2034_array(spl: &Array2<f64>, idx: &[Vec<usize>], weights: &Array1<f64>) -
         cea.row_mut(i).assign(&curve);
     }
 
-    // ER: indices 2..=6 per original logic
-    let mut er_p2 = Array1::<f64>::zeros(len_spl);
-    for i in 2..=6 {
-        let pres = spl2pressure(&cea.row(i).to_owned());
-        er_p2 = &er_p2 + &pres.mapv(|v| v * v);
-    }
-    let er = er_p2.mapv(|v| (v / 5.0).sqrt());
-    let er_spl = pressure2spl(&er);
+    // ER: indices 2..=6 per original logic - vectorized
+    let er_rows = cea.slice(s![2..=6, ..]);
+    let er_pressures = er_rows.mapv(|v| {
+        let p = 10f64.powf((v - 105.0) / 20.0);
+        p * p
+    });
+    let er_p2_sum = er_pressures.sum_axis(Axis(0));
+    let er_p = er_p2_sum.mapv(|v| (v / 5.0).sqrt());
+    let er_spl = pressure2spl(&er_p);
     cea.row_mut(idx_er).assign(&er_spl);
 
     // SP weighted
     let sp_curve = apply_weighted_rms(&p2, &idx[idx_sp], weights);
     cea.row_mut(idx_sp).assign(&sp_curve);
 
-    // PIR
+    // PIR - vectorized computation
     let lw_p = spl2pressure(&cea.row(idx_lw).to_owned());
     let er_p = spl2pressure(&cea.row(idx_er).to_owned());
     let sp_p = spl2pressure(&cea.row(idx_sp).to_owned());
-    let mut pir = Array1::<f64>::zeros(len_spl);
-    for ((pir_v, lw), (er, sp)) in pir
-        .iter_mut()
-        .zip(lw_p.iter())
-        .zip(er_p.iter().zip(sp_p.iter()))
-    {
-        *pir_v = (0.12 * lw * lw + 0.44 * er * er + 0.44 * sp * sp).sqrt();
-    }
+    
+    let lw2 = lw_p.mapv(|v| v * v);
+    let er2 = er_p.mapv(|v| v * v);
+    let sp2 = sp_p.mapv(|v| v * v);
+    
+    let pir = (lw2.mapv(|v| 0.12 * v) + er2.mapv(|v| 0.44 * v) + sp2.mapv(|v| 0.44 * v)).mapv(|v| v.sqrt());
     let pir_spl = pressure2spl(&pir);
     cea.row_mut(idx_pir).assign(&pir_spl);
 
@@ -146,14 +143,11 @@ fn cea2034_array(spl: &Array2<f64>, idx: &[Vec<usize>], weights: &Array1<f64>) -
 /// # Formula
 /// rms = sqrt(sum(p2\[idx\]) / len) then converted to SPL
 fn apply_rms(p2: &Array2<f64>, idx: &[usize]) -> Array1<f64> {
-    // sqrt(sum(p2[idx]) / len) then to SPL
-    let ncols = p2.shape()[1];
-    let mut acc = Array1::<f64>::zeros(ncols);
-    for &i in idx {
-        acc = &acc + &p2.row(i).to_owned();
-    }
+    // Vectorized sum using select and sum_axis
+    let selected_rows = p2.select(Axis(0), idx);
+    let sum_rows = selected_rows.sum_axis(Axis(0));
     let len_idx = idx.len() as f64;
-    let r = acc.mapv(|v| (v / len_idx).sqrt());
+    let r = sum_rows.mapv(|v| (v / len_idx).sqrt());
     pressure2spl(&r)
 }
 
@@ -170,14 +164,14 @@ fn apply_rms(p2: &Array2<f64>, idx: &[usize]) -> Array1<f64> {
 /// # Formula
 /// weighted_rms = sqrt(sum(p2\[idx\] * weights\[idx\]) / sum(weights)) then converted to SPL
 fn apply_weighted_rms(p2: &Array2<f64>, idx: &[usize], weights: &Array1<f64>) -> Array1<f64> {
-    let ncols = p2.shape()[1];
-    let mut acc = Array1::<f64>::zeros(ncols);
-    let mut sum_w = 0.0;
-    for &i in idx {
-        let w = weights[i];
-        acc = &acc + &(p2.row(i).to_owned() * w);
-        sum_w += w;
-    }
+    // Vectorized weighted sum
+    let selected_rows = p2.select(Axis(0), idx);
+    let selected_weights = weights.select(Axis(0), idx);
+    let sum_w = selected_weights.sum();
+    
+    // Broadcast weights to match row dimensions and compute weighted sum
+    let weighted_rows = &selected_rows * &selected_weights.insert_axis(Axis(1));
+    let acc = weighted_rows.sum_axis(Axis(0));
     let r = acc.mapv(|v| (v / sum_w).sqrt());
     pressure2spl(&r)
 }
@@ -210,23 +204,22 @@ fn mad(spl: &Array1<f64>, imin: usize, imax: usize) -> f64 {
 /// # Returns
 /// * R-squared value (Pearson correlation coefficient squared)
 fn r_squared(x: &Array1<f64>, y: &Array1<f64>) -> f64 {
-    // Pearson correlation squared
+    // Vectorized Pearson correlation squared
     let n = x.len() as f64;
     if n == 0.0 {
         return f64::NAN;
     }
     let mx = x.mean().unwrap_or(0.0);
     let my = y.mean().unwrap_or(0.0);
-    let mut num = 0.0;
-    let mut sxx = 0.0;
-    let mut syy = 0.0;
-    for (xi, yi) in x.iter().zip(y.iter()) {
-        let dx = *xi - mx;
-        let dy = *yi - my;
-        num += dx * dy;
-        sxx += dx * dx;
-        syy += dy * dy;
-    }
+    
+    // Vectorized computation of deviations
+    let dx = x.mapv(|v| v - mx);
+    let dy = y.mapv(|v| v - my);
+    
+    let num = (&dx * &dy).sum();
+    let sxx = (&dx * &dx).sum();
+    let syy = (&dy * &dy).sum();
+    
     if sxx == 0.0 || syy == 0.0 {
         return f64::NAN;
     }
@@ -488,21 +481,10 @@ pub fn score_peq(
         "peq length must match SPL columns"
     );
 
-    // add PEQ to each row
-    let mut spl_h_peq = Array2::<f64>::zeros(spl_h.raw_dim());
-    for (mut row_out, row_in) in spl_h_peq
-        .axis_iter_mut(Axis(0))
-        .zip(spl_h.axis_iter(Axis(0)))
-    {
-        row_out.assign(&(&row_in.to_owned() + peq));
-    }
-    let mut spl_v_peq = Array2::<f64>::zeros(spl_v.raw_dim());
-    for (mut row_out, row_in) in spl_v_peq
-        .axis_iter_mut(Axis(0))
-        .zip(spl_v.axis_iter(Axis(0)))
-    {
-        row_out.assign(&(&row_in.to_owned() + peq));
-    }
+    // add PEQ to each row using broadcasting
+    let peq_broadcast = peq.view().insert_axis(Axis(0));
+    let spl_h_peq = spl_h + &peq_broadcast;
+    let spl_v_peq = spl_v + &peq_broadcast;
 
     let spl_full =
         concatenate(Axis(0), &[spl_h_peq.view(), spl_v_peq.view()]).expect("concatenate failed");
