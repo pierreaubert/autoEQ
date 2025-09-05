@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="/src/styles.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AutoEQ UI</title>
+    <script type="module" src="/src/main.ts" defer></script>
+  </head>
+
+  <body>
+    <div class="app">
+      <header class="header">
+        <h1>AutoEQ UI</h1>
+        <button id="exit-btn" class="exit-button" title="Exit Application">×</button>
+      </header>
+
+      <main class="main-content">
+        <div class="left-panel" id="left-panel">
+          <form id="autoeq-form" class="parameter-form">
+            <!-- Data Source -->
+            <div class="section-group">
+              <h3>Select Data</h3>
+              <div class="input-source-tabs">
+                <label class="tab-label" data-tab="file">
+                  <input type="radio" name="input-source" value="file">
+                  File Input
+                </label>
+                <label class="tab-label active" data-tab="api">
+                  <input type="radio" name="input-source" value="api" checked>
+                  API Data
+                </label>
+              </div>
+              
+              <div id="file-inputs" class="tab-content">
+                <div class="compact-row">
+                  <input type="text" id="curve-path" name="curve_path" placeholder="Input CSV path">
+                  <button type="button" id="browse-curve" class="browse-btn">📁</button>
+                </div>
+                <div class="compact-row">
+                  <input type="text" id="target-path" name="target_path" placeholder="Target CSV path (optional)">
+                  <button type="button" id="browse-target" class="browse-btn">📁</button>
+                </div>
+              </div>
+              
+              <div id="api-inputs" class="tab-content active">
+                <div class="autocomplete-container">
+                  <input type="text" id="speaker" name="speaker" placeholder="Start typing speaker name..." autocomplete="off">
+                  <div id="speaker-dropdown" class="autocomplete-dropdown"></div>
+                </div>
+                <select id="version" name="version" disabled>
+                  <option value="">Select Version</option>
+                </select>
+                <select id="measurement" name="measurement" disabled>
+                  <option value="">Select Measurement</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- EQ Design -->
+            <div class="section-group">
+              <h3>EQ Design</h3>
+              <div class="param-grid">
+                <!-- Loss Function -->
+                <div class="param-item">
+                  <label>Loss</label>
+                  <select id="loss" name="loss">
+                    <option value="flat">Flat</option>
+                    <option value="score">Score</option>
+                    <option value="mixed">Mixed</option>
+                  </select>
+                </div>
+                <div class="param-item">
+                  <label>Filters</label>
+                  <input type="number" id="num-filters" name="num_filters" value="7" min="1" max="20">
+                </div>
+                
+                <!-- Basic Settings -->
+                <div class="param-item">
+                  <label>Sample Rate</label>
+                  <input type="number" id="sample-rate" name="sample_rate" value="48000" step="1000">
+                </div>
+                <div class="param-item">
+                  <label>Curve</label>
+                  <select id="curve-name" name="curve_name">
+                    <option value="Listening Window">Listening Window</option>
+                    <option value="On Axis">On Axis</option>
+                    <option value="Early Reflections">Early Reflections</option>
+                    <option value="Sound Power">Sound Power</option>
+                    <option value="Estimated In-Room Response">Estimated In-Room Response</option>
+                  </select>
+                </div>
+                
+                <!-- dB Range -->
+                <div class="param-item">
+                  <label>Min dB</label>
+                  <input type="number" id="min-db" name="min_db" value="1.0" step="0.1" min="0.1">
+                </div>
+                <div class="param-item">
+                  <label>Max dB</label>
+                  <input type="number" id="max-db" name="max_db" value="3.0" step="0.1">
+                </div>
+                
+                <!-- Q Range -->
+                <div class="param-item">
+                  <label>Min Q</label>
+                  <input type="number" id="min-q" name="min_q" value="1.0" step="0.1">
+                </div>
+                <div class="param-item">
+                  <label>Max Q</label>
+                  <input type="number" id="max-q" name="max_q" value="3.0" step="0.1">
+                </div>
+                
+                <!-- Frequency Range -->
+                <div class="param-item">
+                  <label>Min Freq</label>
+                  <input type="number" id="min-freq" name="min_freq" value="60" step="10">
+                </div>
+                <div class="param-item">
+                  <label>Max Freq</label>
+                  <input type="number" id="max-freq" name="max_freq" value="16000" step="1000">
+                </div>
+              </div>
+              
+              <div class="checkbox-group">
+                <label><input type="checkbox" id="smooth" name="smooth" checked> Enable Smoothing</label>
+                <label><input type="checkbox" id="iir-hp-pk" name="iir_hp_pk"> Use HP+PK Filters</label>
+              </div>
+            </div>
+            
+            <!-- Optimization Fine Tuning -->
+            <div class="section-group">
+              <h3>Optimization Fine Tuning</h3>
+              <div class="param-grid">
+                <!-- Algorithm -->
+                <div class="param-item">
+                  <label>Algorithm</label>
+                  <select id="algo" name="algo">
+                    <option value="isres">ISRES</option>
+                    <option value="cobyla">COBYLA</option>
+                    <option value="bobyqa">BOBYQA</option>
+                    <option value="newuoa">NEWUOA</option>
+                  </select>
+                </div>
+                <div class="param-item">
+                  <label>Local Algo</label>
+                  <select id="local-algo" name="local_algo">
+                    <option value="cobyla">COBYLA</option>
+                    <option value="bobyqa">BOBYQA</option>
+                    <option value="newuoa">NEWUOA</option>
+                  </select>
+                </div>
+                
+                <!-- Global Algorithm Parameters -->
+                <div class="param-item global-algo-param">
+                  <label>Population</label>
+                  <input type="number" id="population" name="population" value="30000" step="5000">
+                </div>
+                <div class="param-item global-algo-param">
+                  <label>Max Eval</label>
+                  <input type="number" id="maxeval" name="maxeval" value="200000" step="10000">
+                </div>
+                
+                <!-- Spacing Parameters -->
+                <div class="param-item">
+                  <label>Min Spacing</label>
+                  <input type="number" id="min-spacing-oct" name="min_spacing_oct" value="0.5" step="0.1">
+                </div>
+                <div class="param-item">
+                  <label>Spacing Weight</label>
+                  <input type="number" id="spacing-weight" name="spacing_weight" value="20.0" step="5">
+                </div>
+                
+                <!-- Smoothing Parameters -->
+                <div class="param-item">
+                  <label>Smooth N</label>
+                  <input type="number" id="smooth-n" name="smooth_n" value="2" min="1" max="24">
+                </div>
+                <div class="param-item"><!-- Empty for alignment --></div>
+              </div>
+              
+              <div class="checkbox-group">
+                <label><input type="checkbox" id="refine" name="refine"> Enable Refinement</label>
+              </div>
+            </div>
+          </form>
+          
+          <div class="form-actions-sticky">
+            <button type="submit" form="autoeq-form" id="optimize-btn" class="optimize-button">Run Optimization</button>
+            <button type="button" id="reset-btn" class="reset-button">Reset</button>
+          </div>
+        </div>
+        
+        <div class="resizer" id="resizer"></div>
+
+        <div class="right-panel" id="right-panel">
+          <div id="optimization-progress" class="progress-container" style="display: none;">
+            <div class="progress-bar"><div class="progress-fill"></div></div>
+            <div class="progress-text">Running optimization...</div>
+          </div>
+
+          <div id="scores-display" class="scores-display" style="display: none;">
+            <h4>Preference Scores</h4>
+            <div class="score-grid">
+              <div class="score-item">
+                <span class="score-label">Before:</span>
+                <span id="score-before" class="score-value">--</span>
+              </div>
+              <div class="score-item">
+                <span class="score-label">After:</span>
+                <span id="score-after" class="score-value">--</span>
+              </div>
+              <div class="score-item improvement">
+                <span class="score-label">Improvement:</span>
+                <span id="score-improvement" class="score-value">--</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="plots-accordion">
+            <div class="plot-section expanded">
+              <div class="plot-header" data-plot="filter-details">
+                <h4>Filter Details</h4>
+                <span class="accordion-arrow">▼</span>
+              </div>
+              <div id="filter-details-plot" class="plot-container active">No data to display</div>
+            </div>
+            
+            <div class="plot-section collapsed">
+              <div class="plot-header" data-plot="filter">
+                <h4>Filter Response</h4>
+                <span class="accordion-arrow">▶</span>
+              </div>
+              <div id="filter-plot" class="plot-container">No data to display</div>
+            </div>
+            
+            <div class="plot-section collapsed">
+              <div class="plot-header" data-plot="on-axis">
+                <h4>On Axis</h4>
+                <span class="accordion-arrow">▶</span>
+              </div>
+              <div id="on-axis-plot" class="plot-container">No data to display</div>
+            </div>
+            
+            <div class="plot-section collapsed">
+              <div class="plot-header" data-plot="listening-window">
+                <h4>Listening Window</h4>
+                <span class="accordion-arrow">▶</span>
+              </div>
+              <div id="listening-window-plot" class="plot-container">No data to display</div>
+            </div>
+            
+            <div class="plot-section collapsed">
+              <div class="plot-header" data-plot="early-reflections">
+                <h4>Early Reflections</h4>
+                <span class="accordion-arrow">▶</span>
+              </div>
+              <div id="early-reflections-plot" class="plot-container">No data to display</div>
+            </div>
+            
+            <div class="plot-section collapsed">
+              <div class="plot-header" data-plot="sound-power">
+                <h4>Sound Power</h4>
+                <span class="accordion-arrow">▶</span>
+              </div>
+              <div id="sound-power-plot" class="plot-container">No data to display</div>
+            </div>
+            
+            <div class="plot-section collapsed">
+              <div class="plot-header" data-plot="spin">
+                <h4>Spinorama Combined</h4>
+                <span class="accordion-arrow">▶</span>
+              </div>
+              <div id="spin-plot" class="plot-container">No data to display</div>
+            </div>
+          </div>
+
+          <div id="error-display" class="error-display" style="display: none;">
+            <h4>Error</h4>
+            <div id="error-message" class="error-message"></div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </body>
+</html>
