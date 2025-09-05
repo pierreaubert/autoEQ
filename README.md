@@ -29,6 +29,7 @@ You need to specify the name of the speaker, the version of the measurement and 
 4. How do I find the list of algorithm?
 ```
 cargo run --bin autoeq --release -- --help
+```
 
 ### Parameters: --min-q --max-q
 The minimum and maximum Q of the filter.
