@@ -1,5 +1,6 @@
 /target
 /data
+/dist
 # Ignore generated plot files (but not src/plot.rs)
 plot*.html
 plot*.png
