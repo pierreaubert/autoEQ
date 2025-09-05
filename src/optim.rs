@@ -43,10 +43,10 @@ pub struct ObjectiveData {
     pub target_error: Array1<f64>,
     /// Sample rate in Hz
     pub srate: f64,
+    #[allow(dead_code)]
     /// Minimum spacing between filters in octaves
     pub min_spacing_oct: f64,
     /// Weight for spacing penalty term
-    #[allow(dead_code)]
     pub spacing_weight: f64,
     /// Maximum allowed dB level
     pub max_db: f64,
@@ -104,7 +104,7 @@ struct MinGainConstraintData {
 /// Data needed by the nonlinear spacing constraint callback.
 #[derive(Clone, Copy)]
 struct SpacingConstraintData {
-    min_spacing_oct: f64,
+   min_spacing_oct: f64,
 }
 
 fn x2peq(freqs: &Array1<f64>, x: &[f64], srate: f64, iir_hp_pk: bool) -> Array1<f64> {
@@ -197,7 +197,7 @@ struct MHObjective {
 }
 
 impl MHObjective {
-    fn dim(&self) -> usize {
+    fn _dim(&self) -> usize {
         self.bounds.len()
     }
 
@@ -520,7 +520,7 @@ pub fn optimize_filters(
         max_db: objective_data.max_db,
         iir_hp_pk: objective_data.iir_hp_pk,
     };
-    let spacing_data = SpacingConstraintData {
+    let _spacing_data = SpacingConstraintData {
         min_spacing_oct: objective_data.min_spacing_oct,
     };
     let min_gain_data = MinGainConstraintData {

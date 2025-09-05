@@ -370,15 +370,11 @@ fn plot_filters(
 fn plot_spin_details(
     args: &super::Args,
     input_curve: &super::Curve,
-    smoothed_curve: Option<&super::Curve>,
-    target_curve: &Array1<f64>,
     plot_freqs: &Array1<f64>,
-    optimized_params: &[f64],
     cea2034_curves: Option<&HashMap<String, super::Curve>>,
     eq_response: Option<&Array1<f64>>,
 ) -> plotly::Plot {
     let mut plot = Plot::new();
-    let mut combined_response: Array1<f64> = Array1::zeros(plot_freqs.len());
     // Add each CEA2034 curves if provided
     let mut x_axis1_title = "On Axis".to_string();
     let mut x_axis2_title = "Listening Window".to_string();
@@ -402,7 +398,7 @@ fn plot_spin_details(
         x_axis2_title = format!("{} EQ -- Frequency (Hz)", args.curve_name);
         x_axis3_title = "unused".to_string();
         x_axis4_title = "unused".to_string();
-        // Interpolate input to plotting freqs to align with combined_response
+        // Interpolate input to plotting freqs to align
         let input_on_plot =
             crate::read::interpolate(&plot_freqs, &input_curve.freq, &input_curve.spl);
 
@@ -414,8 +410,7 @@ fn plot_spin_details(
         plot.add_trace(input_second_row);
 
         // Right subplot (x4/y4): Input Curve + PEQ response
-        let input_plus_peq = &input_on_plot + &combined_response;
-        let input_plus_peq_trace = Scatter::new(plot_freqs.to_vec(), input_plus_peq.to_vec())
+        let input_plus_peq_trace = Scatter::new(plot_freqs.to_vec(), input_on_plot.to_vec())
             .mode(Mode::Lines)
             .name(format!("{} + EQ", args.curve_name))
             .x_axis("x2")
@@ -502,12 +497,6 @@ fn plot_spin_details(
 }
 
 fn plot_spin(
-    args: &super::Args,
-    input_curve: &super::Curve,
-    smoothed_curve: Option<&super::Curve>,
-    target_curve: &Array1<f64>,
-    plot_freqs: &Array1<f64>,
-    optimized_params: &[f64],
     cea2034_curves: Option<&HashMap<String, super::Curve>>,
     eq_response: Option<&Array1<f64>>,
 ) -> plotly::Plot {
@@ -626,20 +615,11 @@ pub fn plot_results(
     let plot_spin_details = plot_spin_details(
         args,
         input_curve,
-        smoothed_curve,
-        target_curve,
         &freqs,
-        optimized_params,
         cea2034_curves,
         eq_response,
     );
     let plot_spin = plot_spin(
-        args,
-        input_curve,
-        smoothed_curve,
-        target_curve,
-        &freqs,
-        optimized_params,
         cea2034_curves,
         eq_response,
     );
