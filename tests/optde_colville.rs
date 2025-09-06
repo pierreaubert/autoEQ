@@ -1,7 +1,7 @@
-use autoeq::optde::*;
-use common::*;
+use autoeq::optde::{differential_evolution, DEConfigBuilder, Strategy};
+use testfunctions::colville;
 
-mod common;
+mod testfunctions;
 
 #[test]
 fn test_de_colville_4d() {
@@ -60,7 +60,7 @@ fn test_de_colville_multistart() {
     // Test with multiple random starts to handle multimodality
     let b = vec![(-8.0, 8.0); 4];
     let seeds = [400, 500, 600];
-    
+
     let mut best_result = f64::INFINITY;
     for (i, &seed) in seeds.iter().enumerate() {
         let c = DEConfigBuilder::new()
@@ -74,7 +74,7 @@ fn test_de_colville_multistart() {
         best_result = best_result.min(result.fun);
         println!("Run {} (seed {}): f = {}", i, seed, result.fun);
     }
-    
+
     // At least one run should find a good solution
     assert!(best_result < 0.1, "Best result across runs too high: {}", best_result);
 }
@@ -82,39 +82,39 @@ fn test_de_colville_multistart() {
 #[test]
 fn test_colville_function_properties() {
     use ndarray::Array1;
-    
+
     // Test that the function behaves as expected at known points
-    
+
     // At global optimum (1, 1, 1, 1)
     let x_opt = Array1::from(vec![1.0, 1.0, 1.0, 1.0]);
     let f_opt = colville(&x_opt);
     // Should be exactly 0
     assert!(f_opt < 1e-15, "Global optimum should be 0: {}", f_opt);
-    
+
     // Test the function structure - it's a complex quartic function
     // f = 100*(x1^2 - x2)^2 + (x1-1)^2 + (x3-1)^2 + 90*(x3^2 - x4)^2 + 10.1*((x2-1)^2 + (x4-1)^2) + 19.8*(x2-1)*(x4-1)
-    
+
     // At origin (should be worse)
     let x_origin = Array1::from(vec![0.0, 0.0, 0.0, 0.0]);
     let f_origin = colville(&x_origin);
-    
+
     // Manual calculation for (0,0,0,0):
     // f = 100*(0^2 - 0)^2 + (0-1)^2 + (0-1)^2 + 90*(0^2 - 0)^2 + 10.1*((0-1)^2 + (0-1)^2) + 19.8*(0-1)*(0-1)
     // f = 100*0 + 1 + 1 + 90*0 + 10.1*(1 + 1) + 19.8*(-1)*(-1) = 0 + 1 + 1 + 0 + 20.2 + 19.8 = 42.0
     let expected_origin = 1.0 + 1.0 + 10.1 * 2.0 + 19.8;
     assert!((f_origin - expected_origin).abs() < 1e-10, "Origin calculation incorrect: {} vs {}", f_origin, expected_origin);
-    
+
     // Test adaptation to different dimensions
     let x_2d = Array1::from(vec![1.0, 1.0]);
     let f_2d = colville(&x_2d);
     // With 2D, x3 and x4 default to 1.0, so should be close to 0
     assert!(f_2d < 1e-10, "2D optimum should be near 0: {}", f_2d);
-    
+
     let x_3d = Array1::from(vec![1.0, 1.0, 1.0]);
     let f_3d = colville(&x_3d);
     // With 3D, x4 defaults to 1.0, so should be close to 0
     assert!(f_3d < 1e-10, "3D optimum should be near 0: {}", f_3d);
-    
+
     // Test non-separable nature - changing one variable affects multiple terms
     let x_perturb = Array1::from(vec![1.1, 1.0, 1.0, 1.0]);
     let f_perturb = colville(&x_perturb);

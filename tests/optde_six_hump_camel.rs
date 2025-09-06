@@ -1,7 +1,7 @@
-use autoeq::optde::*;
-use common::*;
+use autoeq::optde::{differential_evolution, DEConfig, Strategy};
+use testfunctions::six_hump_camel;
 
-mod common;
+mod testfunctions;
 
 #[test]
 fn test_de_six_hump_camel() {

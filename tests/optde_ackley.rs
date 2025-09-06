@@ -1,7 +1,8 @@
-use autoeq::optde::*;
-use common::*;
+use autoeq::optde::{differential_evolution, DEConfigBuilder, Strategy};
+use autoeq::optim::auto_de;
+use testfunctions::{ackley, create_bounds};
+mod testfunctions;
 
-mod common;
 
 #[test]
 fn test_de_ackley_2d() {
@@ -37,10 +38,10 @@ fn test_de_ackley_10d() {
 fn test_auto_de_ackley_function() {
     let bounds = create_bounds(4, -32.0, 32.0);
     let result = auto_de(ackley, &bounds, None);
-    
+
     assert!(result.is_some(), "AutoDE should find a solution");
     let (x_opt, f_opt, _) = result.unwrap();
-    
+
     // Ackley has many local minima, so we're more lenient
     assert!(f_opt < 1e-1, "Ackley function value too high: {}", f_opt);
     for &xi in x_opt.iter() {

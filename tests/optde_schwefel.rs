@@ -1,7 +1,7 @@
-use autoeq::optde::*;
-use common::*;
+use autoeq::optde::{differential_evolution, DEConfigBuilder, Strategy, Mutation};
+use testfunctions::schwefel;
 
-mod common;
+mod testfunctions;
 
 #[test]
 fn test_de_schwefel_2d() {

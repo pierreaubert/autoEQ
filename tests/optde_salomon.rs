@@ -1,7 +1,7 @@
-use autoeq::optde::*;
-use common::*;
+use autoeq::optde::{differential_evolution, DEConfigBuilder, Strategy};
+use testfunctions::salomon;
 
-mod common;
+mod testfunctions;
 
 #[test]
 fn test_de_salomon_2d() {
@@ -54,33 +54,33 @@ fn test_de_salomon_5d() {
 #[test]
 fn test_salomon_function_properties() {
     use ndarray::Array1;
-    
+
     // Test that the function behaves as expected at known points
-    
+
     // At origin (global minimum)
     let x_origin = Array1::from(vec![0.0, 0.0]);
     let f_origin = salomon(&x_origin);
     // f(0) = 1 - cos(2π*0) + 0.1*0 = 1 - 1 + 0 = 0
     assert!(f_origin < 1e-15, "Origin should be global minimum: {}", f_origin);
-    
+
     // Test the function structure: 1 - cos(2π*||x||) + 0.1*||x||
     let x_test = Array1::from(vec![1.0, 0.0]);
     let f_test = salomon(&x_test);
     let norm = 1.0;
     let expected = 1.0 - (2.0 * std::f64::consts::PI * norm).cos() + 0.1 * norm;
     assert!((f_test - expected).abs() < 1e-15, "Function calculation incorrect: {} vs {}", f_test, expected);
-    
+
     // Test multimodal nature - there should be local minima at multiples where cos term = 1
     // At norm = 1, cos(2π) = 1, so f = 1 - 1 + 0.1 = 0.1
     // At norm = 2, cos(4π) = 1, so f = 1 - 1 + 0.2 = 0.2
     let x_norm1 = Array1::from(vec![1.0, 0.0]);
     let f_norm1 = salomon(&x_norm1);
     assert!((f_norm1 - 0.1).abs() < 1e-10, "f at norm=1 should be 0.1: {}", f_norm1);
-    
+
     let x_norm2 = Array1::from(vec![2.0, 0.0]);
     let f_norm2 = salomon(&x_norm2);
     assert!((f_norm2 - 0.2).abs() < 1e-10, "f at norm=2 should be 0.2: {}", f_norm2);
-    
+
     // The global minimum should be better than local minima
     assert!(f_origin < f_norm1, "Global minimum should be better than local minima");
     assert!(f_norm1 < f_norm2, "Closer local minima should be better");

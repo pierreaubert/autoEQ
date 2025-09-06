@@ -1,7 +1,7 @@
-use autoeq::optde::*;
-use common::*;
+use autoeq::optde::{differential_evolution, DEConfigBuilder, Strategy};
+use testfunctions::rotated_hyper_ellipsoid;
 
-mod common;
+mod testfunctions;
 
 #[test]
 fn test_de_rotated_hyper_ellipsoid_2d() {
@@ -73,44 +73,44 @@ fn test_de_rotated_hyper_ellipsoid_large_bounds() {
 #[test]
 fn test_rotated_hyper_ellipsoid_function_properties() {
     use ndarray::Array1;
-    
+
     // Test that the function behaves as expected at known points
-    
+
     // At origin (global minimum)
     let x_origin = Array1::from(vec![0.0, 0.0, 0.0]);
     let f_origin = rotated_hyper_ellipsoid(&x_origin);
     assert!(f_origin < 1e-15, "Origin should be global minimum: {}", f_origin);
-    
+
     // Test the function structure: sum_{i=0}^{n-1} sum_{j=0}^{i} x[j]^2
-    // For 3D: x[0]^2 + (x[0]^2 + x[1]^2) + (x[0]^2 + x[1]^2 + x[2]^2) 
+    // For 3D: x[0]^2 + (x[0]^2 + x[1]^2) + (x[0]^2 + x[1]^2 + x[2]^2)
     //        = 3*x[0]^2 + 2*x[1]^2 + x[2]^2
-    
+
     let x_test = Array1::from(vec![1.0, 1.0, 1.0]);
     let f_test = rotated_hyper_ellipsoid(&x_test);
     // Manual calculation: 3*1^2 + 2*1^2 + 1*1^2 = 3 + 2 + 1 = 6
     let expected = 3.0 + 2.0 + 1.0;
     assert!((f_test - expected).abs() < 1e-15, "3D test calculation incorrect: {} vs {}", f_test, expected);
-    
+
     // Test for 2D case: x[0]^2 + (x[0]^2 + x[1]^2) = 2*x[0]^2 + x[1]^2
     let x_2d = Array1::from(vec![1.0, 2.0]);
     let f_2d = rotated_hyper_ellipsoid(&x_2d);
     // Manual calculation: 2*1^2 + 1*2^2 = 2 + 4 = 6
     let expected_2d = 2.0 * 1.0 + 1.0 * 4.0;
     assert!((f_2d - expected_2d).abs() < 1e-15, "2D test calculation incorrect: {} vs {}", f_2d, expected_2d);
-    
+
     // Test non-separability - earlier variables are weighted more heavily
     let x_first = Array1::from(vec![1.0, 0.0, 0.0]);
     let f_first = rotated_hyper_ellipsoid(&x_first);
-    
+
     let x_last = Array1::from(vec![0.0, 0.0, 1.0]);
     let f_last = rotated_hyper_ellipsoid(&x_last);
-    
+
     // First variable appears in all terms, last variable only in its own term
     // f_first = 3*1^2 + 0 + 0 = 3, f_last = 0 + 0 + 1*1^2 = 1
     assert!(f_first > f_last, "Earlier variables should be weighted more heavily: {} vs {}", f_first, f_last);
     assert!((f_first - 3.0).abs() < 1e-15, "First variable test incorrect: {}", f_first);
     assert!((f_last - 1.0).abs() < 1e-15, "Last variable test incorrect: {}", f_last);
-    
+
     // Test scaling behavior
     let x_scaled = Array1::from(vec![2.0, 2.0, 2.0]);
     let f_scaled = rotated_hyper_ellipsoid(&x_scaled);

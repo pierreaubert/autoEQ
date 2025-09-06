@@ -1,7 +1,7 @@
-use autoeq::optde::*;
-use common::*;
+use autoeq::optde::{differential_evolution, DEConfig, Strategy};
+use testfunctions::{booth, matyas, beale, himmelblau};
 
-mod common;
+mod testfunctions;
 
 #[test]
 fn test_de_classics() {

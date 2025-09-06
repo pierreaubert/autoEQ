@@ -1,7 +1,8 @@
-use autoeq::optde::*;
-use common::*;
+use autoeq::optde::{differential_evolution, DEConfigBuilder, Strategy};
+use autoeq::optim::auto_de;
+use testfunctions::{quadratic, create_bounds};
 
-mod common;
+mod testfunctions;
 
 #[test]
 fn test_de_quadratic_2d() {
@@ -37,14 +38,14 @@ fn test_de_quadratic_5d() {
 fn test_auto_de_quadratic_optimization() {
     let bounds = create_bounds(2, -5.0, 5.0);
     let result = auto_de(quadratic, &bounds, None);
-    
+
     // Should find minimum at (0, 0)
     assert!(result.is_some(), "AutoDE should find a solution");
     let (x_opt, f_opt, _) = result.unwrap();
-    
+
     // Check function value is close to 0
     assert!(f_opt < 1e-6, "Function value too high: {}", f_opt);
-    
+
     // Check solution is close to (0, 0)
     for &xi in x_opt.iter() {
         assert!(xi.abs() < 1e-3, "Solution component too far from 0: {}", xi);
@@ -56,10 +57,10 @@ fn test_auto_de_bounds_enforcement() {
     // Test that solution respects bounds
     let bounds = create_bounds(3, -1.0, 1.0);
     let result = auto_de(quadratic, &bounds, None);
-    
+
     assert!(result.is_some(), "AutoDE should find a solution");
     let (x_opt, _, _) = result.unwrap();
-    
+
     // Check all components are within bounds
     for &xi in x_opt.iter() {
         assert!(xi >= -1.0 && xi <= 1.0, "Solution {} violates bounds [-1, 1]", xi);
@@ -69,17 +70,17 @@ fn test_auto_de_bounds_enforcement() {
 #[test]
 fn test_auto_de_asymmetric_bounds() {
     use ndarray::Array2;
-    
+
     // Test with asymmetric bounds
     let mut bounds = Array2::zeros((2, 2));
     bounds[[0, 0]] = -10.0; bounds[[1, 0]] = -5.0;  // x[0] ∈ [-10, -5]
     bounds[[0, 1]] = 2.0;   bounds[[1, 1]] = 8.0;   // x[1] ∈ [2, 8]
-    
+
     let result = auto_de(quadratic, &bounds, None);
-    
+
     assert!(result.is_some(), "AutoDE should find a solution");
     let (x_opt, _, _) = result.unwrap();
-    
+
     // Solution should be at the bounds closest to origin
     assert!((x_opt[0] - (-5.0)).abs() < 1e-2, "x[0] should be close to -5.0: {}", x_opt[0]);
     assert!((x_opt[1] - 2.0).abs() < 1e-2, "x[1] should be close to 2.0: {}", x_opt[1]);
@@ -89,15 +90,15 @@ fn test_auto_de_asymmetric_bounds() {
 fn test_auto_de_single_dimension() {
     // Test 1D optimization
     let bounds = create_bounds(1, -10.0, 10.0);
-    
+
     // Simple parabola: f(x) = (x - 3)^2
     let parabola = |x: &ndarray::Array1<f64>| (x[0] - 3.0).powi(2);
-    
+
     let result = auto_de(parabola, &bounds, None);
-    
+
     assert!(result.is_some(), "AutoDE should find a solution");
     let (x_opt, f_opt, _) = result.unwrap();
-    
+
     assert!((x_opt[0] - 3.0).abs() < 1e-2, "x[0] should be close to 3.0: {}", x_opt[0]);
     assert!(f_opt < 1e-6, "1D parabola function value too high: {}", f_opt);
 }
@@ -108,13 +109,13 @@ fn test_auto_de_large_dimension() {
     let n = 10;
     let bounds = create_bounds(n, -5.0, 5.0);
     let result = auto_de(quadratic, &bounds, None);
-    
+
     assert!(result.is_some(), "AutoDE should find a solution");
     let (x_opt, f_opt, _) = result.unwrap();
-    
+
     assert_eq!(x_opt.len(), n);
     assert!(f_opt < 1e-3, "10D quadratic function value too high: {}", f_opt);
-    
+
     // All components should be close to 0
     for &xi in x_opt.iter() {
         assert!(xi.abs() < 1e-1, "Solution component too far from 0: {}", xi);

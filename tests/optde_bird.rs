@@ -1,11 +1,11 @@
-use autoeq::optde::*;
-use common::*;
+use autoeq::optde::{differential_evolution, DEConfigBuilder, Strategy, Mutation};
+use testfunctions::bird;
 
-mod common;
+mod testfunctions;
 
 #[test]
 fn test_de_bird() {
-    let b = [(-2.0 * std::f64::consts::PI, 2.0 * std::f64::consts::PI), 
+    let b = [(-2.0 * std::f64::consts::PI, 2.0 * std::f64::consts::PI),
              (-2.0 * std::f64::consts::PI, 2.0 * std::f64::consts::PI)];
     let c = DEConfigBuilder::new()
         .seed(70)

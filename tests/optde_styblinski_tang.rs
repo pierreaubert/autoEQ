@@ -1,7 +1,7 @@
-use autoeq::optde::*;
-use common::*;
+use autoeq::optde::{differential_evolution, DEConfig, Mutation};
+use testfunctions::styblinski_tang2;
 
-mod common;
+mod testfunctions;
 
 #[test]
 fn test_de_styblinski_tang() {

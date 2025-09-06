@@ -1,7 +1,7 @@
-use autoeq::optde::*;
-use common::*;
+use autoeq::optde::{differential_evolution, DEConfigBuilder, Strategy};
+use testfunctions::dixons_price;
 
-mod common;
+mod testfunctions;
 
 #[test]
 fn test_de_dixons_price_2d() {

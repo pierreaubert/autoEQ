@@ -1,7 +1,8 @@
-use autoeq::optde::*;
-use common::*;
+use autoeq::optde::{differential_evolution, DEConfigBuilder, Strategy};
+use autoeq::optim::auto_de;
+use testfunctions::{rastrigin, create_bounds};
 
-mod common;
+mod testfunctions;
 
 #[test]
 fn test_de_rastrigin_2d() {
@@ -37,10 +38,10 @@ fn test_de_rastrigin_5d() {
 fn test_auto_de_rastrigin_function() {
     let bounds = create_bounds(3, -5.12, 5.12);
     let result = auto_de(rastrigin, &bounds, None);
-    
+
     assert!(result.is_some(), "AutoDE should find a solution");
     let (x_opt, f_opt, _) = result.unwrap();
-    
+
     // Rastrigin is highly multimodal, so we allow larger tolerance
     assert!(f_opt < 1e-1, "Rastrigin function value too high: {}", f_opt);
     for &xi in x_opt.iter() {

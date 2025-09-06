@@ -1,7 +1,7 @@
-use autoeq::optde::*;
-use common::*;
+use autoeq::optde::{differential_evolution, DEConfigBuilder};
+use testfunctions::{bohachevsky1, bohachevsky2, bohachevsky3};
 
-mod common;
+mod testfunctions;
 
 #[test]
 fn test_de_bohachevsky1() {

@@ -1,7 +1,7 @@
-use autoeq::optde::*;
-use common::*;
+use autoeq::optde::{differential_evolution, DEConfigBuilder, Strategy};
+use testfunctions::drop_wave;
 
-mod common;
+mod testfunctions;
 
 #[test]
 fn test_de_drop_wave() {

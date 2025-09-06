@@ -1,7 +1,7 @@
-use autoeq::optde::*;
-use common::*;
+use autoeq::optde::{differential_evolution, DEConfigBuilder, Strategy};
+use testfunctions::bent_cigar;
 
-mod common;
+mod testfunctions;
 
 #[test]
 fn test_de_bent_cigar_2d() {
@@ -54,21 +54,21 @@ fn test_de_bent_cigar_10d() {
 #[test]
 fn test_bent_cigar_function_properties() {
     use ndarray::Array1;
-    
+
     // Test that the function behaves as expected at known points
-    
+
     // At origin (global minimum)
     let x_origin = Array1::from(vec![0.0, 0.0, 0.0]);
     let f_origin = bent_cigar(&x_origin);
     assert!(f_origin < 1e-15, "Origin should be global minimum: {}", f_origin);
-    
+
     // Test the ill-conditioning: x[0] has normal scaling, others have 10^6 scaling
     let x1 = Array1::from(vec![1.0, 0.0, 0.0]); // Only first component
     let f1 = bent_cigar(&x1);
-    
-    let x2 = Array1::from(vec![0.0, 1.0, 0.0]); // Only second component  
+
+    let x2 = Array1::from(vec![0.0, 1.0, 0.0]); // Only second component
     let f2 = bent_cigar(&x2);
-    
+
     // f2 should be much larger than f1 due to 10^6 scaling
     assert!(f2 / f1 > 1e5, "Second component should be much more penalized: {} vs {}", f2, f1);
 }

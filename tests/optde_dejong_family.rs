@@ -1,7 +1,8 @@
-use autoeq::optde::*;
-use common::*;
+use autoeq::optde::{differential_evolution, DEConfigBuilder, Strategy, Mutation};
+use ndarray::Array1;
+use testfunctions::{de_jong_step2, dejong_f5_foxholes};
 
-mod common;
+mod testfunctions;
 
 #[test]
 fn test_de_dejong_sphere() {

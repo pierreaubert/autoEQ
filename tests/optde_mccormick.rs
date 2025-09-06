@@ -1,7 +1,7 @@
-use autoeq::optde::*;
-use common::*;
+use autoeq::optde::{differential_evolution, DEConfig};
+use testfunctions::mccormick;
 
-mod common;
+mod testfunctions;
 
 #[test]
 fn test_de_mccormick() {

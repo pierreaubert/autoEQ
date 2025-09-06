@@ -1,7 +1,7 @@
-use autoeq::optde::*;
-use common::*;
+use autoeq::optde::{differential_evolution, DEConfigBuilder, Strategy, Mutation};
+use testfunctions::bukin_n6;
 
-mod common;
+mod testfunctions;
 
 #[test]
 fn test_de_bukin_n6() {

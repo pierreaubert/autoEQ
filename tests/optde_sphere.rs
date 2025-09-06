@@ -1,8 +1,8 @@
-use autoeq::optde::*;
-use autoeq::optim::AutoDEParams;
-use common::*;
+use autoeq::optde::{differential_evolution, DEConfigBuilder, Strategy};
+use autoeq::optim::{auto_de, AutoDEParams};
+use testfunctions::{sphere, rastrigin, create_bounds};
 
-mod common;
+mod testfunctions;
 
 #[test]
 fn test_de_sphere_2d() {
@@ -34,14 +34,14 @@ fn test_de_sphere_5d() {
 
 // Auto_de tests using the simplified interface
 
-#[test] 
+#[test]
 fn test_auto_de_sphere_function() {
     let bounds = create_bounds(5, -10.0, 10.0);
     let result = auto_de(sphere, &bounds, None);
-    
+
     assert!(result.is_some(), "AutoDE should find a solution");
     let (x_opt, f_opt, _) = result.unwrap();
-    
+
     // Should find global minimum at origin
     assert!(f_opt < 1e-6, "Sphere function value too high: {}", f_opt);
     for &xi in x_opt.iter() {
@@ -53,7 +53,7 @@ fn test_auto_de_sphere_function() {
 fn test_auto_de_sphere_performance_comparison() {
     // Compare performance on sphere (convex) vs other functions
     let bounds = create_bounds(5, -10.0, 10.0);
-    
+
     let params = AutoDEParams {
         max_iterations: 300,
         population_size: Some(50),
@@ -62,20 +62,20 @@ fn test_auto_de_sphere_performance_comparison() {
         tolerance: 1e-6,
         seed: Some(12345),
     };
-    
+
     // Test on sphere function (should be fast)
     let result_sphere = auto_de(sphere, &bounds, Some(params.clone()));
     assert!(result_sphere.is_some(), "Sphere optimization should succeed");
     let (_, f_sphere, iter_sphere) = result_sphere.unwrap();
-    
+
     // Test on multimodal rastrigin function (should be harder)
     let result_rastrigin = auto_de(rastrigin, &bounds, Some(params));
     assert!(result_rastrigin.is_some(), "Rastrigin optimization should succeed");
     let (_, f_rastrigin, iter_rastrigin) = result_rastrigin.unwrap();
-    
+
     // Sphere should converge better than Rastrigin
     assert!(f_sphere < f_rastrigin, "Sphere should have better final value: {} vs {}", f_sphere, f_rastrigin);
-    
+
     println!("Sphere: f={:.2e}, iter={}", f_sphere, iter_sphere);
     println!("Rastrigin: f={:.2e}, iter={}", f_rastrigin, iter_rastrigin);
 }

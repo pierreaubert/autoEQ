@@ -1,9 +1,6 @@
-use autoeq::optde::*;
-use common::*;
-use std::sync::Arc;
-use ndarray::Array1;
-
-mod common;
+use autoeq::optde::{differential_evolution, DEConfigBuilder, Strategy};
+use testfunctions::{binh_korn_constraint1, binh_korn_constraint2, binh_korn_weighted};
+mod testfunctions;
 
 #[test]
 fn test_de_constrained_binh_korn() {
@@ -19,7 +16,7 @@ fn test_de_constrained_binh_korn() {
         .add_penalty_ineq(Box::new(binh_korn_constraint2), 1e6)
         .build();
     let result = differential_evolution(&binh_korn_weighted, &b, c);
-    
+
     // Check constraints
     let g1 = (result.x[0] - 5.0).powi(2) + result.x[1].powi(2);
     let g2 = (result.x[0] - 8.0).powi(2) + (result.x[1] + 3.0).powi(2);

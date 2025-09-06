@@ -1,9 +1,6 @@
-use autoeq::optde::*;
-use common::*;
-use std::sync::Arc;
-use ndarray::Array1;
+use autoeq::optde::Strategy;
 
-mod common;
+mod testfunctions;
 
 #[test]
 fn test_parse_strategy_variants() {

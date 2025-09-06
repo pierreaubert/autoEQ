@@ -1,7 +1,7 @@
-use autoeq::optde::*;
-use common::*;
+use autoeq::optde::{differential_evolution, DEConfig, DEConfigBuilder, Strategy};
+use testfunctions::{levi13, levy_n13};
 
-mod common;
+mod testfunctions;
 
 #[test]
 fn test_de_levi13_basic() {
@@ -38,7 +38,7 @@ fn test_de_levi13_multistart() {
     // Test with multiple random starts to verify robustness
     let b = [(-10.0, 10.0), (-10.0, 10.0)];
     let seeds = [42, 123, 456];
-    
+
     for (i, &seed) in seeds.iter().enumerate() {
         let c = DEConfigBuilder::new()
             .seed(seed)
@@ -55,22 +55,22 @@ fn test_de_levi13_multistart() {
 #[test]
 fn test_levi13_function_properties() {
     use ndarray::Array1;
-    
+
     // Test that the function behaves as expected at known points
-    
+
     // At global optimum (1, 1)
     let x_opt = Array1::from(vec![1.0, 1.0]);
     let f_opt = levy_n13(&x_opt);
     // Should be very close to 0
     assert!(f_opt < 1e-10, "Global optimum should be near 0: {}", f_opt);
-    
+
     // Test the function structure
     // levy_n13 is same as levi13 - they should be identical
     let x_test = Array1::from(vec![0.5, -0.5]);
     let f_levy = levy_n13(&x_test);
     let f_levi = levi13(&x_test);
     assert!((f_levy - f_levi).abs() < 1e-15, "levy_n13 and levi13 should be identical: {} vs {}", f_levy, f_levi);
-    
+
     // Test at origin - should be worse than optimum
     let x_origin = Array1::from(vec![0.0, 0.0]);
     let f_origin = levy_n13(&x_origin);

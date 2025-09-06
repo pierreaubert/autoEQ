@@ -1,7 +1,7 @@
-use autoeq::optde::*;
-use common::*;
+use autoeq::optde::{differential_evolution, DEConfigBuilder, Strategy};
+use testfunctions::trid;
 
-mod common;
+mod testfunctions;
 
 #[test]
 fn test_de_trid_2d() {
@@ -54,15 +54,15 @@ fn test_de_trid_4d() {
 #[test]
 fn test_trid_function_properties() {
     use ndarray::Array1;
-    
+
     // Test that the function behaves as expected at known points
-    
+
     // At 2D optimum (2, 2)
     let x_2d = Array1::from(vec![2.0, 2.0]);
     let f_2d = trid(&x_2d);
     // Should be close to -2
     assert!((f_2d - (-2.0)).abs() < 1e-10, "2D optimum value incorrect: {}", f_2d);
-    
+
     // At origin (should be higher)
     let x_origin = Array1::from(vec![0.0, 0.0]);
     let f_origin = trid(&x_origin);

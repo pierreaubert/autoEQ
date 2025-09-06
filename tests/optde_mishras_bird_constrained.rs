@@ -1,9 +1,6 @@
-use autoeq::optde::*;
-use common::*;
-use std::sync::Arc;
-use ndarray::Array1;
-
-mod common;
+use autoeq::optde::{differential_evolution, DEConfigBuilder, Strategy, Mutation};
+use testfunctions::{mishras_bird_constraint, mishras_bird_objective};
+mod testfunctions;
 
 #[test]
 fn test_de_constrained_mishras_bird() {

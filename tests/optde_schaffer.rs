@@ -1,7 +1,7 @@
-use autoeq::optde::*;
-use common::*;
+use autoeq::optde::{differential_evolution, DEConfigBuilder, Strategy};
+use testfunctions::{schaffer_n2, schaffer_n4};
 
-mod common;
+mod testfunctions;
 
 #[test]
 fn test_de_schaffer_n2() {

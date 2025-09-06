@@ -1,7 +1,7 @@
-use autoeq::optde::*;
-use common::*;
+use autoeq::optde::{differential_evolution, DEConfigBuilder, Strategy};
+use testfunctions::quartic;
 
-mod common;
+mod testfunctions;
 
 #[test]
 fn test_de_quartic_2d() {
@@ -70,29 +70,29 @@ fn test_de_quartic_10d() {
 #[test]
 fn test_quartic_function_properties() {
     use ndarray::Array1;
-    
+
     // Test that the function behaves as expected at known points
-    
+
     // At origin (global minimum)
     let x_origin = Array1::from(vec![0.0, 0.0, 0.0]);
     let f_origin = quartic(&x_origin);
     assert!(f_origin < 1e-15, "Origin should be global minimum: {}", f_origin);
-    
+
     // Test the weighted quartic: (i+1) * x[i]^4
     let x_test = Array1::from(vec![0.1, 0.1, 0.1]);
     let f_test = quartic(&x_test);
-    
+
     // Manual calculation: 1*(0.1)^4 + 2*(0.1)^4 + 3*(0.1)^4 = (1+2+3)*(0.1)^4 = 6*0.0001 = 0.0006
     let expected = 1.0 * 0.1_f64.powi(4) + 2.0 * 0.1_f64.powi(4) + 3.0 * 0.1_f64.powi(4);
     assert!((f_test - expected).abs() < 1e-15, "Function calculation incorrect: {} vs {}", f_test, expected);
-    
+
     // Test that higher-index components are weighted more heavily
     let x1 = Array1::from(vec![0.5, 0.0, 0.0]);
     let f1 = quartic(&x1);
-    
+
     let x2 = Array1::from(vec![0.0, 0.0, 0.5]);
     let f2 = quartic(&x2);
-    
+
     // f2 should be larger because 3*x[2]^4 > 1*x[0]^4 for same |x|
     assert!(f2 > f1, "Higher indexed components should be weighted more: {} vs {}", f2, f1);
     assert!((f2 / f1 - 3.0).abs() < 1e-10, "Weight ratio should be 3: {}", f2 / f1);

@@ -1,9 +1,6 @@
-use autoeq::optde::*;
-use common::*;
-use std::sync::Arc;
-use ndarray::Array1;
-
-mod common;
+use autoeq::optde::{differential_evolution, DEConfigBuilder, Strategy, Mutation};
+use testfunctions::{keanes_bump_constraint1, keanes_bump_constraint2, keanes_bump_objective};
+mod testfunctions;
 
 #[test]
 fn test_de_constrained_keanes_bump() {

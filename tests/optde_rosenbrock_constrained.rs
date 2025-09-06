@@ -1,9 +1,9 @@
 use std::sync::Arc;
 use ndarray::Array1;
-use autoeq::optde::*;
-use common::*;
+use autoeq::optde::{differential_evolution, DEConfigBuilder, Strategy, NonlinearConstraintHelper};
+use testfunctions::{rosenbrock_disk_constraint, rosenbrock_objective};
 
-mod common;
+mod testfunctions;
 
 #[test]
 fn test_de_constrained_rosenbrock_disk() {
@@ -23,22 +23,22 @@ fn test_de_constrained_rosenbrock_disk() {
     assert!(result.fun < 0.5); // Should find good solution within constraint
 }
 
-#[test] 
+#[test]
 fn test_de_nonlinear_constraint_helper() {
     // Test using NonlinearConstraintHelper for a more complex constraint
     let objective = |x: &Array1<f64>| (x[0] - 1.0).powi(2) + (x[1] - 2.0).powi(2);
-    
+
     // Constraint: x[0]^2 + x[1]^2 <= 4 (circle constraint)
     let constraint_fn = Arc::new(|x: &Array1<f64>| {
         Array1::from(vec![x[0].powi(2) + x[1].powi(2)])
     });
-    
+
     let constraint = NonlinearConstraintHelper {
         fun: constraint_fn,
         lb: Array1::from(vec![-f64::INFINITY]), // no lower bound
         ub: Array1::from(vec![4.0]), // upper bound: <= 4
     };
-    
+
     let b = vec![(-3.0, 3.0), (-3.0, 3.0)];
     let mut c = DEConfigBuilder::new()
         .seed(60)
@@ -47,16 +47,16 @@ fn test_de_nonlinear_constraint_helper() {
         .strategy(Strategy::Best1Exp)
         .recombination(0.9)
         .build();
-    
+
     // Apply nonlinear constraint
     constraint.apply_to(&mut c, 1e6, 1e6);
-    
+
     let result = differential_evolution(&objective, &b, c);
-    
+
     // Check that solution respects constraint x^2 + y^2 <= 4
     let constraint_value = result.x[0].powi(2) + result.x[1].powi(2);
     assert!(constraint_value <= 4.01); // Should be inside circle
-    
+
     // The unconstrained optimum is at (1, 2), but constraint forces it to circle boundary
     assert!(result.fun < 2.0); // Should find good feasible solution
 }

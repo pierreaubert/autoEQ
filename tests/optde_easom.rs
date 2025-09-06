@@ -1,7 +1,7 @@
-use autoeq::optde::*;
-use common::*;
+use autoeq::optde::{differential_evolution, DEConfig, Strategy, Mutation};
+use testfunctions::easom;
 
-mod common;
+mod testfunctions;
 
 #[test]
 fn test_de_easom() {

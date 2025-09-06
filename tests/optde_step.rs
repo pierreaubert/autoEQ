@@ -1,7 +1,7 @@
-use autoeq::optde::*;
-use common::*;
+use autoeq::optde::{differential_evolution, DEConfigBuilder, Strategy};
+use testfunctions::step;
 
-mod common;
+mod testfunctions;
 
 #[test]
 fn test_de_step_2d() {
@@ -54,25 +54,25 @@ fn test_de_step_3d() {
 #[test]
 fn test_step_function_properties() {
     use ndarray::Array1;
-    
+
     // Test that the function behaves as expected at known points
-    
+
     // At global optimum (0.5, 0.5, ...)
     let x_opt = Array1::from(vec![0.5, 0.5, 0.5]);
     let f_opt = step(&x_opt);
     assert!(f_opt < 1e-15, "Global optimum should be 0: {}", f_opt);
-    
+
     // Test discontinuity around the optimum
     let x_just_below = Array1::from(vec![0.4999, 0.4999]);
     let f_below = step(&x_just_below);
-    
-    let x_just_above = Array1::from(vec![0.5001, 0.5001]);  
+
+    let x_just_above = Array1::from(vec![0.5001, 0.5001]);
     let f_above = step(&x_just_above);
-    
+
     // Both should give different integer floor values
     assert!(f_below == 0.0, "Just below optimum should be 0: {}", f_below);
     assert!(f_above == 2.0, "Just above optimum should be 2: {}", f_above);
-    
+
     // Test at integer points
     let x_integers = Array1::from(vec![1.0, 2.0]);
     let f_integers = step(&x_integers);

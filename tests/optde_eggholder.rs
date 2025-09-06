@@ -1,7 +1,7 @@
-use autoeq::optde::*;
-use common::*;
+use autoeq::optde::{differential_evolution, DEConfigBuilder, Strategy, Mutation};
+use testfunctions::eggholder;
 
-mod common;
+mod testfunctions;
 
 #[test]
 fn test_de_eggholder() {
