@@ -585,21 +585,21 @@ fn compute_fitness_penalties(
         }
     }
 
-    // Log fitness details every 1000 evaluations (approximate)
-    use std::sync::atomic::{AtomicUsize, Ordering};
-    static EVAL_COUNTER: AtomicUsize = AtomicUsize::new(0);
-    let count = EVAL_COUNTER.fetch_add(1, Ordering::Relaxed);
-    if count % 1000 == 0 || (count % 100 == 0 && !penalty_terms.is_empty()) {
-        let param_summary: Vec<String> = (0..x.len()/3).map(|i| {
-            let freq = 10f64.powf(x[i*3]);
-            let q = x[i*3+1];
-            let gain = x[i*3+2];
-            format!("f{:.0}Hz/Q{:.2}/G{:.2}dB", freq, q, gain)
-        }).collect();
+    // // Log fitness details every 1000 evaluations (approximate)
+    // use std::sync::atomic::{AtomicUsize, Ordering};
+    // static EVAL_COUNTER: AtomicUsize = AtomicUsize::new(0);
+    // let count = EVAL_COUNTER.fetch_add(1, Ordering::Relaxed);
+    // if count % 1000 == 0 || (count % 100 == 0 && !penalty_terms.is_empty()) {
+    //     let param_summary: Vec<String> = (0..x.len()/3).map(|i| {
+    //         let freq = 10f64.powf(x[i*3]);
+    //         let q = x[i*3+1];
+    //         let gain = x[i*3+2];
+    //         format!("f{:.0}Hz/Q{:.2}/G{:.2}dB", freq, q, gain)
+    //     }).collect();
 
-        eprintln!("TRACE[{}]: fit={:.3e}, penalties=[{}], params=[{}]",
-                  count, fit, penalty_terms.join(", "), param_summary.join(", "));
-    }
+    //     eprintln!("TRACE[{}]: fit={:.3e}, penalties=[{}], params=[{}]",
+    //               count, fit, penalty_terms.join(", "), param_summary.join(", "));
+    // }
 
     penalized
 }
@@ -836,16 +836,16 @@ fn setup_de_common(
     eprintln!("  Constraints: max_db={:.1}, min_spacing={:.3} oct, min_db={:.1}",
               penalty_data.max_db, penalty_data.min_spacing_oct, penalty_data.min_db);
 
-    // Log parameter bounds
-    for (i, &(lo, hi)) in bounds.iter().enumerate() {
-        let param_type = match i % 3 {
-            0 => "log10(freq)",
-            1 => "Q",
-            2 => "gain(dB)",
-            _ => unreachable!(),
-        };
-        eprintln!("  Bound[{}] {}: [{:.3}, {:.3}]", i, param_type, lo, hi);
-    }
+    // // Log parameter bounds
+    // for (i, &(lo, hi)) in bounds.iter().enumerate() {
+    //     let param_type = match i % 3 {
+    //         0 => "log10(freq)",
+    //         1 => "Q",
+    //         2 => "gain(dB)",
+    //         _ => unreachable!(),
+    //     };
+    //     eprintln!("  Bound[{}] {}: [{:.3}, {:.3}]", i, param_type, lo, hi);
+    // }
 
     DESetup {
         bounds,
@@ -885,8 +885,8 @@ fn create_de_callback(algo_name: &str) -> Box<dyn FnMut(&DEIntermediate) -> Call
             }
         };
 
-        // Print progress every 10 iterations, and always when there's improvement or stalling
-        if intermediate.iter % 10 == 0 || stall_count == 1 || stall_count % 25 == 0 {
+        // print when stalling
+        if stall_count == 1 || stall_count % 25 == 0 {
             eprintln!("{} iter {:4}  fitness={:.6e} {} conv={:.3e}",
                      name, intermediate.iter, intermediate.fun, improvement, intermediate.convergence);
         }
@@ -969,7 +969,7 @@ fn optimize_filters_autoeq(
     // Adaptive DE with advanced features and native constraints
     let setup = setup_de_common(lower_bounds, upper_bounds, objective_data.clone(), population, maxeval);
     let base_objective_fn = create_de_objective(setup.penalty_data.clone());
-    let callback = create_de_callback("AutoEQ AutoDE");
+    let callback = create_de_callback("autoeq::DE");
 
     // Create smart initialization based on frequency response analysis
     let num_filters = x.len() / 3;
@@ -1415,21 +1415,27 @@ mod smart_init_tests {
     #[test]
     fn test_generate_integrality_constraints() {
         let constraints = generate_integrality_constraints(2, true);
-        // 2 filters × 4 params each = 8 total params
-        // Pattern: [true, true, false, false] repeated
-        assert_eq!(constraints.len(), 8);
-        assert_eq!(constraints[0], true);  // Filter type
-        assert_eq!(constraints[1], true);  // Frequency (indexed)
-        assert_eq!(constraints[2], false); // Q
-        assert_eq!(constraints[3], false); // Gain
-        assert_eq!(constraints[4], true);  // Filter type
-        assert_eq!(constraints[5], true);  // Frequency (indexed)
-        assert_eq!(constraints[6], false); // Q
-        assert_eq!(constraints[7], false); // Gain
-
+        // 2 filters × 3 params each = 6 total params
+        // Pattern: [true, false, false] repeated (freq indexed, Q continuous, gain continuous)
+        assert_eq!(constraints.len(), 6);
+        assert_eq!(constraints[0], true);  // Frequency (indexed)
+        assert_eq!(constraints[1], false); // Q factor (continuous)
+        assert_eq!(constraints[2], false); // Gain (continuous)
+        
+        // Second filter
+        assert_eq!(constraints[3], true);  // Frequency (indexed)
+        assert_eq!(constraints[4], false); // Q factor (continuous)
+        assert_eq!(constraints[5], false); // Gain (continuous)
+        
+        // Test continuous frequency case
         let constraints_continuous = generate_integrality_constraints(2, false);
-        assert_eq!(constraints_continuous[1], false); // Frequency (continuous)
-        assert_eq!(constraints_continuous[5], false); // Frequency (continuous)
+        assert_eq!(constraints_continuous.len(), 6);
+        assert_eq!(constraints_continuous[0], false); // Frequency (continuous)
+        assert_eq!(constraints_continuous[1], false); // Q factor (continuous)
+        assert_eq!(constraints_continuous[2], false); // Gain (continuous)
+        assert_eq!(constraints_continuous[3], false); // Frequency (continuous)
+        assert_eq!(constraints_continuous[4], false); // Q factor (continuous)
+        assert_eq!(constraints_continuous[5], false); // Gain (continuous)
     }
 
     #[test]

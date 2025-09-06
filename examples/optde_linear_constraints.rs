@@ -1,7 +1,7 @@
 use autoeq::optde::{
     Crossover, DEConfigBuilder, LinearConstraintHelper, Mutation, Strategy, differential_evolution,
 };
-use ndarray::{Array1, Array2, array};
+use ndarray::{Array1, Array2};
 use std::str::FromStr;
 
 extern crate blas_src;

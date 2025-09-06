@@ -2,6 +2,9 @@
 
 ## Introduction
 
+The software can find the best EQ for you based on your measurement. There are extensive options to configure the optimiser.
+You can use a graphical version of the optimiser or a command line version.
+
 ## Building the optimiser
 
 If you already have cargo / rustup:
@@ -9,7 +12,7 @@ If you already have cargo / rustup:
 cargo build --release
 ```
 
-If not install rustup first.
+If not install [rustup](https://rustup.rs/) first.
 
 ## Using the optimiser
 

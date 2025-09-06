@@ -3,7 +3,8 @@
 //! Scenarios per speaker:
 //! 1) --loss flat --measurement CEA2034 --curve-name "Listening Window"
 //! 2) --loss flat --measurement "Estimated In-Room Response" --curve-name "Estimated In-Room Response"
-//! 3) --loss score --measurement CEA2034
+//! 3) --loss score --measurement CEA2034 --algo nlopt:isres
+//! 4) --loss score --measurement CEA2034 --algo autoeq:de
 //!
 //! Input data is expected under data/{speaker}/{measurement}.json (Plotly JSON),
 //! optionally data/{speaker}/metadata.json for metadata preference score.
@@ -18,8 +19,14 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::{Duration, Instant};
 use tokio::sync::{Semaphore, mpsc};
 use tokio::task::JoinSet;
+use tokio::select;
+
+use autoeq::constants::{DATA_CACHED, DATA_GENERATED};
 
 extern crate blas_src;
 
@@ -50,11 +57,43 @@ async fn main() -> Result<(), Box<dyn Error>> {
         autoeq::cli::display_algorithm_list();
     }
     
+    // Set up signal handling for graceful shutdown
+    let shutdown = Arc::new(AtomicBool::new(false));
+    let shutdown_clone = Arc::clone(&shutdown);
+    
+    // Spawn a dedicated signal handler task
+    tokio::spawn(async move {
+        let mut sigint_count = 0;
+        loop {
+            if let Err(e) = tokio::signal::ctrl_c().await {
+                eprintln!("⚠️ Error setting up signal handler: {}", e);
+                break;
+            }
+            
+            sigint_count += 1;
+            
+            if sigint_count == 1 {
+                eprintln!("\n🛑 Received interrupt signal (1/2). Stopping benchmark gracefully...");
+                eprintln!("📝 Press Ctrl+C again within 5 seconds to force immediate termination.");
+                shutdown_clone.store(true, Ordering::Relaxed);
+                
+                // Wait 5 seconds for graceful shutdown (longer than autoeq since benchmarks can take time)
+                let start = Instant::now();
+                while start.elapsed() < Duration::from_secs(5) {
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                }
+            } else {
+                eprintln!("\n‼️ Received second interrupt signal. Forcing immediate termination!");
+                std::process::exit(130); // Standard exit code for SIGINT
+            }
+        }
+    });
+    
     // Validate CLI arguments
     autoeq::cli::validate_args_or_exit(&args.base);
 
     // Enumerate speakers as subdirectories of ./data
-    let speakers = list_speakers("data")?;
+    let speakers = list_speakers(DATA_CACHED)?;
     let speakers: Vec<String> = if args.smoke_test {
         speakers.into_iter().take(5).collect()
     } else {
@@ -72,10 +111,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
         num_cpus::get()
     };
     eprintln!("Running benchmark with {} parallel jobs", jobs);
+    eprintln!("Press Ctrl+C to gracefully stop the benchmark and save partial results...");
 
     // Channel for rows; writer runs on main task
     let (tx, mut rx) =
-        mpsc::channel::<(String, Option<f64>, Option<f64>, Option<f64>, Option<f64>)>(jobs * 2);
+        mpsc::channel::<(String, Option<f64>, Option<f64>, Option<f64>, Option<f64>, Option<f64>)>(jobs * 2);
     let sem = std::sync::Arc::new(Semaphore::new(jobs));
     let mut set = JoinSet::new();
 
@@ -83,8 +123,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let tx = tx.clone();
         let sem = sem.clone();
         let base_args = args.base.clone();
+        let shutdown_clone = Arc::clone(&shutdown);
         set.spawn(async move {
             let _permit = sem.acquire_owned().await.expect("semaphore");
+
+            // Check for shutdown signal before starting work
+            if shutdown_clone.load(Ordering::Relaxed) {
+                let _ = tx.send((speaker, None, None, None, None, None)).await;
+                return;
+            }
 
             // For local cache usage, version value is irrelevant provided cache exists.
             let version = "latest".to_string();
@@ -96,7 +143,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
             a1.measurement = Some("CEA2034".to_string());
             a1.curve_name = "Listening Window".to_string();
             a1.loss = autoeq::LossType::Flat;
-            let s1 = run_one(&a1).await.ok().map(|m| m.pref_score);
+            let s1 = if shutdown_clone.load(Ordering::Relaxed) {
+                None
+            } else {
+                run_one(&a1, Arc::clone(&shutdown_clone)).await.ok().map(|m| m.pref_score)
+            };
 
             // Scenario 2
             let mut a2 = base_args.clone();
@@ -105,31 +156,54 @@ async fn main() -> Result<(), Box<dyn Error>> {
             a2.measurement = Some("Estimated In-Room Response".to_string());
             a2.curve_name = "Estimated In-Room Response".to_string();
             a2.loss = autoeq::LossType::Flat;
-            let s2 = run_one(&a2).await.ok().map(|m| m.pref_score);
+            let s2 = if shutdown_clone.load(Ordering::Relaxed) {
+                None
+            } else {
+                run_one(&a2, Arc::clone(&shutdown_clone)).await.ok().map(|m| m.pref_score)
+            };
 
-            // Scenario 3
+            // Scenario 3: Score loss with nlopt:isres
             let mut a3 = base_args.clone();
             a3.speaker = Some(speaker.clone());
             a3.version = Some(version.clone());
             a3.measurement = Some("CEA2034".to_string());
             a3.loss = autoeq::LossType::Score;
-            let s3 = run_one(&a3).await.ok().map(|m| m.pref_score);
+            a3.algo = "nlopt:isres".to_string();
+            let s3 = if shutdown_clone.load(Ordering::Relaxed) {
+                None
+            } else {
+                run_one(&a3, Arc::clone(&shutdown_clone)).await.ok().map(|m| m.pref_score)
+            };
+
+            // Scenario 4: Score loss with autoeq:de
+            let mut a4 = base_args.clone();
+            a4.speaker = Some(speaker.clone());
+            a4.version = Some(version.clone());
+            a4.measurement = Some("CEA2034".to_string());
+            a4.loss = autoeq::LossType::Score;
+            a4.algo = "autoeq:de".to_string();
+            let s4 = if shutdown_clone.load(Ordering::Relaxed) {
+                None
+            } else {
+                run_one(&a4, Arc::clone(&shutdown_clone)).await.ok().map(|m| m.pref_score)
+            };
 
             // Metadata preference
             let meta_pref = read_metadata_pref_score(&speaker).ok().flatten();
 
-            let _ = tx.send((speaker, s1, s2, s3, meta_pref)).await;
+            let _ = tx.send((speaker, s1, s2, s3, s4, meta_pref)).await;
         });
     }
     drop(tx); // close sender when tasks finish
 
     // CSV writer: header then rows as they arrive (unordered)
-    let mut wtr = csv::Writer::from_path("data_generated/benchmark.csv")?;
+    let mut wtr = csv::Writer::from_path(std::path::Path::new(DATA_GENERATED).join("benchmark.csv"))?;
     wtr.write_record([
         "speaker",
         "flat_cea2034_lw",
         "flat_eir",
-        "score_cea2034",
+        "score_cea2034_isres",
+        "score_cea2034_autoeq_de",
         "metadata_pref",
     ])?;
 
@@ -137,45 +211,93 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut deltas_s1: Vec<f64> = Vec::new();
     let mut deltas_s2: Vec<f64> = Vec::new();
     let mut deltas_s3: Vec<f64> = Vec::new();
+    let mut deltas_s4: Vec<f64> = Vec::new();
+    
+    let mut completed_speakers = 0;
+    let total_speakers = speakers.len();
 
-    while let Some((speaker, s1, s2, s3, meta_pref)) = rx.recv().await {
-        wtr.write_record([
-            speaker.as_str(),
-            fmt_opt_f64(s1).as_str(),
-            fmt_opt_f64(s2).as_str(),
-            fmt_opt_f64(s3).as_str(),
-            fmt_opt_f64(meta_pref).as_str(),
-        ])?;
+    // Main result collection loop with signal handling
+    loop {
+        select! {
+            result = rx.recv() => {
+                match result {
+                    Some((speaker, s1, s2, s3, s4, meta_pref)) => {
+                        completed_speakers += 1;
+                        eprintln!("Completed {}/{} speakers: {}", completed_speakers, total_speakers, speaker);
+                        
+                        wtr.write_record([
+                            speaker.as_str(),
+                            fmt_opt_f64(s1).as_str(),
+                            fmt_opt_f64(s2).as_str(),
+                            fmt_opt_f64(s3).as_str(),
+                            fmt_opt_f64(s4).as_str(),
+                            fmt_opt_f64(meta_pref).as_str(),
+                        ])?;
 
-        // Accumulate deltas vs metadata when both values are present and finite
-        if let (Some(v), Some(m)) = (s1, meta_pref) {
-            if v.is_finite() && m.is_finite() {
-                deltas_s1.push(v - m);
+                        // Accumulate deltas vs metadata when both values are present and finite
+                        if let (Some(v), Some(m)) = (s1, meta_pref) {
+                            if v.is_finite() && m.is_finite() {
+                                deltas_s1.push(v - m);
+                            }
+                        }
+                        if let (Some(v), Some(m)) = (s2, meta_pref) {
+                            if v.is_finite() && m.is_finite() {
+                                deltas_s2.push(v - m);
+                            }
+                        }
+                        if let (Some(v), Some(m)) = (s3, meta_pref) {
+                            if v.is_finite() && m.is_finite() {
+                                deltas_s3.push(v - m);
+                            }
+                        }
+                        if let (Some(v), Some(m)) = (s4, meta_pref) {
+                            if v.is_finite() && m.is_finite() {
+                                deltas_s4.push(v - m);
+                            }
+                        }
+                    }
+                    None => {
+                        // Channel closed, all tasks are done
+                        break;
+                    }
+                }
             }
-        }
-        if let (Some(v), Some(m)) = (s2, meta_pref) {
-            if v.is_finite() && m.is_finite() {
-                deltas_s2.push(v - m);
-            }
-        }
-        if let (Some(v), Some(m)) = (s3, meta_pref) {
-            if v.is_finite() && m.is_finite() {
-                deltas_s3.push(v - m);
+            _ = tokio::time::sleep(Duration::from_millis(100)) => {
+                // Check for shutdown signal periodically
+                if shutdown.load(Ordering::Relaxed) {
+                    eprintln!("\n🛑 Shutdown signal detected. Stopping benchmark gracefully...");
+                    
+                    // Abort all pending tasks
+                    set.abort_all();
+                    
+                    eprintln!("⏹️  Aborted {} pending tasks. Saving partial results...", 
+                             total_speakers - completed_speakers);
+                    break;
+                }
             }
         }
     }
     wtr.flush()?;
 
-    // Ensure all tasks are done
+    // Ensure all remaining tasks are cleaned up
     while let Some(_res) = set.join_next().await {
         // ignore task result; errors are reflected as empty row fields
+    }
+    
+    if completed_speakers < total_speakers {
+        eprintln!("⚠️  Benchmark incomplete: {}/{} speakers processed due to early termination.", 
+                 completed_speakers, total_speakers);
+    } else {
+        eprintln!("✅ Benchmark completed successfully: {}/{} speakers processed.", 
+                 completed_speakers, total_speakers);
     }
 
     // Print end-of-run statistics comparing scenarios to metadata
     eprintln!("\n=== Benchmark statistics (scenario - metadata) ===");
     print_stats("flat_cea2034_lw", &deltas_s1);
     print_stats("flat_eir", &deltas_s2);
-    print_stats("score_cea2034", &deltas_s3);
+    print_stats("score_isres", &deltas_s3);
+    print_stats("score_de", &deltas_s4);
 
     Ok(())
 }
@@ -255,31 +377,47 @@ fn list_speakers<P: AsRef<Path>>(data_dir: P) -> Result<Vec<String>, Box<dyn Err
     Ok(out)
 }
 
-async fn run_one(args: &autoeq::cli::Args) -> Result<score::ScoreMetrics, Box<dyn Error>> {
-    let (input_curve, spin_data) = load_input_curve(args).await?;
+async fn run_one(args: &autoeq::cli::Args, shutdown: Arc<AtomicBool>) -> Result<score::ScoreMetrics, String> {
+    // Check for shutdown before starting
+    if shutdown.load(Ordering::Relaxed) {
+        return Err("Task cancelled due to shutdown".into());
+    }
+    
+    let (input_curve, spin_data) = load_input_curve(args).await.map_err(|e| e.to_string())?;
+    
+    // Check for shutdown after data loading
+    if shutdown.load(Ordering::Relaxed) {
+        return Err("Task cancelled during data loading".into());
+    }
+    
     let (inverted_curve, smoothed_curve) = build_target_curve(args, &input_curve);
     let target_curve = smoothed_curve.as_ref().unwrap_or(&inverted_curve);
     let (objective_data, use_cea) =
         setup_objective_data(args, &input_curve, target_curve, &spin_data);
 
-    let x = perform_optimization(args, &objective_data)?;
+    // Check for shutdown before optimization
+    if shutdown.load(Ordering::Relaxed) {
+        return Err("Task cancelled before optimization".into());
+    }
+
+    let x = perform_optimization(args, &objective_data, Arc::clone(&shutdown)).await.map_err(|e| e.to_string())?;
 
     if use_cea {
         let freq = &input_curve.freq;
         let peq_after = iir::compute_peq_response(freq, &x, args.sample_rate, args.iir_hp_pk);
         let metrics =
             score::compute_cea2034_metrics(freq, spin_data.as_ref().unwrap(), Some(&peq_after))
-                .await?;
+                .await.map_err(|e| e.to_string())?;
         Ok(metrics)
     } else {
-        Err("CEA2034 data required to compute preference score".into())
+        Err("CEA2034 data required to compute preference score".to_string())
     }
 }
 
 async fn load_input_curve(
     args: &autoeq::cli::Args,
-) -> Result<(autoeq::Curve, Option<HashMap<String, autoeq::Curve>>), Box<dyn Error>> {
-    autoeq::workflow::load_input_curve(args).await
+) -> Result<(autoeq::Curve, Option<HashMap<String, autoeq::Curve>>), String> {
+    autoeq::workflow::load_input_curve(args).await.map_err(|e| e.to_string())
 }
 
 fn build_target_curve(
@@ -298,15 +436,44 @@ fn setup_objective_data(
     autoeq::workflow::setup_objective_data(args, input_curve, target_curve, spin_data)
 }
 
-fn perform_optimization(
+async fn perform_optimization(
     args: &autoeq::cli::Args,
     objective_data: &ObjectiveData,
-) -> Result<Vec<f64>, Box<dyn Error>> {
-    autoeq::workflow::perform_optimization(args, objective_data)
+    shutdown: Arc<AtomicBool>,
+) -> Result<Vec<f64>, String> {
+    if shutdown.load(Ordering::Relaxed) {
+        return Err("Optimization cancelled by shutdown".to_string());
+    }
+    
+    let args_clone = args.clone();
+    let objective_data_clone = objective_data.clone();
+    
+    let mut optimization_task = tokio::task::spawn_blocking(move || {
+        autoeq::workflow::perform_optimization(&args_clone, &objective_data_clone)
+            .map_err(|e| e.to_string())
+    });
+    
+    // Wait for optimization with periodic shutdown checks
+    loop {
+        select! {
+            result = &mut optimization_task => {
+                match result {
+                    Ok(opt_result) => return opt_result.map_err(|e| format!("Optimization error: {}", e)),
+                    Err(e) => return Err(format!("Optimization task failed: {}", e)),
+                }
+            }
+            _ = tokio::time::sleep(Duration::from_millis(100)) => {
+                if shutdown.load(Ordering::Relaxed) {
+                    optimization_task.abort();
+                    return Err("Optimization cancelled by shutdown".to_string());
+                }
+            }
+        }
+    }
 }
 
 fn read_metadata_pref_score(speaker: &str) -> Result<Option<f64>, Box<dyn Error>> {
-    let p = PathBuf::from("data").join(speaker).join("metadata.json");
+    let p = PathBuf::from(DATA_CACHED).join(speaker).join("metadata.json");
     let content = match fs::read_to_string(&p) {
         Ok(s) => s,
         Err(e) => {

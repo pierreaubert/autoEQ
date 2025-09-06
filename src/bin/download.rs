@@ -90,6 +90,7 @@ async fn write_json(path: &PathBuf, value: &Value) -> Result<(), Box<dyn Error>>
 #[cfg(test)]
 mod tests {
     use autoeq::read;
+    use autoeq::constants::DATA_CACHED;
 
     #[test]
     fn sanitize_replaces_forbidden() {
@@ -99,6 +100,7 @@ mod tests {
     #[test]
     fn data_dir_builds_expected_path() {
         let p = read::data_dir_for("KEF LS50 Meta");
-        assert!(p.ends_with("data/KEF LS50 Meta"));
+        let expected = std::path::Path::new(DATA_CACHED).join("KEF LS50 Meta");
+        assert!(p.ends_with(expected));
     }
 }

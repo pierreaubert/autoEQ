@@ -25,6 +25,12 @@ use clap::Parser;
 use ndarray::Array1;
 use std::collections::HashMap;
 use std::error::Error;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::thread::JoinHandle;
+use std::time::{Duration, Instant};
+use tokio::select;
+use tokio::sync::oneshot;
 
 extern crate blas_src;
 
@@ -79,25 +85,61 @@ fn print_freq_spacing(x: &Vec<f64>, args: &autoeq::cli::Args, label: &str) {
     iir::peq_print(x, args.iir_hp_pk);
 }
 
-fn perform_optimization(
+async fn perform_optimization(
     args: &autoeq::cli::Args,
     objective_data: &ObjectiveData,
+    shutdown: Arc<AtomicBool>,
 ) -> Result<Vec<f64>, Box<dyn Error>> {
     let (lower_bounds, upper_bounds) = autoeq::workflow::setup_bounds(args);
 
     let mut x = autoeq::workflow::initial_guess(args, &lower_bounds, &upper_bounds);
 
-    // iir::peq_print(&x, args.iir_hp_pk);
-
-    let result = optim::optimize_filters(
-        &mut x,
-        &lower_bounds,
-        &upper_bounds,
-        objective_data.clone(),
-        &args.algo,
-        args.population,
-        args.maxeval,
-    );
+    // Check for shutdown before optimization
+    if shutdown.load(Ordering::Relaxed) {
+        return Err("Optimization cancelled by user".into());
+    }
+    
+    let args_clone = args.clone();
+    let objective_data_clone = objective_data.clone();
+    let lower_bounds_clone = lower_bounds.clone();
+    let upper_bounds_clone = upper_bounds.clone();
+    let mut x_clone = x.clone();
+    
+    // Run optimization in a blocking task that can be cancelled
+    let mut optimization_task = tokio::task::spawn_blocking(move || {
+        let result = optim::optimize_filters(
+            &mut x_clone,
+            &lower_bounds_clone,
+            &upper_bounds_clone,
+            objective_data_clone,
+            &args_clone.algo,
+            args_clone.population,
+            args_clone.maxeval,
+        );
+        (x_clone, result)
+    });
+    
+    // Wait for optimization with periodic shutdown checks
+    let (x_optimized, result) = loop {
+        select! {
+            result = &mut optimization_task => {
+                match result {
+                    Ok((x_opt, opt_result)) => break (x_opt, opt_result),
+                    Err(e) => return Err(format!("Optimization task failed: {}", e).into()),
+                }
+            }
+            _ = tokio::time::sleep(Duration::from_millis(500)) => {
+                if shutdown.load(Ordering::Relaxed) {
+                    eprintln!("⚠️  Optimization interrupted by shutdown signal.");
+                    optimization_task.abort();
+                    return Err("Optimization cancelled by user".into());
+                }
+            }
+        }
+    };
+    
+    // Get the optimized parameters
+    x = x_optimized;
 
     match result {
         Ok((status, val)) => {
@@ -116,15 +158,51 @@ fn perform_optimization(
     };
 
     if args.refine {
-        let local_result = optim::optimize_filters(
-            &mut x,
-            &lower_bounds,
-            &upper_bounds,
-            objective_data.clone(),
-            &args.local_algo,
-            args.population,
-            args.maxeval,
-        );
+        // Check for shutdown before local refinement
+        if shutdown.load(Ordering::Relaxed) {
+            eprintln!("⚠️  Local refinement skipped due to shutdown signal.");
+            return Ok(x);
+        }
+        
+        let args_clone = args.clone();
+        let objective_data_clone = objective_data.clone();
+        let lower_bounds_clone = lower_bounds.clone();
+        let upper_bounds_clone = upper_bounds.clone();
+        let mut x_clone = x.clone();
+        
+        let mut refinement_task = tokio::task::spawn_blocking(move || {
+            let result = optim::optimize_filters(
+                &mut x_clone,
+                &lower_bounds_clone,
+                &upper_bounds_clone,
+                objective_data_clone,
+                &args_clone.local_algo,
+                args_clone.population,
+                args_clone.maxeval,
+            );
+            (x_clone, result)
+        });
+        
+        let (x_refined, local_result) = loop {
+            select! {
+                result = &mut refinement_task => {
+                    match result {
+                        Ok((x_ref, opt_result)) => break (x_ref, opt_result),
+                        Err(e) => return Err(format!("Refinement task failed: {}", e).into()),
+                    }
+                }
+                _ = tokio::time::sleep(Duration::from_millis(500)) => {
+                    if shutdown.load(Ordering::Relaxed) {
+                        eprintln!("⚠️  Local refinement interrupted by shutdown signal.");
+                        refinement_task.abort();
+                        return Ok(x); // Return best result so far
+                    }
+                }
+            }
+        };
+        
+        x = x_refined;
+        
         match local_result {
             Ok((local_status, local_val)) => {
                 println!(
@@ -156,6 +234,7 @@ async fn plot_results(
     smoothed_curve: &Option<Array1<f64>>,
     cea_metrics_before: Option<score::ScoreMetrics>,
     use_cea: bool,
+    shutdown: Arc<AtomicBool>,
 ) -> Result<(), Box<dyn Error>> {
     // Generate plots - use provided output path or create default
     let output_path = args.output.clone().unwrap_or_else(|| {
@@ -185,9 +264,18 @@ async fn plot_results(
     let output_path_cloned = output_path.clone();
     let spin_data_cloned = spin_data.clone();
     let eq_response_cloned = eq_response.clone();
+    let shutdown_clone = Arc::clone(&shutdown);
+    
+    // Create a channel to communicate with the plotting thread
+    let (_plot_tx, _plot_rx) = oneshot::channel::<()>();
 
     println!("📊 Generating plots: {}", output_path_cloned.display());
-    let plot_handle = std::thread::spawn(move || {
+    let plot_handle: JoinHandle<Result<(), String>> = std::thread::spawn(move || {
+        // Check for shutdown signal before plotting
+        if shutdown_clone.load(Ordering::Relaxed) {
+            return Ok(());
+        }
+        
         let result = plot::plot_results(
             &args_cloned,
             &input_curve_cloned,
@@ -199,13 +287,39 @@ async fn plot_results(
             Some(&eq_response_cloned),
         );
         if let Err(e) = result {
-            eprintln!("⚠️ Warning: Failed to generate plots: {}", e);
+            let error_msg = format!("Failed to generate plots: {}", e);
+            eprintln!("⚠️ Warning: {}", error_msg);
+            return Err(error_msg);
         } else {
             println!("✅ Plots generated successfully");
         }
+        Ok(())
     });
-
-    plot_handle.join().expect("Plotting thread panicked");
+    
+    // Wait for plotting to complete or shutdown signal
+    let plot_task = tokio::task::spawn_blocking(move || {
+        plot_handle.join().unwrap_or_else(|_| {
+            eprintln!("⚠️ Plotting thread panicked");
+            Err("Plotting thread panicked".to_string())
+        })
+    });
+    
+    select! {
+        result = plot_task => {
+            match result {
+                Ok(Ok(())) => {},
+                Ok(Err(e)) => eprintln!("⚠️ Warning: Failed to generate plots: {}", e),
+                Err(e) => eprintln!("⚠️ Warning: Plotting task failed: {}", e),
+            }
+        }
+        _ = tokio::time::sleep(std::time::Duration::from_millis(100)) => {
+            // Check for shutdown periodically
+            if shutdown.load(Ordering::Relaxed) {
+                eprintln!("🛑 Plotting interrupted by shutdown signal");
+                return Ok(());
+            }
+        }
+    }
 
     if use_cea {
         let freq = &input_curve.freq;
@@ -247,38 +361,102 @@ async fn main() -> Result<(), Box<dyn Error>> {
         autoeq::cli::display_algorithm_list();
     }
     
+    // Set up signal handling for graceful shutdown
+    let shutdown = Arc::new(AtomicBool::new(false));
+    let shutdown_clone = Arc::clone(&shutdown);
+    
+    // Spawn a dedicated signal handler task
+    tokio::spawn(async move {
+        let mut sigint_count = 0;
+        loop {
+            if let Err(e) = tokio::signal::ctrl_c().await {
+                eprintln!("⚠️ Error setting up signal handler: {}", e);
+                break;
+            }
+            
+            sigint_count += 1;
+            
+            if sigint_count == 1 {
+                eprintln!("\n🛑 Received interrupt signal (1/2). Attempting graceful shutdown...");
+                eprintln!("📝 Press Ctrl+C again within 3 seconds to force immediate termination.");
+                shutdown_clone.store(true, Ordering::Relaxed);
+                
+                // Wait 3 seconds for graceful shutdown
+                let start = Instant::now();
+                while start.elapsed() < Duration::from_secs(3) {
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                    if !shutdown_clone.load(Ordering::Relaxed) {
+                        // Process completed gracefully
+                        return;
+                    }
+                }
+            } else {
+                eprintln!("\n‼️ Received second interrupt signal. Forcing immediate termination!");
+                std::process::exit(130); // Standard exit code for SIGINT
+            }
+        }
+    });
+    
     // Validate CLI arguments
     autoeq::cli::validate_args_or_exit(&args);
-    let (input_curve, spin_data) = load_input_curve(&args).await?;
-    let (inverted_curve, smoothed_curve) = build_target_curve(&args, &input_curve);
-    let target_curve = smoothed_curve.as_ref().unwrap_or(&inverted_curve);
-    let (objective_data, use_cea) =
-        setup_objective_data(&args, &input_curve, target_curve, &spin_data);
+    // Main execution wrapped in select! for signal handling
+    let main_task = async {
+        let (input_curve, spin_data) = load_input_curve(&args).await?;
+        
+        // Check for shutdown signal during data loading
+        if shutdown.load(Ordering::Relaxed) {
+            eprintln!("\n🛑 Interrupted during data loading. Exiting gracefully...");
+            return Ok(());
+        }
+        
+        let (inverted_curve, smoothed_curve) = build_target_curve(&args, &input_curve);
+        let target_curve = smoothed_curve.as_ref().unwrap_or(&inverted_curve);
+        let (objective_data, use_cea) =
+            setup_objective_data(&args, &input_curve, target_curve, &spin_data);
 
-    let mut cea_metrics_before: Option<score::ScoreMetrics> = None;
-    if use_cea {
-        let metrics =
-            score::compute_cea2034_metrics(&input_curve.freq, spin_data.as_ref().unwrap(), None)
-                .await?;
-        cea_metrics_before = Some(metrics);
-    }
+        let mut cea_metrics_before: Option<score::ScoreMetrics> = None;
+        if use_cea {
+            let metrics =
+                score::compute_cea2034_metrics(&input_curve.freq, spin_data.as_ref().unwrap(), None)
+                    .await?;
+            cea_metrics_before = Some(metrics);
+        }
+        
+        // Check for shutdown signal before starting optimization
+        if shutdown.load(Ordering::Relaxed) {
+            eprintln!("\n🛑 Interrupted before optimization. Exiting gracefully...");
+            return Ok(());
+        }
 
-    let x = perform_optimization(&args, &objective_data)?;
+        eprintln!("🚀 Starting optimization... (Press Ctrl+C for graceful shutdown)");
+        let x = perform_optimization(&args, &objective_data, Arc::clone(&shutdown)).await?;
+        
+        // Check for shutdown signal after optimization
+        if shutdown.load(Ordering::Relaxed) {
+            eprintln!("\n🛑 Interrupted after optimization. Skipping plot generation...");
+            println!("✅ Optimization completed successfully before shutdown.");
+            return Ok(());
+        }
 
-    plot_results(
-        &args,
-        &x,
-        &objective_data,
-        &input_curve,
-        &spin_data,
-        target_curve,
-        &smoothed_curve,
-        cea_metrics_before,
-        use_cea,
-    )
-    .await?;
+        plot_results(
+            &args,
+            &x,
+            &objective_data,
+            &input_curve,
+            &spin_data,
+            target_curve,
+            &smoothed_curve,
+            cea_metrics_before,
+            use_cea,
+            Arc::clone(&shutdown),
+        )
+        .await?;
 
-    Ok(())
+        Ok(())
+    };
+    
+    // Run the main task
+    main_task.await
 }
 
 #[cfg(test)]

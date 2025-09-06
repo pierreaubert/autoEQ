@@ -2,10 +2,10 @@
 /data_cached
 /data_generated
 /dist
-# Ignore generated plot files (but not src/plot.rs)
-plot*.html
-plot*.png
+autoeq_*.html
+autoeq_*.png
 *.csv
 *~
 .*~
 src/unused.rs
+.idea

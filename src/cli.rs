@@ -98,7 +98,7 @@ pub struct Args {
     pub population: usize,
 
     /// Maximum number of evaluations for the optimizer
-    #[arg(long, default_value_t = 2000)]
+    #[arg(long, default_value_t = 2_000)]
     pub maxeval: usize,
 
     /// Whether to run a local refinement after global optimization
@@ -412,7 +412,7 @@ mod tests {
         let args = Args::parse_from(["autoeq-test"]);
         assert_eq!(args.num_filters, 7);
         assert_eq!(args.sample_rate, 48000.0);
-        assert_eq!(args.maxeval, 200_000);
+        assert_eq!(args.maxeval, 2000);
         assert_eq!(args.curve_name, "Listening Window");
         assert!(!args.iir_hp_pk);
     }

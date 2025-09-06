@@ -54,4 +54,6 @@ num_cpus = "1.16"
 build_html = "2.7.0"
 clap = { version = "4.5", features = ["derive"] }
 csv = "1.3"
+signal-hook-tokio = { version = "0.3", features = ["futures-v0_3"] }
+signal-hook = "0.3"
 
