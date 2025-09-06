@@ -28,6 +28,10 @@ path = "src/bin/download.rs"
 name = "benchmark"
 path = "src/bin/benchmark.rs"
 
+[[bin]]
+name = "plot_functions"
+path = "src/bin/plot_functions.rs"
+
 [dependencies]
 
 # ndarray and dependencies: picky stuff
