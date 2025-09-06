@@ -21,6 +21,8 @@ use std::path::{Path, PathBuf};
 use tokio::sync::{Semaphore, mpsc};
 use tokio::task::JoinSet;
 
+extern crate blas_src;
+
 #[derive(Parser, Debug, Clone)]
 #[command(
     author,
@@ -114,7 +116,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     drop(tx); // close sender when tasks finish
 
     // CSV writer: header then rows as they arrive (unordered)
-    let mut wtr = csv::Writer::from_path("benchmark.csv")?;
+    let mut wtr = csv::Writer::from_path("data_generated/benchmark.csv")?;
     wtr.write_record([
         "speaker",
         "flat_cea2034_lw",

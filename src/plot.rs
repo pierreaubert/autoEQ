@@ -187,12 +187,12 @@ fn create_cea2034_traces(curves: &HashMap<String, super::Curve>) -> Vec<Scatter<
     let axes = ["x1y1", "x2y2", "x3y3", "x4y4"];
 
     for (i, (curve_name, axis)) in CEA2034_CURVE_NAMES.iter().zip(axes.iter()).enumerate() {
-	let mut x_axis_name = &axis[..2];
-	let mut y_axis_name = &axis[2..];
-	if x_axis_name == "x1" || y_axis_name == "y1" {
-	    x_axis_name = "x";
-	    y_axis_name = "y";
-	}
+        let mut x_axis_name = &axis[..2];
+        let mut y_axis_name = &axis[2..];
+        if x_axis_name == "x1" || y_axis_name == "y1" {
+            x_axis_name = "x";
+            y_axis_name = "y";
+        }
         let curve = curves.get(*curve_name).unwrap();
         let trace = Scatter::new(curve.freq.to_vec(), curve.spl.to_vec())
             .mode(Mode::Lines)
@@ -227,12 +227,12 @@ fn create_cea2034_with_eq_traces(
     let axes = ["x1y1", "x2y2", "x3y3", "x4y4"];
 
     for (i, (curve_name, axis)) in CEA2034_CURVE_NAMES.iter().zip(axes.iter()).enumerate() {
-	let mut x_axis_name = &axis[..2];
-	let mut y_axis_name = &axis[2..];
-	if x_axis_name == "x1" || y_axis_name == "y1" {
-	    x_axis_name = "x";
-	    y_axis_name = "y";
-	}
+        let mut x_axis_name = &axis[..2];
+        let mut y_axis_name = &axis[2..];
+        if x_axis_name == "x1" || y_axis_name == "y1" {
+            x_axis_name = "x";
+            y_axis_name = "y";
+        }
         let curve = curves.get(*curve_name).unwrap();
         let trace = Scatter::new(curve.freq.to_vec(), (&curve.spl + eq_response).to_vec())
             .mode(Mode::Lines)
@@ -348,7 +348,7 @@ fn plot_filters(
         .y_axis(
             plotly::layout::Axis::new()
                 .title(plotly::common::Title::with_text("SPL (dB)"))
-                .range(vec![-5.0, 5.0])
+                .range(vec![-5.0, 5.0]),
         )
         .x_axis2(
             plotly::layout::Axis::new()
@@ -360,7 +360,7 @@ fn plot_filters(
         .y_axis2(
             plotly::layout::Axis::new()
                 .title(plotly::common::Title::with_text("SPL (dB)"))
-                .range(vec![-5.0, 5.0])
+                .range(vec![-5.0, 5.0]),
         );
     plot.set_layout(layout);
 
@@ -549,7 +549,7 @@ fn plot_spin(
         .y_axis(
             plotly::layout::Axis::new()
                 .title(plotly::common::Title::with_text("SPL (dB)"))
-                .range(vec![-40.0, 10.0])
+                .range(vec![-40.0, 10.0]),
         )
         .x_axis2(
             plotly::layout::Axis::new()
@@ -561,7 +561,7 @@ fn plot_spin(
         .y_axis2(
             plotly::layout::Axis::new()
                 .title(plotly::common::Title::with_text("SPL (dB)"))
-                .range(vec![-40.0, 10.0])
+                .range(vec![-40.0, 10.0]),
         );
     plot.set_layout(layout);
 
@@ -612,17 +612,9 @@ pub fn plot_results(
         &freqs,
         optimized_params,
     );
-    let plot_spin_details = plot_spin_details(
-        args,
-        input_curve,
-        &freqs,
-        cea2034_curves,
-        eq_response,
-    );
-    let plot_spin = plot_spin(
-        cea2034_curves,
-        eq_response,
-    );
+    let plot_spin_details =
+        plot_spin_details(args, input_curve, &freqs, cea2034_curves, eq_response);
+    let plot_spin = plot_spin(cea2034_curves, eq_response);
 
     // Title with optional speaker name
     let title_text = match speaker {
@@ -631,12 +623,12 @@ pub fn plot_results(
     };
 
     let html: String = HtmlPage::new()
-	.with_title(title_text)
-	.with_script_link("https://cdn.plot.ly/plotly-latest.min.js")
-	.with_raw(plot_filters.to_inline_html(Some("filters")))
-	.with_raw(plot_spin_details.to_inline_html(Some("details")))
-	.with_raw(plot_spin.to_inline_html(Some("spinorame")))
-	.to_html_string();
+        .with_title(title_text)
+        .with_script_link("https://cdn.plot.ly/plotly-latest.min.js")
+        .with_raw(plot_filters.to_inline_html(Some("filters")))
+        .with_raw(plot_spin_details.to_inline_html(Some("details")))
+        .with_raw(plot_spin.to_inline_html(Some("spinorame")))
+        .to_html_string();
 
     let mut file = File::create(&output_path.with_extension("html")).unwrap();
     file.write_all(html.as_bytes())
@@ -663,14 +655,16 @@ pub fn plot_results(
 
     for (plot, name, width, height) in plots {
         let img_path = output_path.with_file_name(format!("{}-{}.png", stem, name));
-        exporter.write_fig(
-            img_path.as_path(),
-            &serde_json::to_value(&plot).expect("Failed to serialize plot to JSON"),
-            ImageFormat::PNG,
-            width,
-            height,
-            1.0,
-        ).expect("Failed to export plot to PNG");
+        exporter
+            .write_fig(
+                img_path.as_path(),
+                &serde_json::to_value(&plot).expect("Failed to serialize plot to JSON"),
+                ImageFormat::PNG,
+                width,
+                height,
+                1.0,
+            )
+            .expect("Failed to export plot to PNG");
     }
 
     exporter.close();

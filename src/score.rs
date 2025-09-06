@@ -119,12 +119,13 @@ fn cea2034_array(spl: &Array2<f64>, idx: &[Vec<usize>], weights: &Array1<f64>) -
     let lw_p = spl2pressure(&cea.row(idx_lw).to_owned());
     let er_p = spl2pressure(&cea.row(idx_er).to_owned());
     let sp_p = spl2pressure(&cea.row(idx_sp).to_owned());
-    
+
     let lw2 = lw_p.mapv(|v| v * v);
     let er2 = er_p.mapv(|v| v * v);
     let sp2 = sp_p.mapv(|v| v * v);
-    
-    let pir = (lw2.mapv(|v| 0.12 * v) + er2.mapv(|v| 0.44 * v) + sp2.mapv(|v| 0.44 * v)).mapv(|v| v.sqrt());
+
+    let pir = (lw2.mapv(|v| 0.12 * v) + er2.mapv(|v| 0.44 * v) + sp2.mapv(|v| 0.44 * v))
+        .mapv(|v| v.sqrt());
     let pir_spl = pressure2spl(&pir);
     cea.row_mut(idx_pir).assign(&pir_spl);
 
@@ -168,7 +169,7 @@ fn apply_weighted_rms(p2: &Array2<f64>, idx: &[usize], weights: &Array1<f64>) ->
     let selected_rows = p2.select(Axis(0), idx);
     let selected_weights = weights.select(Axis(0), idx);
     let sum_w = selected_weights.sum();
-    
+
     // Broadcast weights to match row dimensions and compute weighted sum
     let weighted_rows = &selected_rows * &selected_weights.insert_axis(Axis(1));
     let acc = weighted_rows.sum_axis(Axis(0));
@@ -211,15 +212,15 @@ fn r_squared(x: &Array1<f64>, y: &Array1<f64>) -> f64 {
     }
     let mx = x.mean().unwrap_or(0.0);
     let my = y.mean().unwrap_or(0.0);
-    
+
     // Vectorized computation of deviations
     let dx = x.mapv(|v| v - mx);
     let dy = y.mapv(|v| v - my);
-    
+
     let num = (&dx * &dy).sum();
     let sxx = (&dx * &dx).sum();
     let syy = (&dy * &dy).sum();
-    
+
     if sxx == 0.0 || syy == 0.0 {
         return f64::NAN;
     }

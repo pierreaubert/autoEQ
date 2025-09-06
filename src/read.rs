@@ -36,9 +36,9 @@ struct CsvRecord {
     spl: f64,
 }
 
-/// Return the cache directory for a given speaker under `data/` using sanitized name
+/// Return the cache directory for a given speaker under `data_cached/` using sanitized name
 pub fn data_dir_for(speaker: &str) -> PathBuf {
-    let mut p = PathBuf::from("data");
+    let mut p = PathBuf::from("data_cached");
     p.push(sanitize_dir_name(speaker));
     p
 }

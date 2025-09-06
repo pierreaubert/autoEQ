@@ -40,6 +40,8 @@ pub mod cli;
 pub mod iir;
 /// Loss functions for optimization
 pub mod loss;
+/// Differential Evolution (pure Rust) global optimizer
+pub mod optde;
 /// Optimization algorithms and objective functions
 pub mod optim;
 /// Plotting and visualization functions

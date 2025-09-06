@@ -76,11 +76,11 @@ fn parse_metaheur_algo(name: &str) -> Option<&'static str> {
         s.as_str()
     };
     match algo {
-        "de" | "diff" | "differential_evolution" => Some("de"),
+        "de" | "differential_evolution" => Some("de"),
         "pso" | "particle_swarm" => Some("pso"),
         "rga" | "ga" | "genetic" => Some("rga"),
         "tlbo" => Some("tlbo"),
-        "fa" | "firefly" => Some("fa"),
+        "firefly" => Some("fa"),
         _ => None,
     }
 }
@@ -104,7 +104,7 @@ struct MinGainConstraintData {
 /// Data needed by the nonlinear spacing constraint callback.
 #[derive(Clone, Copy)]
 struct SpacingConstraintData {
-   min_spacing_oct: f64,
+    min_spacing_oct: f64,
 }
 
 fn x2peq(freqs: &Array1<f64>, x: &[f64], srate: f64, iir_hp_pk: bool) -> Array1<f64> {
@@ -610,7 +610,7 @@ mod spacing_diag_tests {
             1.0,
             0.0,
         ];
-        let (freqs, spacings) = compute_sorted_freqs_and_adjacent_octave_spacings(&x);
+        let (_freqs, spacings) = compute_sorted_freqs_and_adjacent_octave_spacings(&x);
         assert!((spacings[0] - 1.0).abs() < 1e-12);
         assert!((spacings[1] - 1.0).abs() < 1e-12);
     }

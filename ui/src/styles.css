@@ -522,12 +522,20 @@ input[type="checkbox"] {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: var(--radius);
-  overflow: hidden;
-  transition: all 0.3s ease;
+  overflow: visible; /* Changed from hidden to visible */
+  margin-bottom: var(--spacing-sm);
 }
 
-.plot-section.collapsed {
+.plot-section.collapsed .plot-container {
   display: none;
+}
+
+.plot-section.expanded .plot-container {
+  display: block;
+}
+
+.plot-section .plot-container {
+  display: none; /* Default to hidden */
 }
 
 .plot-header {
@@ -561,16 +569,11 @@ input[type="checkbox"] {
 .plot-container {
   min-height: 400px;
   height: 400px;
-  display: none;
   width: 100%;
   position: relative;
   background: var(--bg-secondary);
   border-radius: var(--radius);
-  overflow: hidden;
-}
-
-.plot-container.active {
-  display: block !important;
+  overflow: visible;
 }
 
 /* When plot has no data, show centered message */

@@ -16,10 +16,10 @@ Use the provided build script:
 
 ```bash
 # Make the script executable
-chmod +x build-cross.sh
+chmod +x ./scripts/build-cross.sh
 
 # Run the build
-./build-cross.sh
+./scripts/build-cross.sh
 ```
 
 This will create a `dist/` directory with binaries for all supported platforms.
@@ -28,7 +28,7 @@ This will create a `dist/` directory with binaries for all supported platforms.
 
 ### CLI Tools
 - ✅ **macOS ARM64** (Apple Silicon) - `aarch64-apple-darwin`
-- ✅ **macOS Intel** - `x86_64-apple-darwin`  
+- ✅ **macOS Intel** - `x86_64-apple-darwin`
 - 🐳 **Linux x86_64** - `x86_64-unknown-linux-gnu` (requires Docker)
 - 🐳 **Linux ARM64** - `aarch64-unknown-linux-gnu` (requires Docker)
 - 🐳 **Windows x86_64** - `x86_64-pc-windows-gnu` (requires Docker)
@@ -45,7 +45,7 @@ This will create a `dist/` directory with binaries for all supported platforms.
 ```bash
 # Install cross-compilation targets
 rustup target add x86_64-apple-darwin aarch64-apple-darwin
-rustup target add x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu  
+rustup target add x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu
 rustup target add x86_64-pc-windows-gnu
 ```
 
@@ -69,7 +69,7 @@ cargo build --release
 # Intel macOS
 cargo build --release --target x86_64-apple-darwin
 
-# Apple Silicon macOS  
+# Apple Silicon macOS
 cargo build --release --target aarch64-apple-darwin
 ```
 
@@ -104,7 +104,7 @@ npm run tauri build -- --target aarch64-apple-darwin
 
 The repository includes a GitHub Actions workflow (`.github/workflows/build.yml`) that automatically builds binaries for all platforms on:
 - Push to main/master branch
-- Pull requests 
+- Pull requests
 - Git tags (creates releases)
 
 ## Output Structure
@@ -119,7 +119,7 @@ dist/
 │   ├── benchmark                  # Performance testing
 │   └── README.txt                 # Build info
 ├── x86_64-apple-darwin/           # macOS Intel
-├── x86_64-unknown-linux-gnu/      # Linux x86_64  
+├── x86_64-unknown-linux-gnu/      # Linux x86_64
 ├── aarch64-unknown-linux-gnu/     # Linux ARM64
 └── x86_64-pc-windows-gnu/         # Windows x86_64
     ├── autoeq.exe
@@ -136,7 +136,7 @@ dist/
 
 ### File Sizes (Approximate)
 - **autoeq**: ~17-18 MB (includes NLOPT optimization libraries)
-- **download**: ~3.8 MB  
+- **download**: ~3.8 MB
 - **benchmark**: ~5.1 MB
 
 ### Dependencies
@@ -186,7 +186,7 @@ These are ready for distribution or release uploads.
 ## Next Steps
 
 1. Fix TypeScript issues in UI code for Tauri builds
-2. Test binaries on actual target platforms  
+2. Test binaries on actual target platforms
 3. Set up automated testing in CI/CD
 4. Create proper release packaging with version numbers
 5. Add code signing for macOS/Windows distributables

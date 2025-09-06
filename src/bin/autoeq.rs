@@ -26,6 +26,8 @@ use ndarray::Array1;
 use std::collections::HashMap;
 use std::error::Error;
 
+extern crate blas_src;
+
 async fn load_input_curve(
     args: &autoeq::cli::Args,
 ) -> Result<(Curve, Option<HashMap<String, Curve>>), Box<dyn Error>> {
@@ -307,7 +309,7 @@ mod tests {
         let spl = Array1::<f64>::zeros(freqs.len());
         let curve = autoeq::Curve { freq: freqs, spl };
 
-        let (inverted_curve, smoothed) = build_target_curve(&args, &curve);
+        let (inverted_curve, _smoothed) = build_target_curve(&args, &curve);
         // Since SPL is zero, inverted_curve == base_target
         assert!((inverted_curve[0] - 0.0).abs() < 1e-12);
         assert!((inverted_curve[1] - 0.0).abs() < 1e-12);
