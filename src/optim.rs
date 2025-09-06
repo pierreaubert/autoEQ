@@ -38,6 +38,7 @@ use crate::optde::{
     differential_evolution,
 };
 use ndarray::Array2;
+use crate::read::smooth_gaussian;
 
 /// Parameters for AutoDE (AutoEQ Differential Evolution) algorithm
 #[derive(Debug, Clone)]
@@ -186,6 +187,47 @@ pub enum AlgorithmType {
     Global,
     /// Local optimization algorithm - refines solution from starting point, fast but may get trapped in local optimum
     Local,
+}
+
+/// Frequency problem descriptor for smart initialization
+#[derive(Debug, Clone)]
+struct FrequencyProblem {
+    /// Frequency in Hz
+    frequency: f64,
+    /// Magnitude of the problem (positive = boost needed, negative = cut needed)
+    magnitude: f64,
+    /// Suggested Q factor for this frequency
+    q_factor: f64,
+}
+
+/// Smart initialization configuration
+#[derive(Debug, Clone)]
+pub struct SmartInitConfig {
+    /// Number of different initial guesses to generate
+    pub num_guesses: usize,
+    /// Sigma for Gaussian smoothing of frequency response
+    pub smoothing_sigma: f64,
+    /// Minimum peak/dip height to consider
+    pub min_peak_height: f64,
+    /// Minimum distance between peaks/dips (in frequency points)
+    pub min_peak_distance: usize,
+    /// Critical frequencies to always consider (Hz)
+    pub critical_frequencies: Vec<f64>,
+    /// Random variation factor for guess diversification
+    pub variation_factor: f64,
+}
+
+impl Default for SmartInitConfig {
+    fn default() -> Self {
+        Self {
+            num_guesses: 5,
+            smoothing_sigma: 2.0,
+            min_peak_height: 1.0,
+            min_peak_distance: 10,
+            critical_frequencies: vec![100.0, 300.0, 1000.0, 3000.0, 8000.0, 16000.0],
+            variation_factor: 0.1,
+        }
+    }
 }
 
 /// Get all available algorithms with their metadata
@@ -405,6 +447,8 @@ pub struct ObjectiveData {
     pub penalty_w_spacing: f64,
     /// Penalty for min gain constraint
     pub penalty_w_mingain: f64,
+    /// Integrality constraints - true for integer parameters, false for continuous
+    pub integrality: Option<Vec<bool>>,
 }
 
 /// Determine algorithm type and return normalized name
@@ -545,7 +589,7 @@ fn compute_fitness_penalties(
     use std::sync::atomic::{AtomicUsize, Ordering};
     static EVAL_COUNTER: AtomicUsize = AtomicUsize::new(0);
     let count = EVAL_COUNTER.fetch_add(1, Ordering::Relaxed);
-    if count % 1000 == 0 || !penalty_terms.is_empty() {
+    if count % 1000 == 0 || (count % 100 == 0 && !penalty_terms.is_empty()) {
         let param_summary: Vec<String> = (0..x.len()/3).map(|i| {
             let freq = 10f64.powf(x[i*3]);
             let q = x[i*3+1];
@@ -776,9 +820,9 @@ fn setup_de_common(
 
     // Set up penalty-based objective data for DE
     let mut penalty_data = objective_data.clone();
-    penalty_data.penalty_w_ceiling = 100.0;
-    penalty_data.penalty_w_spacing = objective_data.spacing_weight.max(0.0) * 1.0;
-    penalty_data.penalty_w_mingain = 10.0;
+    penalty_data.penalty_w_ceiling = 0.0;
+    penalty_data.penalty_w_spacing = 0.0;
+    penalty_data.penalty_w_mingain = 0.0;
 
     // Estimate parameters
     let pop_size = population.max(15); // minimum reasonable population
@@ -917,7 +961,7 @@ fn optimize_filters_autoeq(
     lower_bounds: &[f64],
     upper_bounds: &[f64],
     objective_data: ObjectiveData,
-    autoeq_name: &str,
+    _autoeq_name: &str,
     population: usize,
     maxeval: usize,
 ) -> Result<(String, f64), (String, f64)> {
@@ -926,6 +970,48 @@ fn optimize_filters_autoeq(
     let setup = setup_de_common(lower_bounds, upper_bounds, objective_data.clone(), population, maxeval);
     let base_objective_fn = create_de_objective(setup.penalty_data.clone());
     let callback = create_de_callback("AutoEQ AutoDE");
+
+    // Create smart initialization based on frequency response analysis
+    let num_filters = x.len() / 3;
+    let smart_config = SmartInitConfig::default();
+
+    // Use the inverted target as the response to analyze for problems
+    let target_response = &setup.penalty_data.target_error;
+    let freq_grid = &setup.penalty_data.freqs;
+
+    eprintln!("🧠 Generating smart initial guesses based on frequency response analysis...");
+    let smart_guesses = create_smart_initial_guesses(
+        target_response,
+        freq_grid,
+        num_filters,
+        &setup.bounds,
+        &smart_config,
+    );
+
+    eprintln!("📊 Generated {} smart initial guesses", smart_guesses.len());
+
+    // Generate Sobol quasi-random population for better space coverage
+    let sobol_samples = generate_sobol_initialization(
+        x.len(),
+        setup.pop_size.saturating_sub(smart_guesses.len()),
+        &setup.bounds,
+    );
+
+    eprintln!("🎯 Generated {} Sobol quasi-random samples", sobol_samples.len());
+
+    // Use the best smart guess as initial x0, fall back to Sobol initialization
+    let best_initial_guess = if !smart_guesses.is_empty() {
+        // Use the first (best) smart guess
+        Array1::from(smart_guesses[0].clone())
+    } else if !sobol_samples.is_empty() {
+        // Fallback to the first Sobol sample if no smart guesses
+        Array1::from(sobol_samples[0].clone())
+    } else {
+        // Ultimate fallback: use current x as initial guess
+        Array1::from(x.to_vec())
+    };
+
+    eprintln!("🚀 Using smart initial guess with Sobol population initialization");
 
     // Use constraint helpers for nonlinear constraints
     let mut config_builder = DEConfigBuilder::new()
@@ -936,7 +1022,8 @@ fn optimize_filters_autoeq(
         .strategy(Strategy::CurrentToBest1Bin)
         .mutation(Mutation::Range { min: 0.4, max: 1.2 })
         .recombination(0.9)
-        .init(Init::LatinHypercube)
+        .init(Init::LatinHypercube)  // Use Latin Hypercube sampling for population
+        .x0(best_initial_guess)     // Use smart guess as initial best individual
         .disp(false)
         .callback(callback);
 
@@ -1062,6 +1149,358 @@ pub fn compute_sorted_freqs_and_adjacent_octave_spacings(x: &[f64]) -> (Vec<f64>
             .collect()
     };
     (freqs, spacings)
+}
+
+/// Generate integrality constraints for filter optimization
+///
+/// In the AutoEQ parameter encoding:
+/// - Parameter 1 (frequency index): integer (when using frequency indexing)
+/// - Parameter 2 (Q factor): continuous
+/// - Parameter 3 (gain): continuous
+///
+/// # Arguments
+/// * `num_filters` - Number of filters
+/// * `use_freq_indexing` - Whether frequency is encoded as integer index (true) or continuous log10(Hz) (false)
+///
+/// # Returns
+/// Vector of boolean values: true for integer parameters, false for continuous
+pub fn generate_integrality_constraints(num_filters: usize, use_freq_indexing: bool) -> Vec<bool> {
+    let mut constraints = Vec::with_capacity(num_filters * 4);
+
+    for _i in 0..num_filters {
+        // constraints.push(true);  // Filter type - integer, not yet implemented
+        constraints.push(use_freq_indexing);  // Frequency - integer if indexing, continuous if log10(Hz)
+        constraints.push(false); // Q factor - continuous
+        constraints.push(false); // Gain - continuous
+    }
+
+    constraints
+}
+
+/// Find peaks in a signal using simple local maxima detection
+///
+/// # Arguments
+/// * `signal` - Input signal to analyze
+/// * `min_height` - Minimum height for peaks
+/// * `min_distance` - Minimum distance between peaks (in samples)
+///
+/// # Returns
+/// Indices of detected peaks
+fn find_peaks(signal: &Array1<f64>, min_height: f64, min_distance: usize) -> Vec<usize> {
+    let mut peaks = Vec::new();
+    let n = signal.len();
+
+    if n < 3 {
+        return peaks;
+    }
+
+    // Find local maxima
+    for i in 1..n-1 {
+        if signal[i] > signal[i-1] && signal[i] > signal[i+1] && signal[i] >= min_height {
+            peaks.push(i);
+        }
+    }
+
+    // Filter by minimum distance
+    if min_distance > 0 {
+        peaks = filter_peaks_by_distance(peaks, min_distance);
+    }
+
+    peaks
+}
+
+/// Filter peaks by minimum distance constraint
+fn filter_peaks_by_distance(mut peaks: Vec<usize>, min_distance: usize) -> Vec<usize> {
+    if peaks.is_empty() {
+        return peaks;
+    }
+
+    peaks.sort_unstable();
+    let mut filtered = vec![peaks[0]];
+
+    for &peak in peaks.iter().skip(1) {
+        if peak >= filtered.last().unwrap() + min_distance {
+            filtered.push(peak);
+        }
+    }
+
+    filtered
+}
+
+/// Create smart initial guesses based on frequency response analysis
+///
+/// Analyzes the target frequency response to identify peaks and dips,
+/// then generates initial parameter guesses that address these problems.
+///
+/// # Arguments
+/// * `target_response` - Target frequency response to analyze
+/// * `freq_grid` - Frequency grid corresponding to the response
+/// * `num_filters` - Number of filters to optimize
+/// * `bounds` - Parameter bounds for validation
+/// * `config` - Smart initialization configuration
+///
+/// # Returns
+/// Vector of initial guess parameter vectors
+pub fn create_smart_initial_guesses(
+    target_response: &Array1<f64>,
+    freq_grid: &Array1<f64>,
+    num_filters: usize,
+    bounds: &[(f64, f64)],
+    config: &SmartInitConfig,
+) -> Vec<Vec<f64>> {
+    // Smooth the response to reduce noise
+    let smoothed = smooth_gaussian(target_response, config.smoothing_sigma);
+
+    // Find peaks (need cuts) and dips (need boosts)
+    let peaks = find_peaks(&smoothed, config.min_peak_height, config.min_peak_distance);
+    let inverted = -&smoothed;
+    let dips = find_peaks(&inverted, config.min_peak_height, config.min_peak_distance);
+
+    let mut problems = Vec::new();
+
+    // Add peaks (need cuts)
+    for &peak_idx in &peaks {
+        if peak_idx < freq_grid.len() {
+            problems.push(FrequencyProblem {
+                frequency: freq_grid[peak_idx],
+                magnitude: -smoothed[peak_idx].abs(), // Negative for cuts
+                q_factor: 1.0,
+            });
+        }
+    }
+
+    // Add dips (need boosts)
+    for &dip_idx in &dips {
+        if dip_idx < freq_grid.len() {
+            problems.push(FrequencyProblem {
+                frequency: freq_grid[dip_idx],
+                magnitude: smoothed[dip_idx].abs(), // Positive for boosts
+                q_factor: 0.7, // Lower Q for boosts
+            });
+        }
+    }
+
+    // Sort by magnitude (most problematic first)
+    problems.sort_by(|a, b| b.magnitude.abs().partial_cmp(&a.magnitude.abs()).unwrap_or(std::cmp::Ordering::Equal));
+
+    // Generate initial guesses
+    let mut initial_guesses = Vec::new();
+
+    for _guess_idx in 0..config.num_guesses {
+        let mut guess = Vec::with_capacity(num_filters * 3); // [log10(freq), Q, gain] per filter
+        let mut used_problems = problems.clone();
+
+        // Fill with critical frequencies if not enough problems found
+        while used_problems.len() < num_filters {
+            for &critical_freq in &config.critical_frequencies {
+                if critical_freq >= freq_grid[0] && critical_freq <= freq_grid[freq_grid.len()-1] {
+                    used_problems.push(FrequencyProblem {
+                        frequency: critical_freq,
+                        magnitude: 0.5,
+                        q_factor: 1.0,
+                    });
+                }
+                if used_problems.len() >= num_filters {
+                    break;
+                }
+            }
+
+            // Fill remaining with random frequencies if needed
+            while used_problems.len() < num_filters {
+                use rand::Rng;
+                let mut rng = rand::rng();
+                let rand_freq = rng.random_range(freq_grid[0]..freq_grid[freq_grid.len()-1]);
+                used_problems.push(FrequencyProblem {
+                    frequency: rand_freq,
+                    magnitude: rng.random_range(-2.0..2.0),
+                    q_factor: 1.0,
+                });
+            }
+        }
+
+        // Create parameter vector for this guess
+        for i in 0..num_filters {
+            let problem = &used_problems[i % used_problems.len()];
+
+            // Add some randomization to diversify guesses
+            use rand::Rng;
+            let mut rng = rand::rng();
+
+            let freq_var = problem.frequency * (1.0 + rng.random_range(-config.variation_factor..config.variation_factor));
+            let gain_var = problem.magnitude * (1.0 + rng.random_range(-0.2..0.2));
+            let q_var = problem.q_factor * (1.0 + rng.random_range(-0.3..0.3));
+
+            // Convert to log10(freq) and constrain to bounds
+            let log_freq = freq_var.log10().max(bounds[i*3].0).min(bounds[i*3].1);
+            let q_constrained = q_var.max(bounds[i*3+1].0).min(bounds[i*3+1].1);
+            let gain_constrained = gain_var.max(bounds[i*3+2].0).min(bounds[i*3+2].1);
+
+            guess.extend_from_slice(&[log_freq, q_constrained, gain_constrained]);
+        }
+
+        initial_guesses.push(guess);
+    }
+
+    initial_guesses
+}
+
+/// Generate Sobol quasi-random sequence for initialization
+///
+/// Uses a simple Sobol sequence implementation for better parameter space coverage
+/// than pure random initialization.
+///
+/// # Arguments
+/// * `dimensions` - Number of dimensions (parameters)
+/// * `num_samples` - Number of samples to generate
+/// * `bounds` - Parameter bounds for scaling
+///
+/// # Returns
+/// Vector of parameter vectors sampled from Sobol sequence
+pub fn generate_sobol_initialization(
+    dimensions: usize,
+    num_samples: usize,
+    bounds: &[(f64, f64)],
+) -> Vec<Vec<f64>> {
+    // Simple Sobol implementation - for production use, consider a more sophisticated library
+    let mut samples = Vec::new();
+
+    // Generate quasi-random samples using Van der Corput sequence (simple 1D Sobol)
+    for i in 0..num_samples {
+        let mut sample = Vec::with_capacity(dimensions);
+
+        for dim in 0..dimensions {
+            // Van der Corput sequence in base 2 for dimension 0, base 3 for dim 1, etc.
+            let base = match dim {
+                0 => 2,
+                1 => 3,
+                2 => 5,
+                3 => 7,
+                4 => 11,
+                _ => 2 + (dim % 10), // Simple fallback
+            };
+
+            let quasi_random = van_der_corput(i + 1, base);
+
+            // Scale to bounds
+            let (lower, upper) = bounds[dim];
+            let scaled = lower + quasi_random * (upper - lower);
+            sample.push(scaled);
+        }
+
+        samples.push(sample);
+    }
+
+    samples
+}
+
+/// Van der Corput sequence for quasi-random number generation
+fn van_der_corput(mut n: usize, base: usize) -> f64 {
+    let mut result = 0.0;
+    let mut f = 1.0 / base as f64;
+
+    while n > 0 {
+        result += (n % base) as f64 * f;
+        n /= base;
+        f /= base as f64;
+    }
+
+    result
+}
+
+#[cfg(test)]
+mod smart_init_tests {
+    use super::*;
+    use ndarray::Array1;
+
+    #[test]
+    fn test_generate_integrality_constraints() {
+        let constraints = generate_integrality_constraints(2, true);
+        // 2 filters × 4 params each = 8 total params
+        // Pattern: [true, true, false, false] repeated
+        assert_eq!(constraints.len(), 8);
+        assert_eq!(constraints[0], true);  // Filter type
+        assert_eq!(constraints[1], true);  // Frequency (indexed)
+        assert_eq!(constraints[2], false); // Q
+        assert_eq!(constraints[3], false); // Gain
+        assert_eq!(constraints[4], true);  // Filter type
+        assert_eq!(constraints[5], true);  // Frequency (indexed)
+        assert_eq!(constraints[6], false); // Q
+        assert_eq!(constraints[7], false); // Gain
+
+        let constraints_continuous = generate_integrality_constraints(2, false);
+        assert_eq!(constraints_continuous[1], false); // Frequency (continuous)
+        assert_eq!(constraints_continuous[5], false); // Frequency (continuous)
+    }
+
+    #[test]
+    fn test_find_peaks() {
+        let signal = Array1::from(vec![1.0, 3.0, 2.0, 5.0, 1.0, 4.0, 2.0]);
+        let peaks = find_peaks(&signal, 2.5, 1);
+        // Should find peaks at indices 1 (value 3.0), 3 (value 5.0), 5 (value 4.0)
+        assert_eq!(peaks, vec![1, 3, 5]);
+    }
+
+    #[test]
+    fn test_van_der_corput() {
+        // Test basic Van der Corput sequence properties
+        let val1 = van_der_corput(1, 2);
+        let val2 = van_der_corput(2, 2);
+        let val3 = van_der_corput(3, 2);
+
+        // Should be in [0, 1)
+        assert!(val1 >= 0.0 && val1 < 1.0);
+        assert!(val2 >= 0.0 && val2 < 1.0);
+        assert!(val3 >= 0.0 && val3 < 1.0);
+
+        // Should be different values
+        assert_ne!(val1, val2);
+        assert_ne!(val2, val3);
+    }
+
+    #[test]
+    fn test_generate_sobol_initialization() {
+        let bounds = vec![(0.0, 10.0), (0.1, 5.0), (-12.0, 12.0)];
+        let samples = generate_sobol_initialization(3, 5, &bounds);
+
+        assert_eq!(samples.len(), 5);
+        for sample in &samples {
+            assert_eq!(sample.len(), 3);
+            // Check bounds
+            assert!(sample[0] >= 0.0 && sample[0] <= 10.0);
+            assert!(sample[1] >= 0.1 && sample[1] <= 5.0);
+            assert!(sample[2] >= -12.0 && sample[2] <= 12.0);
+        }
+    }
+
+    #[test]
+    fn test_create_smart_initial_guesses() {
+        // Create a simple test case with a peak and dip
+        let target_response = Array1::from(vec![0.0, 3.0, 0.0, -2.0, 0.0]);
+        let freq_grid = Array1::from(vec![100.0, 200.0, 400.0, 800.0, 1600.0]);
+        let bounds = vec![
+            (100.0_f64.log10(), 1600.0_f64.log10()), // log10(freq)
+            (0.5, 3.0), // Q
+            (-6.0, 6.0), // Gain
+        ];
+        let config = SmartInitConfig::default();
+
+        let guesses = create_smart_initial_guesses(
+            &target_response,
+            &freq_grid,
+            1,
+            &bounds,
+            &config,
+        );
+
+        assert_eq!(guesses.len(), config.num_guesses);
+        for guess in &guesses {
+            assert_eq!(guess.len(), 3); // 1 filter × 3 params
+            // Check bounds
+            assert!(guess[0] >= bounds[0].0 && guess[0] <= bounds[0].1);
+            assert!(guess[1] >= bounds[1].0 && guess[1] <= bounds[1].1);
+            assert!(guess[2] >= bounds[2].0 && guess[2] <= bounds[2].1);
+        }
+    }
 }
 
 #[cfg(test)]

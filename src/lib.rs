@@ -36,6 +36,8 @@ pub struct Curve {
 
 /// Common CLI argument definitions shared across binaries
 pub mod cli;
+/// Constants used throughout the library
+pub mod constants;
 /// Constraint functions for optimization
 pub mod constraints;
 /// IIR filter implementations and utilities

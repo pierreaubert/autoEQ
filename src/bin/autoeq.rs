@@ -157,39 +157,55 @@ async fn plot_results(
     cea_metrics_before: Option<score::ScoreMetrics>,
     use_cea: bool,
 ) -> Result<(), Box<dyn Error>> {
-    if let Some(ref output_path) = args.output {
-        let eq_response =
-            iir::compute_peq_response(&input_curve.freq, x, args.sample_rate, args.iir_hp_pk);
+    // Generate plots - use provided output path or create default
+    let output_path = args.output.clone().unwrap_or_else(|| {
+        use std::path::Path;
+        if let Some(speaker) = &args.speaker {
+            // Use speaker name for default filename
+            let safe_name = speaker.replace(['/', '\\', ':', '*', '?', '"', '<', '>', '|'], "_");
+            Path::new(&format!("autoeq_{}", safe_name)).to_path_buf()
+        } else {
+            Path::new("autoeq_results").to_path_buf()
+        }
+    });
+    
+    let eq_response =
+        iir::compute_peq_response(&input_curve.freq, x, args.sample_rate, args.iir_hp_pk);
 
-        let smoothed_curve_opt = smoothed_curve.as_ref().map(|smoothed| crate::Curve {
-            freq: input_curve.freq.clone(),
-            spl: smoothed.clone(),
-        });
+    let smoothed_curve_opt = smoothed_curve.as_ref().map(|smoothed| crate::Curve {
+        freq: input_curve.freq.clone(),
+        spl: smoothed.clone(),
+    });
 
-        let args_cloned = args.clone();
-        let input_curve_cloned = input_curve.clone();
-        let smoothed_curve_cloned = smoothed_curve_opt.as_ref().map(|c| c.clone());
-        let target_curve_cloned = target_curve.clone();
-        let x_cloned = x.clone();
-        let output_path_cloned = output_path.clone();
-        let spin_data_cloned = spin_data.clone();
-        let eq_response_cloned = eq_response.clone();
+    let args_cloned = args.clone();
+    let input_curve_cloned = input_curve.clone();
+    let smoothed_curve_cloned = smoothed_curve_opt.as_ref().map(|c| c.clone());
+    let target_curve_cloned = target_curve.clone();
+    let x_cloned = x.clone();
+    let output_path_cloned = output_path.clone();
+    let spin_data_cloned = spin_data.clone();
+    let eq_response_cloned = eq_response.clone();
 
-        let plot_handle = std::thread::spawn(move || {
-            let _ = plot::plot_results(
-                &args_cloned,
-                &input_curve_cloned,
-                smoothed_curve_cloned.as_ref(),
-                &target_curve_cloned,
-                &x_cloned,
-                &output_path_cloned,
-                spin_data_cloned.as_ref(),
-                Some(&eq_response_cloned),
-            );
-        });
+    println!("📊 Generating plots: {}", output_path_cloned.display());
+    let plot_handle = std::thread::spawn(move || {
+        let result = plot::plot_results(
+            &args_cloned,
+            &input_curve_cloned,
+            smoothed_curve_cloned.as_ref(),
+            &target_curve_cloned,
+            &x_cloned,
+            &output_path_cloned,
+            spin_data_cloned.as_ref(),
+            Some(&eq_response_cloned),
+        );
+        if let Err(e) = result {
+            eprintln!("⚠️ Warning: Failed to generate plots: {}", e);
+        } else {
+            println!("✅ Plots generated successfully");
+        }
+    });
 
-        plot_handle.join().expect("Plotting thread panicked");
-    }
+    plot_handle.join().expect("Plotting thread panicked");
 
     if use_cea {
         let freq = &input_curve.freq;

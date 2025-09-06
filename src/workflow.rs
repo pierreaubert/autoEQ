@@ -147,6 +147,8 @@ pub fn setup_objective_data(
         penalty_w_ceiling: 0.0,
         penalty_w_spacing: 0.0,
         penalty_w_mingain: 0.0,
+        // Integrality constraints - none for continuous optimization
+        integrality: None,
     };
 
     (objective_data, use_cea)

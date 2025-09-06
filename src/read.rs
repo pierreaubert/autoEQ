@@ -28,6 +28,7 @@ use tokio::fs;
 use urlencoding;
 
 use crate::Curve;
+use crate::constants::DATA_CACHED;
 use crate::score;
 
 #[derive(Debug, Deserialize)]
@@ -35,8 +36,6 @@ struct CsvRecord {
     frequency: f64,
     spl: f64,
 }
-
-const DATA_CACHED: &str = "data_cached";
 
 /// Return the cache directory for a given speaker under `data_cached/` using sanitized name
 pub fn data_dir_for(speaker: &str) -> PathBuf {
@@ -893,6 +892,66 @@ pub fn smooth_one_over_n_octave(
         out[i] = if cnt > 0 { sum / cnt as f64 } else { values[i] };
     }
     out
+}
+
+/// Apply Gaussian smoothing to a signal
+///
+/// # Arguments
+/// * `signal` - Input signal to smooth
+/// * `sigma` - Standard deviation of Gaussian kernel
+///
+/// # Returns
+/// Smoothed signal
+pub fn smooth_gaussian(signal: &Array1<f64>, sigma: f64) -> Array1<f64> {
+    if sigma <= 0.0 {
+        return signal.clone();
+    }
+
+    let n = signal.len();
+    let mut result = Array1::zeros(n);
+
+    // Calculate kernel size (3 sigma on each side is usually sufficient)
+    let kernel_half_size = (3.0 * sigma).ceil() as usize;
+    let kernel_size = 2 * kernel_half_size + 1;
+
+    // Pre-calculate Gaussian kernel
+    let mut kernel = Vec::with_capacity(kernel_size);
+    let mut kernel_sum = 0.0;
+
+    for i in 0..kernel_size {
+        let x = i as f64 - kernel_half_size as f64;
+        let weight = (-0.5 * (x / sigma).powi(2)).exp();
+        kernel.push(weight);
+        kernel_sum += weight;
+    }
+
+    // Normalize kernel
+    for weight in kernel.iter_mut() {
+        *weight /= kernel_sum;
+    }
+
+    // Apply convolution with boundary handling
+    for i in 0..n {
+        let mut weighted_sum = 0.0;
+        let mut weight_sum = 0.0;
+
+        for (j, &kernel_weight) in kernel.iter().enumerate() {
+            let sample_idx = i as isize + j as isize - kernel_half_size as isize;
+
+            if sample_idx >= 0 && sample_idx < n as isize {
+                weighted_sum += signal[sample_idx as usize] * kernel_weight;
+                weight_sum += kernel_weight;
+            }
+        }
+
+        result[i] = if weight_sum > 0.0 {
+            weighted_sum / weight_sum
+        } else {
+            signal[i]
+        };
+    }
+
+    result
 }
 
 #[cfg(test)]
