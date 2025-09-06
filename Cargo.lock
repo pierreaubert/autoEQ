@@ -190,7 +190,6 @@ dependencies = [
  "build_html",
  "clap",
  "csv",
- "defmac",
  "metaheuristics-nature",
  "ndarray",
  "nlopt",
@@ -268,9 +267,9 @@ checksum = "2261d10cca569e4643e526d8dc2e62e433cc8aba21ab764233731f8d369bf394"
 
 [[package]]
 name = "blas-src"
-version = "0.10.0"
+version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b95e83dc868db96e69795c0213143095f03de9dd3252f205d4ac716e4076a7e0"
+checksum = "9bae1f9c995f3deabb3eff7ed9272369a6f260e961c8723779b951c35056c45d"
 dependencies = [
  "openblas-src",
 ]
@@ -631,12 +630,6 @@ name = "deflate64"
 version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "da692b8d1080ea3045efaab14434d40468c3d8657e42abddfffca87b428f4c1b"
-
-[[package]]
-name = "defmac"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d5592fca31e96d8a748d03080b58be78c5383617aa4bd89e69f30607d8769891"
 
 [[package]]
 name = "der"

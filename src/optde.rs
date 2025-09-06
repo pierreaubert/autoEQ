@@ -553,6 +553,12 @@ where
 
         let npop = self.config.popsize * n_free;
         let _bounds_span = &self.upper - &self.lower;
+        
+        eprintln!("DE Init: {} dimensions ({} free), population={}, maxiter={}", 
+                  n, n_free, npop, self.config.maxiter);
+        eprintln!("  Strategy: {:?}, Mutation: {:?}, Crossover: CR={:.3}",
+                  self.config.strategy, self.config.mutation, self.config.recombination);
+        eprintln!("  Tolerances: tol={:.2e}, atol={:.2e}", self.config.tol, self.config.atol);
 
         // RNG
         let mut rng: StdRng = match self.config.seed {
@@ -563,14 +569,19 @@ where
         // Initialize population in [lower, upper]
         let mut pop = match self.config.init {
             Init::LatinHypercube => {
+                eprintln!("  Using Latin Hypercube initialization");
                 init_latin_hypercube(n, npop, &self.lower, &self.upper, &is_free, &mut rng)
             }
-            Init::Random => init_random(n, npop, &self.lower, &self.upper, &is_free, &mut rng),
+            Init::Random => {
+                eprintln!("  Using Random initialization");
+                init_random(n, npop, &self.lower, &self.upper, &is_free, &mut rng)
+            }
         };
 
         // Evaluate energies (objective + penalties)
         let mut nfev: usize = 0;
         let mut energies = Array1::zeros(npop);
+        eprintln!("  Evaluating initial population of {} individuals...", npop);
         for i in 0..npop {
             let xi = pop.row(i).to_owned();
             let mut x_eval = xi.clone();
@@ -581,6 +592,10 @@ where
             energies[i] = fi;
             nfev += 1;
         }
+        
+        // Report initial population statistics
+        let (pop_mean, pop_std) = mean_std(&energies);
+        eprintln!("  Initial population: mean={:.6e}, std={:.6e}", pop_mean, pop_std);
 
         // If x0 provided, override the best member
         if let Some(x0) = &self.config.x0 {
@@ -599,6 +614,15 @@ where
 
         let (mut best_idx, mut best_f) = argmin(&energies);
         let mut best_x = pop.row(best_idx).to_owned();
+        
+        eprintln!("  Initial best: fitness={:.6e} at index {}", best_f, best_idx);
+        let param_summary: Vec<String> = (0..best_x.len()/3).map(|i| {
+            let freq = 10f64.powf(best_x[i*3]);
+            let q = best_x[i*3+1];
+            let gain = best_x[i*3+2];
+            format!("f{:.0}Hz/Q{:.2}/G{:.2}dB", freq, q, gain)
+        }).collect();
+        eprintln!("  Initial best params: [{}]", param_summary.join(", "));
 
         if self.config.disp {
             eprintln!("DE iter {:4}  best_f={:.6e}", 0, best_f);
@@ -608,8 +632,13 @@ where
         let mut success = false;
         let mut message = String::new();
         let mut nit = 0;
+        let mut accepted_trials = 0;
+        let mut improvement_count = 0;
+        
         for iter in 1..=self.config.maxiter {
             nit = iter;
+            accepted_trials = 0;
+            improvement_count = 0;
 
             // For deferred updating we build a new population in place
             for i in 0..npop {
@@ -689,15 +718,28 @@ where
 
                 // Selection
                 if ft <= energies[i] {
+                    accepted_trials += 1;
+                    let old_energy = energies[i];
                     pop.row_mut(i).assign(&trial_clipped.view());
                     energies[i] = ft;
+                    
+                    if ft < old_energy {
+                        improvement_count += 1;
+                    }
 
                     // Track best for next iterations
                     match ft.partial_cmp(&best_f).unwrap_or(Ordering::Greater) {
                         Ordering::Less => {
+                            let old_best = best_f;
                             best_f = ft;
                             best_idx = i;
                             best_x = pop.row(i).to_owned();
+                            
+                            // Log significant improvements
+                            if iter % 10 == 0 || old_best - ft > 0.01 {
+                                eprintln!("  --> NEW BEST at iter {}: {:.6e} (improvement: {:.3e})", 
+                                         iter, ft, old_best - ft);
+                            }
                         }
                         _ => {}
                     }
@@ -706,7 +748,17 @@ where
 
             // Convergence check using std/mean of energies
             let (e_mean, e_std) = mean_std(&energies);
-            let conv = e_std <= self.config.atol + self.config.tol * e_mean.abs();
+            let conv_threshold = self.config.atol + self.config.tol * e_mean.abs();
+            let conv = e_std <= conv_threshold;
+            
+            // More detailed convergence logging every 10 iterations
+            if iter % 10 == 0 || conv {
+                eprintln!("DE iter {:4}  best_f={:.6e}  mean={:.6e}  std={:.6e}  conv_thresh={:.6e} conv={}",
+                         iter, best_f, e_mean, e_std, conv_threshold, conv);
+                eprintln!("  --> Trials: {}/{} accepted ({:.1}%), {} improvements",
+                         accepted_trials, npop, (accepted_trials as f64 / npop as f64) * 100.0, improvement_count);
+            }
+            
             if self.config.disp {
                 eprintln!(
                     "DE iter {:4}  best_f={:.6e}  mean={:.6e}  std={:.6e}",

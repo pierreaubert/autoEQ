@@ -225,6 +225,14 @@ async fn plot_results(
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let args = autoeq::cli::Args::parse();
+    
+    // Check if user wants to see algorithm list
+    if args.algo_list {
+        autoeq::cli::display_algorithm_list();
+    }
+    
+    // Validate CLI arguments
+    autoeq::cli::validate_args_or_exit(&args);
     let (input_curve, spin_data) = load_input_curve(&args).await?;
     let (inverted_curve, smoothed_curve) = build_target_curve(&args, &input_curve);
     let target_curve = smoothed_curve.as_ref().unwrap_or(&inverted_curve);

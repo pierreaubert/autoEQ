@@ -44,6 +44,14 @@ pub struct BenchArgs {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let args = BenchArgs::parse();
+    
+    // Check if user wants to see algorithm list
+    if args.base.algo_list {
+        autoeq::cli::display_algorithm_list();
+    }
+    
+    // Validate CLI arguments
+    autoeq::cli::validate_args_or_exit(&args.base);
 
     // Enumerate speakers as subdirectories of ./data
     let speakers = list_speakers("data")?;

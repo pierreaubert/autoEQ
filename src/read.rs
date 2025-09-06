@@ -36,9 +36,11 @@ struct CsvRecord {
     spl: f64,
 }
 
+const DATA_CACHED: &str = "data_cached";
+
 /// Return the cache directory for a given speaker under `data_cached/` using sanitized name
 pub fn data_dir_for(speaker: &str) -> PathBuf {
-    let mut p = PathBuf::from("data_cached");
+    let mut p = PathBuf::from(DATA_CACHED);
     p.push(sanitize_dir_name(speaker));
     p
 }
@@ -172,7 +174,7 @@ pub async fn fetch_measurement_plot_data(
 ) -> Result<Value, Box<dyn Error>> {
     // 1) Try local cache first: data/{sanitized_speaker}/{measurement}.json
     // We keep filename identical to measurement name when possible (with path separators replaced).
-    let cache_dir = PathBuf::from("data").join(sanitize_dir_name(speaker));
+    let cache_dir = PathBuf::from(DATA_CACHED).join(sanitize_dir_name(speaker));
     let cache_file = cache_dir.join(measurement_filename(measurement));
 
     if let Ok(content) = fs::read_to_string(&cache_file).await {

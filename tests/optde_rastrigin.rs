@@ -30,3 +30,20 @@ fn test_de_rastrigin_5d() {
         .build();
     assert!(differential_evolution(&rastrigin, &b5, c5).fun < 1e-1);
 }
+
+// Auto_de tests using the simplified interface
+
+#[test]
+fn test_auto_de_rastrigin_function() {
+    let bounds = create_bounds(3, -5.12, 5.12);
+    let result = auto_de(rastrigin, &bounds, None);
+    
+    assert!(result.is_some(), "AutoDE should find a solution");
+    let (x_opt, f_opt, _) = result.unwrap();
+    
+    // Rastrigin is highly multimodal, so we allow larger tolerance
+    assert!(f_opt < 1e-1, "Rastrigin function value too high: {}", f_opt);
+    for &xi in x_opt.iter() {
+        assert!(xi.abs() < 1e-1, "Solution component too far from 0: {}", xi);
+    }
+}
