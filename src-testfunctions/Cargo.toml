@@ -1,0 +1,15 @@
+[package]
+name = "autoeq-testfunctions"
+version = "0.2.187"
+edition = "2021"
+authors = ["Pierre Aubert <pierre@spinorama.org>"]
+license = "GPL-3.0-or-later"
+description = "Test functions for optimization algorithm validation and benchmarking"
+repository = "https://github.com/pierreaubert/autoeq"
+
+[dependencies]
+ndarray = { workspace = true }
+
+[lib]
+name = "autoeq_testfunctions"
+path = "src/lib.rs"

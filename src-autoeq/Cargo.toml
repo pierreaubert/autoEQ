@@ -1,0 +1,51 @@
+[package]
+name = "autoeq"
+version = "0.2.187"
+edition = "2021"
+authors = ["Pierre Aubert <pierre@spinorama.org>"]
+license = "GPL-3.0-or-later"
+description = "Automatic equalization for speakers and headphones"
+repository = "https://github.com/pierreaubert/autoeq"
+
+[dependencies]
+ndarray = { workspace = true }
+clap = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+reqwest = { workspace = true }
+plotly = { workspace = true }
+csv = { workspace = true }
+nlopt = { workspace = true }
+signal-hook-tokio = { workspace = true }
+num_cpus = { workspace = true }
+urlencoding = { workspace = true }
+rand = { workspace = true }
+metaheuristics-nature = { workspace = true }
+build_html = { workspace = true }
+plotly_static = { workspace = true }
+
+# AutoEQ crates
+autoeq-iir = { path = "../src-iir" }
+autoeq-de = { path = "../src-de" }
+autoeq-cea2034 = { path = "../src-cea2034" }
+
+# External BLAS
+blas-src = { workspace = true }
+openblas-src = { workspace = true }
+
+[[bin]]
+name = "autoeq"
+path = "bin/autoeq.rs"
+
+[[bin]]  
+name = "benchmark"
+path = "bin/benchmark.rs"
+
+[[bin]]
+name = "download"
+path = "bin/download.rs"
+
+[lib]
+name = "autoeq"
+path = "src/lib.rs"

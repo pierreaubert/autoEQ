@@ -1,0 +1,17 @@
+[package]
+name = "autoeq-cea2034"
+version = "0.2.187"
+edition = "2021"
+authors = ["Pierre Aubert <pierre@spinorama.org>"]
+license = "GPL-3.0-or-later"
+description = "CEA2034 scoring and preference rating algorithms for loudspeaker measurements"
+repository = "https://github.com/pierreaubert/autoeq"
+
+[dependencies]
+ndarray = { workspace = true }
+serde = { workspace = true }
+tokio = { workspace = true }
+
+[lib]
+name = "autoeq_cea2034"
+path = "src/lib.rs"

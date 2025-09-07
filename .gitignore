@@ -1,6 +1,7 @@
 /target
+/data
 /data_cached
-/data_generated
+data_generated
 /dist
 autoeq_*.html
 autoeq_*.png
@@ -9,3 +10,6 @@ autoeq_*.png
 .*~
 src/unused.rs
 .idea
+TAGS
+ETAGS
+CTAGS

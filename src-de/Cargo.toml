@@ -1,0 +1,28 @@
+[package]
+name = "autoeq-de"
+version = "0.2.187"
+edition = "2021"
+authors = ["Pierre Aubert <pierre@spinorama.org>"]
+license = "GPL-3.0-or-later"
+description = "Differential Evolution optimizer and evaluation tools for AutoEQ"
+repository = "https://github.com/pierreaubert/autoeq"
+
+[dependencies]
+# Core numerical computing
+ndarray = { workspace = true }
+blas-src = { workspace = true }
+openblas-src = { workspace = true }
+rand = { workspace = true }
+csv = { workspace = true }
+clap = { workspace = true }
+plotly = { workspace = true }
+serde = { workspace = true }
+autoeq-testfunctions = { path = "../src-testfunctions" }
+
+[[bin]]
+name = "plot_functions"
+path = "bin/plot_functions.rs"
+
+[lib]
+name = "autoeq_de"
+path = "src/mod.rs"

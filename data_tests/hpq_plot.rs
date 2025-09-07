@@ -1,7 +1,9 @@
 use autoeq::{Biquad, BiquadFilterType};
+use autoeq::constants::DATA_GENERATED;
 use ndarray::Array1;
 use plotly::common::{Mode, Title};
 use plotly::{Layout, Plot, Scatter};
+use std::path::PathBuf;
 
 fn logspace_20_to_20k_n(n: usize) -> Array1<f64> {
     assert!(n >= 2);
@@ -64,8 +66,12 @@ fn plot_highpass_variable_q_responses() {
         );
     plot.set_layout(layout);
 
-    // Write HTML next to project root so it's easy to open
-    let out = std::path::PathBuf::from("plot_hpq.html");
+    // Create DATA_GENERATED/plot_tests directory and write HTML there
+    let mut out_dir = PathBuf::from(DATA_GENERATED);
+    out_dir.push("plot_tests");
+    std::fs::create_dir_all(&out_dir).expect("Failed to create plot_tests directory");
+    
+    let out = out_dir.join("plot_hpq.html");
     plot.write_html(&out);
 
     // Ensure file was produced

@@ -1,0 +1,17 @@
+[package]
+name = "autoeq-iir"
+version = "0.2.187"
+edition = "2021"
+authors = ["Pierre Aubert <pierre@spinorama.org>"]
+license = "GPL-3.0-or-later"
+description = "IIR filter implementations for audio equalization"
+repository = "https://github.com/pierreaubert/autoeq"
+
+[dependencies]
+ndarray = { workspace = true }
+num-complex = { workspace = true }
+serde = { workspace = true }
+
+[lib]
+name = "autoeq_iir"
+path = "src/mod.rs"
