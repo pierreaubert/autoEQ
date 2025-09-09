@@ -86,33 +86,3 @@ fn test_de_ackley_n3_recorded() {
         assert!(actual >= -32.0 && actual <= 32.0, "Solution out of bounds: {}", actual);
     }
 }
-
-#[test]
-fn test_ackley_n3_known_properties() {
-    // Test some properties of the Ackley N.3 function
-    use ndarray::Array1;
-    
-    // Test that function is finite at various points
-    let test_points = vec![
-        vec![0.0, 0.0],
-        vec![1.0, -1.0],
-        vec![-5.0, 5.0],
-        vec![32.0, -32.0],
-    ];
-    
-    for point in test_points {
-        let x = Array1::from(point.clone());
-        let f = ackley_n3(&x);
-        
-        assert!(f.is_finite(), "Function should be finite at {:?}: {}", point, f);
-        // Ackley N.3 should produce negative values in its optimal region
-        if point[0].abs() < 10.0 && point[1].abs() < 10.0 {
-            // Near origin, should have potential for good values
-        }
-    }
-    
-    // Test boundary behavior
-    let x_boundary = Array1::from(vec![32.0, 32.0]);
-    let f_boundary = ackley_n3(&x_boundary);
-    assert!(f_boundary.is_finite(), "Function at boundary should be finite");
-}

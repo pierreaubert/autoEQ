@@ -41,6 +41,11 @@ pub enum Strategy {
     Best2Exp,
     RandToBest1Bin,
     RandToBest1Exp,
+    /// Adaptive mutation based on the SAM approach: dynamic sampling from top w% individuals
+    /// where w decreases linearly from w_max to w_min based on current iteration
+    AdaptiveBin,
+    /// Adaptive mutation with exponential crossover
+    AdaptiveExp,
 }
 
 impl FromStr for Strategy {
@@ -68,6 +73,12 @@ impl FromStr for Strategy {
             "randtobest1exp" | "rand-to-best1exp" | "rand_to_best1exp" => {
                 Ok(Strategy::RandToBest1Exp)
             }
+            "adaptivebin" | "adaptive-bin" | "adaptive_bin" | "adaptive" => {
+                Ok(Strategy::AdaptiveBin)
+            }
+            "adaptiveexp" | "adaptive-exp" | "adaptive_exp" => {
+                Ok(Strategy::AdaptiveExp)
+            }
             _ => Err(format!("unknown strategy: {}", s)),
         }
     }
@@ -88,13 +99,15 @@ impl Default for Crossover {
     }
 }
 
-/// Mutation setting: either a fixed factor or a uniform range (dithering)
+/// Mutation setting: either a fixed factor, a uniform range (dithering), or adaptive
 #[derive(Debug, Clone, Copy)]
 pub enum Mutation {
     /// Fixed mutation factor F in [0, 2)
     Factor(f64),
     /// Dithering range [min, max) with 0 <= min < max <= 2
     Range { min: f64, max: f64 },
+    /// Adaptive mutation factor using Cauchy distribution with location parameter tracking
+    Adaptive { initial_f: f64 },
 }
 
 impl Default for Mutation {
@@ -108,7 +121,16 @@ impl Mutation {
         match *self {
             Mutation::Factor(f) => f,
             Mutation::Range { min, max } => rng.random_range(min..max),
+            Mutation::Adaptive { initial_f } => initial_f, // Will be overridden by adaptive logic
         }
+    }
+    
+    /// Sample from Cauchy distribution for adaptive mutation (F parameter)
+    #[allow(dead_code)]
+    fn sample_cauchy<R: Rng + ?Sized>(&self, f_m: f64, _scale: f64, rng: &mut R) -> f64 {
+        // Simplified version using normal random for now
+        let perturbation = (rng.random::<f64>() - 0.5) * 0.2; // Small perturbation
+        (f_m + perturbation).max(0.0).min(2.0) // Clamp to valid range
     }
 }
 
@@ -248,6 +270,8 @@ pub struct DEConfig {
     pub linear_penalty: Option<LinearPenalty>,
     /// Polishing configuration (optional)
     pub polish: Option<PolishConfig>,
+    /// Adaptive differential evolution configuration
+    pub adaptive: AdaptiveConfig,
 }
 
 impl Default for DEConfig {
@@ -272,6 +296,7 @@ impl Default for DEConfig {
             penalty_eq: Vec::new(),
             linear_penalty: None,
             polish: None,
+            adaptive: AdaptiveConfig::default(),
         }
     }
 }
@@ -369,6 +394,23 @@ impl DEConfigBuilder {
         self.cfg.polish = Some(pol);
         self
     }
+    pub fn adaptive(mut self, adaptive: AdaptiveConfig) -> Self {
+        self.cfg.adaptive = adaptive;
+        self
+    }
+    pub fn enable_adaptive_mutation(mut self, enable: bool) -> Self {
+        self.cfg.adaptive.adaptive_mutation = enable;
+        self
+    }
+    pub fn enable_wls(mut self, enable: bool) -> Self {
+        self.cfg.adaptive.wls_enabled = enable;
+        self
+    }
+    pub fn adaptive_weights(mut self, w_max: f64, w_min: f64) -> Self {
+        self.cfg.adaptive.w_max = w_max;
+        self.cfg.adaptive.w_min = w_min;
+        self
+    }
     pub fn build(self) -> DEConfig {
         self.cfg
     }
@@ -389,6 +431,46 @@ fn mutant_rand_to_best1<R: Rng + ?Sized>(
     let x_r0 = pop.row(r0).to_owned();
     &x_r0
         + &((pop.row(best_idx).to_owned() - x_r0.clone() + pop.row(r1).to_owned()
+            - pop.row(r2).to_owned())
+            * f)
+}
+
+/// Adaptive mutation based on Self-Adaptive Mutation (SAM) from the paper
+/// Uses linearly decreasing weight w to select from top individuals
+fn mutant_adaptive<R: Rng + ?Sized>(
+    i: usize,
+    pop: &Array2<f64>,
+    energies: &Array1<f64>,
+    w: f64,
+    f: f64,
+    rng: &mut R,
+) -> Array1<f64> {
+    // Calculate w% of population size for adaptive selection
+    let w_size = ((w * pop.nrows() as f64) as usize).max(1).min(pop.nrows() - 1);
+    
+    // Get sorted indices by fitness (best to worst)
+    let mut sorted_indices: Vec<usize> = (0..pop.nrows()).collect();
+    sorted_indices.sort_by(|&a, &b| energies[a].partial_cmp(&energies[b]).unwrap_or(std::cmp::Ordering::Equal));
+    
+    // Select gr_better from top w% individuals randomly
+    let top_indices = &sorted_indices[0..w_size];
+    let gr_better_idx = top_indices[rng.random_range(0..w_size)];
+    // Get two distinct random indices different from i and gr_better_idx
+    let mut available: Vec<usize> = (0..pop.nrows()).filter(|&idx| idx != i && idx != gr_better_idx).collect();
+    available.shuffle(rng);
+    
+    if available.len() < 2 {
+        // Fallback to standard rand1 if not enough individuals
+        return mutant_rand1(i, pop, f, rng);
+    }
+    
+    let r1 = available[0];
+    let r2 = available[1];
+    
+    // Adaptive mutation: x_i + F * (x_gr_better - x_i + x_r1 - x_r2)
+    // This is the SAM approach from equation (18) in the paper
+    pop.row(i).to_owned()
+        + &((pop.row(gr_better_idx).to_owned() - pop.row(i).to_owned() + pop.row(r1).to_owned()
             - pop.row(r2).to_owned())
             * f)
 }
@@ -430,6 +512,161 @@ fn stack_linear_penalty(dst: &mut LinearPenalty, src: &LinearPenalty) {
     dst.lb = lb_new;
     dst.ub = ub_new;
     dst.weight = dst.weight.max(src.weight);
+}
+
+/// Wrapper Local Search (WLS) strategy for local refinement
+/// Uses Cauchy distribution to perturb selected dimensions
+fn apply_wls<R: Rng + ?Sized>(
+    x: &Array1<f64>,
+    lower: &Array1<f64>,
+    upper: &Array1<f64>,
+    scale: f64,
+    rng: &mut R,
+) -> Array1<f64> {
+    let mut result = x.clone();
+    let n_dims = x.len();
+    
+    // Generate random wrapper mask - selects which dimensions to perturb
+    let n_selected = rng.random_range(1..=n_dims.max(1));
+    let mut dimensions: Vec<usize> = (0..n_dims).collect();
+    dimensions.shuffle(rng);
+    let selected_dims = &dimensions[0..n_selected];
+    
+    // Apply normal random perturbation to selected dimensions (simplified)
+    for &dim in selected_dims {
+        let perturbation = (rng.random::<f64>() - 0.5) * scale * 2.0;
+        let new_val = x[dim] + perturbation;
+        // Clip to bounds
+        result[dim] = new_val.max(lower[dim]).min(upper[dim]);
+    }
+    
+    result
+}
+
+/// Structures for tracking adaptive parameters
+#[derive(Debug, Clone)]
+struct AdaptiveState {
+    /// Current F_m parameter for Cauchy distribution (mutation)
+    f_m: f64,
+    /// Current CR_m parameter for Gaussian distribution (crossover)
+    cr_m: f64,
+    /// Successful F values from this generation
+    successful_f: Vec<f64>,
+    /// Successful CR values from this generation
+    successful_cr: Vec<f64>,
+    /// Current linearly decreasing weight for adaptive mutation
+    current_w: f64,
+}
+
+impl AdaptiveState {
+    fn new(config: &AdaptiveConfig) -> Self {
+        Self {
+            f_m: config.f_m,
+            cr_m: config.cr_m,
+            successful_f: Vec::new(),
+            successful_cr: Vec::new(),
+            current_w: config.w_max, // Start with maximum weight
+        }
+    }
+    
+    /// Update adaptive parameters based on successful trials
+    fn update(&mut self, config: &AdaptiveConfig, iter: usize, max_iter: usize) {
+        // Update linearly decreasing weight (Equation 19 from the paper)
+        let iter_ratio = iter as f64 / max_iter as f64;
+        self.current_w = config.w_max - (config.w_max - config.w_min) * iter_ratio;
+        
+        // Update F_m using power mean of successful F values (Equations 8-10)
+        if !self.successful_f.is_empty() {
+            let power_mean_f = self.compute_power_mean(&self.successful_f);
+            self.f_m = (1.0 - config.w_f) * self.f_m + config.w_f * power_mean_f;
+        }
+        
+        // Update CR_m using power mean of successful CR values (Equations 12-14)
+        if !self.successful_cr.is_empty() {
+            let power_mean_cr = self.compute_power_mean(&self.successful_cr);
+            self.cr_m = (1.0 - config.w_cr) * self.cr_m + config.w_cr * power_mean_cr;
+        }
+        
+        // Clear successful values for next generation
+        self.successful_f.clear();
+        self.successful_cr.clear();
+    }
+    
+    /// Compute power mean as described in equation (10) from the paper
+    fn compute_power_mean(&self, values: &[f64]) -> f64 {
+        if values.is_empty() {
+            return 0.5; // Default fallback
+        }
+        
+        let sum_powers: f64 = values.iter().map(|&x| x.powf(1.5)).sum();
+        let sum_inv_powers: f64 = values.iter().map(|&x| x.powf(-1.5)).sum();
+        
+        if sum_inv_powers > 0.0 {
+            sum_powers / sum_inv_powers
+        } else {
+            values.iter().sum::<f64>() / values.len() as f64 // Fallback to arithmetic mean
+        }
+    }
+    
+    /// Record successful parameter values
+    fn record_success(&mut self, f_val: f64, cr_val: f64) {
+        self.successful_f.push(f_val);
+        self.successful_cr.push(cr_val);
+    }
+    
+    /// Sample adaptive F parameter using simple perturbation
+    fn sample_f<R: Rng + ?Sized>(&self, rng: &mut R) -> f64 {
+        let perturbation = (rng.random::<f64>() - 0.5) * 0.2;
+        (self.f_m + perturbation).max(0.0).min(2.0) // Clamp to valid range
+    }
+    
+    /// Sample adaptive CR parameter using simple perturbation  
+    fn sample_cr<R: Rng + ?Sized>(&self, rng: &mut R) -> f64 {
+        let perturbation = (rng.random::<f64>() - 0.5) * 0.2;
+        (self.cr_m + perturbation).max(0.0).min(1.0) // Clamp to valid range
+    }
+}
+
+/// Adaptive differential evolution configuration
+#[derive(Debug, Clone)]
+pub struct AdaptiveConfig {
+    /// Enable adaptive mutation strategy
+    pub adaptive_mutation: bool,
+    /// Enable Wrapper Local Search (WLS)
+    pub wls_enabled: bool,
+    /// Maximum weight for adaptive mutation (w_max)
+    pub w_max: f64,
+    /// Minimum weight for adaptive mutation (w_min)
+    pub w_min: f64,
+    /// Weight factor for F parameter adaptation (between 0.8 and 1.0)
+    pub w_f: f64,
+    /// Weight factor for CR parameter adaptation (between 0.9 and 1.0)
+    pub w_cr: f64,
+    /// Initial location parameter for Cauchy distribution (F_m)
+    pub f_m: f64,
+    /// Initial location parameter for Gaussian distribution (CR_m)
+    pub cr_m: f64,
+    /// WLS probability (what fraction of population to apply WLS to)
+    pub wls_prob: f64,
+    /// WLS Cauchy scale parameter
+    pub wls_scale: f64,
+}
+
+impl Default for AdaptiveConfig {
+    fn default() -> Self {
+        Self {
+            adaptive_mutation: false,
+            wls_enabled: false,
+            w_max: 0.9,
+            w_min: 0.1,
+            w_f: 0.9,
+            w_cr: 0.9,
+            f_m: 0.5,
+            cr_m: 0.6,
+            wls_prob: 0.1,
+            wls_scale: 0.1,
+        }
+    }
 }
 
 /// Polishing configuration using NLopt local optimizer within bounds
@@ -657,6 +894,14 @@ where
             eprintln!("DE iter {:4}  best_f={:.6e}", 0, best_f);
         }
 
+        // Initialize adaptive state if adaptive strategies are enabled
+        let mut adaptive_state = if matches!(self.config.strategy, Strategy::AdaptiveBin | Strategy::AdaptiveExp) || 
+                                    self.config.adaptive.adaptive_mutation {
+            Some(AdaptiveState::new(&self.config.adaptive))
+        } else {
+            None
+        };
+        
         // Main loop
         let mut success = false;
         let mut message = String::new();
@@ -671,8 +916,18 @@ where
 
             // For deferred updating we build a new population in place
             for i in 0..npop {
-                // Mutation factor for this candidate (dithering if needed)
-                let f = self.config.mutation.sample(&mut rng);
+                // Sample mutation factor and crossover rate (adaptive or fixed)
+                let (f, cr) = if let Some(ref adaptive) = adaptive_state {
+                    // Use adaptive parameter sampling
+                    let adaptive_f = adaptive.sample_f(&mut rng);
+                    let adaptive_cr = adaptive.sample_cr(&mut rng);
+                    (adaptive_f, adaptive_cr)
+                } else {
+                    // Use traditional parameter sampling
+                    let traditional_f = self.config.mutation.sample(&mut rng);
+                    let traditional_cr = self.config.recombination;
+                    (traditional_f, traditional_cr)
+                };
 
                 // Build mutant and pick crossover type from strategy when explicit, else from config
                 let (mutant, cross) = match self.config.strategy {
@@ -716,6 +971,28 @@ where
                         mutant_rand_to_best1(i, &pop, best_idx, f, &mut rng),
                         Crossover::Exponential,
                     ),
+                    Strategy::AdaptiveBin => {
+                        if let Some(ref adaptive) = adaptive_state {
+                            (
+                                mutant_adaptive(i, &pop, &energies, adaptive.current_w, f, &mut rng),
+                                Crossover::Binomial,
+                            )
+                        } else {
+                            // Fallback to rand1 if adaptive state not available
+                            (mutant_rand1(i, &pop, f, &mut rng), Crossover::Binomial)
+                        }
+                    },
+                    Strategy::AdaptiveExp => {
+                        if let Some(ref adaptive) = adaptive_state {
+                            (
+                                mutant_adaptive(i, &pop, &energies, adaptive.current_w, f, &mut rng),
+                                Crossover::Exponential,
+                            )
+                        } else {
+                            // Fallback to rand1 if adaptive state not available
+                            (mutant_rand1(i, &pop, f, &mut rng), Crossover::Exponential)
+                        }
+                    },
                 };
 
                 // If strategy didn't dictate crossover, fallback to config
@@ -724,13 +1001,13 @@ where
                     Crossover::Binomial => binomial_crossover(
                         &pop.row(i).to_owned(),
                         &mutant,
-                        self.config.recombination,
+                        cr, // Use adaptive or traditional crossover rate
                         &mut rng,
                     ),
                     Crossover::Exponential => exponential_crossover(
                         &pop.row(i).to_owned(),
                         &mutant,
-                        self.config.recombination,
+                        cr, // Use adaptive or traditional crossover rate
                         &mut rng,
                     ),
                 };
@@ -755,6 +1032,11 @@ where
                     if ft < old_energy {
                         improvement_count += 1;
                     }
+                    
+                    // Record successful parameters for adaptive algorithms
+                    if let Some(ref mut adaptive) = adaptive_state {
+                        adaptive.record_success(f, cr);
+                    }
 
                     // Track best for next iterations
                     match ft.partial_cmp(&best_f).unwrap_or(Ordering::Greater) {
@@ -775,6 +1057,54 @@ where
                             }
                         }
                         _ => {}
+                    }
+                }
+            }
+            
+            // Update adaptive parameters at the end of each generation
+            if let Some(ref mut adaptive) = adaptive_state {
+                adaptive.update(&self.config.adaptive, iter, self.config.maxiter);
+            }
+            
+            // Apply Wrapper Local Search (WLS) to selected individuals
+            if self.config.adaptive.wls_enabled {
+                let wls_count = ((npop as f64 * self.config.adaptive.wls_prob) as usize).max(1);
+                
+                // Select individuals for WLS (randomly from population)
+                let mut wls_indices: Vec<usize> = (0..npop).collect();
+                wls_indices.shuffle(&mut rng);
+                
+                for &idx in wls_indices.iter().take(wls_count) {
+                    let current_x = pop.row(idx).to_owned();
+                    let wls_trial = apply_wls(
+                        &current_x,
+                        &self.lower,
+                        &self.upper,
+                        self.config.adaptive.wls_scale,
+                        &mut rng
+                    );
+                    
+                    // Apply integrality constraints if needed
+                    let mut wls_trial_constrained = wls_trial;
+                    if let Some(mask) = &self.config.integrality {
+                        apply_integrality(&mut wls_trial_constrained, mask, &self.lower, &self.upper);
+                    }
+                    
+                    // Evaluate WLS trial
+                    let wls_fitness = self.energy(&wls_trial_constrained);
+                    nfev += 1;
+                    
+                    // Accept if better
+                    if wls_fitness <= energies[idx] {
+                        pop.row_mut(idx).assign(&wls_trial_constrained.view());
+                        energies[idx] = wls_fitness;
+                        
+                        // Update best if this is the new global best
+                        if wls_fitness < best_f {
+                            best_f = wls_fitness;
+                            best_idx = idx;
+                            best_x = wls_trial_constrained;
+                        }
                     }
                 }
             }

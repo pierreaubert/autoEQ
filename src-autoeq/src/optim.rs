@@ -839,6 +839,7 @@ fn optimize_filters_autoeq(
     _autoeq_name: &str,
     population: usize,
     maxeval: usize,
+    cli_args: &crate::cli::Args,
 ) -> Result<(String, f64), (String, f64)> {
 
     // Adaptive DE with advanced features and native constraints
@@ -888,19 +889,45 @@ fn optimize_filters_autoeq(
 
     eprintln!("🚀 Using smart initial guess with Sobol population initialization");
 
+    // Parse strategy from CLI args
+    use std::str::FromStr;
+    let strategy = Strategy::from_str(&cli_args.strategy)
+        .unwrap_or_else(|_| {
+            eprintln!("⚠️ Warning: Invalid strategy '{}', falling back to CurrentToBest1Bin", cli_args.strategy);
+            Strategy::CurrentToBest1Bin
+        });
+
+    // Set up adaptive configuration if using adaptive strategies
+    let adaptive_config = if matches!(strategy, Strategy::AdaptiveBin | Strategy::AdaptiveExp) {
+        Some(crate::de::AdaptiveConfig {
+            adaptive_mutation: true,
+            wls_enabled: true,  // Enable WLS for adaptive strategies
+            w_f: cli_args.adaptive_weight_f,
+            w_cr: cli_args.adaptive_weight_cr,
+            ..crate::de::AdaptiveConfig::default()
+        })
+    } else {
+        None
+    };
+
     // Use constraint helpers for nonlinear constraints
     let mut config_builder = DEConfigBuilder::new()
         .maxiter(setup.max_iter)
         .popsize(setup.pop_size)
-        .tol(1e-3)
-        .atol(1e-4)
-        .strategy(Strategy::CurrentToBest1Bin)
+        .tol(cli_args.tolerance)
+        .atol(cli_args.atolerance)
+        .strategy(strategy)
         .mutation(Mutation::Range { min: 0.4, max: 1.2 })
-        .recombination(0.9)
+        .recombination(cli_args.recombination)
         .init(Init::LatinHypercube)  // Use Latin Hypercube sampling for population
         .x0(best_initial_guess)     // Use smart guess as initial best individual
         .disp(false)
         .callback(callback);
+
+    // Add adaptive configuration if present
+    if let Some(adaptive_cfg) = adaptive_config {
+        config_builder = config_builder.adaptive(adaptive_cfg);
+    }
 
     // Add native constraint penalties for ceiling and spacing constraints
     let ceiling_penalty = {
@@ -958,6 +985,7 @@ fn optimize_filters_autoeq(
 /// * `algo` - Optimization algorithm name (e.g., "isres", "cobyla")
 /// * `population` - Population size for population-based algorithms
 /// * `maxeval` - Maximum number of function evaluations
+/// * `cli_args` - CLI arguments containing DE parameters (tolerance, strategy, etc.)
 ///
 /// # Returns
 /// * Result containing (status, optimal value) or (error, value)
@@ -973,6 +1001,7 @@ pub fn optimize_filters(
     algo: &str,
     population: usize,
     maxeval: usize,
+    cli_args: &crate::cli::Args,
 ) -> Result<(String, f64), (String, f64)> {
     // Parse algorithm and dispatch to appropriate function
     match parse_algorithm_name(algo) {
@@ -1002,6 +1031,7 @@ pub fn optimize_filters(
             &autoeq_name,
             population,
             maxeval,
+            cli_args,
         ),
         None => Err((format!("Unknown algorithm: {}", algo), f64::INFINITY)),
     }

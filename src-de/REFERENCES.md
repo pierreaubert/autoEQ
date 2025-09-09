@@ -1,0 +1,5 @@
+# References
+
+- Pauli Virtanen, Ralf Gommers, Travis E. Oliphant, Matt Haberland, Tyler Reddy, David Cournapeau, Evgeni Burovski, Pearu Peterson, Warren Weckesser, Jonathan Bright, Stéfan J. van der Walt, Matthew Brett, Joshua Wilson, K. Jarrod Millman, Nikolay Mayorov, Andrew R. J. Nelson, Eric Jones, Robert Kern, Eric Larson, CJ Carey, İlhan Polat, Yu Feng, Eric W. Moore, Jake VanderPlas, Denis Laxalde, Josef Perktold, Robert Cimrman, Ian Henriksen, E.A. Quintero, Charles R Harris, Anne M. Archibald, Antônio H. Ribeiro, Fabian Pedregosa, Paul van Mulbregt, and SciPy 1.0 Contributors. (2020) SciPy 1.0: Fundamental Algorithms for Scientific Computing in Python. Nature Methods, 17(3), 261-272. DOI: 10.1038/s41592-019-0686-2.
+- J. Zhang et al., “JADE: Adaptive differential evolution with optional external archive,” IEEE Trans. on Evolutionary Computation, Vol. 13, pp. 945–958, 2009.
+- Chun-Liang Lu1, Shih-Yuan Chiu2, Chih-Hsu Hsu3, Shi-Jim Yen4 and Chih-Jen Lin5, "JADE: Adaptive Differential Evolution with Optional External Archive," IEEE Trans. on Evolutionary Computation, 2019, 23(6), 823-837.

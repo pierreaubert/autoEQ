@@ -267,6 +267,90 @@ pub fn ackley_n2(x: &Array1<f64>) -> f64 {
         * (2.0 * std::f64::consts::PI * x2).cos()
 }
 
+#[test]
+fn test_ackley_n2_function_properties() {
+    use ndarray::Array1;
+
+    // Test that the function behaves as expected at known points
+
+    // At global optimum (0, 0)
+    let x_opt = Array1::from(vec![0.0, 0.0]);
+    let f_opt = ackley_n2(&x_opt);
+    // Should be exactly -200
+    assert!(
+        (f_opt - (-200.0)).abs() < 1e-10,
+        "Global optimum should be -200: {}",
+        f_opt
+    );
+
+    // Test the function structure:
+    // f(x1,x2) = -200 * exp(-0.02 * sqrt(x1^2 + x2^2)) * cos(2π*x1) * cos(2π*x2)
+
+    // At unit distance from origin
+    let x_unit = Array1::from(vec![1.0, 0.0]);
+    let f_unit = ackley_n2(&x_unit);
+    let expected_unit =
+        -200.0 * (-0.02 * 1.0_f64.sqrt()).exp() * (2.0 * std::f64::consts::PI).cos() * 1.0;
+    assert!(
+        (f_unit - expected_unit).abs() < 1e-10,
+        "Unit distance calculation incorrect: {} vs {}",
+        f_unit,
+        expected_unit
+    );
+
+    // The function should be worse (closer to 0) as we move away from origin
+    assert!(
+        f_unit > f_opt,
+        "Moving away from origin should worsen function value: {} vs {}",
+        f_unit,
+        f_opt
+    );
+
+    // Test symmetry - function should be symmetric around origin
+    let x_pos = Array1::from(vec![1.0, 1.0]);
+    let f_pos = ackley_n2(&x_pos);
+
+    let x_neg = Array1::from(vec![-1.0, -1.0]);
+    let f_neg = ackley_n2(&x_neg);
+
+    // Should be identical due to symmetry (cos is even function)
+    assert!(
+        (f_pos - f_neg).abs() < 1e-15,
+        "Function should be symmetric: {} vs {}",
+        f_pos,
+        f_neg
+    );
+
+    // Test the multimodal nature - cosine terms create oscillations
+    // At points where cos terms are -1, function should be positive
+    let x_cos_neg = Array1::from(vec![0.5, 0.5]); // cos(π) = -1 for both terms
+    let f_cos_neg = ackley_n2(&x_cos_neg);
+
+    let norm = (0.5_f64.powi(2) + 0.5_f64.powi(2)).sqrt();
+    let expected_cos_neg = -200.0 * (-0.02 * norm).exp() * (-1.0) * (-1.0); // Both cos terms = -1, so result is positive
+    assert!(
+        (f_cos_neg - expected_cos_neg).abs() < 1e-10,
+        "Cosine negative test incorrect: {} vs {}",
+        f_cos_neg,
+        expected_cos_neg
+    );
+    assert!(
+        f_cos_neg > 0.0,
+        "Function should be positive when cosines are negative: {}",
+        f_cos_neg
+    );
+
+    // Test exponential decay - further from origin should have smaller magnitude
+    let x_far = Array1::from(vec![10.0, 0.0]);
+    let f_far = ackley_n2(&x_far);
+    assert!(
+        f_far.abs() < f_unit.abs(),
+        "Function magnitude should decay with distance: |{}| vs |{}|",
+        f_far,
+        f_unit
+    );
+}
+
 /// Ackley function - N-dimensional multimodal
 /// Global minimum: f(x) = 0 at x = (0, 0, ..., 0)
 /// Bounds: x_i in [-32.768, 32.768]
@@ -438,20 +522,20 @@ pub fn shubert(x: &Array1<f64>) -> f64 {
 /// Bounds: x_i in [-10, 10]
 pub fn levy(x: &Array1<f64>) -> f64 {
     use std::f64::consts::PI;
-    
+
     let w: Vec<f64> = x.iter().map(|&xi| 1.0 + (xi - 1.0) / 4.0).collect();
-    
+
     let first_term = (PI * w[0]).sin().powi(2);
-    
+
     let middle_sum: f64 = w.iter().take(w.len() - 1).map(|&wi| {
         (wi - 1.0).powi(2) * (1.0 + 10.0 * (PI * wi + 1.0).sin().powi(2))
     }).sum();
-    
+
     let last_term = {
         let wn = w[w.len() - 1];
         (wn - 1.0).powi(2) * (1.0 + (2.0 * PI * wn).sin().powi(2))
     };
-    
+
     first_term + middle_sum + last_term
 }
 
@@ -461,7 +545,7 @@ pub fn levy(x: &Array1<f64>) -> f64 {
 pub fn periodic(x: &Array1<f64>) -> f64 {
     let sum_sin_squared: f64 = x.iter().map(|&xi| xi.sin().powi(2)).sum();
     let sum_squares: f64 = x.iter().map(|&xi| xi.powi(2)).sum();
-    
+
     1.0 + sum_sin_squared - 0.1 * (-sum_squares).exp()
 }
 
@@ -471,7 +555,7 @@ pub fn periodic(x: &Array1<f64>) -> f64 {
 pub fn katsuura(x: &Array1<f64>) -> f64 {
     let d = x.len();
     let mut product = 1.0;
-    
+
     for (i, &xi) in x.iter().enumerate() {
         let mut sum = 0.0;
         // Limit j to prevent overflow, 20 is sufficient for precision
@@ -482,7 +566,7 @@ pub fn katsuura(x: &Array1<f64>) -> f64 {
         }
         product *= 1.0 + (i + 1) as f64 * sum;
     }
-    
+
     let factor = 100.0 / (d as f64).powi(2);
     factor * product - factor
 }
@@ -493,18 +577,18 @@ pub fn katsuura(x: &Array1<f64>) -> f64 {
 pub fn epistatic_michalewicz(x: &Array1<f64>) -> f64 {
     let m = 10.0; // Steepness parameter
     let n = x.len();
-    
+
     // Add epistatic (interaction) terms
     let base_sum = -x.iter().enumerate().map(|(i, &xi)| {
         xi.sin() * ((i as f64 + 1.0) * xi.powi(2) / std::f64::consts::PI).sin().powf(2.0 * m)
     }).sum::<f64>();
-    
+
     // Add epistatic interactions between adjacent variables
     let epistatic_sum: f64 = (0..n-1).map(|i| {
         let xi = x[i];
         let xi_plus_1 = x[i + 1];
         0.1 * (xi * xi_plus_1).sin().powi(2)
     }).sum();
-    
+
     base_sum + epistatic_sum
 }

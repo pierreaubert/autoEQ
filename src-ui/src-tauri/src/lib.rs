@@ -189,6 +189,13 @@ async fn run_optimization_internal(params: OptimizationParams) -> Result<Optimiz
         },
         iir_hp_pk: params.iir_hp_pk,
         algo_list: false, // UI doesn't need to list algorithms
+        tolerance: 1e-3, // Default DE tolerance
+        atolerance: 1e-4, // Default DE absolute tolerance
+        recombination: 0.9, // Default DE recombination probability
+        strategy: "currenttobest1bin".to_string(), // Default DE strategy
+        strategy_list: false, // UI doesn't need to list strategies
+        adaptive_weight_f: 0.9, // Default adaptive weight for F
+        adaptive_weight_cr: 0.9, // Default adaptive weight for CR
     };
 
     // Load input curve

@@ -17,6 +17,7 @@
 //! along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 use crate::LossType;
+use crate::de::Strategy;
 use super::optim::{get_all_algorithms, AlgorithmType};
 use clap::Parser;
 use std::path::PathBuf;
@@ -137,6 +138,34 @@ pub struct Args {
     /// Display list of available optimization algorithms with descriptions and exit.
     #[arg(long, default_value_t = false)]
     pub algo_list: bool,
+
+    /// Optimization tolerance (tol parameter for DE algorithm)
+    #[arg(long, default_value_t = 1e-3)]
+    pub tolerance: f64,
+
+    /// Absolute tolerance (atol parameter for DE algorithm)
+    #[arg(long, default_value_t = 1e-4)]
+    pub atolerance: f64,
+
+    /// Recombination probability for DE algorithm (0.0 to 1.0)
+    #[arg(long, default_value_t = 0.9, value_parser = parse_recombination_probability)]
+    pub recombination: f64,
+
+    /// DE strategy to use (e.g., best1bin, rand1bin, currenttobest1bin, adaptive)
+    #[arg(long, default_value = "currenttobest1bin")]
+    pub strategy: String,
+
+    /// Display list of available DE strategies and exit.
+    #[arg(long, default_value_t = false)]
+    pub strategy_list: bool,
+
+    /// Adaptive weight for F parameter (DE adaptive strategies only)
+    #[arg(long, default_value_t = 0.9)]
+    pub adaptive_weight_f: f64,
+
+    /// Adaptive weight for CR parameter (DE adaptive strategies only)
+    #[arg(long, default_value_t = 0.9)]
+    pub adaptive_weight_cr: f64,
 }
 
 /// Display available optimization algorithms with descriptions and exit
@@ -298,8 +327,85 @@ pub fn display_algorithm_list() -> ! {
     process::exit(0);
 }
 
+/// Display available DE strategies with descriptions and exit
+pub fn display_strategy_list() -> ! {
+    println!("Available Differential Evolution (DE) Strategies");
+    println!("===============================================\n");
+
+    let strategies = [
+        ("best1bin", "Best1Bin", "Use best individual + 1 random difference (binomial crossover)", "Global exploration with fast convergence"),
+        ("best1exp", "Best1Exp", "Use best individual + 1 random difference (exponential crossover)", "Similar to best1bin with different crossover"),
+        ("rand1bin", "Rand1Bin", "Use random individual + 1 random difference (binomial crossover)", "Good diversity, slower convergence"),
+        ("rand1exp", "Rand1Exp", "Use random individual + 1 random difference (exponential crossover)", "Similar to rand1bin with different crossover"),
+        ("rand2bin", "Rand2Bin", "Use random individual + 2 random differences (binomial crossover)", "High exploration, may be slower"),
+        ("rand2exp", "Rand2Exp", "Use random individual + 2 random differences (exponential crossover)", "Similar to rand2bin with different crossover"),
+        ("currenttobest1bin", "CurrentToBest1Bin", "Blend current with best + random difference (binomial)", "Balanced exploration/exploitation (recommended)"),
+        ("currenttobest1exp", "CurrentToBest1Exp", "Blend current with best + random difference (exponential)", "Similar to currenttobest1bin"),
+        ("best2bin", "Best2Bin", "Use best individual + 2 random differences (binomial crossover)", "Fast convergence, may get trapped locally"),
+        ("best2exp", "Best2Exp", "Use best individual + 2 random differences (exponential crossover)", "Similar to best2bin"),
+        ("randtobest1bin", "RandToBest1Bin", "Blend random with best + random difference (binomial)", "Good balance of diversity and convergence"),
+        ("randtobest1exp", "RandToBest1Exp", "Blend random with best + random difference (exponential)", "Similar to randtobest1bin"),
+        ("adaptivebin", "AdaptiveBin", "Self-adaptive mutation with top-w% selection (binomial)", "Advanced adaptive strategy (experimental)"),
+        ("adaptiveexp", "AdaptiveExp", "Self-adaptive mutation with top-w% selection (exponential)", "Advanced adaptive strategy (experimental)"),
+    ];
+
+    println!("🎯 Classic DE Strategies (well-tested, reliable):");
+    for &(name, _enum_name, description, recommendation) in strategies.iter().take(12) {
+        if name.starts_with("adaptive") { continue; }
+        println!("   - {:<20} | {}", name, description);
+        println!("     {:<20} | 💡 {}", "", recommendation);
+        if name == "currenttobest1bin" {
+            println!("     {:<20} | ⭐ Recommended default strategy", "");
+        }
+        println!();
+    }
+
+    println!("🧬 Adaptive DE Strategies (experimental, research-based):");
+    for &(name, _enum_name, description, recommendation) in strategies.iter() {
+        if !name.starts_with("adaptive") { continue; }
+        println!("   - {:<20} | {}", name, description);
+        println!("     {:<20} | 💡 {}", "", recommendation);
+        println!("     {:<20} | 🔧 Requires --adaptive-weight-f and --adaptive-weight-cr", "");
+        println!();
+    }
+
+    println!("Strategy Naming Conventions:");
+    println!("==========================\n");
+    println!("  • 'bin' = Binomial (uniform) crossover - each gene has equal probability");
+    println!("  • 'exp' = Exponential crossover - contiguous segments are more likely");
+    println!("  • Numbers (1, 2) indicate how many difference vectors are used\n");
+
+    println!("Usage Examples:");
+    println!("==============\n");
+    println!("  # Use recommended default strategy:");
+    println!("  autoeq --algo autoeq:de --strategy currenttobest1bin --curve input.csv\n");
+    println!("  # Use adaptive strategy with custom weights:");
+    println!("  autoeq --algo autoeq:de --strategy adaptivebin --adaptive-weight-f 0.8 --adaptive-weight-cr 0.7\n");
+    println!("  # Use classic exploration strategy:");
+    println!("  autoeq --algo autoeq:de --strategy rand1bin --curve input.csv\n");
+
+    println!("Recommendations:");
+    println!("===============\n");
+    println!("  ⭐ For general use: currenttobest1bin (good balance of exploration and exploitation)");
+    println!("  🚀 For fast convergence: best1bin or best2bin (may get trapped in local optima)");
+    println!("  🌍 For thorough exploration: rand1bin or rand2bin (slower but more robust)");
+    println!("  🧪 For research/experimentation: adaptivebin or adaptiveexp (requires parameter tuning)");
+
+    process::exit(0);
+}
+
 /// Validate CLI arguments and exit with error message if validation fails
 pub fn validate_args(args: &Args) -> Result<(), String> {
+    // Check if strategy is valid when using DE algorithm
+    if args.algo == "autoeq:de" || args.algo.contains("de") {
+        use std::str::FromStr;
+        if let Err(err) = Strategy::from_str(&args.strategy) {
+            return Err(format!(
+                "Invalid DE strategy '{}': {}. Use --strategy-list to see available strategies.",
+                args.strategy, err
+            ));
+        }
+    }
     // Check if algorithm is valid
     if let Some(_) = crate::optim::find_algorithm_info(&args.algo) {
         // Algorithm is valid
@@ -389,6 +495,24 @@ pub fn validate_args(args: &Args) -> Result<(), String> {
             "Number of filters ({}) is very high. Consider using <= 50 filters for reasonable performance",
             args.num_filters
         ));
+    }
+
+    // Check tolerance parameters
+    if args.tolerance <= 0.0 {
+        return Err("Tolerance must be > 0".to_string());
+    }
+
+    if args.atolerance < 0.0 {
+        return Err("Absolute tolerance must be >= 0".to_string());
+    }
+
+    // Check adaptive weight parameters (should be in [0, 1])
+    if args.adaptive_weight_f < 0.0 || args.adaptive_weight_f > 1.0 {
+        return Err("Adaptive weight for F must be between 0.0 and 1.0".to_string());
+    }
+
+    if args.adaptive_weight_cr < 0.0 || args.adaptive_weight_cr > 1.0 {
+        return Err("Adaptive weight for CR must be between 0.0 and 1.0".to_string());
     }
 
     Ok(())
@@ -555,6 +679,102 @@ mod tests {
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Must be in range [1..24]"));
     }
+
+    #[test]
+    fn validate_args_invalid_de_strategy() {
+        let mut args = Args::parse_from(["autoeq-test", "--algo", "autoeq:de"]);
+        args.strategy = "invalid-strategy".to_string();
+        let result = validate_args(&args);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("Invalid DE strategy"));
+        assert!(err.contains("--strategy-list"));
+    }
+
+    #[test]
+    fn validate_args_valid_de_strategy() {
+        let mut args = Args::parse_from(["autoeq-test", "--algo", "autoeq:de"]);
+        args.strategy = "best1bin".to_string();
+        let result = validate_args(&args);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn validate_args_invalid_tolerance() {
+        let mut args = Args::parse_from(["autoeq-test"]);
+        args.tolerance = 0.0;
+        let result = validate_args(&args);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Tolerance must be > 0"));
+
+        args.tolerance = -0.1;
+        let result = validate_args(&args);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Tolerance must be > 0"));
+    }
+
+    #[test]
+    fn validate_args_invalid_atolerance() {
+        let mut args = Args::parse_from(["autoeq-test"]);
+        args.atolerance = -0.1;
+        let result = validate_args(&args);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Absolute tolerance must be >= 0"));
+    }
+
+    #[test]
+    fn validate_args_invalid_adaptive_weights() {
+        let mut args = Args::parse_from(["autoeq-test"]);
+        
+        // Test adaptive_weight_f out of bounds
+        args.adaptive_weight_f = -0.1;
+        let result = validate_args(&args);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Adaptive weight for F must be between 0.0 and 1.0"));
+
+        args.adaptive_weight_f = 1.1;
+        let result = validate_args(&args);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Adaptive weight for F must be between 0.0 and 1.0"));
+
+        // Reset and test adaptive_weight_cr out of bounds
+        args.adaptive_weight_f = 0.5;
+        args.adaptive_weight_cr = -0.1;
+        let result = validate_args(&args);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Adaptive weight for CR must be between 0.0 and 1.0"));
+
+        args.adaptive_weight_cr = 1.1;
+        let result = validate_args(&args);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Adaptive weight for CR must be between 0.0 and 1.0"));
+    }
+
+    #[test]
+    fn parse_recombination_probability_valid() {
+        assert_eq!(parse_recombination_probability("0.0").unwrap(), 0.0);
+        assert_eq!(parse_recombination_probability("0.5").unwrap(), 0.5);
+        assert_eq!(parse_recombination_probability("1.0").unwrap(), 1.0);
+    }
+
+    #[test]
+    fn parse_recombination_probability_invalid() {
+        assert!(parse_recombination_probability("-0.1").is_err());
+        assert!(parse_recombination_probability("1.1").is_err());
+        assert!(parse_recombination_probability("not_a_number").is_err());
+    }
+
+    #[test]
+    fn cli_defaults_for_de_parameters() {
+        let args = Args::parse_from(["autoeq-test"]);
+        assert_eq!(args.tolerance, 1e-3);
+        assert_eq!(args.atolerance, 1e-4);
+        assert_eq!(args.recombination, 0.9);
+        assert_eq!(args.strategy, "currenttobest1bin");
+        assert_eq!(args.adaptive_weight_f, 0.9);
+        assert_eq!(args.adaptive_weight_cr, 0.9);
+        assert!(!args.strategy_list);
+    }
 }
 
 // Custom value parser to enforce strictly positive f64
@@ -574,5 +794,15 @@ fn parse_nonnegative_f64(s: &str) -> Result<f64, String> {
         Ok(v)
     } else {
         Err("value must be non-negative (>= 0)".to_string())
+    }
+}
+
+// Custom value parser to enforce recombination probability (0.0 to 1.0)
+fn parse_recombination_probability(s: &str) -> Result<f64, String> {
+    let v: f64 = s.parse().map_err(|_| format!("invalid float: {s}"))?;
+    if v >= 0.0 && v <= 1.0 {
+        Ok(v)
+    } else {
+        Err("recombination probability must be between 0.0 and 1.0".to_string())
     }
 }

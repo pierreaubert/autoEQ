@@ -13,6 +13,7 @@ ndarray = { workspace = true }
 blas-src = { workspace = true }
 openblas-src = { workspace = true }
 rand = { workspace = true }
+rand_distr = "0.4"
 csv = { workspace = true }
 clap = { workspace = true }
 plotly = { workspace = true }

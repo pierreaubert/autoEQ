@@ -230,6 +230,7 @@ pub fn perform_optimization(
         &args.algo,
         args.population,
         args.maxeval,
+        args,
     );
 
     match result {
@@ -248,6 +249,7 @@ pub fn perform_optimization(
             &args.local_algo,
             args.population,
             args.maxeval,
+            args,
         );
         match local_result {
             Ok((_local_status, _local_val)) => {}

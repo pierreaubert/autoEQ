@@ -102,6 +102,57 @@ Local optimisation without a derivative:
 
 A few constraits are necessary to contol the behaviour of the various algorithms. If the algorithms support the constraints, then we use that. If the algorithm does not support the constraints, then we use either multiple objective functions or we add the constraints as a penalty to the function you want to optimise.
 
+### Advanced Differential Evolution Parameters
+
+When using the `autoeq:de` algorithm, you can fine-tune the Differential Evolution optimizer with additional parameters:
+
+#### Parameter: --strategy
+Select the DE mutation strategy (default: `currenttobest1bin`):
+
+**Classic Strategies:**
+- `best1bin`: Use best individual + 1 random difference (fast convergence)
+- `rand1bin`: Use random individual + 1 random difference (good diversity)
+- `currenttobest1bin`: Blend current with best + random difference (**recommended**)
+- `best2bin`, `rand2bin`: Use 2 random differences (more exploration)
+
+**Adaptive Strategies (experimental):**
+- `adaptivebin`: Self-adaptive mutation with top-w% selection
+- `adaptiveexp`: Adaptive strategy with exponential crossover
+
+Example:
+```bash
+cargo run --bin autoeq --release -- --algo autoeq:de --strategy rand1bin --speaker="KEF R3" --version asr --measurement CEA2034
+```
+
+#### Parameter: --strategy-list
+Display all available DE strategies with descriptions:
+```bash
+cargo run --bin autoeq --release -- --strategy-list
+```
+
+#### Parameters: --tolerance and --atolerance
+Control convergence criteria for the DE optimizer:
+- `--tolerance`: Relative tolerance (default: 0.001)
+- `--atolerance`: Absolute tolerance (default: 0.0001)
+
+Lower values = stricter convergence, higher values = faster but less precise optimization.
+
+#### Parameter: --recombination
+Recombination probability (0.0 to 1.0, default: 0.9):
+Higher values increase information exchange between population members.
+
+#### Parameters: --adaptive-weight-f and --adaptive-weight-cr
+For adaptive strategies only:
+- `--adaptive-weight-f`: Adaptive weight for mutation factor F (0.0 to 1.0, default: 0.9)
+- `--adaptive-weight-cr`: Adaptive weight for crossover rate CR (0.0 to 1.0, default: 0.9)
+
+Example with adaptive strategy:
+```bash
+cargo run --bin autoeq --release -- --algo autoeq:de --strategy adaptivebin \
+  --adaptive-weight-f 0.8 --adaptive-weight-cr 0.7 \
+  --speaker="KEF R3" --version asr --measurement CEA2034
+```
+
 ### Parameter: --refine
 
 If you have use a global optimiser they are good at exploring the search space but they are slow to converge. You should stop them early and finish with a local algorithm.
@@ -130,7 +181,7 @@ The benchmark will generate a csv file with results for each speaker than you ca
 
 A list of ideas:
 - the global algorithm are all very sensitive to upper/lower bounds. Tight bounds means less space to look into and weak bounds yield random results or take a very long time. Find a good compromise.
-- currently DE does not work well. The python version of scipy performs much better.
+- The `autoeq:de` algorithm now supports advanced adaptive strategies based on recent research, which may perform better than traditional methods.
 - results are highly unpredictable: sometimes you need to optimise the low frequency, sometime the midrange etc. It make it hard to reason about the problem.
 - test other strategies:
   - start with 3 iirs, optimise, add 3.

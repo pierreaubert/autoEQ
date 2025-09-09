@@ -117,6 +117,7 @@ async fn perform_optimization(
             &args_clone.algo,
             args_clone.population,
             args_clone.maxeval,
+            &args_clone,
         );
         (x_clone, result)
     });
@@ -181,6 +182,7 @@ async fn perform_optimization(
                 &args_clone.local_algo,
                 args_clone.population,
                 args_clone.maxeval,
+                &args_clone,
             );
             (x_clone, result)
         });
@@ -363,6 +365,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Check if user wants to see algorithm list
     if args.algo_list {
         autoeq::cli::display_algorithm_list();
+    }
+
+    // Check if user wants to see strategy list
+    if args.strategy_list {
+        autoeq::cli::display_strategy_list();
     }
 
     // Set up signal handling for graceful shutdown

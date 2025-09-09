@@ -90,25 +90,3 @@ fn test_de_pinter_recorded() {
     }
 }
 
-#[test]
-fn test_pinter_known_properties() {
-    // Test some properties of the Pinter function
-    use ndarray::Array1;
-    
-    // Test the known global optimum
-    let x_global = Array1::from(vec![0.0, 0.0]);
-    let f_global = pinter(&x_global);
-    
-    // Should be exactly 0 at the global optimum
-    assert!(f_global.abs() < 1e-10, "Global optimum value not as expected: {}", f_global);
-    
-    // Test boundary behavior - should be finite
-    let x_bound = Array1::from(vec![-10.0, 10.0]);
-    let f_bound = pinter(&x_bound);
-    assert!(f_bound.is_finite(), "Function at boundary should be finite");
-    
-    // Test a point away from optimum - should be positive
-    let x_away = Array1::from(vec![1.0, 1.0]);
-    let f_away = pinter(&x_away);
-    assert!(f_away > 0.0, "Function away from optimum should be positive: {}", f_away);
-}

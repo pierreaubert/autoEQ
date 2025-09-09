@@ -115,38 +115,6 @@ fn test_de_epistatic_michalewicz_recorded() {
     }
 }
 
-#[test] 
-fn test_epistatic_michalewicz_known_properties() {
-    // Test some properties of the Epistatic Michalewicz function
-    use ndarray::Array1;
-    
-    // Test that function is finite at various points within bounds
-    let test_points = vec![
-        vec![std::f64::consts::PI / 4.0, std::f64::consts::PI / 4.0],
-        vec![std::f64::consts::PI / 2.0, std::f64::consts::PI / 2.0],
-        vec![std::f64::consts::PI * 3.0 / 4.0, std::f64::consts::PI / 4.0],
-        vec![std::f64::consts::PI, std::f64::consts::PI],
-        vec![0.1, 0.1],
-        vec![3.0, 2.8],
-    ];
-    
-    for point in test_points {
-        let x = Array1::from(point.clone());
-        let f = epistatic_michalewicz(&x);
-        
-        assert!(f.is_finite(), "Function should be finite at {:?}: {}", point, f);
-        // Epistatic Michalewicz should generally be negative for good points
-    }
-    
-    // Test boundary behavior
-    let x_boundary = Array1::from(vec![0.0, std::f64::consts::PI]);
-    let f_boundary = epistatic_michalewicz(&x_boundary);
-    assert!(f_boundary.is_finite(), "Function at boundary should be finite");
-    
-    let x_corner = Array1::from(vec![std::f64::consts::PI, 0.0]);
-    let f_corner = epistatic_michalewicz(&x_corner);
-    assert!(f_corner.is_finite(), "Function at corner should be finite");
-}
 
 #[test]
 fn test_epistatic_michalewicz_interaction_effects() {

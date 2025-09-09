@@ -25,7 +25,6 @@ fn main() {
     while improved && iterations < 1000 {
         improved = false;
         let current_x = best_x.clone();
-        let current_f = best_f;
         
         // Try small steps in each dimension
         for dim in 0..4 {
