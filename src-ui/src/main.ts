@@ -29,6 +29,12 @@ interface OptimizationParams {
   smooth_n: number;
   loss: string;
   iir_hp_pk: boolean;
+  // DE-specific parameters
+  strategy?: string;
+  de_f?: number;
+  de_cr?: number;
+  adaptive_weight_f?: number;
+  adaptive_weight_cr?: number;
 }
 
 interface PlotData {
@@ -52,7 +58,6 @@ class AutoEQUI {
   private form: HTMLFormElement;
   private optimizeBtn: HTMLButtonElement;
   private resetBtn: HTMLButtonElement;
-  private exitBtn: HTMLButtonElement;
   private progressElement: HTMLElement;
   private scoresElement: HTMLElement;
   private errorElement: HTMLElement;
@@ -78,7 +83,6 @@ class AutoEQUI {
     this.form = document.getElementById('autoeq-form') as HTMLFormElement;
     this.optimizeBtn = document.getElementById('optimize-btn') as HTMLButtonElement;
     this.resetBtn = document.getElementById('reset-btn') as HTMLButtonElement;
-    this.exitBtn = document.getElementById('exit-btn') as HTMLButtonElement;
     this.progressElement = document.getElementById('optimization-progress') as HTMLElement;
     this.scoresElement = document.getElementById('scores-display') as HTMLElement;
     this.errorElement = document.getElementById('error-display') as HTMLElement;
@@ -115,10 +119,6 @@ class AutoEQUI {
       this.resetToDefaults();
     });
 
-    // Exit button
-    this.exitBtn.addEventListener('click', async () => {
-      await invoke('exit_app');
-    });
 
     // File browser buttons
     const browseCurveBtn = document.getElementById('browse-curve');
@@ -180,6 +180,12 @@ class AutoEQUI {
     algoSelect?.addEventListener('change', () => {
       this.updateConditionalParameters();
     });
+    
+    // Strategy change handler for adaptive parameters
+    const strategySelect = document.getElementById('strategy') as HTMLSelectElement;
+    strategySelect?.addEventListener('change', () => {
+      this.updateConditionalParameters();
+    });
 
     // Version selection handler
     const versionSelect = document.getElementById('version') as HTMLSelectElement;
@@ -201,31 +207,62 @@ class AutoEQUI {
     console.log('openFileDialog called for:', inputId);
     try {
       const input = document.getElementById(inputId) as HTMLInputElement;
-      console.log('Input element found:', input);
+      if (!input) {
+        console.error('Input element not found:', inputId);
+        return;
+      }
       
+      console.log('Input element found:', input);
       console.log('Opening file dialog...');
+      
       const result = await openDialog({
         multiple: false,
+        directory: false,
         filters: [{
           name: 'CSV Files',
           extensions: ['csv']
-        }, {
-          name: 'All Files',
-          extensions: ['*']
-        }]
+        }],
+        defaultPath: undefined,
+        title: 'Select CSV File'
       });
       
       console.log('Dialog result:', result);
-      if (result) {
+      if (result && typeof result === 'string') {
         console.log('Setting input value to:', result);
         input.value = result;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
         this.validateForm();
+      } else if (result === null) {
+        console.log('Dialog cancelled by user');
       } else {
-        console.log('No file selected or dialog cancelled');
+        console.log('No file selected');
       }
     } catch (error) {
       console.error('Error opening file dialog:', error);
+      // Fallback: try to trigger a native file input
+      this.fallbackFileDialog(inputId);
     }
+  }
+  
+  private fallbackFileDialog(inputId: string): void {
+    const input = document.getElementById(inputId) as HTMLInputElement;
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = '.csv';
+    fileInput.style.display = 'none';
+    
+    fileInput.onchange = (event) => {
+      const file = (event.target as HTMLInputElement).files?.[0];
+      if (file) {
+        input.value = file.name; // Note: This gives filename, not full path
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        this.validateForm();
+      }
+    };
+    
+    document.body.appendChild(fileInput);
+    fileInput.click();
+    document.body.removeChild(fileInput);
   }
 
   private resetToDefaults(): void {
@@ -250,7 +287,7 @@ class AutoEQUI {
     (document.getElementById('min-q') as HTMLInputElement).value = '1.0';
     (document.getElementById('min-freq') as HTMLInputElement).value = '60';
     (document.getElementById('max-freq') as HTMLInputElement).value = '16000';
-    (document.getElementById('algo') as HTMLSelectElement).value = 'isres';
+    (document.getElementById('algo') as HTMLSelectElement).value = 'autoeq:de';
     (document.getElementById('loss') as HTMLSelectElement).value = 'flat';
     (document.getElementById('population') as HTMLInputElement).value = '30000';
     (document.getElementById('maxeval') as HTMLInputElement).value = '200000';
@@ -266,6 +303,11 @@ class AutoEQUI {
     (document.getElementById('speaker') as HTMLInputElement).value = '';
     (document.getElementById('version') as HTMLInputElement).value = '';
     (document.getElementById('measurement') as HTMLSelectElement).value = '';
+    (document.getElementById('strategy') as HTMLSelectElement).value = 'currenttobest1bin';
+    (document.getElementById('de-f') as HTMLInputElement).value = '0.8';
+    (document.getElementById('de-cr') as HTMLInputElement).value = '0.9';
+    (document.getElementById('adaptive-weight-f') as HTMLInputElement).value = '0.8';
+    (document.getElementById('adaptive-weight-cr') as HTMLInputElement).value = '0.7';
 
     // Update conditional parameters
     this.updateConditionalParameters();
@@ -279,9 +321,18 @@ class AutoEQUI {
   private updateConditionalParameters(): void {
     const algo = (document.getElementById('algo') as HTMLSelectElement).value;
     const globalAlgoParams = document.querySelectorAll('.global-algo-param');
+    const deParams = document.querySelectorAll('.de-param');
+    const adaptiveParams = document.querySelectorAll('.adaptive-param');
     
-    // Show population and maxeval only for global algorithms
-    const isGlobalAlgo = ['isres', 'de', 'pso', 'stogo', 'ags', 'origdirect'].includes(algo);
+    // Show population and maxeval for global algorithms
+    const isGlobalAlgo = [
+      'nlopt:isres', 'nlopt:ags', 'nlopt:origdirect', 'nlopt:crs2lm',
+      'nlopt:direct', 'nlopt:directl', 'nlopt:gmlsl', 'nlopt:gmlsllds',
+      'nlopt:stogo', 'nlopt:stogorand', 'mh:de', 'mh:pso', 'mh:rga',
+      'mh:tlbo', 'mh:firefly', 'autoeq:de',
+      // Legacy support
+      'isres', 'de', 'pso', 'stogo', 'ags', 'origdirect'
+    ].includes(algo);
     
     globalAlgoParams.forEach(param => {
       if (isGlobalAlgo) {
@@ -290,6 +341,25 @@ class AutoEQUI {
         param.classList.remove('show');
       }
     });
+    
+    // Show DE parameters only for autoeq:de algorithm
+    const isAutoEQDE = algo === 'autoeq:de';
+    deParams.forEach(param => {
+      (param as HTMLElement).style.display = isAutoEQDE ? 'flex' : 'none';
+    });
+    
+    // Show adaptive parameters only for adaptive strategies
+    if (isAutoEQDE) {
+      const strategy = (document.getElementById('strategy') as HTMLSelectElement).value;
+      const isAdaptive = strategy.includes('adaptive');
+      adaptiveParams.forEach(param => {
+        (param as HTMLElement).style.display = isAdaptive ? 'flex' : 'none';
+      });
+    } else {
+      adaptiveParams.forEach(param => {
+        (param as HTMLElement).style.display = 'none';
+      });
+    }
   }
   
   private expandPlotSection(plotElementId: string): void {
@@ -435,6 +505,7 @@ class AutoEQUI {
 
   private getFormData(): OptimizationParams {
     const activeTab = document.querySelector('.tab-label.active')?.getAttribute('data-tab');
+    const algo = (document.getElementById('algo') as HTMLSelectElement).value;
     
     return {
       num_filters: parseInt((document.getElementById('num-filters') as HTMLInputElement).value),
@@ -451,7 +522,7 @@ class AutoEQUI {
       version: activeTab === 'api' ? (document.getElementById('version') as HTMLInputElement).value || undefined : undefined,
       measurement: activeTab === 'api' ? (document.getElementById('measurement') as HTMLSelectElement).value || undefined : undefined,
       curve_name: (document.getElementById('curve-name') as HTMLSelectElement).value,
-      algo: (document.getElementById('algo') as HTMLSelectElement).value,
+      algo: algo,
       population: parseInt((document.getElementById('population') as HTMLInputElement).value),
       maxeval: parseInt((document.getElementById('maxeval') as HTMLInputElement).value),
       refine: (document.getElementById('refine') as HTMLInputElement).checked,
@@ -462,6 +533,12 @@ class AutoEQUI {
       smooth_n: parseInt((document.getElementById('smooth-n') as HTMLInputElement).value),
       loss: (document.getElementById('loss') as HTMLSelectElement).value,
       iir_hp_pk: (document.getElementById('iir-hp-pk') as HTMLInputElement).checked,
+      // DE parameters (only included if autoeq:de is selected)
+      strategy: algo === 'autoeq:de' ? (document.getElementById('strategy') as HTMLSelectElement).value : undefined,
+      de_f: algo === 'autoeq:de' ? parseFloat((document.getElementById('de-f') as HTMLInputElement).value) : undefined,
+      de_cr: algo === 'autoeq:de' ? parseFloat((document.getElementById('de-cr') as HTMLInputElement).value) : undefined,
+      adaptive_weight_f: algo === 'autoeq:de' ? parseFloat((document.getElementById('adaptive-weight-f') as HTMLInputElement).value) : undefined,
+      adaptive_weight_cr: algo === 'autoeq:de' ? parseFloat((document.getElementById('adaptive-weight-cr') as HTMLInputElement).value) : undefined,
     };
   }
   
@@ -558,6 +635,14 @@ class AutoEQUI {
       this.updateScores(result.preference_score_before, result.preference_score_after);
     }
 
+    // Update filter details if available
+    if (result.filter_params) {
+      console.log('Updating filter details with parameters:', result.filter_params);
+      this.updateFilterDetailsPlot(result.filter_params);
+    } else {
+      console.log('No filter_params data in result');
+    }
+
     // Update plots if available
     if (result.filter_response) {
       console.log('Updating filter plot with data:', result.filter_response);
@@ -567,7 +652,11 @@ class AutoEQUI {
     }
     
     if (result.spin_details) {
-      console.log('Updating spin plot with data:', result.spin_details);
+      console.log('Updating individual plots with data:', result.spin_details);
+      this.updateOnAxisPlot(result.spin_details, result.filter_response);
+      this.updateListeningWindowPlot(result.spin_details, result.filter_response);
+      this.updateEarlyReflectionsPlot(result.spin_details);
+      this.updateSoundPowerPlot(result.spin_details);
       this.updateSpinPlot(result.spin_details);
     } else {
       console.log('No spin_details data in result');
@@ -593,6 +682,73 @@ class AutoEQUI {
   private showError(error: string): void {
     (document.getElementById('error-message') as HTMLElement).textContent = error;
     this.errorElement.style.display = 'block';
+  }
+
+  private updateFilterDetailsPlot(filterParams: number[]): void {
+    if (!this.filterDetailsPlotElement) {
+      console.error('Filter details plot element not found!');
+      return;
+    }
+    
+    // Clear and prepare
+    this.filterDetailsPlotElement.innerHTML = '';
+    this.filterDetailsPlotElement.classList.add('has-plot');
+    this.filterDetailsPlotElement.style.display = 'block';
+    this.filterDetailsPlotElement.style.padding = '10px';
+    
+    // Parse filter parameters (assuming they're in groups of 3: freq, Q, gain)
+    const numFilters = Math.floor(filterParams.length / 3);
+    
+    // Create table to display filter parameters
+    let tableHTML = `
+      <div style="padding: 20px; font-family: monospace;">
+        <h4 style="margin-bottom: 15px; color: var(--text-primary);">Optimized Filter Parameters</h4>
+        <table style="width: 100%; border-collapse: collapse; background: var(--bg-secondary); border-radius: var(--radius);">
+          <thead>
+            <tr style="background: var(--bg-accent);">
+              <th style="padding: 12px; border: 1px solid var(--border-color); color: var(--text-primary); font-weight: 600;">Filter #</th>
+              <th style="padding: 12px; border: 1px solid var(--border-color); color: var(--text-primary); font-weight: 600;">Frequency (Hz)</th>
+              <th style="padding: 12px; border: 1px solid var(--border-color); color: var(--text-primary); font-weight: 600;">Q Factor</th>
+              <th style="padding: 12px; border: 1px solid var(--border-color); color: var(--text-primary); font-weight: 600;">Gain (dB)</th>
+              <th style="padding: 12px; border: 1px solid var(--border-color); color: var(--text-primary); font-weight: 600;">Filter Type</th>
+            </tr>
+          </thead>
+          <tbody>
+    `;
+    
+    for (let i = 0; i < numFilters; i++) {
+      const freq = Math.pow(10, filterParams[i * 3]).toFixed(1);
+      const q = filterParams[i * 3 + 1].toFixed(2);
+      const gain = filterParams[i * 3 + 2].toFixed(2);
+      const filterType = Math.abs(parseFloat(gain)) > 0.1 ? 'PK (Peak)' : 'None';
+      
+      tableHTML += `
+        <tr style="${i % 2 === 0 ? 'background: var(--bg-secondary);' : 'background: var(--bg-primary);'}">
+          <td style="padding: 10px; border: 1px solid var(--border-color); color: var(--text-primary); text-align: center; font-weight: 500;">${i + 1}</td>
+          <td style="padding: 10px; border: 1px solid var(--border-color); color: var(--text-primary); text-align: right;">${freq}</td>
+          <td style="padding: 10px; border: 1px solid var(--border-color); color: var(--text-primary); text-align: right;">${q}</td>
+          <td style="padding: 10px; border: 1px solid var(--border-color); color: ${parseFloat(gain) > 0 ? 'var(--success-color)' : parseFloat(gain) < 0 ? 'var(--danger-color)' : 'var(--text-primary)'}; text-align: right; font-weight: 500;">${parseFloat(gain) > 0 ? '+' : ''}${gain}</td>
+          <td style="padding: 10px; border: 1px solid var(--border-color); color: var(--text-secondary); text-align: center;">${filterType}</td>
+        </tr>
+      `;
+    }
+    
+    tableHTML += `
+          </tbody>
+        </table>
+        <div style="margin-top: 15px; font-size: 12px; color: var(--text-secondary); line-height: 1.4;">
+          <p><strong>Note:</strong> Frequency values are in Hz, Q factors control filter bandwidth (higher Q = narrower filter), and gain values show boost (+) or cut (-) in dB.</p>
+          <p>These parameters can be imported into your audio software or hardware EQ that supports parametric EQ with peak filters.</p>
+        </div>
+      </div>
+    `;
+    
+    this.filterDetailsPlotElement.innerHTML = tableHTML;
+    
+    // Expand the plot section
+    this.expandPlotSection('filter-details-plot');
+    
+    console.log(`Filter details updated with ${numFilters} filters`);
   }
 
   private updateFilterPlot(data: PlotData): void {
@@ -686,6 +842,232 @@ class AutoEQUI {
     });
   }
 
+  private updateOnAxisPlot(spinData: PlotData, filterData?: PlotData): void {
+    this.updateIndividualPlotWithFilter(this.onAxisPlotElement, 'on-axis-plot', spinData, filterData, 'On Axis', ['On Axis']);
+  }
+  
+  private updateListeningWindowPlot(spinData: PlotData, filterData?: PlotData): void {
+    this.updateIndividualPlotWithFilter(this.listeningWindowPlotElement, 'listening-window-plot', spinData, filterData, 'Listening Window', ['Listening Window']);
+  }
+  
+  private updateEarlyReflectionsPlot(data: PlotData): void {
+    this.updateDualAxisPlot(this.earlyReflectionsPlotElement, 'early-reflections-plot', data, 'Early Reflections', ['Early Reflections'], 'ERDI');
+  }
+  
+  private updateSoundPowerPlot(data: PlotData): void {
+    this.updateDualAxisPlot(this.soundPowerPlotElement, 'sound-power-plot', data, 'Sound Power', ['Sound Power'], 'SPDI');
+  }
+  
+  // Plot function for On-Axis and Listening Window with original + optimized curves
+  private updateIndividualPlotWithFilter(plotElement: HTMLElement | null, plotId: string, spinData: PlotData, filterData: PlotData | undefined, title: string, curveNames: string[]): void {
+    if (!plotElement) {
+      console.error(`Plot element not found for ${plotId}`);
+      return;
+    }
+    
+    // Clear and prepare
+    plotElement.innerHTML = '';
+    plotElement.classList.add('has-plot');
+    plotElement.style.display = 'block';
+    plotElement.style.padding = '0';
+    
+    const traces: any[] = [];
+    
+    // Add original measurement curves
+    Object.entries(spinData.curves)
+      .filter(([name]) => curveNames.some(curveName => name.includes(curveName)))
+      .forEach(([name, values]) => {
+        traces.push({
+          x: spinData.frequencies,
+          y: values,
+          type: 'scatter' as const,
+          mode: 'lines' as const,
+          name: `${name} (Original)`,
+          line: { width: 2, color: '#1f77b4' }
+        });
+      });
+    
+    // Add optimized curves if available
+    if (filterData) {
+      // Apply filter to the original curve to show optimized result
+      Object.entries(spinData.curves)
+        .filter(([name]) => curveNames.some(curveName => name.includes(curveName)))
+        .forEach(([name, originalValues]) => {
+          // For now, we'll use the EQ Response as the optimization result
+          // In a more complete implementation, we'd apply the filter to each curve
+          const eqResponse = filterData.curves['EQ Response'];
+          if (eqResponse && originalValues.length === eqResponse.length) {
+            const optimizedValues = originalValues.map((val, i) => val + eqResponse[i]);
+            traces.push({
+              x: spinData.frequencies,
+              y: optimizedValues,
+              type: 'scatter' as const,
+              mode: 'lines' as const,
+              name: `${name} (Optimized)`,
+              line: { width: 2, dash: 'dash' as const, color: '#ff7f0e' }
+            });
+          }
+        });
+    }
+    
+    if (traces.length === 0) {
+      plotElement.innerHTML = `<div style="display: flex; align-items: center; justify-content: center; height: 400px; color: var(--text-secondary);">No ${title} data available</div>`;
+      return;
+    }
+    
+    const layout = {
+      title: { text: '' },
+      xaxis: {
+        title: { text: 'Frequency (Hz)' },
+        type: 'log' as const,
+        range: [Math.log10(20), Math.log10(20000)]
+      },
+      yaxis: {
+        title: { text: 'SPL (dB)' },
+        range: [-40, 10]
+      },
+      paper_bgcolor: 'rgba(0,0,0,0)',
+      plot_bgcolor: 'rgba(0,0,0,0)',
+      font: { 
+        color: getComputedStyle(document.documentElement).getPropertyValue('--text-primary').trim(),
+        size: 12
+      },
+      margin: { l: 50, r: 20, t: 20, b: 60 },
+      showlegend: true,
+      legend: {
+        x: 0.5,
+        y: -0.15,
+        xanchor: 'center' as const,
+        yanchor: 'top' as const,
+        orientation: 'h' as const,
+        bgcolor: 'rgba(0,0,0,0)'
+      }
+    };
+    
+    this.expandPlotSection(plotId);
+    
+    Plotly.newPlot(plotElement, traces, layout, { 
+      responsive: true, 
+      displayModeBar: false 
+    }).then(() => {
+      console.log(`${title} plot created successfully`);
+      Plotly.Plots.resize(plotElement);
+    }).catch((error: any) => {
+      console.error(`Error creating ${title} plot:`, error);
+    });
+  }
+  
+  // Plot function for Early Reflections and Sound Power with dual axes
+  private updateDualAxisPlot(plotElement: HTMLElement | null, plotId: string, data: PlotData, title: string, curveNames: string[], diCurveName: string): void {
+    if (!plotElement) {
+      console.error(`Plot element not found for ${plotId}`);
+      return;
+    }
+    
+    // Clear and prepare
+    plotElement.innerHTML = '';
+    plotElement.classList.add('has-plot');
+    plotElement.style.display = 'block';
+    plotElement.style.padding = '0';
+    
+    const traces: any[] = [];
+    
+    // Add main measurement curves (left axis)
+    Object.entries(data.curves)
+      .filter(([name]) => curveNames.some(curveName => name.includes(curveName)) && !name.includes(diCurveName))
+      .forEach(([name, values]) => {
+        traces.push({
+          x: data.frequencies,
+          y: values,
+          type: 'scatter' as const,
+          mode: 'lines' as const,
+          name: name,
+          yaxis: 'y',
+          line: { width: 2 }
+        });
+      });
+    
+    // Add DI curves (right axis)
+    Object.entries(data.curves)
+      .filter(([name]) => name.includes(diCurveName))
+      .forEach(([name, values]) => {
+        traces.push({
+          x: data.frequencies,
+          y: values,
+          type: 'scatter' as const,
+          mode: 'lines' as const,
+          name: name,
+          yaxis: 'y2',
+          line: { 
+            width: 2.5, 
+            ...(name.includes('DI') ? { dash: 'dash' as const } : {})
+          }
+        });
+      });
+    
+    if (traces.length === 0) {
+      plotElement.innerHTML = `<div style="display: flex; align-items: center; justify-content: center; height: 400px; color: var(--text-secondary);">No ${title} data available</div>`;
+      return;
+    }
+    
+    const layout = {
+      title: { text: '' },
+      xaxis: {
+        title: { text: 'Frequency (Hz)' },
+        type: 'log' as const,
+        range: [Math.log10(20), Math.log10(20000)]
+      },
+      yaxis: {
+        title: { 
+          text: 'SPL (dB)',
+          font: { color: getComputedStyle(document.documentElement).getPropertyValue('--text-primary').trim() }
+        },
+        range: [-40, 10],
+        side: 'left' as const,
+        tickfont: { color: getComputedStyle(document.documentElement).getPropertyValue('--text-primary').trim() }
+      },
+      yaxis2: {
+        title: { 
+          text: 'Directivity Index (dB)',
+          font: { color: '#ff7f0e' }
+        },
+        range: [-5, 45],
+        side: 'right' as const,
+        overlaying: 'y' as const,
+        tickfont: { color: '#ff7f0e' }
+      },
+      paper_bgcolor: 'rgba(0,0,0,0)',
+      plot_bgcolor: 'rgba(0,0,0,0)',
+      font: { 
+        color: getComputedStyle(document.documentElement).getPropertyValue('--text-primary').trim(),
+        size: 12
+      },
+      margin: { l: 50, r: 80, t: 20, b: 80 },
+      showlegend: true,
+      legend: {
+        x: 0.5,
+        y: -0.2,
+        xanchor: 'center' as const,
+        yanchor: 'top' as const,
+        orientation: 'h' as const,
+        bgcolor: 'rgba(0,0,0,0)'
+      },
+      hovermode: 'x unified' as const
+    };
+    
+    this.expandPlotSection(plotId);
+    
+    Plotly.newPlot(plotElement, traces, layout, { 
+      responsive: true, 
+      displayModeBar: false 
+    }).then(() => {
+      console.log(`${title} plot created successfully`);
+      Plotly.Plots.resize(plotElement);
+    }).catch((error: any) => {
+      console.error(`Error creating ${title} plot:`, error);
+    });
+  }
+
   private updateSpinPlot(data: PlotData): void {
     console.log('updateSpinPlot called with:', data);
     
@@ -702,7 +1084,10 @@ class AutoEQUI {
     
     const traces = Object.entries(data.curves).map(([name, values]) => {
       // Check if this is a DI curve (Directivity Index)
-      const isDICurve = name.toLowerCase().includes('di') || name.toLowerCase().includes('directivity');
+      const isDICurve = name.toLowerCase().includes('di') || 
+                       name.toLowerCase().includes('directivity') ||
+                       name === 'Early Reflections DI' ||
+                       name === 'Sound Power DI';
       
       return {
         x: data.frequencies,
@@ -712,28 +1097,23 @@ class AutoEQUI {
         name: name,
         yaxis: isDICurve ? 'y2' : 'y', // Use secondary axis for DI curves
         line: {
-          width: isDICurve ? 2 : 1.5
+          width: isDICurve ? 2.5 : 1.5,
+          ...(isDICurve ? { dash: 'dash' as const } : {}) // Make DI curves dashed for clarity
         }
       };
     });
 
-    // Determine legend position based on screen size
-    const isWideScreen = window.innerWidth > 768;
-    const legendConfig = isWideScreen ? {
-      x: 1.02,
-      y: 1,
-      xanchor: 'left' as const,
-      yanchor: 'top' as const
-    } : {
+    // Always use horizontal legend below plot for Spinorama
+    const legendConfig = {
       x: 0.5,
-      y: -0.1,
+      y: -0.2,
       xanchor: 'center' as const,
       yanchor: 'top' as const,
       orientation: 'h' as const
     };
     
-    const rightMargin = isWideScreen ? 120 : 20; // More space for right legend
-    const bottomMargin = isWideScreen ? 40 : 80; // More space for bottom legend
+    const rightMargin = 140; // Space for dual Y-axis
+    const bottomMargin = 120; // More space for horizontal legend
 
     const layout = {
       title: { text: '' },
@@ -743,15 +1123,23 @@ class AutoEQUI {
         range: [Math.log10(20), Math.log10(20000)]
       },
       yaxis: {
-        title: { text: 'SPL (dB)' },
-        range: [-10, 10],
-        side: 'left' as const
+        title: { 
+          text: 'SPL (dB)',
+          font: { color: getComputedStyle(document.documentElement).getPropertyValue('--text-primary').trim() }
+        },
+        range: [-40, 10],
+        side: 'left' as const,
+        tickfont: { color: getComputedStyle(document.documentElement).getPropertyValue('--text-primary').trim() }
       },
       yaxis2: {
-        title: { text: 'Directivity Index (dB)' },
+        title: { 
+          text: 'Directivity Index (dB)',
+          font: { color: '#ff7f0e' } // Orange color for DI axis
+        },
         range: [-5, 45],
         side: 'right' as const,
-        overlaying: 'y' as const
+        overlaying: 'y' as const,
+        tickfont: { color: '#ff7f0e' }
       },
       paper_bgcolor: 'rgba(0,0,0,0)',
       plot_bgcolor: 'rgba(0,0,0,0)',
@@ -759,12 +1147,13 @@ class AutoEQUI {
         color: getComputedStyle(document.documentElement).getPropertyValue('--text-primary').trim(),
         size: 12
       },
-      margin: { l: 40, r: rightMargin, t: 20, b: bottomMargin },
+      margin: { l: 50, r: rightMargin, t: 20, b: bottomMargin },
       showlegend: true,
       legend: {
         ...legendConfig,
         bgcolor: 'rgba(0,0,0,0)'
-      }
+      },
+      hovermode: 'x unified' as const
     };
 
     // Ensure container is visible

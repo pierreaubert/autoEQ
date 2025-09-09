@@ -10,11 +10,6 @@
 
   <body>
     <div class="app">
-      <header class="header">
-        <h1>AutoEQ UI</h1>
-        <button id="exit-btn" class="exit-button" title="Exit Application">×</button>
-      </header>
-
       <main class="main-content">
         <div class="left-panel" id="left-panel">
           <form id="autoeq-form" class="parameter-form">
@@ -123,7 +118,6 @@
               </div>
               
               <div class="checkbox-group">
-                <label><input type="checkbox" id="smooth" name="smooth" checked> Enable Smoothing</label>
                 <label><input type="checkbox" id="iir-hp-pk" name="iir_hp_pk"> Use HP+PK Filters</label>
               </div>
             </div>
@@ -136,10 +130,35 @@
                 <div class="param-item">
                   <label>Algorithm</label>
                   <select id="algo" name="algo">
-                    <option value="isres">ISRES</option>
-                    <option value="cobyla">COBYLA</option>
-                    <option value="bobyqa">BOBYQA</option>
-                    <option value="newuoa">NEWUOA</option>
+                    <optgroup label="AutoEQ Algorithms">
+                      <option value="autoeq:de" selected>Auto DE (Recommended)</option>
+                    </optgroup>
+                    <optgroup label="NLOPT Global Optimizers">
+                      <option value="nlopt:isres">NLOPT ISRES</option>
+                      <option value="nlopt:ags">NLOPT AGS</option>
+                      <option value="nlopt:origdirect">NLOPT Original DIRECT</option>
+                      <option value="nlopt:crs2lm">NLOPT CRS2 LM</option>
+                      <option value="nlopt:direct">NLOPT DIRECT</option>
+                      <option value="nlopt:directl">NLOPT DIRECT-L</option>
+                      <option value="nlopt:gmlsl">NLOPT GMLSL</option>
+                      <option value="nlopt:gmlsllds">NLOPT GMLSL LDS</option>
+                      <option value="nlopt:stogo">NLOPT StoGO</option>
+                      <option value="nlopt:stogorand">NLOPT StoGO Rand</option>
+                    </optgroup>
+                    <optgroup label="NLOPT Local Optimizers">
+                      <option value="nlopt:cobyla">NLOPT COBYLA</option>
+                      <option value="nlopt:bobyqa">NLOPT BOBYQA</option>
+                      <option value="nlopt:neldermead">NLOPT Nelder-Mead</option>
+                      <option value="nlopt:sbplx">NLOPT Subplex</option>
+                      <option value="nlopt:slsqp">NLOPT SLSQP</option>
+                    </optgroup>
+                    <optgroup label="Metaheuristics">
+                      <option value="mh:de">MH Differential Evolution</option>
+                      <option value="mh:pso">MH Particle Swarm</option>
+                      <option value="mh:rga">MH Genetic Algorithm</option>
+                      <option value="mh:tlbo">MH TLBO</option>
+                      <option value="mh:firefly">MH Firefly</option>
+                    </optgroup>
                   </select>
                 </div>
                 <div class="param-item">
@@ -171,16 +190,70 @@
                   <input type="number" id="spacing-weight" name="spacing_weight" value="20.0" step="5">
                 </div>
                 
+                <!-- DE Strategy Parameters (conditional) -->
+                <div class="param-item de-param" id="strategy-param" style="display: none;">
+                  <label>Strategy</label>
+                  <select id="strategy" name="strategy">
+                    <option value="currenttobest1bin" selected>Current-to-Best/1/Bin (Recommended)</option>
+                    <option value="rand1bin">Rand/1/Bin</option>
+                    <option value="best1bin">Best/1/Bin</option>
+                    <option value="rand2bin">Rand/2/Bin</option>
+                    <option value="best2bin">Best/2/Bin</option>
+                    <option value="randtobest1bin">Rand-to-Best/1/Bin</option>
+                    <option value="rand1exp">Rand/1/Exp</option>
+                    <option value="best1exp">Best/1/Exp</option>
+                    <option value="rand2exp">Rand/2/Exp</option>
+                    <option value="best2exp">Best/2/Exp</option>
+                    <option value="currenttobest1exp">Current-to-Best/1/Exp</option>
+                    <option value="randtobest1exp">Rand-to-Best/1/Exp</option>
+                    <option value="adaptivebin">Adaptive/Bin (Experimental)</option>
+                    <option value="adaptiveexp">Adaptive/Exp (Experimental)</option>
+                  </select>
+                </div>
+                
+                <!-- Adaptive F Parameter (conditional) -->
+                <div class="param-item adaptive-param" id="adaptive-f-param" style="display: none;">
+                  <label>F (Mutation)</label>
+                  <input type="number" id="de-f" name="de_f" value="0.8" step="0.1" min="0.1" max="2.0">
+                </div>
+                
+                <!-- Adaptive CR Parameter (conditional) -->
+                <div class="param-item adaptive-param" id="adaptive-cr-param" style="display: none;">
+                  <label>CR (Crossover)</label>
+                  <input type="number" id="de-cr" name="de_cr" value="0.9" step="0.1" min="0.0" max="1.0">
+                </div>
+                
+                <!-- Adaptive Weight F (conditional) -->
+                <div class="param-item adaptive-param" id="adaptive-weight-f-param" style="display: none;">
+                  <label>Adaptive Weight F</label>
+                  <input type="number" id="adaptive-weight-f" name="adaptive_weight_f" value="0.8" step="0.1" min="0.1" max="1.0">
+                </div>
+                
+                <!-- Adaptive Weight CR (conditional) -->
+                <div class="param-item adaptive-param" id="adaptive-weight-cr-param" style="display: none;">
+                  <label>Adaptive Weight CR</label>
+                  <input type="number" id="adaptive-weight-cr" name="adaptive_weight_cr" value="0.7" step="0.1" min="0.1" max="1.0">
+                </div>
+                
                 <!-- Smoothing Parameters -->
                 <div class="param-item">
                   <label>Smooth N</label>
                   <input type="number" id="smooth-n" name="smooth_n" value="2" min="1" max="24">
                 </div>
-                <div class="param-item"><!-- Empty for alignment --></div>
               </div>
               
-              <div class="checkbox-group">
-                <label><input type="checkbox" id="refine" name="refine"> Enable Refinement</label>
+              <div class="param-group-section">
+                <div class="param-group-header">Refinement</div>
+                <div class="checkbox-group">
+                  <label><input type="checkbox" id="refine" name="refine"> Enable Refinement</label>
+                </div>
+              </div>
+              
+              <div class="param-group-section">
+                <div class="param-group-header">Smoothing</div>
+                <div class="checkbox-group">
+                  <label><input type="checkbox" id="smooth" name="smooth" checked> Enable Smoothing</label>
+                </div>
               </div>
             </div>
           </form>

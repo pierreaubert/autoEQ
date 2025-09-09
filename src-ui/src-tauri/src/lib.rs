@@ -31,6 +31,12 @@ struct OptimizationParams {
     smooth_n: usize,
     loss: String, // "flat", "score", or "mixed"
     iir_hp_pk: bool,
+    // DE-specific parameters
+    strategy: Option<String>,
+    de_f: Option<f64>,
+    de_cr: Option<f64>,
+    adaptive_weight_f: Option<f64>,
+    adaptive_weight_cr: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -191,11 +197,11 @@ async fn run_optimization_internal(params: OptimizationParams) -> Result<Optimiz
         algo_list: false, // UI doesn't need to list algorithms
         tolerance: 1e-3, // Default DE tolerance
         atolerance: 1e-4, // Default DE absolute tolerance
-        recombination: 0.9, // Default DE recombination probability
-        strategy: "currenttobest1bin".to_string(), // Default DE strategy
+        recombination: params.de_cr.unwrap_or(0.9), // DE crossover probability
+        strategy: params.strategy.unwrap_or_else(|| "currenttobest1bin".to_string()), // DE strategy
         strategy_list: false, // UI doesn't need to list strategies
-        adaptive_weight_f: 0.9, // Default adaptive weight for F
-        adaptive_weight_cr: 0.9, // Default adaptive weight for CR
+        adaptive_weight_f: params.adaptive_weight_f.unwrap_or(0.8), // Adaptive weight for F
+        adaptive_weight_cr: params.adaptive_weight_cr.unwrap_or(0.7), // Adaptive weight for CR
     };
 
     // Load input curve

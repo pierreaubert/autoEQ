@@ -62,48 +62,6 @@ body {
   flex-direction: column;
 }
 
-.header {
-  background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border-color);
-  padding: var(--spacing-sm) var(--spacing-lg);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  position: relative;
-}
-
-.header h1 {
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin: 0;
-}
-
-.exit-button {
-  position: absolute;
-  right: var(--spacing-lg);
-  top: 50%;
-  transform: translateY(-50%);
-  width: 32px;
-  height: 32px;
-  border: none;
-  background: var(--danger-color);
-  color: white;
-  border-radius: 50%;
-  font-size: 18px;
-  font-weight: bold;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s;
-}
-
-.exit-button:hover {
-  background: #c82333;
-  transform: translateY(-50%) scale(1.1);
-}
-
 .main-content {
   flex: 1;
   display: flex;
@@ -178,6 +136,37 @@ body {
 
 .global-algo-param.show {
   display: flex;
+}
+
+/* DE Parameters (handled by JavaScript) */
+.de-param {
+  display: none;
+}
+
+.adaptive-param {
+  display: none;
+}
+
+/* Parameter Group Sections */
+.param-group-section {
+  margin-top: var(--spacing-md);
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--border-color);
+}
+
+.param-group-section:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
+.param-group-header {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: var(--spacing-sm);
 }
 
 .section-group {
@@ -527,15 +516,23 @@ input[type="checkbox"] {
 }
 
 .plot-section.collapsed .plot-container {
-  display: none;
+  display: none !important;
+  height: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .plot-section.expanded .plot-container {
   display: block;
+  height: 400px;
+  min-height: 400px;
 }
 
 .plot-section .plot-container {
   display: none; /* Default to hidden */
+  height: 0;
+  min-height: 0;
+  transition: height 0.3s ease, min-height 0.3s ease;
 }
 
 .plot-header {
@@ -567,27 +564,24 @@ input[type="checkbox"] {
 }
 
 .plot-container {
-  min-height: 400px;
-  height: 400px;
   width: 100%;
   position: relative;
   background: var(--bg-secondary);
   border-radius: var(--radius);
   overflow: visible;
+  padding: 0;
 }
 
 /* When plot has no data, show centered message */
-.plot-container:not(.has-plot) {
+.plot-section.expanded .plot-container:not(.has-plot) {
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--text-secondary);
   font-size: 14px;
   padding: var(--spacing-lg);
-}
-
-.plot-container:not(.has-plot).active {
-  display: flex !important;
+  height: 400px;
+  min-height: 400px;
 }
 
 /* When plot has data, remove padding and centering */
