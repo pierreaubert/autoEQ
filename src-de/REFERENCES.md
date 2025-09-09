@@ -1,5 +1,7 @@
 # References
 
+## Scipy
+
 ```bibtex
 @ARTICLE{2020SciPy-NMeth,
   author  = {Virtanen, Pauli and Gommers, Ralf and Oliphant, Travis E. and
@@ -26,18 +28,7 @@
 }
 ```
 
-```bibtex
-@ARTICLE{5208221,
-  author={Zhang, Jingqiao and Sanderson, Arthur C.},
-  journal={IEEE Transactions on Evolutionary Computation},
-  title={JADE: Adaptive Differential Evolution With Optional External Archive},
-  year={2009},
-  volume={13},
-  number={5},
-  pages={945-958},
-  keywords={Genetic mutations;Programmable control;Adaptive control;Convergence;Automatic control;Evolutionary computation;Feedback;Robustness;Particle swarm optimization;Performance analysis;Adaptive parameter control;differential evolution;evolutionary optimization;external archive},
-  doi={10.1109/TEVC.2009.2014613}}
-```
+## A large review in 2020 of the DE space
 
 ```bibtex
 @article{BILAL2020103479,
@@ -54,3 +45,19 @@
 	abstract = {Since its inception in 1995, Differential Evolution (DE) has emerged as one of the most frequently used algorithms for solving complex optimization problems. Its flexibility and versatility have prompted several customized variants of DE for solving a variety of real life and test problems. The present study, surveys the near 25 years of existence of DE. In this extensive survey, 283 research articles have been covered and the journey of DE is shown through its basic aspects like population generation, mutation schemes, crossover schemes, variation in parameters and hybridized variants along with various successful applications of DE. This study also provides some key bibliometric indicators like highly cited papers having citations more than 500, publication trend since 1996, journal citations etc. The main aim of the present document is to serve as an extended summary of 25 years of existence of DE, intended for dissemination to interested parties. It is expected that the present survey would generate interest among the new users towards the philosophy of DE and would also guide the experience researchers.}
 }
 ```
+
+## JADE
+
+```bibtex
+@ARTICLE{5208221,
+  author={Zhang, Jingqiao and Sanderson, Arthur C.},
+  journal={IEEE Transactions on Evolutionary Computation},
+  title={JADE: Adaptive Differential Evolution With Optional External Archive},
+  year={2009},
+  volume={13},
+  number={5},
+  pages={945-958},
+  keywords={Genetic mutations;Programmable control;Adaptive control;Convergence;Automatic control;Evolutionary computation;Feedback;Robustness;Particle swarm optimization;Performance analysis;Adaptive parameter control;differential evolution;evolutionary optimization;external archive},
+  doi={10.1109/TEVC.2009.2014613}}
+```
+

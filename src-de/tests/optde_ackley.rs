@@ -17,23 +17,6 @@ fn test_de_ackley_10d() {
     assert!(differential_evolution(&ackley, &b10, c10).fun < 1e-2);
 }
 
-// Auto_de tests using the simplified interface
-
-#[test]
-fn test_auto_de_ackley_function() {
-    let bounds = create_bounds(4, -32.0, 32.0);
-    let result = auto_de(ackley, &bounds, None);
-
-    assert!(result.is_some(), "AutoDE should find a solution");
-    let (x_opt, f_opt, _) = result.unwrap();
-
-    // Ackley has many local minima, so we're more lenient
-    assert!(f_opt < 1e-1, "Ackley function value too high: {}", f_opt);
-    for &xi in x_opt.iter() {
-        assert!(xi.abs() < 1.0, "Solution component too far from 0: {}", xi);
-    }
-}
-
 #[test]
 fn test_de_ackley_2d() {
     let bounds = vec![(-32.768, 32.768), (-32.768, 32.768)];

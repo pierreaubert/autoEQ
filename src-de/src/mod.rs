@@ -47,6 +47,8 @@ pub mod auto_de;
 pub mod optimization_recorder;
 pub mod recorded_de;
 pub mod tests;
+pub mod adaptive;
+pub mod metadata;
 
 // Re-exports for public API
 pub use auto_de_params::AutoDEParams;
@@ -1058,4 +1060,27 @@ where
 /// Examples for using the differential evolution optimizer
 pub mod examples {
     //! Example programs demonstrating differential evolution usage
+}
+
+#[cfg(test)]
+mod strategy_tests {
+    use super::*;
+
+    extern crate blas_src;
+    
+    #[test]
+    fn test_parse_strategy_variants() {
+        assert!(matches!(
+            "best1exp".parse::<Strategy>().unwrap(),
+            Strategy::Best1Exp
+        ));
+        assert!(matches!(
+            "rand1bin".parse::<Strategy>().unwrap(),
+            Strategy::Rand1Bin
+        ));
+        assert!(matches!(
+            "randtobest1exp".parse::<Strategy>().unwrap(),
+            Strategy::RandToBest1Exp
+        ));
+    }
 }

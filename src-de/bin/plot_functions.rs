@@ -66,6 +66,10 @@ struct Args {
     /// Use function metadata for bounds (overrides x_bounds and y_bounds)
     #[arg(long)]
     use_metadata: bool,
+
+    /// Create convergence plots showing loss function vs iterations/evaluations
+    #[arg(long)]
+    convergence_plots: bool,
 }
 
 // Test function type definition
@@ -73,15 +77,16 @@ type TestFunction = fn(&Array1<f64>) -> f64;
 
 #[derive(Debug, Clone)]
 struct OptimizationPoint {
-    _iteration: usize,
+    iteration: usize,
     x: Vec<f64>,
-    _best_result: f64,
+    best_result: f64,
+    f_value: f64,
     is_improvement: bool,
 }
 
 #[derive(Debug, Clone)]
 struct OptimizationTrace {
-    _function_name: String,
+    function_name: String,
     points: Vec<OptimizationPoint>,
 }
 
@@ -94,21 +99,31 @@ fn read_csv_trace(csv_path: &str) -> Result<OptimizationTrace, Box<dyn std::erro
     }
 
     let header = lines[0];
-    let expected_prefix = "iteration,";
-    if !header.starts_with(expected_prefix) {
+
+    // Determine CSV format based on header
+    let is_new_format = header.starts_with("eval_id,generation,");
+    let is_old_format = header.starts_with("iteration,");
+
+    if !is_new_format && !is_old_format {
         return Err(format!(
-            "Invalid CSV header format. Expected to start with '{}'",
-            expected_prefix
+            "Invalid CSV header format. Expected to start with 'eval_id,generation,' or 'iteration,', got: {}",
+            header
         )
         .into());
     }
 
     // Extract function name from filename
-    let function_name = Path::new(csv_path)
+    let raw_name = Path::new(csv_path)
         .file_stem()
         .and_then(|s| s.to_str())
-        .unwrap_or("unknown")
-        .to_string();
+        .unwrap_or("unknown");
+
+    // Clean function name by removing _block_XXXX suffix if present
+    let function_name = if raw_name.contains("_block_") {
+        raw_name.split("_block_").next().unwrap_or(raw_name).to_string()
+    } else {
+        raw_name.to_string()
+    };
 
     let mut points = Vec::new();
 
@@ -119,63 +134,114 @@ fn read_csv_trace(csv_path: &str) -> Result<OptimizationTrace, Box<dyn std::erro
             return Err(format!("Line {}: insufficient columns", line_idx + 2).into());
         }
 
-        let iteration: usize = parts[0]
-            .parse()
-            .map_err(|_| format!("Line {}: invalid iteration number", line_idx + 2))?;
+        let point = if is_new_format {
+            // New format: eval_id,generation,x0,x1,f_value,best_so_far,is_improvement
+            if parts.len() < 7 {
+                return Err(format!("Line {}: insufficient columns for new format (expected 7+)", line_idx + 2).into());
+            }
 
-        // Parse x coordinates (all columns between iteration and last 3 columns)
-        let x_columns_end = parts.len() - 3; // best_result, convergence, is_improvement
-        let mut x = Vec::new();
+            let eval_id: usize = parts[0]
+                .parse()
+                .map_err(|_| format!("Line {}: invalid eval_id", line_idx + 2))?;
 
-        for i in 1..x_columns_end {
-            let coord: f64 = parts[i].parse().map_err(|_| {
-                format!(
-                    "Line {}: invalid x coordinate at column {}",
-                    line_idx + 2,
-                    i
-                )
-            })?;
-            x.push(coord);
-        }
+            let _generation: usize = parts[1]
+                .parse()
+                .map_err(|_| format!("Line {}: invalid generation", line_idx + 2))?;
 
-        if x.len() != 2 {
-            return Err(format!(
-                "Line {}: expected 2D coordinates, got {}D",
-                line_idx + 2,
-                x.len()
-            )
-            .into());
-        }
+            // Parse x coordinates (between generation and f_value/best_so_far/is_improvement)
+            let x_end = parts.len() - 3; // f_value, best_so_far, is_improvement
+            let mut x = Vec::new();
+            for i in 2..x_end {
+                let coord: f64 = parts[i].parse().map_err(|_| {
+                    format!("Line {}: invalid x coordinate at column {}", line_idx + 2, i)
+                })?;
+                x.push(coord);
+            }
 
-        let best_result: f64 = parts[x_columns_end]
-            .parse()
-            .map_err(|_| format!("Line {}: invalid best_result", line_idx + 2))?;
+            if x.len() != 2 {
+                return Err(format!("Line {}: expected 2D coordinates, got {}D", line_idx + 2, x.len()).into());
+            }
 
-        let is_improvement: bool = parts[x_columns_end + 2]
-            .parse()
-            .map_err(|_| format!("Line {}: invalid is_improvement", line_idx + 2))?;
+            let f_value: f64 = parts[x_end]
+                .parse()
+                .map_err(|_| format!("Line {}: invalid f_value", line_idx + 2))?;
 
-        points.push(OptimizationPoint {
-            _iteration:iteration,
-            x,
-            _best_result:best_result,
-            is_improvement,
-        });
+            let best_so_far: f64 = parts[x_end + 1]
+                .parse()
+                .map_err(|_| format!("Line {}: invalid best_so_far", line_idx + 2))?;
+
+            let is_improvement: bool = parts[x_end + 2]
+                .parse()
+                .map_err(|_| format!("Line {}: invalid is_improvement", line_idx + 2))?;
+
+            OptimizationPoint {
+                iteration: eval_id,
+                x,
+                best_result: best_so_far,
+                f_value,
+                is_improvement,
+            }
+        } else {
+            // Old format: iteration,x0,x1,best_result,convergence,is_improvement
+            let iteration: usize = parts[0]
+                .parse()
+                .map_err(|_| format!("Line {}: invalid iteration number", line_idx + 2))?;
+
+            // Parse x coordinates (all columns between iteration and last 3 columns)
+            let x_columns_end = parts.len() - 3; // best_result, convergence, is_improvement
+            let mut x = Vec::new();
+
+            for i in 1..x_columns_end {
+                let coord: f64 = parts[i].parse().map_err(|_| {
+                    format!("Line {}: invalid x coordinate at column {}", line_idx + 2, i)
+                })?;
+                x.push(coord);
+            }
+
+            if x.len() != 2 {
+                return Err(format!("Line {}: expected 2D coordinates, got {}D", line_idx + 2, x.len()).into());
+            }
+
+            let best_result: f64 = parts[x_columns_end]
+                .parse()
+                .map_err(|_| format!("Line {}: invalid best_result", line_idx + 2))?;
+
+            let is_improvement: bool = parts[x_columns_end + 2]
+                .parse()
+                .map_err(|_| format!("Line {}: invalid is_improvement", line_idx + 2))?;
+
+            OptimizationPoint {
+                iteration,
+                x,
+                best_result,
+                f_value: best_result, // In old format, we don't have separate f_value
+                is_improvement,
+            }
+        };
+
+        points.push(point);
     }
 
     Ok(OptimizationTrace {
-        _function_name:function_name,
+        function_name,
         points,
     })
 }
 
 fn find_csv_for_function(csv_dir: &str, function_name: &str) -> Option<String> {
+    // Try old format first
     let csv_path = format!("{}/{}.csv", csv_dir, function_name);
     if Path::new(&csv_path).exists() {
-        Some(csv_path)
-    } else {
-        None
+        return Some(csv_path);
     }
+
+    // Try new block-based format
+    let block_path = format!("{}/{}_block_0001.csv", csv_dir, function_name);
+    if Path::new(&block_path).exists() {
+        return Some(block_path);
+    }
+
+    None
 }
 
 fn add_optimization_trace(
@@ -296,6 +362,84 @@ fn add_optimization_trace(
     }
 }
 
+/// Create a convergence plot showing loss function over iterations/evaluations
+fn plot_convergence(
+    trace: &OptimizationTrace,
+    output_dir: &str,
+    width: usize,
+    height: usize,
+) {
+    if trace.points.is_empty() {
+        eprintln!("  Warning: No data points for convergence plot");
+        return;
+    }
+
+    let iterations: Vec<usize> = trace.points.iter().map(|p| p.iteration).collect();
+    let best_results: Vec<f64> = trace.points.iter().map(|p| p.best_result).collect();
+    let f_values: Vec<f64> = trace.points.iter().map(|p| p.f_value).collect();
+
+    // Create best-so-far trace (shows the convergence of the optimization)
+    let best_trace = Scatter::new(iterations.clone(), best_results)
+        .mode(Mode::Lines)
+        .name("Best So Far")
+        .line(
+            plotly::common::Line::new()
+                .color("rgba(0, 100, 200, 0.8)") // Blue
+                .width(3.0),
+        );
+
+    // Create function evaluation trace (shows all individual evaluations)
+    // Only plot every nth point to avoid overcrowding for large datasets
+    let step_size = std::cmp::max(1, trace.points.len() / 1000); // Limit to ~1000 points max
+    let sampled_iterations: Vec<usize> = iterations.iter().step_by(step_size).copied().collect();
+    let sampled_f_values: Vec<f64> = f_values.iter().step_by(step_size).copied().collect();
+
+    let eval_trace = Scatter::new(sampled_iterations, sampled_f_values)
+        .mode(Mode::Markers)
+        .name("Function Evaluations")
+        .marker(
+            Marker::new()
+                .color("rgba(200, 200, 200, 0.4)") // Light gray with transparency
+                .size(2)
+                .symbol(plotly::common::MarkerSymbol::Circle),
+        );
+
+    let layout = Layout::new()
+        .title(Title::with_text(&format!("Convergence: {}", trace.function_name)))
+        .width(width)
+        .height(height)
+        .x_axis(
+            plotly::layout::Axis::new()
+                .title(Title::with_text("Iteration/Evaluation"))
+                .type_(plotly::layout::AxisType::Linear),
+        )
+        .y_axis(
+            plotly::layout::Axis::new()
+                .title(Title::with_text("Function Value"))
+                .type_(plotly::layout::AxisType::Log), // Use log scale for better visualization
+        )
+        .legend(
+            plotly::layout::Legend::new()
+                .x(0.7)
+                .y(0.9),
+        );
+
+    let mut plot = Plot::new();
+    plot.add_trace(eval_trace);
+    plot.add_trace(best_trace);
+    plot.set_layout(layout);
+
+    // Use a clean function name for the convergence plot (remove _block_XXXX suffix if present)
+    let clean_name = if trace.function_name.contains("_block_") {
+        trace.function_name.split("_block_").next().unwrap_or(&trace.function_name)
+    } else {
+        &trace.function_name
+    };
+    let filename = format!("{}/{}_convergence.html", output_dir, clean_name.replace(' ', "_"));
+    plot.write_html(&filename);
+    println!("  Created convergence plot: {}", filename);
+}
+
 fn main() {
     let args = Args::parse();
 
@@ -377,7 +521,7 @@ fn main() {
                 plot_x_bounds.0, plot_x_bounds.1, plot_y_bounds.0, plot_y_bounds.1);
 
         // Load optimization trace if requested
-        let trace = if args.show_traces {
+        let trace = if args.show_traces || args.convergence_plots {
             if let Some(csv_path) = find_csv_for_function(&csv_dir, &name) {
                 match read_csv_trace(&csv_path) {
                     Ok(trace) => {
@@ -410,9 +554,16 @@ fn main() {
             args.width,
             args.height,
             &output_dir,
-            trace.as_ref(),
+            if args.show_traces { trace.as_ref() } else { None },
             metadata.get(&name),
         );
+
+        // Create convergence plot if requested and trace is available
+        if args.convergence_plots {
+            if let Some(ref trace) = trace {
+                plot_convergence(trace, &output_dir, args.width, args.height);
+            }
+        }
     }
 
     println!("Plots saved to directory: {}", output_dir);
@@ -545,13 +696,15 @@ fn get_test_functions() -> Vec<(String, TestFunction)> {
 /// This is the only place that needs to be updated when adding new functions
 fn get_function_by_name(name: &str) -> Option<TestFunction> {
     match name {
-        // Core mathematical functions
+        // Core mathematical functions (alphabetically ordered)
         "ackley" => Some(ackley),
         "ackley_n2" => Some(ackley_n2),
+        "ackley_n3" => Some(ackley_n3),
         "alpine_n1" => Some(alpine_n1),
         "alpine_n2" => Some(alpine_n2),
         "beale" => Some(beale),
         "bent_cigar" => Some(bent_cigar),
+        "bent_cigar_alt" => Some(bent_cigar_alt),
         "bird" => Some(bird),
         "bohachevsky1" => Some(bohachevsky1),
         "bohachevsky2" => Some(bohachevsky2),
@@ -560,24 +713,40 @@ fn get_function_by_name(name: &str) -> Option<TestFunction> {
         "branin" => Some(branin),
         "brown" => Some(brown),
         "bukin_n6" => Some(bukin_n6),
+        "chung_reynolds" => Some(chung_reynolds),
+        "cigar" => Some(cigar),
         "colville" => Some(colville),
         "cosine_mixture" => Some(cosine_mixture),
         "cross_in_tray" => Some(cross_in_tray),
         "de_jong_step2" => Some(de_jong_step2),
         "dejong_f5_foxholes" => Some(dejong_f5_foxholes),
+        "different_powers" => Some(different_powers),
+        "discus" => Some(discus),
         "dixons_price" => Some(dixons_price),
         "drop_wave" => Some(drop_wave),
         "easom" => Some(easom),
         "eggholder" => Some(eggholder),
+        "elliptic" => Some(elliptic),
+        "epistatic_michalewicz" => Some(epistatic_michalewicz),
+        "expanded_griewank_rosenbrock" => Some(expanded_griewank_rosenbrock),
+        "exponential" => Some(exponential),
+        "forrester_2008" => Some(forrester_2008),
         "freudenstein_roth" => Some(freudenstein_roth),
         "goldstein_price" => Some(goldstein_price),
+        "gramacy_lee_2012" => Some(gramacy_lee_2012),
+        "gramacy_lee_function" => Some(gramacy_lee_function),
         "griewank" => Some(griewank),
         "griewank2" => Some(griewank2),
+        "happy_cat" => Some(happy_cat),
+        "happycat" => Some(happycat),
         "hartman_3d" => Some(hartman_3d),
+        "hartman_4d" => Some(hartman_4d),
         "hartman_6d" => Some(hartman_6d),
         "himmelblau" => Some(himmelblau),
         "holder_table" => Some(holder_table),
+        "katsuura" => Some(katsuura),
         "lampinen_simplified" => Some(lampinen_simplified),
+        "langermann" => Some(langermann),
         "levi13" => Some(levi13),
         "levy" => Some(levy),
         "levy_n13" => Some(levy_n13),
@@ -585,44 +754,44 @@ fn get_function_by_name(name: &str) -> Option<TestFunction> {
         "mccormick" => Some(mccormick),
         "michalewicz" => Some(michalewicz),
         "periodic" => Some(periodic),
+        "perm_0_d_beta" => Some(perm_0_d_beta),
+        "perm_d_beta" => Some(perm_d_beta),
+        "pinter" => Some(pinter),
         "powell" => Some(powell),
+        "power_sum" => Some(power_sum),
+        "qing" => Some(qing),
         "quadratic" => Some(quadratic),
         "quartic" => Some(quartic),
         "rastrigin" => Some(rastrigin),
+        "ridge" => Some(ridge),
         "rosenbrock" => Some(rosenbrock),
         "rotated_hyper_ellipsoid" => Some(rotated_hyper_ellipsoid),
         "salomon" => Some(salomon),
+        "salomon_corrected" => Some(salomon_corrected),
         "schaffer_n2" => Some(schaffer_n2),
         "schaffer_n4" => Some(schaffer_n4),
         "schwefel" => Some(schwefel),
         "schwefel2" => Some(schwefel2),
+        "sharp_ridge" => Some(sharp_ridge),
+        "shekel" => Some(shekel),
         "shubert" => Some(shubert),
         "six_hump_camel" => Some(six_hump_camel),
         "sphere" => Some(sphere),
         "step" => Some(step),
         "styblinski_tang2" => Some(styblinski_tang2),
         "sum_of_different_powers" => Some(sum_of_different_powers),
+        "sum_squares" => Some(sum_squares),
+        "tablet" => Some(tablet),
         "three_hump_camel" => Some(three_hump_camel),
         "trid" => Some(trid),
-        "zakharov" => Some(zakharov),
-        "zakharov2" => Some(zakharov2),
-
-        // Medium Priority Functions
-        "happy_cat" => Some(happy_cat),
-        "pinter" => Some(pinter),
         "vincent" => Some(vincent),
-        "ackley_n3" => Some(ackley_n3),
-        "chung_reynolds" => Some(chung_reynolds),
-        "exponential" => Some(exponential),
-
-        // Low Priority Functions
+        "whitley" => Some(whitley),
+        "xin_she_yang_n1" => Some(xin_she_yang_n1),
         "xin_she_yang_n2" => Some(xin_she_yang_n2),
         "xin_she_yang_n3" => Some(xin_she_yang_n3),
         "xin_she_yang_n4" => Some(xin_she_yang_n4),
-        "langermann" => Some(langermann),
-        "qing" => Some(qing),
-        "whitley" => Some(whitley),
-        "epistatic_michalewicz" => Some(epistatic_michalewicz),
+        "zakharov" => Some(zakharov),
+        "zakharov2" => Some(zakharov2),
 
         // Constraint functions (typically not plotted directly but included for completeness)
         "binh_korn_constraint1" => Some(binh_korn_constraint1),

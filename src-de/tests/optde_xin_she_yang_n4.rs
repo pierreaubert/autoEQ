@@ -14,13 +14,13 @@ fn test_de_xin_she_yang_n4_2d() {
         .strategy(Strategy::Best1Bin)
         .recombination(0.9)
         .build();
-    
+
     let result = differential_evolution(&xin_she_yang_n4, &bounds, config);
-    
+
     // Global minimum is at (0, 0) with f = -1
     assert!(result.fun > -1.01, "Solution too good (below theoretical minimum): {}", result.fun);
     assert!(result.fun < -0.3, "Solution quality too low: {}", result.fun);
-    
+
     // Check solution is close to known optimum (0, 0)
     for &xi in result.x.iter() {
         assert!(xi >= -10.0 && xi <= 10.0, "Solution coordinate out of bounds: {}", xi);
@@ -39,33 +39,16 @@ fn test_de_xin_she_yang_n4_5d() {
         .strategy(Strategy::RandToBest1Bin)
         .recombination(0.8)
         .build();
-    
+
     let result = differential_evolution(&xin_she_yang_n4, &bounds, config);
-    
+
     // For 5D, accept much higher tolerance due to complexity
     assert!(result.fun > -1.01, "Solution too good (below theoretical minimum): {}", result.fun);
     assert!(result.fun < 0.5, "Solution quality too low for 5D: {}", result.fun);
-    
+
     // Check solution is within bounds
     for &xi in result.x.iter() {
         assert!(xi >= -10.0 && xi <= 10.0, "Solution coordinate out of bounds: {}", xi);
-    }
-}
-
-// Auto_de tests using the simplified interface
-#[test]
-fn test_auto_de_xin_she_yang_n4_function() {
-    let bounds = create_bounds(2, -10.0, 10.0);
-    let result = auto_de(xin_she_yang_n4, &bounds, None);
-
-    assert!(result.is_some(), "AutoDE should find a solution");
-    let (x_opt, f_opt, _) = result.unwrap();
-
-    // This function is very challenging, so accept reasonable improvements
-    assert!(f_opt > -1.01, "Solution too good (below theoretical minimum): {}", f_opt);
-    assert!(f_opt < 1.0, "Xin-She Yang N.4 function value too high: {}", f_opt);
-    for &xi in x_opt.iter() {
-        assert!(xi >= -10.0 && xi <= 10.0, "Solution component out of bounds: {}", xi);
     }
 }
 

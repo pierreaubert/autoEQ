@@ -1,20 +1,46 @@
 use std::sync::{Arc, Mutex};
 use std::fs::{create_dir_all, File};
-use std::io::Write;
+use std::io::{Write, BufWriter};
 use crate::{DEIntermediate, CallbackAction};
+use ndarray::Array1;
 
-/// Records optimization progress via DE callbacks
+/// Records optimization progress for every function evaluation
 #[derive(Debug)]
 pub struct OptimizationRecorder {
     /// Function name (used for CSV filename)
     function_name: String,
-    /// Shared records storage
-    records: Arc<Mutex<Vec<OptimizationRecord>>>,
+    /// Output directory for CSV files
+    output_dir: String,
+    /// Shared evaluation records storage
+    records: Arc<Mutex<Vec<EvaluationRecord>>>,
     /// Best function value seen so far
     best_value: Arc<Mutex<Option<f64>>>,
+    /// Counter for function evaluations
+    eval_counter: Arc<Mutex<usize>>,
+    /// Current generation number
+    current_generation: Arc<Mutex<usize>>,
+    /// Block counter for periodic saves
+    block_counter: Arc<Mutex<usize>>,
 }
 
-/// A single optimization iteration record
+/// A single function evaluation record
+#[derive(Debug, Clone)]
+pub struct EvaluationRecord {
+    /// Function evaluation number
+    pub eval_id: usize,
+    /// Generation number
+    pub generation: usize,
+    /// Input parameters x
+    pub x: Vec<f64>,
+    /// Function value f(x)
+    pub f_value: f64,
+    /// Current best function value so far
+    pub best_so_far: f64,
+    /// Whether this evaluation improved the global best
+    pub is_improvement: bool,
+}
+
+/// Legacy record type for compatibility
 #[derive(Debug, Clone)]
 pub struct OptimizationRecord {
     /// Iteration number
@@ -32,104 +58,223 @@ pub struct OptimizationRecord {
 impl OptimizationRecorder {
     /// Create a new optimization recorder for the given function
     pub fn new(function_name: String) -> Self {
+        Self::with_output_dir(function_name, "./data_generated/records".to_string())
+    }
+
+    /// Create a new optimization recorder with custom output directory
+    pub fn with_output_dir(function_name: String, output_dir: String) -> Self {
         Self {
             function_name,
+            output_dir,
             records: Arc::new(Mutex::new(Vec::new())),
             best_value: Arc::new(Mutex::new(None)),
+            eval_counter: Arc::new(Mutex::new(0)),
+            current_generation: Arc::new(Mutex::new(0)),
+            block_counter: Arc::new(Mutex::new(0)),
         }
     }
 
-    /// Create a callback function that records optimization progress
+    /// Record a single function evaluation
+    pub fn record_evaluation(&self, x: &Array1<f64>, f_value: f64) {
+        let mut eval_counter_guard = self.eval_counter.lock().unwrap();
+        *eval_counter_guard += 1;
+        let eval_id = *eval_counter_guard;
+        
+        
+        drop(eval_counter_guard);
+
+        // Update best value
+        let mut best_guard = self.best_value.lock().unwrap();
+        let is_improvement = match *best_guard {
+            Some(best) => f_value < best,
+            None => true,
+        };
+        
+        let best_so_far = if is_improvement {
+            *best_guard = Some(f_value);
+            f_value
+        } else {
+            best_guard.unwrap_or(f_value)
+        };
+        drop(best_guard);
+
+        // Record the evaluation
+        let mut records_guard = self.records.lock().unwrap();
+        let current_gen = *self.current_generation.lock().unwrap();
+        records_guard.push(EvaluationRecord {
+            eval_id,
+            generation: current_gen,
+            x: x.to_vec(),
+            f_value,
+            best_so_far,
+            is_improvement,
+        });
+
+        // Check if we need to save a block (every 10k evaluations)
+        if records_guard.len() >= 10_000 {
+            let records_to_save = records_guard.clone();
+            records_guard.clear();
+            drop(records_guard);
+            
+            // Save block in background
+            let mut block_counter = self.block_counter.lock().unwrap();
+            *block_counter += 1;
+            let block_id = *block_counter;
+            drop(block_counter);
+            
+            if let Err(e) = self.save_block_to_csv(&records_to_save, block_id) {
+                eprintln!("Warning: Failed to save evaluation block {}: {}", block_id, e);
+            }
+        }
+    }
+
+    /// Set the current generation number
+    pub fn set_generation(&self, generation: usize) {
+        *self.current_generation.lock().unwrap() = generation;
+    }
+
+    /// Create a callback function that updates generation number
     pub fn create_callback(&self) -> Box<dyn FnMut(&DEIntermediate) -> CallbackAction + Send> {
-        let records = self.records.clone();
-        let best_value = self.best_value.clone();
+        let current_generation = self.current_generation.clone();
 
         Box::new(move |intermediate: &DEIntermediate| -> CallbackAction {
-            let mut best_guard = best_value.lock().unwrap();
-            let is_improvement = match *best_guard {
-                Some(best) => intermediate.fun < best,
-                None => true,
-            };
-
-            if is_improvement {
-                *best_guard = Some(intermediate.fun);
-            }
-            drop(best_guard);
-
-            // Record the iteration
-            let mut records_guard = records.lock().unwrap();
-            records_guard.push(OptimizationRecord {
-                iteration: intermediate.iter,
-                x: intermediate.x.to_vec(),
-                best_result: intermediate.fun,
-                convergence: intermediate.convergence,
-                is_improvement,
-            });
-            drop(records_guard);
-
+            *current_generation.lock().unwrap() = intermediate.iter;
             CallbackAction::Continue
         })
     }
 
-    /// Save all recorded iterations to a CSV file
-    pub fn save_to_csv(&self, output_dir: &str) -> Result<String, Box<dyn std::error::Error>> {
+    /// Save a block of evaluations to CSV file
+    fn save_block_to_csv(&self, records: &[EvaluationRecord], block_id: usize) -> Result<(), Box<dyn std::error::Error>> {
         // Create output directory if it doesn't exist
-        create_dir_all(output_dir)?;
+        create_dir_all(&self.output_dir)?;
 
-        let filename = format!("{}/{}.csv", output_dir, self.function_name);
-        let mut file = File::create(&filename)?;
+        let filename = format!("{}/{}_block_{:04}.csv", self.output_dir, self.function_name, block_id);
+        let mut file = BufWriter::new(File::create(&filename)?);
 
-        let records_guard = self.records.lock().unwrap();
-
-        if records_guard.is_empty() {
-            return Ok(filename);
+        if records.is_empty() {
+            return Ok(());
         }
 
         // Write CSV header
-        let num_dimensions = records_guard[0].x.len();
-        write!(file, "iteration,")?;
+        let num_dimensions = records[0].x.len();
+        write!(file, "eval_id,generation,")?;
         for i in 0..num_dimensions {
             write!(file, "x{},", i)?;
         }
-        writeln!(file, "best_result,convergence,is_improvement")?;
+        writeln!(file, "f_value,best_so_far,is_improvement")?;
 
         // Write data rows
-        for record in records_guard.iter() {
-            write!(file, "{},", record.iteration)?;
+        for record in records.iter() {
+            write!(file, "{},{},", record.eval_id, record.generation)?;
             for &xi in &record.x {
                 write!(file, "{:.16},", xi)?;
             }
             writeln!(
                 file,
                 "{:.16},{:.16},{}",
-                record.best_result, record.convergence, record.is_improvement
+                record.f_value, record.best_so_far, record.is_improvement
             )?;
         }
 
-        Ok(filename)
+        file.flush()?;
+        Ok(())
     }
 
-    /// Get a copy of all recorded iterations
+    /// Save any remaining records and finalize
+    pub fn finalize(&self) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+        let mut saved_files = Vec::new();
+        
+        // Save any remaining records
+        let mut records_guard = self.records.lock().unwrap();
+        if !records_guard.is_empty() {
+            let records_to_save = records_guard.clone();
+            records_guard.clear();
+            drop(records_guard);
+            
+            let mut block_counter = self.block_counter.lock().unwrap();
+            *block_counter += 1;
+            let block_id = *block_counter;
+            drop(block_counter);
+            
+            let filename = format!("{}/{}_block_{:04}.csv", self.output_dir, self.function_name, block_id);
+            self.save_block_to_csv(&records_to_save, block_id)?;
+            saved_files.push(filename);
+        }
+        
+        // Create a summary file with metadata
+        self.save_summary(&saved_files)?;
+        
+        Ok(saved_files)
+    }
+
+    /// Save summary file with metadata
+    fn save_summary(&self, block_files: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+        let summary_filename = format!("{}/{}_summary.txt", self.output_dir, self.function_name);
+        let mut file = File::create(&summary_filename)?;
+        
+        let total_evaluations = *self.eval_counter.lock().unwrap();
+        let total_blocks = *self.block_counter.lock().unwrap();
+        let best_value = *self.best_value.lock().unwrap();
+        
+        writeln!(file, "Function: {}", self.function_name)?;
+        writeln!(file, "Total evaluations: {}", total_evaluations)?;
+        writeln!(file, "Total blocks: {}", total_blocks)?;
+        writeln!(file, "Best value found: {:?}", best_value)?;
+        writeln!(file, "Block files:")?;
+        
+        for (i, _) in block_files.iter().enumerate() {
+            writeln!(file, "  {}_block_{:04}.csv", self.function_name, i + 1)?;
+        }
+        
+        Ok(())
+    }
+
+    /// Get evaluation statistics
+    pub fn get_stats(&self) -> (usize, Option<f64>, usize) {
+        let total_evals = *self.eval_counter.lock().unwrap();
+        let best_value = *self.best_value.lock().unwrap();
+        let total_blocks = *self.block_counter.lock().unwrap();
+        (total_evals, best_value, total_blocks)
+    }
+
+    /// Legacy method: Save all recorded iterations to a CSV file (for compatibility)
+    pub fn save_to_csv(&self, output_dir: &str) -> Result<String, Box<dyn std::error::Error>> {
+        // For backward compatibility, just finalize and return the first block filename
+        let saved_files = self.finalize()?;
+        if let Some(first_file) = saved_files.first() {
+            Ok(first_file.clone())
+        } else {
+            Ok(format!("{}/{}_no_data.csv", output_dir, self.function_name))
+        }
+    }
+
+    /// Get a copy of all recorded iterations (legacy compatibility - returns empty)
     pub fn get_records(&self) -> Vec<OptimizationRecord> {
-        self.records.lock().unwrap().clone()
+        // Legacy compatibility: evaluation records are saved to disk, not kept in memory
+        Vec::new()
     }
 
-    /// Get the number of iterations recorded
+    /// Get the number of evaluations recorded
     pub fn num_iterations(&self) -> usize {
-        self.records.lock().unwrap().len()
+        *self.eval_counter.lock().unwrap()
     }
 
-    /// Clear all recorded iterations
+    /// Clear all recorded evaluations
     pub fn clear(&self) {
         self.records.lock().unwrap().clear();
         *self.best_value.lock().unwrap() = None;
+        *self.eval_counter.lock().unwrap() = 0;
+        *self.current_generation.lock().unwrap() = 0;
+        *self.block_counter.lock().unwrap() = 0;
     }
 
-    /// Get the final best solution if any iterations were recorded
+    /// Get the final best solution if any evaluations were recorded
     pub fn get_best_solution(&self) -> Option<(Vec<f64>, f64)> {
-        let records_guard = self.records.lock().unwrap();
-        if let Some(last_record) = records_guard.last() {
-            Some((last_record.x.clone(), last_record.best_result))
+        // Since we don't keep all records in memory, we can't return the exact solution
+        // This would need to be reconstructed from the CSV files if needed
+        if let Some(best_val) = *self.best_value.lock().unwrap() {
+            // Return placeholder - actual best x would need to be read from CSV files
+            Some((Vec::new(), best_val))
         } else {
             None
         }
