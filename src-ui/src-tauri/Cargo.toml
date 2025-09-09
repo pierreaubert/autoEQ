@@ -28,4 +28,6 @@ tokio = { workspace = true }
 ndarray = { workspace = true }
 reqwest = { workspace = true }
 urlencoding = { workspace = true }
+blas-src = { workspace = true }
+openblas-src = { workspace = true }
 

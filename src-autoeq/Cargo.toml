@@ -1,6 +1,6 @@
 [package]
 name = "autoeq"
-version = "0.2.187"
+version = "0.2.188"
 edition = "2021"
 authors = ["Pierre Aubert <pierre@spinorama.org>"]
 license = "GPL-3.0-or-later"
@@ -38,7 +38,7 @@ openblas-src = { workspace = true }
 name = "autoeq"
 path = "bin/autoeq.rs"
 
-[[bin]]  
+[[bin]]
 name = "benchmark"
 path = "bin/benchmark.rs"
 
