@@ -1,7 +1,5 @@
 # References
 
-- Pauli Virtanen, Ralf Gommers, Travis E. Oliphant, Matt Haberland, Tyler Reddy, David Cournapeau, Evgeni Burovski, Pearu Peterson, Warren Weckesser, Jonathan Bright, Stéfan J. van der Walt, Matthew Brett, Joshua Wilson, K. Jarrod Millman, Nikolay Mayorov, Andrew R. J. Nelson, Eric Jones, Robert Kern, Eric Larson, CJ Carey, İlhan Polat, Yu Feng, Eric W. Moore, Jake VanderPlas, Denis Laxalde, Josef Perktold, Robert Cimrman, Ian Henriksen, E.A. Quintero, Charles R Harris, Anne M. Archibald, Antônio H. Ribeiro, Fabian Pedregosa, Paul van Mulbregt, and SciPy 1.0 Contributors. (2020) SciPy 1.0: Fundamental Algorithms for Scientific Computing in Python. Nature Methods, 17(3), 261-272. DOI: 10.1038/s41592-019-0686-2.
-
 ```bibtex
 @ARTICLE{2020SciPy-NMeth,
   author  = {Virtanen, Pauli and Gommers, Ralf and Oliphant, Travis E. and
@@ -28,5 +26,31 @@
 }
 ```
 
-- J. Zhang et al., “JADE: Adaptive differential evolution with optional external archive,” IEEE Trans. on Evolutionary Computation, Vol. 13, pp. 945–958, 2009.
-- Chun-Liang Lu1, Shih-Yuan Chiu2, Chih-Hsu Hsu3, Shi-Jim Yen4 and Chih-Jen Lin5, "JADE: Adaptive Differential Evolution with Optional External Archive," IEEE Trans. on Evolutionary Computation, 2019, 23(6), 823-837.
+```bibtex
+@ARTICLE{5208221,
+  author={Zhang, Jingqiao and Sanderson, Arthur C.},
+  journal={IEEE Transactions on Evolutionary Computation},
+  title={JADE: Adaptive Differential Evolution With Optional External Archive},
+  year={2009},
+  volume={13},
+  number={5},
+  pages={945-958},
+  keywords={Genetic mutations;Programmable control;Adaptive control;Convergence;Automatic control;Evolutionary computation;Feedback;Robustness;Particle swarm optimization;Performance analysis;Adaptive parameter control;differential evolution;evolutionary optimization;external archive},
+  doi={10.1109/TEVC.2009.2014613}}
+```
+
+```bibtex
+@article{BILAL2020103479,
+	title = {Differential Evolution: A review of more than two decades of research},
+	journal = {Engineering Applications of Artificial Intelligence},
+	volume = {90},
+	pages = {103479},
+	year = {2020},
+	issn = {0952-1976},
+	doi = {https://doi.org/10.1016/j.engappai.2020.103479},
+	url = {https://www.sciencedirect.com/science/article/pii/S095219762030004X},
+	author = { Bilal and Millie Pant and Hira Zaheer and Laura Garcia-Hernandez and Ajith Abraham},
+	keywords = {Meta-heuristics, Differential evolution, Mutation, Crossover, Selection},
+	abstract = {Since its inception in 1995, Differential Evolution (DE) has emerged as one of the most frequently used algorithms for solving complex optimization problems. Its flexibility and versatility have prompted several customized variants of DE for solving a variety of real life and test problems. The present study, surveys the near 25 years of existence of DE. In this extensive survey, 283 research articles have been covered and the journey of DE is shown through its basic aspects like population generation, mutation schemes, crossover schemes, variation in parameters and hybridized variants along with various successful applications of DE. This study also provides some key bibliometric indicators like highly cited papers having citations more than 500, publication trend since 1996, journal citations etc. The main aim of the present document is to serve as an extended summary of 25 years of existence of DE, intended for dissemination to interested parties. It is expected that the present survey would generate interest among the new users towards the philosophy of DE and would also guide the experience researchers.}
+}
+```
