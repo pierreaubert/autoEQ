@@ -469,6 +469,7 @@ input[type="checkbox"] {
   border: 1px solid var(--border-color);
   border-radius: var(--radius);
   padding: var(--spacing-md);
+  margin: 0 calc(-1 * var(--spacing-md)); /* Negative margin to offset right-panel padding */
 }
 
 .scores-display h4 {
@@ -651,6 +652,7 @@ input[type="checkbox"] {
   border: 1px solid var(--danger-color);
   border-radius: var(--radius);
   padding: var(--spacing-md);
+  margin: 0 calc(-1 * var(--spacing-md)); /* Negative margin to offset right-panel padding */
 }
 
 .error-display h4 {
@@ -677,7 +679,7 @@ input[type="checkbox"] {
   .main-content {
     flex-direction: column;
   }
-  
+
   .left-panel {
     width: 100% !important;
     min-width: 100%;
@@ -687,17 +689,17 @@ input[type="checkbox"] {
     border-right: none;
     border-bottom: 1px solid var(--border-color);
   }
-  
+
   .right-panel {
     width: 100%;
     height: auto;
     order: 2;
   }
-  
+
   .resizer {
     display: none;
   }
-  
+
   .param-grid {
     grid-template-columns: 1fr;
   }
@@ -707,26 +709,26 @@ input[type="checkbox"] {
   .left-panel {
     padding: var(--spacing-sm);
   }
-  
+
   .right-panel {
     padding: var(--spacing-sm);
     min-height: 60vh; /* Ensure plots have space */
   }
-  
+
   .plots-accordion {
     flex: 1;
     min-height: 50vh;
   }
-  
+
   .plot-container {
     min-height: 250px;
     height: 300px;
   }
-  
+
   .score-grid {
     grid-template-columns: 1fr;
   }
-  
+
   .form-actions {
     flex-direction: column;
   }
@@ -1025,17 +1027,17 @@ input[type="checkbox"] {
     width: 95%;
     margin: var(--spacing-md);
   }
-  
+
   .modal-header,
   .modal-body,
   .modal-footer {
     padding: var(--spacing-md);
   }
-  
+
   .progress-table {
     font-size: 11px;
   }
-  
+
   .progress-table th,
   .progress-table td {
     padding: var(--spacing-xs) var(--spacing-sm);
@@ -1093,4 +1095,246 @@ input[type="checkbox"] {
   border-top: 6px solid var(--border-color);
   z-index: 1001;
   margin-bottom: -2px;
+}
+
+/* Audio Testing Controls */
+.audio-testing-controls {
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border-color);
+  padding: 8px;
+  margin: 0 calc(-1 * var(--spacing-md)) 0 calc(-1 * var(--spacing-md)); /* Negative margin to offset right-panel padding */
+  margin-top: auto; /* Push to bottom */
+  flex-shrink: 0;
+}
+
+/* Remove the header styles as there's no h4 anymore */
+
+.audio-control-row {
+  margin-bottom: var(--spacing-md);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+}
+
+.audio-control-row:last-child {
+  margin-bottom: 0;
+}
+
+.audio-left-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.audio-left-controls label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.audio-center-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  max-width: 300px;
+}
+
+.audio-right-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+#demo-audio-select {
+  width: 120px;
+  height: 32px;
+  padding: var(--spacing-sm);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+#demo-audio-select:focus {
+  outline: none;
+  border-color: var(--border-active);
+}
+
+/* EQ Toggle Buttons */
+.eq-toggle-buttons {
+  display: flex;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--bg-primary);
+  height: 32px;
+  width: 80px;
+}
+
+.eq-toggle-btn {
+  flex: 1;
+  border: none;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  height: 100%;
+}
+
+.eq-toggle-btn:first-child {
+  border-right: 1px solid var(--border-color);
+}
+
+.eq-toggle-btn:hover {
+  background: var(--bg-accent);
+  color: var(--text-primary);
+}
+
+.eq-toggle-btn.active {
+  background: var(--button-primary);
+  color: white;
+  font-weight: 600;
+}
+
+.eq-toggle-btn.active:hover {
+  background: var(--button-primary-hover);
+}
+
+.listen-button, .stop-button {
+  width: 80px;
+  height: 32px;
+  border: 1px solid var(--button-primary);
+  border-radius: var(--radius);
+  background: var(--button-primary);
+  color: white;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-xs);
+}
+
+.listen-button:hover:not(:disabled) {
+  background: var(--button-primary-hover);
+  transform: translateY(-1px);
+}
+
+.stop-button {
+  background: var(--danger-color);
+  border-color: var(--danger-color);
+}
+
+.stop-button:hover {
+  background: #c82333;
+  border-color: #c82333;
+  transform: translateY(-1px);
+}
+
+.listen-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+.audio-center-controls .audio-status {
+  width: 100%;
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+
+.audio-info-compact {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-xs);
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-bottom: var(--spacing-xs);
+}
+
+.audio-info-compact span {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.audio-center-controls .audio-progress {
+  width: 100%;
+  max-width: 200px;
+  display: flex;
+  justify-content: center;
+}
+
+.audio-center-controls .audio-progress-bar {
+  width: 100%;
+  height: 3px;
+  background: var(--bg-accent);
+  border-radius: 1.5px;
+  overflow: hidden;
+}
+
+.audio-center-controls .audio-progress-fill {
+  height: 100%;
+  background: var(--button-primary);
+  border-radius: 1.5px;
+  transition: width 0.1s ease;
+}
+
+/* Responsive adjustments for audio controls */
+@media (max-width: 768px) {
+  .audio-testing-controls {
+    padding: var(--spacing-sm);
+  }
+
+  .audio-control-row {
+    gap: var(--spacing-xs);
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .audio-left-controls {
+    justify-content: flex-start;
+    order: 1;
+  }
+
+  .audio-center-controls {
+    order: 2;
+    margin: var(--spacing-sm) 0;
+    max-width: none;
+  }
+
+  .audio-right-controls {
+    justify-content: flex-end;
+    order: 3;
+  }
+
+  .audio-left-controls label {
+    font-size: 11px;
+  }
+
+  .audio-info-compact {
+    font-size: 10px;
+  }
+
+  .listen-button, .stop-button {
+    font-size: 12px;
+    padding: var(--spacing-xs) var(--spacing-sm);
+  }
+
+  .eq-toggle-btn {
+    font-size: 11px;
+    padding: var(--spacing-xs) var(--spacing-sm);
+    min-width: 35px;
+  }
 }

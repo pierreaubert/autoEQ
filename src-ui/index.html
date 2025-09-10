@@ -205,6 +205,16 @@
                   <input type="number" id="spacing-weight" name="spacing_weight" value="20.0" step="1">
                 </div>
 
+                <!-- Tolerance Parameters -->
+                <div class="param-item">
+                  <label>Tolerance</label>
+                  <input type="number" id="tolerance" name="tolerance" value="1.e-4" step="1.e-6" min="1e-12">
+                </div>
+                <div class="param-item">
+                  <label>Abs Tolerance</label>
+                  <input type="number" id="abs-tolerance" name="abs_tolerance" value="1e-6" step="1e-8" min="1e-12">
+                </div>
+
                 <!-- Adaptive F Parameter (conditional) -->
                 <div class="param-item adaptive-param" id="adaptive-f-param" style="display: none;">
                   <label>F (Mutation)</label>
@@ -272,6 +282,7 @@
         <div class="resizer" id="resizer"></div>
 
         <div class="right-panel" id="right-panel">
+
           <div id="optimization-progress" class="progress-container" style="display: none;">
             <div class="progress-bar"><div class="progress-fill"></div></div>
             <div class="progress-text">Running optimization...</div>
@@ -296,16 +307,6 @@
           </div>
 
           <div class="plots-accordion">
-            <div class="plot-section expanded">
-              <div class="plot-header" data-plot="filter-details">
-                <h4>Filter Details
-                  <span class="help-tooltip" title="Frequency values are in Hz, Q factors control filter bandwidth (higher Q = narrower filter), and gain values show boost (+) or cut (-) in dB. These parameters can be imported into your audio software or hardware EQ that supports parametric EQ with peak filters.">❓</span>
-                </h4>
-                <span class="accordion-arrow">▼</span>
-              </div>
-              <div id="filter-details-plot" class="plot-container">No data to display</div>
-            </div>
-
             <div class="plot-section collapsed">
               <div class="plot-header" data-plot="filter">
                 <h4>Filter Response</h4>
@@ -353,11 +354,64 @@
               </div>
               <div id="spin-plot" class="plot-container">No data to display</div>
             </div>
+
+            <div class="plot-section expanded">
+              <div class="plot-header" data-plot="filter-details">
+                <h4>Filter Details
+                  <span class="help-tooltip" title="Frequency values are in Hz, Q factors control filter bandwidth (higher Q = narrower filter), and gain values show boost (+) or cut (-) in dB. These parameters can be imported into your audio software or hardware EQ that supports parametric EQ with peak filters.">❓</span>
+                </h4>
+                <span class="accordion-arrow">▼</span>
+              </div>
+              <div id="filter-details-plot" class="plot-container">No data to display</div>
+            </div>
           </div>
 
           <div id="error-display" class="error-display" style="display: none;">
             <h4>Error</h4>
             <div id="error-message" class="error-message"></div>
+          </div>
+
+          <!-- Audio Testing Controls -->
+          <div class="audio-testing-controls">
+            <div class="audio-control-row">
+              <div class="audio-left-controls">
+		<label for="demo-audio-select">Demo Track</label>
+		<select id="demo-audio-select" name="demo_audio">
+                  <option value="">Select track...</option>
+                  <option value="classical">Classical</option>
+                  <option value="rock">Rock</option>
+                  <option value="female_vocal">Female Vocal</option>
+		</select>
+              </div>
+
+              <div class="audio-center-controls">
+		<div class="audio-status" id="audio-status" style="display: none;">
+                  <div class="audio-info-compact">
+                    <span id="audio-status-text">Ready</span> •
+                    <span id="audio-position">--:--</span> •
+                    <span id="audio-duration">--:--</span>
+                  </div>
+                  <div class="audio-progress">
+                    <div class="audio-progress-bar">
+                      <div class="audio-progress-fill" id="audio-progress-fill" style="width: 0%;"></div>
+                    </div>
+                  </div>
+		</div>
+              </div>
+
+              <div class="audio-right-controls">
+		<div class="eq-toggle-buttons">
+                  <button type="button" id="eq-on-btn" class="eq-toggle-btn active">On</button>
+                  <button type="button" id="eq-off-btn" class="eq-toggle-btn">Off</button>
+		</div>
+		<button type="button" id="listen-btn" class="listen-button" disabled>
+                  🎵 Listen
+		</button>
+		<button type="button" id="stop-btn" class="stop-button" style="display: none;">
+                  ⏹️ Stop
+		</button>
+              </div>
+            </div>
           </div>
         </div>
       </main>

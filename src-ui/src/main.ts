@@ -36,6 +36,9 @@ interface OptimizationParams {
   de_cr?: number;
   adaptive_weight_f?: number;
   adaptive_weight_cr?: number;
+  // Tolerance parameters
+  tolerance: number;
+  atolerance: number;
 }
 
 interface PlotData {
@@ -100,6 +103,31 @@ class AutoEQUI {
   private progressGraphData: { iteration: number; fitness: number; convergence: number }[] = [];
   private lastGraphUpdate: number = 0;
 
+  // Audio testing elements and state
+  private demoAudioSelect: HTMLSelectElement;
+  private eqOnBtn: HTMLButtonElement;
+  private eqOffBtn: HTMLButtonElement;
+  private listenBtn: HTMLButtonElement;
+  private stopBtn: HTMLButtonElement;
+  private eqEnabled: boolean = true;
+  private audioStatus: HTMLElement;
+  private audioStatusText: HTMLElement;
+  private audioDuration: HTMLElement;
+  private audioPosition: HTMLElement;
+  private audioProgressFill: HTMLElement;
+
+  // Web Audio API state
+  private audioContext: AudioContext | null = null;
+  private audioBuffer: AudioBuffer | null = null;
+  private audioSource: AudioBufferSourceNode | null = null;
+  private eqFilters: BiquadFilterNode[] = [];
+  private gainNode: GainNode | null = null;
+  private isAudioPlaying: boolean = false;
+  private audioStartTime: number = 0;
+  private audioAnimationFrame: number | null = null;
+  private currentFilterParams: number[] = [];
+  private originalFilterParams: number[] = [];
+
   constructor() {
     this.form = document.getElementById('autoeq-form') as HTMLFormElement;
     this.optimizeBtn = document.getElementById('optimize-btn') as HTMLButtonElement;
@@ -126,13 +154,29 @@ class AutoEQUI {
     this.modalCloseBtn = document.getElementById('modal-close') as HTMLButtonElement;
     this.progressGraphElement = document.getElementById('progress-graph') as HTMLElement;
 
+    // Initialize audio elements
+    this.demoAudioSelect = document.getElementById('demo-audio-select') as HTMLSelectElement;
+    this.eqOnBtn = document.getElementById('eq-on-btn') as HTMLButtonElement;
+    this.eqOffBtn = document.getElementById('eq-off-btn') as HTMLButtonElement;
+    this.listenBtn = document.getElementById('listen-btn') as HTMLButtonElement;
+    this.stopBtn = document.getElementById('stop-btn') as HTMLButtonElement;
+    this.audioStatus = document.getElementById('audio-status') as HTMLElement;
+    this.audioStatusText = document.getElementById('audio-status-text') as HTMLElement;
+    this.audioDuration = document.getElementById('audio-duration') as HTMLElement;
+    this.audioPosition = document.getElementById('audio-position') as HTMLElement;
+    this.audioProgressFill = document.getElementById('audio-progress-fill') as HTMLElement;
+
     this.setupEventListeners();
     this.setupUIInteractions();
     this.setupModalEventListeners();
     this.setupResizer();
     this.setupAutocomplete();
+    this.setupAudioEventListeners();
     this.resetToDefaults();
     this.updateConditionalParameters();
+
+    // Initialize EQ to Off (no filters loaded yet)
+    this.setEQEnabled(false);
 
     // Ensure all accordion sections start collapsed
     this.collapseAllAccordion();
@@ -759,6 +803,8 @@ class AutoEQUI {
     (document.getElementById('de-cr') as HTMLInputElement).value = '0.9';
     (document.getElementById('adaptive-weight-f') as HTMLInputElement).value = '0.8';
     (document.getElementById('adaptive-weight-cr') as HTMLInputElement).value = '0.7';
+    (document.getElementById('tolerance') as HTMLInputElement).value = '1e-6';
+    (document.getElementById('abs-tolerance') as HTMLInputElement).value = '1e-6';
 
     // Update conditional parameters
     this.updateConditionalParameters();
@@ -1118,6 +1164,9 @@ class AutoEQUI {
       de_cr: algo === 'autoeq:de' ? parseFloat((document.getElementById('de-cr') as HTMLInputElement).value) : undefined,
       adaptive_weight_f: algo === 'autoeq:de' ? parseFloat((document.getElementById('adaptive-weight-f') as HTMLInputElement).value) : undefined,
       adaptive_weight_cr: algo === 'autoeq:de' ? parseFloat((document.getElementById('adaptive-weight-cr') as HTMLInputElement).value) : undefined,
+      // Tolerance parameters
+      tolerance: parseFloat((document.getElementById('tolerance') as HTMLInputElement).value),
+      atolerance: parseFloat((document.getElementById('abs-tolerance') as HTMLInputElement).value),
     };
   }
 
@@ -1272,6 +1321,19 @@ class AutoEQUI {
     if (result.filter_params) {
       console.log('Updating filter details with parameters:', result.filter_params);
       this.updateFilterDetailsPlot(result.filter_params);
+      
+      // Convert log frequencies to linear for audio filters
+      const linearFilterParams = [];
+      for (let i = 0; i < result.filter_params.length; i += 3) {
+        if (i + 2 < result.filter_params.length) {
+          linearFilterParams.push(Math.pow(10, result.filter_params[i])); // Convert log freq to linear
+          linearFilterParams.push(result.filter_params[i + 1]); // Q factor
+          linearFilterParams.push(result.filter_params[i + 2]); // Gain
+        }
+      }
+      
+      // Update audio filter parameters
+      this.updateFilterParams(linearFilterParams);
     } else {
       console.log('No filter_params data in result');
     }
@@ -1288,8 +1350,8 @@ class AutoEQUI {
       console.log('Updating individual plots with data:', result.spin_details);
       this.updateOnAxisPlot(result.spin_details, result.filter_response);
       this.updateListeningWindowPlot(result.spin_details, result.filter_response);
-      this.updateEarlyReflectionsPlot(result.spin_details);
-      this.updateSoundPowerPlot(result.spin_details);
+      this.updateEarlyReflectionsPlot(result.spin_details, result.filter_response);
+      this.updateSoundPowerPlot(result.spin_details, result.filter_response);
       this.updateSpinPlot(result.spin_details);
     } else {
       console.log('No spin_details data in result');
@@ -1332,65 +1394,244 @@ class AutoEQUI {
     // Parse filter parameters (assuming they're in groups of 3: freq, Q, gain)
     const numFilters = Math.floor(filterParams.length / 3);
 
-    // Create table to display filter parameters
-    let tableHTML = `
-      <div style="padding: 15px; font-family: monospace;">
-        <table style="width: 100%; border-collapse: collapse; background: var(--bg-secondary); border-radius: var(--radius);">
-          <thead>
-            <tr style="background: var(--bg-accent);">
-              <th style="padding: 12px; border: 1px solid var(--border-color); color: var(--text-primary); font-weight: 600;">Filter #</th>
-              <th style="padding: 12px; border: 1px solid var(--border-color); color: var(--text-primary); font-weight: 600;">Frequency (Hz)</th>
-              <th style="padding: 12px; border: 1px solid var(--border-color); color: var(--text-primary); font-weight: 600;">Q Factor</th>
-              <th style="padding: 12px; border: 1px solid var(--border-color); color: var(--text-primary); font-weight: 600;">Gain (dB)</th>
-              <th style="padding: 12px; border: 1px solid var(--border-color); color: var(--text-primary); font-weight: 600;">Filter Type</th>
-            </tr>
-          </thead>
-          <tbody>
-    `;
-
-    for (let i = 0; i < numFilters; i++) {
-      const freq = Math.pow(10, filterParams[i * 3]).toFixed(1);
-      const q = filterParams[i * 3 + 1].toFixed(2);
-      const gain = filterParams[i * 3 + 2].toFixed(2);
-      const filterType = Math.abs(parseFloat(gain)) > 0.1 ? 'PK (Peak)' : 'None';
-
-      tableHTML += `
-        <tr style="${i % 2 === 0 ? 'background: var(--bg-secondary);' : 'background: var(--bg-primary);'}">
-          <td style="padding: 10px; border: 1px solid var(--border-color); color: var(--text-primary); text-align: center; font-weight: 500;">${i + 1}</td>
-          <td style="padding: 10px; border: 1px solid var(--border-color); color: var(--text-primary); text-align: right;">${freq}</td>
-          <td style="padding: 10px; border: 1px solid var(--border-color); color: var(--text-primary); text-align: right;">${q}</td>
-          <td style="padding: 10px; border: 1px solid var(--border-color); color: ${parseFloat(gain) > 0 ? 'var(--success-color)' : parseFloat(gain) < 0 ? 'var(--danger-color)' : 'var(--text-primary)'}; text-align: right; font-weight: 500;">${parseFloat(gain) > 0 ? '+' : ''}${gain}</td>
-          <td style="padding: 10px; border: 1px solid var(--border-color); color: var(--text-secondary); text-align: center;">${filterType}</td>
-        </tr>
-      `;
-    }
-
-    tableHTML += `
-          </tbody>
-        </table>
-      </div>
-    `;
-
-    // Create a container with max height and scrolling for large filter tables
-    const wrapper = document.createElement('div');
-    wrapper.style.cssText = `
-      max-height: 500px;
-      overflow-y: auto;
-      overflow-x: hidden;
-      border-radius: 8px;
-      border: 1px solid var(--border-color, #ddd);
-    `;
-    wrapper.innerHTML = tableHTML;
-
-    this.filterDetailsPlotElement.innerHTML = '';
-    this.filterDetailsPlotElement.appendChild(wrapper);
-
-    this.filterDetailsPlotElement.innerHTML = tableHTML;
+    // Store original parameters for reference
+    this.originalFilterParams = [...filterParams];
+    
+    // Create interactive table
+    this.createInteractiveFilterTable(numFilters, filterParams);
 
     // Expand the plot section
     this.expandPlotSection('filter-details-plot');
 
-    console.log(`Filter details updated with ${numFilters} filters`);
+    console.log(`Interactive filter details updated with ${numFilters} filters`);
+  }
+
+  private createInteractiveFilterTable(numFilters: number, filterParams: number[]): void {
+    const container = document.createElement('div');
+    container.style.cssText = `
+      max-height: 500px;
+      overflow-y: auto;
+      overflow-x: hidden;
+      border-radius: 8px;
+      border: 1px solid var(--border-color);
+      padding: 15px;
+      font-family: monospace;
+    `;
+
+    const table = document.createElement('table');
+    table.style.cssText = `
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--bg-secondary);
+      border-radius: var(--radius);
+    `;
+
+    // Create header
+    const thead = document.createElement('thead');
+    const headerRow = document.createElement('tr');
+    headerRow.style.background = 'var(--bg-accent)';
+
+    const headers = ['Active', 'Filter #', 'Frequency (Hz)', 'Q Factor', 'Gain (dB)', 'Type'];
+    headers.forEach(headerText => {
+      const th = document.createElement('th');
+      th.style.cssText = `
+        padding: 12px;
+        border: 1px solid var(--border-color);
+        color: var(--text-primary);
+        font-weight: 600;
+        font-size: 12px;
+      `;
+      th.textContent = headerText;
+      headerRow.appendChild(th);
+    });
+    thead.appendChild(headerRow);
+    table.appendChild(thead);
+
+    // Create body
+    const tbody = document.createElement('tbody');
+    for (let i = 0; i < numFilters; i++) {
+      const row = this.createFilterRow(i, filterParams);
+      tbody.appendChild(row);
+    }
+    table.appendChild(tbody);
+
+    container.appendChild(table);
+    this.filterDetailsPlotElement.appendChild(container);
+  }
+
+  private createFilterRow(index: number, filterParams: number[]): HTMLTableRowElement {
+    const row = document.createElement('tr');
+    row.style.background = index % 2 === 0 ? 'var(--bg-secondary)' : 'var(--bg-primary)';
+    
+    const freq = Math.pow(10, filterParams[index * 3]);
+    const q = filterParams[index * 3 + 1];
+    const gain = filterParams[index * 3 + 2];
+    const isActive = Math.abs(gain) > 0.1;
+    
+    // Active checkbox
+    const activeCell = document.createElement('td');
+    activeCell.style.cssText = 'padding: 10px; border: 1px solid var(--border-color); text-align: center;';
+    const activeCheckbox = document.createElement('input');
+    activeCheckbox.type = 'checkbox';
+    activeCheckbox.checked = isActive;
+    activeCheckbox.id = `filter-active-${index}`;
+    activeCheckbox.addEventListener('change', () => this.onFilterActiveChange(index));
+    activeCell.appendChild(activeCheckbox);
+    row.appendChild(activeCell);
+    
+    // Filter number
+    const numberCell = document.createElement('td');
+    numberCell.style.cssText = 'padding: 10px; border: 1px solid var(--border-color); color: var(--text-primary); text-align: center; font-weight: 500;';
+    numberCell.textContent = (index + 1).toString();
+    row.appendChild(numberCell);
+    
+    // Frequency input
+    const freqCell = document.createElement('td');
+    freqCell.style.cssText = 'padding: 5px; border: 1px solid var(--border-color);';
+    const freqInput = document.createElement('input');
+    freqInput.type = 'number';
+    freqInput.value = freq.toFixed(1);
+    freqInput.min = '20';
+    freqInput.max = '20000';
+    freqInput.step = '0.1';
+    freqInput.id = `filter-freq-${index}`;
+    freqInput.style.cssText = `
+      width: 100%;
+      border: none;
+      background: transparent;
+      color: var(--text-primary);
+      text-align: right;
+      font-family: monospace;
+      font-size: 11px;
+    `;
+    freqInput.addEventListener('change', () => this.onFilterParamChange());
+    freqCell.appendChild(freqInput);
+    row.appendChild(freqCell);
+    
+    // Q factor input
+    const qCell = document.createElement('td');
+    qCell.style.cssText = 'padding: 5px; border: 1px solid var(--border-color);';
+    const qInput = document.createElement('input');
+    qInput.type = 'number';
+    qInput.value = q.toFixed(2);
+    qInput.min = '0.1';
+    qInput.max = '10';
+    qInput.step = '0.01';
+    qInput.id = `filter-q-${index}`;
+    qInput.style.cssText = `
+      width: 100%;
+      border: none;
+      background: transparent;
+      color: var(--text-primary);
+      text-align: right;
+      font-family: monospace;
+      font-size: 11px;
+    `;
+    qInput.addEventListener('change', () => this.onFilterParamChange());
+    qCell.appendChild(qInput);
+    row.appendChild(qCell);
+    
+    // Gain input
+    const gainCell = document.createElement('td');
+    gainCell.style.cssText = 'padding: 5px; border: 1px solid var(--border-color);';
+    const gainInput = document.createElement('input');
+    gainInput.type = 'number';
+    gainInput.value = gain.toFixed(2);
+    gainInput.min = '-20';
+    gainInput.max = '20';
+    gainInput.step = '0.1';
+    gainInput.id = `filter-gain-${index}`;
+    gainInput.style.cssText = `
+      width: 100%;
+      border: none;
+      background: transparent;
+      color: ${gain > 0 ? 'var(--success-color)' : gain < 0 ? 'var(--danger-color)' : 'var(--text-primary)'};
+      text-align: right;
+      font-family: monospace;
+      font-size: 11px;
+      font-weight: 500;
+    `;
+    gainInput.addEventListener('change', () => {
+      this.updateGainInputColor(gainInput, index);
+      this.onFilterParamChange();
+    });
+    gainCell.appendChild(gainInput);
+    row.appendChild(gainCell);
+    
+    // Filter type
+    const typeCell = document.createElement('td');
+    typeCell.style.cssText = 'padding: 10px; border: 1px solid var(--border-color); color: var(--text-secondary); text-align: center; font-size: 11px;';
+    typeCell.textContent = isActive ? 'PK (Peak)' : 'Disabled';
+    typeCell.id = `filter-type-${index}`;
+    row.appendChild(typeCell);
+    
+    return row;
+  }
+
+  private onFilterActiveChange(index: number): void {
+    const activeCheckbox = document.getElementById(`filter-active-${index}`) as HTMLInputElement;
+    const gainInput = document.getElementById(`filter-gain-${index}`) as HTMLInputElement;
+    const typeCell = document.getElementById(`filter-type-${index}`) as HTMLElement;
+    
+    if (!activeCheckbox.checked) {
+      // Disable filter by setting gain to 0
+      gainInput.value = '0.00';
+      gainInput.style.color = 'var(--text-primary)';
+      typeCell.textContent = 'Disabled';
+    } else {
+      // Restore original gain if available, or set to 1.0
+      const originalGain = this.originalFilterParams[index * 3 + 2] || 1.0;
+      gainInput.value = originalGain.toFixed(2);
+      gainInput.style.color = originalGain > 0 ? 'var(--success-color)' : originalGain < 0 ? 'var(--danger-color)' : 'var(--text-primary)';
+      typeCell.textContent = 'PK (Peak)';
+    }
+    
+    this.onFilterParamChange();
+  }
+
+  private onFilterParamChange(): void {
+    // Collect all current filter parameters
+    const newFilterParams: number[] = [];
+    const filterRows = this.filterDetailsPlotElement.querySelectorAll('tbody tr');
+    
+    filterRows.forEach((row, index) => {
+      const freqInput = document.getElementById(`filter-freq-${index}`) as HTMLInputElement;
+      const qInput = document.getElementById(`filter-q-${index}`) as HTMLInputElement;
+      const gainInput = document.getElementById(`filter-gain-${index}`) as HTMLInputElement;
+      
+      if (freqInput && qInput && gainInput) {
+        newFilterParams.push(parseFloat(freqInput.value));
+        newFilterParams.push(parseFloat(qInput.value));
+        newFilterParams.push(parseFloat(gainInput.value));
+      }
+    });
+    
+    // Update current filter parameters
+    this.updateFilterParams(newFilterParams);
+    
+    // If audio is playing, update EQ in real-time without restarting
+    if (this.isAudioPlaying) {
+      this.setupEQFilters(); // Recreate filters with new parameters
+      this.reconnectAudioChain(); // Reconnect the audio chain
+    }
+    
+    console.log('Filter parameters updated in real-time:', newFilterParams);
+  }
+
+  private updateGainInputColor(gainInput: HTMLInputElement, index: number): void {
+    const gain = parseFloat(gainInput.value);
+    const typeCell = document.getElementById(`filter-type-${index}`) as HTMLElement;
+    const activeCheckbox = document.getElementById(`filter-active-${index}`) as HTMLInputElement;
+    
+    if (Math.abs(gain) <= 0.1) {
+      gainInput.style.color = 'var(--text-primary)';
+      if (typeCell) typeCell.textContent = 'Disabled';
+      if (activeCheckbox) activeCheckbox.checked = false;
+    } else {
+      gainInput.style.color = gain > 0 ? 'var(--success-color)' : 'var(--danger-color)';
+      if (typeCell) typeCell.textContent = 'PK (Peak)';
+      if (activeCheckbox) activeCheckbox.checked = true;
+    }
   }
 
   private updateFilterPlot(data: PlotData): void {
@@ -1523,12 +1764,12 @@ class AutoEQUI {
     this.updateIndividualPlotWithFilter(this.listeningWindowPlotElement, 'listening-window-plot', spinData, filterData, 'Listening Window', ['Listening Window']);
   }
 
-  private updateEarlyReflectionsPlot(data: PlotData): void {
-    this.updateDualAxisPlot(this.earlyReflectionsPlotElement, 'early-reflections-plot', data, 'Early Reflections', ['Early Reflections'], 'Early Reflections DI');
+  private updateEarlyReflectionsPlot(spinData: PlotData, filterData?: PlotData): void {
+    this.updateDualAxisPlotWithFilter(this.earlyReflectionsPlotElement, 'early-reflections-plot', spinData, filterData, 'Early Reflections', ['Early Reflections'], 'Early Reflections DI');
   }
 
-  private updateSoundPowerPlot(data: PlotData): void {
-    this.updateDualAxisPlot(this.soundPowerPlotElement, 'sound-power-plot', data, 'Sound Power', ['Sound Power'], 'Sound Power DI');
+  private updateSoundPowerPlot(spinData: PlotData, filterData?: PlotData): void {
+    this.updateDualAxisPlotWithFilter(this.soundPowerPlotElement, 'sound-power-plot', spinData, filterData, 'Sound Power', ['Sound Power'], 'Sound Power DI');
   }
 
   // Plot function for On-Axis and Listening Window with original + optimized curves
@@ -1630,7 +1871,154 @@ class AutoEQUI {
     });
   }
 
-  // Plot function for Early Reflections and Sound Power with dual axes
+  // Plot function for Early Reflections and Sound Power with dual axes and filter correction
+  private updateDualAxisPlotWithFilter(plotElement: HTMLElement | null, plotId: string, spinData: PlotData, filterData: PlotData | undefined, title: string, curveNames: string[], diCurveName: string): void {
+    if (!plotElement) {
+      console.error(`Plot element not found for ${plotId}`);
+      return;
+    }
+
+    // Clear and prepare
+    plotElement.innerHTML = '';
+    plotElement.classList.add('has-plot');
+    plotElement.style.display = 'block';
+    plotElement.style.padding = '0';
+
+    const traces: any[] = [];
+
+    // Add original measurement curves (left axis) - filter out DI curves
+    Object.entries(spinData.curves)
+      .filter(([name]) => {
+        // Include curves that match curveNames but exclude any DI curves
+        const matchesCurveName = curveNames.some(curveName => name.includes(curveName));
+        const isDICurve = name.includes('DI') || name.toLowerCase().includes('di');
+        return matchesCurveName && !isDICurve;
+      })
+      .forEach(([name, values]) => {
+        traces.push({
+          x: spinData.frequencies,
+          y: values,
+          type: 'scatter' as const,
+          mode: 'lines' as const,
+          name: `${name} (Original)`,
+          yaxis: 'y',
+          line: { width: 2, color: '#1f77b4' }
+        });
+      });
+
+    // Add optimized curves if available (left axis)
+    if (filterData) {
+      Object.entries(spinData.curves)
+        .filter(([name]) => {
+          // Include curves that match curveNames but exclude any DI curves
+          const matchesCurveName = curveNames.some(curveName => name.includes(curveName));
+          const isDICurve = name.includes('DI') || name.toLowerCase().includes('di');
+          return matchesCurveName && !isDICurve;
+        })
+        .forEach(([name, originalValues]) => {
+          // Apply filter response to show optimized result
+          const eqResponse = filterData.curves['EQ Response'];
+          if (eqResponse && originalValues.length === eqResponse.length) {
+            const optimizedValues = originalValues.map((val, i) => val + eqResponse[i]);
+            traces.push({
+              x: spinData.frequencies,
+              y: optimizedValues,
+              type: 'scatter' as const,
+              mode: 'lines' as const,
+              name: `${name} (Optimized)`,
+              yaxis: 'y',
+              line: { width: 2, dash: 'dash' as const, color: '#ff7f0e' }
+            });
+          }
+        });
+    }
+
+    // Add DI curve (right axis) - UNCHANGED, no filter correction applied
+    Object.entries(spinData.curves)
+      .filter(([name]) => {
+        // Look for curves that contain the DI curve name (e.g., "Early Reflections DI", "Sound Power DI")
+        return name.includes(diCurveName);
+      })
+      .forEach(([name, values]) => {
+        traces.push({
+          x: spinData.frequencies,
+          y: values,
+          type: 'scatter' as const,
+          mode: 'lines' as const,
+          name: name,
+          yaxis: 'y2', // Always use right axis for DI curves
+          line: {
+            width: 2.5,
+            dash: 'dash' as const,
+            color: '#d62728' // Different color to distinguish from main curves
+          }
+        });
+      });
+
+    if (traces.length === 0) {
+      plotElement.innerHTML = `<div style="display: flex; align-items: center; justify-content: center; height: 400px; color: var(--text-secondary);">No ${title} data available</div>`;
+      return;
+    }
+
+    const layout = {
+      title: { text: '' },
+      xaxis: {
+        title: { text: 'Frequency (Hz)' },
+        type: 'log' as const,
+        range: [Math.log10(20), Math.log10(20000)]
+      },
+      yaxis: {
+        title: {
+          text: 'SPL (dB)',
+          font: { color: getComputedStyle(document.documentElement).getPropertyValue('--text-primary').trim() }
+        },
+        range: [-40, 10],
+        side: 'left' as const,
+        tickfont: { color: getComputedStyle(document.documentElement).getPropertyValue('--text-primary').trim() }
+      },
+      yaxis2: {
+        title: {
+          text: 'Directivity Index (dB)',
+          font: { color: '#d62728' }
+        },
+        range: [-5, 45],
+        side: 'right' as const,
+        overlaying: 'y' as const,
+        tickfont: { color: '#d62728' }
+      },
+      paper_bgcolor: 'rgba(0,0,0,0)',
+      plot_bgcolor: 'rgba(0,0,0,0)',
+      font: {
+        color: getComputedStyle(document.documentElement).getPropertyValue('--text-primary').trim(),
+        size: 12
+      },
+      margin: { l: 50, r: 80, t: 20, b: 80 },
+      showlegend: true,
+      legend: {
+        x: 0.5,
+        y: -0.2,
+        xanchor: 'center' as const,
+        yanchor: 'top' as const,
+        orientation: 'h' as const,
+        bgcolor: 'rgba(0,0,0,0)'
+      },
+      hovermode: 'x unified' as const
+    };
+
+    this.expandPlotSection(plotId);
+
+    Plotly.newPlot(plotElement, traces, layout, {
+      responsive: true,
+      displayModeBar: false
+    }).then(() => {
+      console.log(`${title} plot with filter correction created successfully`);
+      Plotly.Plots.resize(plotElement);
+    }).catch((error: any) => {
+      console.error(`Error creating ${title} plot:`, error);
+    });
+  }
+
+  // Original plot function for Early Reflections and Sound Power with dual axes (kept for compatibility)
   private updateDualAxisPlot(plotElement: HTMLElement | null, plotId: string, data: PlotData, title: string, curveNames: string[], diCurveName: string): void {
     if (!plotElement) {
       console.error(`Plot element not found for ${plotId}`);
@@ -2040,6 +2428,402 @@ class AutoEQUI {
     }
 
     this.validateForm();
+  }
+
+  // Audio Testing Methods
+  private setupAudioEventListeners(): void {
+    // Listen button
+    this.listenBtn.addEventListener('click', () => {
+      this.startAudioPlayback();
+    });
+
+    // Stop button
+    this.stopBtn.addEventListener('click', () => {
+      this.stopAudioPlayback();
+    });
+
+    // Demo audio selection change
+    this.demoAudioSelect.addEventListener('change', () => {
+      this.loadAudioFile();
+    });
+
+    // EQ toggle buttons
+    this.eqOnBtn.addEventListener('click', () => {
+      this.setEQEnabled(true);
+    });
+
+    this.eqOffBtn.addEventListener('click', () => {
+      this.setEQEnabled(false);
+    });
+
+    // Initialize audio on page load
+    this.loadAudioFile();
+  }
+
+  private async initAudioContext(): Promise<void> {
+    if (!this.audioContext) {
+      try {
+        this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+        console.log('Audio context initialized:', this.audioContext);
+      } catch (error) {
+        console.error('Failed to initialize audio context:', error);
+        this.showAudioError('Audio not supported in this browser');
+      }
+    }
+
+    // Resume context if suspended (required for some browsers)
+    if (this.audioContext && this.audioContext.state === 'suspended') {
+      await this.audioContext.resume();
+    }
+  }
+
+  private async loadAudioFile(): Promise<void> {
+    const selectedAudio = this.demoAudioSelect.value;
+    
+    // If no track selected, disable controls and clear audio
+    if (!selectedAudio) {
+      this.audioBuffer = null;
+      this.listenBtn.disabled = true;
+      this.setAudioStatus('Select a track to begin');
+      this.audioDuration.textContent = '--:--';
+      return;
+    }
+    
+    const audioUrl = `/demo-audio/${selectedAudio}.wav`;
+    this.setAudioStatus('Loading audio file...');
+    this.listenBtn.disabled = true;
+
+    try {
+      await this.initAudioContext();
+
+      // Fetch audio file
+      const response = await fetch(audioUrl);
+      if (!response.ok) {
+        throw new Error(`Failed to load audio file: ${response.statusText}`);
+      }
+
+      const arrayBuffer = await response.arrayBuffer();
+      
+      // Decode audio data
+      this.audioBuffer = await this.audioContext!.decodeAudioData(arrayBuffer);
+      
+      // Update UI
+      const duration = this.formatTime(this.audioBuffer.duration);
+      this.audioDuration.textContent = duration;
+      this.setAudioStatus('Ready');
+      this.listenBtn.disabled = false;
+      
+      console.log('Audio loaded:', {
+        duration: this.audioBuffer.duration,
+        sampleRate: this.audioBuffer.sampleRate,
+        channels: this.audioBuffer.numberOfChannels
+      });
+      
+    } catch (error) {
+      console.error('Failed to load audio:', error);
+      this.showAudioError('Failed to load audio file');
+      this.listenBtn.disabled = true;
+    }
+  }
+
+  private async startAudioPlayback(): Promise<void> {
+    if (!this.audioContext || !this.audioBuffer) {
+      console.error('Audio context or buffer not ready');
+      return;
+    }
+
+    try {
+      // Stop any existing playback
+      this.stopAudioPlayback();
+
+      // Create audio source
+      this.audioSource = this.audioContext.createBufferSource();
+      this.audioSource.buffer = this.audioBuffer;
+
+      // Create gain node for volume control
+      this.gainNode = this.audioContext.createGain();
+      this.gainNode.gain.value = 0.7; // Reduce volume slightly
+
+      // Connect source to gain
+      this.audioSource.connect(this.gainNode);
+
+      // Create and configure EQ filters
+      this.setupEQFilters();
+
+      // Connect the audio chain
+      let currentNode: AudioNode = this.gainNode;
+      
+      // Chain EQ filters if enabled
+      if (this.eqEnabled && this.eqFilters.length > 0) {
+        for (const filter of this.eqFilters) {
+          currentNode.connect(filter);
+          currentNode = filter;
+        }
+      }
+
+      // Connect to destination (speakers)
+      currentNode.connect(this.audioContext.destination);
+
+      // Set up playback tracking
+      this.audioStartTime = this.audioContext.currentTime;
+      this.isAudioPlaying = true;
+      
+      // Handle end of playback
+      this.audioSource.onended = () => {
+        this.handleAudioEnded();
+      };
+
+      // Start playback
+      this.audioSource.start(0);
+      
+      // Update UI
+      this.updateAudioControls(true);
+      this.setAudioStatus('Playing');
+      this.audioStatus.style.display = 'block';
+      
+      // Start position tracking
+      this.startPositionTracking();
+      
+      console.log('Audio playback started');
+      
+    } catch (error) {
+      console.error('Failed to start audio playback:', error);
+      this.showAudioError('Failed to start audio playback');
+    }
+  }
+
+  private stopAudioPlayback(): void {
+    if (this.audioSource) {
+      try {
+        this.audioSource.stop();
+      } catch (error) {
+        // Source might already be stopped
+      }
+      this.audioSource.disconnect();
+      this.audioSource = null;
+    }
+
+    // Disconnect EQ filters
+    this.eqFilters.forEach(filter => {
+      try {
+        filter.disconnect();
+      } catch (error) {
+        // Filter might already be disconnected
+      }
+    });
+
+    if (this.gainNode) {
+      try {
+        this.gainNode.disconnect();
+      } catch (error) {
+        // Gain node might already be disconnected
+      }
+      this.gainNode = null;
+    }
+
+    this.isAudioPlaying = false;
+    this.stopPositionTracking();
+    this.updateAudioControls(false);
+    this.setAudioStatus('Stopped');
+    this.audioPosition.textContent = '00:00';
+    this.audioProgressFill.style.width = '0%';
+    
+    console.log('Audio playback stopped');
+  }
+
+  private setupEQFilters(): void {
+    if (!this.audioContext) return;
+
+    // Clear existing filters
+    this.eqFilters.forEach(filter => {
+      try {
+        filter.disconnect();
+      } catch (error) {
+        // Filter might already be disconnected
+      }
+    });
+    this.eqFilters = [];
+
+    // Get current EQ parameters from the optimization result
+    if (this.currentFilterParams.length === 0) {
+      console.log('No EQ parameters available, playing without EQ');
+      return;
+    }
+
+    // Create biquad filters for each EQ band
+    // EQ parameters come in groups of 3: [frequency, Q, gain]
+    for (let i = 0; i < this.currentFilterParams.length; i += 3) {
+      if (i + 2 >= this.currentFilterParams.length) break;
+
+      const frequency = this.currentFilterParams[i];
+      const q = this.currentFilterParams[i + 1];
+      const gain = this.currentFilterParams[i + 2];
+
+      // Skip filters with very low gain to reduce processing
+      if (Math.abs(gain) < 0.1) continue;
+
+      const filter = this.audioContext.createBiquadFilter();
+      filter.type = 'peaking';
+      filter.frequency.value = frequency;
+      filter.Q.value = q;
+      filter.gain.value = gain;
+
+      this.eqFilters.push(filter);
+      
+      console.log(`Created EQ filter: ${frequency.toFixed(1)}Hz, Q=${q.toFixed(2)}, Gain=${gain.toFixed(1)}dB`);
+    }
+
+    console.log(`Created ${this.eqFilters.length} EQ filters`);
+  }
+
+  private setEQEnabled(enabled: boolean): void {
+    this.eqEnabled = enabled;
+    
+    // Update button states
+    this.eqOnBtn.classList.toggle('active', enabled);
+    this.eqOffBtn.classList.toggle('active', !enabled);
+    
+    // Update audio if playing
+    this.updateAudioEQ();
+  }
+
+  private updateAudioEQ(): void {
+    if (!this.isAudioPlaying || !this.audioContext || !this.gainNode) return;
+
+    console.log('EQ toggle changed, updating audio chain in real-time');
+    this.reconnectAudioChain();
+  }
+
+  private reconnectAudioChain(): void {
+    if (!this.audioContext || !this.gainNode) return;
+
+    try {
+      // Disconnect current chain
+      this.gainNode.disconnect();
+      this.eqFilters.forEach(filter => {
+        try {
+          filter.disconnect();
+        } catch (error) {
+          // Filter might already be disconnected
+        }
+      });
+
+      // Rebuild the audio chain
+      let currentNode: AudioNode = this.gainNode;
+
+      // Chain EQ filters if enabled
+      if (this.eqEnabled && this.eqFilters.length > 0) {
+        for (const filter of this.eqFilters) {
+          currentNode.connect(filter);
+          currentNode = filter;
+        }
+      }
+
+      // Connect final node to destination
+      currentNode.connect(this.audioContext.destination);
+
+      console.log(`Audio chain reconnected with EQ ${this.eqEnabled ? 'enabled' : 'disabled'}`);
+    } catch (error) {
+      console.error('Failed to reconnect audio chain:', error);
+    }
+  }
+
+  private handleAudioEnded(): void {
+    this.isAudioPlaying = false;
+    this.stopPositionTracking();
+    this.updateAudioControls(false);
+    this.setAudioStatus('Finished');
+    
+    // Reset progress
+    this.audioPosition.textContent = this.audioDuration.textContent || '00:00';
+    this.audioProgressFill.style.width = '100%';
+    
+    // Hide status after a delay
+    setTimeout(() => {
+      if (!this.isAudioPlaying) {
+        this.audioStatus.style.display = 'none';
+        this.audioPosition.textContent = '00:00';
+        this.audioProgressFill.style.width = '0%';
+      }
+    }, 2000);
+  }
+
+  private startPositionTracking(): void {
+    const updatePosition = () => {
+      if (!this.isAudioPlaying || !this.audioContext || !this.audioBuffer) {
+        return;
+      }
+
+      const currentTime = this.audioContext.currentTime - this.audioStartTime;
+      const duration = this.audioBuffer.duration;
+      const progress = Math.min(currentTime / duration, 1);
+      
+      this.audioPosition.textContent = this.formatTime(currentTime);
+      this.audioProgressFill.style.width = `${progress * 100}%`;
+      
+      if (this.isAudioPlaying) {
+        this.audioAnimationFrame = requestAnimationFrame(updatePosition);
+      }
+    };
+    
+    updatePosition();
+  }
+
+  private stopPositionTracking(): void {
+    if (this.audioAnimationFrame) {
+      cancelAnimationFrame(this.audioAnimationFrame);
+      this.audioAnimationFrame = null;
+    }
+  }
+
+  private updateAudioControls(playing: boolean): void {
+    this.listenBtn.style.display = playing ? 'none' : 'block';
+    this.stopBtn.style.display = playing ? 'block' : 'none';
+    this.listenBtn.disabled = !this.audioBuffer;
+  }
+
+  private setAudioStatus(status: string): void {
+    this.audioStatusText.textContent = status;
+  }
+
+  private showAudioError(message: string): void {
+    this.setAudioStatus(`Error: ${message}`);
+    this.audioStatus.style.display = 'block';
+    
+    // Hide error after delay
+    setTimeout(() => {
+      this.audioStatus.style.display = 'none';
+    }, 5000);
+  }
+
+  private formatTime(seconds: number): string {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  }
+
+  // Update current filter parameters when optimization completes
+  private updateFilterParams(filterParams: number[]): void {
+    this.currentFilterParams = [...filterParams];
+    console.log('Updated EQ parameters:', this.currentFilterParams);
+    
+    // Auto-switch EQ state based on filter availability
+    if (filterParams.length === 0) {
+      // No filters available - switch to EQ Off
+      this.setEQEnabled(false);
+      console.log('No EQ filters available - automatically switched to EQ Off');
+    } else {
+      // Filters available - enable EQ if not already enabled
+      if (!this.eqEnabled) {
+        this.setEQEnabled(true);
+        console.log('EQ filters loaded - automatically switched to EQ On');
+      }
+    }
+    
+    // Enable listen button if we have both audio and EQ parameters
+    if (this.audioBuffer && this.currentFilterParams.length > 0) {
+      this.listenBtn.disabled = false;
+    }
   }
 }
 
