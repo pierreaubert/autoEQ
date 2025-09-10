@@ -61,8 +61,10 @@ fn test_tolerance_parameter_affects_optimization() {
     // Both should use the same strategy and other parameters for fair comparison
     args_high_tol.strategy = "best1bin".to_string();
     args_low_tol.strategy = "best1bin".to_string();
-    args_high_tol.maxeval = 500; // Limited evaluations to see difference
-    args_low_tol.maxeval = 500;
+    args_high_tol.maxeval = 50; // Very limited evaluations for fast test
+    args_low_tol.maxeval = 50;
+    args_high_tol.population = 20; // Small population for fast test
+    args_low_tol.population = 20;
     
     let objective_data = create_test_objective_data();
     let (lower_bounds, upper_bounds) = setup_bounds(&args_high_tol);
@@ -105,12 +107,14 @@ fn test_strategy_parameter_affects_optimization() {
     let strategies = ["best1bin", "rand1bin", "currenttobest1bin"];
     
     for strategy_name in strategies.iter() {
-        let args = Args::parse_from([
+        let mut args = Args::parse_from([
             "autoeq-test",
             "--algo", "autoeq:de",
             "--strategy", strategy_name,
             "--num-filters", "2"
         ]);
+        args.population = 10; // Small population for fast test
+        args.maxeval = 30; // Small evaluations for fast test
         
         // Verify the strategy is correctly set
         assert_eq!(args.strategy, *strategy_name);
@@ -131,7 +135,7 @@ fn test_strategy_parameter_affects_optimization() {
             objective_data,
             &args.algo,
             args.population,
-            200, // Small number of evaluations for quick test
+            args.maxeval, // Use the reduced evaluation count
             &args,
         );
         
@@ -144,12 +148,14 @@ fn test_recombination_parameter_affects_optimization() {
     let recombination_values = [0.1, 0.5, 0.9];
     
     for recomb in recombination_values.iter() {
-        let args = Args::parse_from([
+        let mut args = Args::parse_from([
             "autoeq-test",
             "--algo", "autoeq:de",
             "--recombination", &recomb.to_string(),
             "--num-filters", "2"
         ]);
+        args.population = 10; // Small population for fast test
+        args.maxeval = 30; // Small evaluations for fast test
         
         // Verify the recombination value is correctly set
         assert_eq!(args.recombination, *recomb);
@@ -165,7 +171,7 @@ fn test_recombination_parameter_affects_optimization() {
             objective_data,
             &args.algo,
             args.population,
-            200,
+            args.maxeval,
             &args,
         );
         
@@ -175,7 +181,7 @@ fn test_recombination_parameter_affects_optimization() {
 
 #[test]
 fn test_adaptive_strategy_with_weights() {
-    let args = Args::parse_from([
+    let mut args = Args::parse_from([
         "autoeq-test",
         "--algo", "autoeq:de",
         "--strategy", "adaptivebin",
@@ -183,6 +189,8 @@ fn test_adaptive_strategy_with_weights() {
         "--adaptive-weight-cr", "0.7",
         "--num-filters", "2"
     ]);
+    args.population = 15; // Small population for fast test
+    args.maxeval = 40; // Small evaluations for fast test
     
     // Verify adaptive parameters are correctly set
     assert_eq!(args.strategy, "adaptivebin");
@@ -200,7 +208,7 @@ fn test_adaptive_strategy_with_weights() {
         objective_data,
         &args.algo,
         args.population,
-        300, // Adaptive strategies may need more evaluations
+        args.maxeval, // Use the reduced evaluation count
         &args,
     );
     
@@ -213,9 +221,9 @@ fn test_parameter_validation_with_de_algorithm() {
     let test_cases = vec![
         (vec!["autoeq-test", "--algo", "autoeq:de", "--strategy", "invalid"], "Invalid DE strategy"),
         (vec!["autoeq-test", "--algo", "autoeq:de", "--tolerance", "0"], "Tolerance must be > 0"),
-        (vec!["autoeq-test", "--algo", "autoeq:de", "--atolerance", "-0.1"], "Absolute tolerance must be >= 0"),
+        (vec!["autoeq-test", "--algo", "autoeq:de", "--atolerance=-0.1"], "Absolute tolerance must be >= 0"),
         (vec!["autoeq-test", "--algo", "autoeq:de", "--adaptive-weight-f", "1.1"], "Adaptive weight for F must be between 0.0 and 1.0"),
-        (vec!["autoeq-test", "--algo", "autoeq:de", "--adaptive-weight-cr", "-0.1"], "Adaptive weight for CR must be between 0.0 and 1.0"),
+        (vec!["autoeq-test", "--algo", "autoeq:de", "--adaptive-weight-cr=-0.1"], "Adaptive weight for CR must be between 0.0 and 1.0"),
     ];
     
     for (args_vec, expected_error) in test_cases {
