@@ -27,7 +27,6 @@ pub mod mutant_rand_to_best1;
 pub mod mutant_adaptive;
 pub mod stack_linear_penalty;
 pub mod apply_wls;
-pub mod clip_free_inplace;
 pub mod apply_integrality;
 pub mod argmin;
 pub mod init_random;
