@@ -254,6 +254,21 @@ impl OptimizationRecorder {
         Vec::new()
     }
 
+    /// Test-only method: Get evaluation records converted to legacy format
+    #[cfg(test)]
+    pub fn get_test_records(&self) -> Vec<OptimizationRecord> {
+        let records_guard = self.records.lock().unwrap();
+        records_guard.iter().map(|eval_record| {
+            OptimizationRecord {
+                iteration: eval_record.generation,
+                x: eval_record.x.clone(),
+                best_result: eval_record.best_so_far,
+                convergence: 0.0, // Not tracked in new system
+                is_improvement: eval_record.is_improvement,
+            }
+        }).collect()
+    }
+
     /// Get the number of evaluations recorded
     pub fn num_iterations(&self) -> usize {
         *self.eval_counter.lock().unwrap()

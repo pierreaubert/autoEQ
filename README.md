@@ -2,8 +2,7 @@
 
 ## Introduction
 
-The software can find the best EQ for you based on your measurement. There are extensive options to configure the optimiser.
-You can use a graphical version of the optimiser or a command line version.
+The software can find the best EQ for you based on your measurements. There are extensive options to configure the optimiser. You can use a graphical version of the optimiser or a command line version.
 
 ## Building the optimiser
 

@@ -1,3 +1,4 @@
+.DS_Store
 /target
 /data
 /data_cached
@@ -8,6 +9,7 @@ autoeq_*.png
 *.csv
 *~
 .*~
+*#
 src/unused.rs
 .idea
 TAGS

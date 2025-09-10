@@ -2,7 +2,7 @@
 mod tests {
     use ndarray::Array1;
     use crate::{
-        OptimizationRecorder, DEIntermediate, CallbackAction,
+        OptimizationRecorder,
         run_recorded_differential_evolution, DEConfigBuilder,
     };
     use autoeq_testfunctions::quadratic;
@@ -11,30 +11,17 @@ mod tests {
     fn test_optimization_recorder() {
         let recorder = OptimizationRecorder::new("test_function".to_string());
 
-        // Create a callback
-        let mut callback = recorder.create_callback();
+        // Test recording evaluations directly
+        let x1 = Array1::from(vec![1.0, 2.0]);
+        recorder.set_generation(0);
+        recorder.record_evaluation(&x1, 5.0);
 
-        // Test a few callback invocations
-        let intermediate1 = DEIntermediate {
-            x: Array1::from(vec![1.0, 2.0]),
-            fun: 5.0,
-            convergence: 0.1,
-            iter: 0,
-        };
-        let action1 = callback(&intermediate1);
-        assert!(matches!(action1, CallbackAction::Continue));
+        let x2 = Array1::from(vec![0.5, 1.0]);
+        recorder.set_generation(1);
+        recorder.record_evaluation(&x2, 1.25);
 
-        let intermediate2 = DEIntermediate {
-            x: Array1::from(vec![0.5, 1.0]),
-            fun: 1.25,
-            convergence: 0.05,
-            iter: 1,
-        };
-        let action2 = callback(&intermediate2);
-        assert!(matches!(action2, CallbackAction::Continue));
-
-        // Check records
-        let records = recorder.get_records();
+        // Check records using test method
+        let records = recorder.get_test_records();
         assert_eq!(records.len(), 2);
 
         assert_eq!(records[0].iteration, 0);
@@ -82,7 +69,7 @@ mod tests {
 
         // Check header format
         let header = lines[0];
-        assert!(header.starts_with("iteration,x0,x1,best_result,convergence,is_improvement"));
+        assert!(header.starts_with("eval_id,generation,x0,x1,f_value,best_so_far,is_improvement"));
 
         println!(
             "Recording test passed - {} iterations recorded",
