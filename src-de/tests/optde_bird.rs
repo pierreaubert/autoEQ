@@ -1,7 +1,6 @@
 use autoeq_de::{differential_evolution, DEConfigBuilder, Mutation, Strategy, run_recorded_differential_evolution};
 use autoeq_testfunctions::bird;
 
-extern crate blas_src;
 #[test]
 fn test_de_bird() {
     let b = [
@@ -37,16 +36,16 @@ fn test_de_bird_recorded() {
         .recombination(0.9)
         .mutation(Mutation::Range { min: 0.5, max: 1.2 })
         .build();
-    
+
     let result = run_recorded_differential_evolution(
         "bird", bird, &bounds, config, "./data_generated/records"
     );
-    
+
     assert!(result.is_ok());
     let (report, _csv_path) = result.unwrap();
     assert!(report.fun > -1e6); // Bird is extremely challenging, just check it finished
-    
-    // Check that solution is within bounds  
+
+    // Check that solution is within bounds
     let pi_2 = 2.0 * std::f64::consts::PI;
     assert!(report.x[0] >= -pi_2 && report.x[0] <= pi_2);
     assert!(report.x[1] >= -pi_2 && report.x[1] <= pi_2);

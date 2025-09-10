@@ -2,7 +2,6 @@ use autoeq_de::{differential_evolution, DEConfigBuilder, Mutation, Strategy};
 use autoeq_testfunctions::{de_jong_step2, dejong_f5_foxholes};
 use ndarray::Array1;
 
-extern crate blas_src;
 #[test]
 fn test_de_dejong_sphere() {
     let b10 = vec![(-5.12, 5.12); 10];

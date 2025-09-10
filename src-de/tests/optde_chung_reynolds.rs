@@ -1,7 +1,6 @@
 use autoeq_de::{auto_de, differential_evolution, DEConfigBuilder, Strategy, run_recorded_differential_evolution};
 use autoeq_testfunctions::{chung_reynolds, create_bounds};
 
-extern crate blas_src;
 
 #[test]
 fn test_de_chung_reynolds_2d() {
@@ -14,12 +13,12 @@ fn test_de_chung_reynolds_2d() {
         .strategy(Strategy::Best1Bin)
         .recombination(0.7)
         .build();
-    
+
     let result = differential_evolution(&chung_reynolds, &bounds, config);
-    
+
     // Global minimum is at (0, 0) with f = 0
     assert!(result.fun < 1e-6, "Solution quality too low: {}", result.fun);
-    
+
     // Check solution is very close to known optimum (0, 0)
     for &xi in result.x.iter() {
         assert!(xi >= -100.0 && xi <= 100.0, "Solution coordinate out of bounds: {}", xi);
@@ -38,12 +37,12 @@ fn test_de_chung_reynolds_5d() {
         .strategy(Strategy::Rand1Bin)
         .recombination(0.8)
         .build();
-    
+
     let result = differential_evolution(&chung_reynolds, &bounds, config);
-    
+
     // Should still achieve high precision for unimodal function
     assert!(result.fun < 1e-4, "Solution quality too low for 5D: {}", result.fun);
-    
+
     // Check solution is within bounds
     for &xi in result.x.iter() {
         assert!(xi >= -100.0 && xi <= 100.0, "Solution coordinate out of bounds: {}", xi);
@@ -62,12 +61,12 @@ fn test_de_chung_reynolds_10d() {
         .strategy(Strategy::Best2Bin)
         .recombination(0.9)
         .build();
-    
+
     let result = differential_evolution(&chung_reynolds, &bounds, config);
-    
+
     // Still should converge well for unimodal function
     assert!(result.fun < 1e-2, "Solution quality too low for 10D: {}", result.fun);
-    
+
     // Check solution is within bounds
     for &xi in result.x.iter() {
         assert!(xi >= -100.0 && xi <= 100.0, "Solution coordinate out of bounds: {}", xi);
@@ -99,15 +98,15 @@ fn test_de_chung_reynolds_recorded() {
         .strategy(Strategy::Best1Bin)
         .recombination(0.7)
         .build();
-    
+
     let result = run_recorded_differential_evolution(
         "chung_reynolds", chung_reynolds, &bounds, config, "./data_generated/records"
     );
-    
+
     assert!(result.is_ok());
     let (report, _csv_path) = result.unwrap();
     assert!(report.fun < 1e-4, "Recorded Chung Reynolds optimization failed: {}", report.fun);
-    
+
     // Check that solution is within bounds
     for &actual in report.x.iter() {
         assert!(actual >= -100.0 && actual <= 100.0, "Solution out of bounds: {}", actual);

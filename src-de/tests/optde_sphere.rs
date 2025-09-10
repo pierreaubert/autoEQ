@@ -1,7 +1,6 @@
 use autoeq_de::{auto_de, differential_evolution, AutoDEParams, DEConfigBuilder, Strategy, run_recorded_differential_evolution};
 use autoeq_testfunctions::{create_bounds, rastrigin, sphere};
 
-extern crate blas_src;
 #[test]
 fn test_de_sphere_2d() {
     // Test 2D Sphere function using direct DE interface
@@ -99,15 +98,15 @@ fn test_de_sphere_recorded() {
         .strategy(Strategy::Rand1Bin)
         .recombination(0.8)
         .build();
-    
+
     let result = run_recorded_differential_evolution(
         "sphere", sphere, &bounds, config, "./data_generated/records"
     );
-    
+
     assert!(result.is_ok());
     let (report, _csv_path) = result.unwrap();
     assert!(report.fun < 1e-6);
-    
+
     // Check that solution is close to global optimum (0, 0)
     for &actual in report.x.iter() {
         assert!(actual.abs() < 1e-3);

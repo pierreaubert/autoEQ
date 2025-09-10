@@ -1,7 +1,6 @@
 use autoeq_de::{differential_evolution, DEConfigBuilder, Strategy};
 use autoeq_testfunctions::colville;
 
-extern crate blas_src;
 #[test]
 fn test_de_colville_4d() {
     // Test 4D Colville function (multimodal, non-separable)

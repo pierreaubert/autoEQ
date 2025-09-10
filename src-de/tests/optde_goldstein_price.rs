@@ -1,7 +1,6 @@
 use autoeq_de::{differential_evolution, DEConfig, DEConfigBuilder, Strategy, run_recorded_differential_evolution};
 use autoeq_testfunctions::goldstein_price;
 
-extern crate blas_src;
 #[test]
 fn test_de_goldstein_price() {
     let b = [(-2.0, 2.0), (-2.0, 2.0)];
@@ -23,15 +22,15 @@ fn test_de_goldstein_price_recorded() {
         .strategy(Strategy::Rand1Exp)
         .recombination(0.9)
         .build();
-    
+
     let result = run_recorded_differential_evolution(
         "goldstein_price", goldstein_price, &bounds, config, "./data_generated/records"
     );
-    
+
     assert!(result.is_ok());
     let (report, _csv_path) = result.unwrap();
     assert!(report.fun < 3.01);
-    
+
     // Check that solution is close to global minimum at (0, -1) with f = 3
     assert!((report.x[0] - 0.0).abs() < 0.5, "x[0] should be close to 0.0: {}", report.x[0]);
     assert!((report.x[1] + 1.0).abs() < 0.5, "x[1] should be close to -1.0: {}", report.x[1]);

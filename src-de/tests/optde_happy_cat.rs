@@ -1,7 +1,6 @@
 use autoeq_de::{auto_de, differential_evolution, DEConfigBuilder, Strategy, run_recorded_differential_evolution};
 use autoeq_testfunctions::{happy_cat, create_bounds};
 
-extern crate blas_src;
 
 #[test]
 fn test_de_happy_cat_2d() {
@@ -14,10 +13,10 @@ fn test_de_happy_cat_2d() {
         .strategy(Strategy::Best1Bin)
         .recombination(0.9)
         .build();
-    
+
     let result = differential_evolution(&happy_cat, &bounds, config);
     assert!(result.fun < 0.1, "Solution quality too low: {}", result.fun);
-    
+
     // Check solution is close to one of the global minima (±1, ±1)
     let found_minimum = result.x.iter().all(|&xi| (xi.abs() - 1.0).abs() < 0.2);
     assert!(found_minimum, "Solution not near global minima: {:?}", result.x);
@@ -34,10 +33,10 @@ fn test_de_happy_cat_5d() {
         .strategy(Strategy::RandToBest1Bin)
         .recombination(0.9)
         .build();
-    
+
     let result = differential_evolution(&happy_cat, &bounds, config);
     assert!(result.fun < 0.5, "Solution quality too low: {}", result.fun);
-    
+
     // Check solution is reasonably close to some optimum
     for &xi in result.x.iter() {
         assert!(xi.abs() <= 2.5, "Solution coordinate out of expected range: {}", xi);
@@ -69,15 +68,15 @@ fn test_de_happy_cat_recorded() {
         .strategy(Strategy::Best1Bin)
         .recombination(0.9)
         .build();
-    
+
     let result = run_recorded_differential_evolution(
         "happy_cat", happy_cat, &bounds, config, "./data_generated/records"
     );
-    
+
     assert!(result.is_ok());
     let (report, _csv_path) = result.unwrap();
     assert!(report.fun < 0.2);
-    
+
     // Check that solution is within bounds
     for &actual in report.x.iter() {
         assert!(actual >= -2.0 && actual <= 2.0, "Solution out of bounds: {}", actual);
@@ -90,10 +89,10 @@ fn test_happy_cat_known_minimum() {
     use ndarray::Array1;
     let x_star1 = Array1::from(vec![1.0, 1.0]);
     let f_star1 = happy_cat(&x_star1);
-    
+
     let x_star2 = Array1::from(vec![-1.0, -1.0]);
     let f_star2 = happy_cat(&x_star2);
-    
+
     // Both should be approximately 0
     assert!(f_star1 < 0.01, "Known minimum (1,1) doesn't match expected value: {}", f_star1);
     assert!(f_star2 < 0.01, "Known minimum (-1,-1) doesn't match expected value: {}", f_star2);

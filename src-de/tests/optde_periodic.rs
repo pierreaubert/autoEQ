@@ -1,7 +1,6 @@
 use autoeq_de::{auto_de, differential_evolution, DEConfigBuilder, Strategy, run_recorded_differential_evolution};
 use autoeq_testfunctions::{periodic, get_function_bounds_vec};
 
-extern crate blas_src;
 
 #[test]
 fn test_de_periodic_2d() {
@@ -14,10 +13,10 @@ fn test_de_periodic_2d() {
         .strategy(Strategy::Best1Bin)
         .recombination(0.9)
         .build();
-    
+
     let result = differential_evolution(&periodic, &bounds, config);
     assert!(result.fun < 1.0, "Solution quality too low: {}", result.fun);
-    
+
     // Check solution is close to global minimum (0, 0) with f = 0.9
     for &xi in result.x.iter() {
         assert!(xi.abs() < 0.1, "Solution coordinate not near 0: {}", xi);
@@ -35,10 +34,10 @@ fn test_de_periodic_5d() {
         .strategy(Strategy::RandToBest1Bin)
         .recombination(0.9)
         .build();
-    
+
     let result = differential_evolution(&periodic, &bounds, config);
     assert!(result.fun < 1.0, "Solution quality too low: {}", result.fun);
-    
+
     // Check solution is close to global minimum (0, 0, 0, 0, 0)
     for &xi in result.x.iter() {
         assert!(xi.abs() < 0.2, "Solution coordinate not near 0: {}", xi);
@@ -50,7 +49,7 @@ fn test_de_periodic_multimodal_behavior() {
     // Test that the function can find the global minimum from different starting points
     let bounds = vec![(-10.0, 10.0), (-10.0, 10.0)];
     let mut results = Vec::new();
-    
+
     for seed in 100..105 {
         let config = DEConfigBuilder::new()
             .seed(seed)
@@ -59,11 +58,11 @@ fn test_de_periodic_multimodal_behavior() {
             .strategy(Strategy::Best1Bin)
             .recombination(0.9)
             .build();
-        
+
         let result = differential_evolution(&periodic, &bounds, config);
         results.push(result.fun);
     }
-    
+
     // All runs should find the global minimum region (around 0.9)
     for (i, &f) in results.iter().enumerate() {
         assert!(f < 1.1, "Run {} failed to find good solution: {}", i, f);
@@ -96,15 +95,15 @@ fn test_de_periodic_recorded() {
         .strategy(Strategy::Best1Bin)
         .recombination(0.9)
         .build();
-    
+
     let result = run_recorded_differential_evolution(
         "periodic", periodic, &bounds, config, "./data_generated/records"
     );
-    
+
     assert!(result.is_ok());
     let (report, _csv_path) = result.unwrap();
     assert!(report.fun < 1.0);
-    
+
     // Check that solution is close to global optimum (0, 0)
     for &actual in report.x.iter() {
         assert!(actual.abs() < 0.1, "Solution not near 0: {}", actual);
@@ -117,7 +116,7 @@ fn test_periodic_known_minimum() {
     use ndarray::Array1;
     let x_star = Array1::from(vec![0.0, 0.0]);
     let f_star = periodic(&x_star);
-    
+
     // Should be exactly 0.9
     assert!((f_star - 0.9).abs() < 1e-10, "Known minimum doesn't match expected value: {}", f_star);
 }
@@ -126,15 +125,15 @@ fn test_periodic_known_minimum() {
 fn test_periodic_different_dimensions() {
     // Test function behavior in different dimensions
     use ndarray::Array1;
-    
+
     let dimensions = [2, 3, 5, 10];
-    
+
     for &dim in &dimensions {
         // Test at global minimum (all zeros)
         let x_zero = Array1::from(vec![0.0; dim]);
         let f_zero = periodic(&x_zero);
         assert!((f_zero - 0.9).abs() < 1e-10, "Function at zero not 0.9 for dim {}: {}", dim, f_zero);
-        
+
         // Test at small perturbation
         let x_small = Array1::from(vec![0.1; dim]);
         let f_small = periodic(&x_small);
@@ -147,21 +146,21 @@ fn test_periodic_different_dimensions() {
 fn test_periodic_properties() {
     // Test some mathematical properties of the periodic function
     use ndarray::Array1;
-    
+
     // Test symmetry around origin
     let x1 = Array1::from(vec![1.0, 2.0]);
     let x2 = Array1::from(vec![-1.0, -2.0]);
     let f1 = periodic(&x1);
     let f2 = periodic(&x2);
-    
+
     // Should be the same due to sin^2 and exp(-x^2) symmetry
     assert!((f1 - f2).abs() < 1e-10, "Function should be symmetric: f({:?}) = {}, f({:?}) = {}", x1, f1, x2, f2);
-    
+
     // Test that the function increases as we move away from origin
     let x_far = Array1::from(vec![5.0, 5.0]);
     let f_far = periodic(&x_far);
     let f_origin = periodic(&Array1::from(vec![0.0, 0.0]));
-    
+
     assert!(f_far > f_origin, "Function should increase away from origin");
 }
 
@@ -169,7 +168,7 @@ fn test_periodic_properties() {
 fn test_periodic_boundary_behavior() {
     // Test function behavior at boundaries
     use ndarray::Array1;
-    
+
     let test_points = vec![
         vec![-10.0, -10.0],
         vec![10.0, 10.0],
@@ -178,7 +177,7 @@ fn test_periodic_boundary_behavior() {
         vec![0.0, 10.0],
         vec![0.0, -10.0],
     ];
-    
+
     for point in test_points {
         let x = Array1::from(point.clone());
         let f = periodic(&x);

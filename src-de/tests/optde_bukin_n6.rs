@@ -1,7 +1,6 @@
 use autoeq_de::{differential_evolution, DEConfigBuilder, Mutation, Strategy, run_recorded_differential_evolution};
 use autoeq_testfunctions::bukin_n6;
 
-extern crate blas_src;
 #[test]
 fn test_de_bukin_n6() {
     let b = [(-15.0, -5.0), (-3.0, 3.0)];
@@ -27,15 +26,15 @@ fn test_de_bukin_n6_recorded() {
         .recombination(0.9)
         .mutation(Mutation::Range { min: 0.4, max: 1.0 })
         .build();
-    
+
     let result = run_recorded_differential_evolution(
         "bukin_n6", bukin_n6, &bounds, config, "./data_generated/records"
     );
-    
+
     assert!(result.is_ok());
     let (report, _csv_path) = result.unwrap();
     assert!(report.fun < 5.0); // Very relaxed - Bukin N6 is extremely challenging
-    
+
     // Check bounds
     assert!(report.x[0] >= -15.0 && report.x[0] <= -5.0);
     assert!(report.x[1] >= -3.0 && report.x[1] <= 3.0);

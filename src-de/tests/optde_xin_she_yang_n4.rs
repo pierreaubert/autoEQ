@@ -1,7 +1,6 @@
 use autoeq_de::{auto_de, differential_evolution, DEConfigBuilder, Strategy, run_recorded_differential_evolution};
 use autoeq_testfunctions::{xin_she_yang_n4, create_bounds};
 
-extern crate blas_src;
 
 #[test]
 fn test_de_xin_she_yang_n4_2d() {

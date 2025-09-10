@@ -3,7 +3,6 @@ use autoeq_testfunctions::{rosenbrock_disk_constraint, rosenbrock_objective};
 use ndarray::Array1;
 use std::sync::Arc;
 
-extern crate blas_src;
 #[test]
 fn test_de_constrained_rosenbrock_disk() {
     let b = vec![(-1.5, 1.5), (-1.5, 1.5)];

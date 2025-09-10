@@ -4,7 +4,6 @@ use autoeq_de::{
 use ndarray::{Array1, Array2};
 use std::str::FromStr;
 
-extern crate blas_src;
 
 fn main() {
     // Objective: sphere in 2D

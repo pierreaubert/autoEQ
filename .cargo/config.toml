@@ -1,9 +1,11 @@
 [env]
 # macOS-specific configuration
 MACOSX_DEPLOYMENT_TARGET = "15.0"
-# OpenBLAS paths for macOS (Homebrew)
-OPENBLAS_LIB = "/opt/homebrew/opt/openblas/lib"
-OPENBLAS_INCLUDE = "/opt/homebrew/opt/openblas/include"
+# Using Apple Accelerate framework (no additional paths needed)
+
+# OpenBLAS paths for macOS (uncomment if switching back to OpenBLAS)
+# OPENBLAS_LIB = "/opt/homebrew/opt/openblas/lib"
+# OPENBLAS_INCLUDE = "/opt/homebrew/opt/openblas/include"
 
 # Linux OpenBLAS paths (uncomment if needed)
 # OPENBLAS_LIB = "/usr/lib/x86_64-linux-gnu"  # Ubuntu/Debian
@@ -15,19 +17,33 @@ OPENBLAS_INCLUDE = "/opt/homebrew/opt/openblas/include"
 # OPENBLAS_LIB = "C:\\vcpkg\\installed\\x64-windows\\lib"
 # OPENBLAS_INCLUDE = "C:\\vcpkg\\installed\\x64-windows\\include"
 
+# macOS Apple Silicon (M1/M2/M3) - using Accelerate framework
 [target.aarch64-apple-darwin]
 rustflags = [
     "-C", "link-arg=-mmacosx-version-min=15.0",
-    "-C", "link-arg=-L/opt/homebrew/opt/openblas/lib",
-    "-C", "link-arg=-lopenblas"
+    "-C", "link-arg=-framework", "-C", "link-arg=Accelerate"
 ]
 
+# macOS Intel - using Accelerate framework
 [target.x86_64-apple-darwin] 
 rustflags = [
     "-C", "link-arg=-mmacosx-version-min=15.0",
-    "-C", "link-arg=-L/opt/homebrew/opt/openblas/lib",
-    "-C", "link-arg=-lopenblas"
+    "-C", "link-arg=-framework", "-C", "link-arg=Accelerate"
 ]
+
+# Alternative: OpenBLAS configuration for macOS (uncomment if needed)
+# [target.aarch64-apple-darwin]
+# rustflags = [
+#     "-C", "link-arg=-mmacosx-version-min=15.0",
+#     "-C", "link-arg=-L/opt/homebrew/opt/openblas/lib",
+#     "-C", "link-arg=-lopenblas"
+# ]
+# [target.x86_64-apple-darwin] 
+# rustflags = [
+#     "-C", "link-arg=-mmacosx-version-min=15.0",
+#     "-C", "link-arg=-L/opt/homebrew/opt/openblas/lib",
+#     "-C", "link-arg=-lopenblas"
+# ]
 
 # Linux x86_64 configuration
 [target.x86_64-unknown-linux-gnu]
@@ -64,8 +80,14 @@ rustflags = [
 # Platform-specific setup instructions:
 #
 # === macOS ===
-# Install OpenBLAS via Homebrew:
+# RECOMMENDED: Using Apple Accelerate framework (no installation needed)
+#   - Built into macOS, optimized for Apple Silicon and Intel Macs
+#   - Generally faster than OpenBLAS on Apple hardware
+#   - No external dependencies required
+#
+# Alternative: Install OpenBLAS via Homebrew (if needed):
 #   brew install openblas
+#   Then uncomment OpenBLAS configuration above
 #
 # === Linux ===
 # Ubuntu/Debian:

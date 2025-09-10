@@ -1,7 +1,6 @@
 use autoeq_de::{differential_evolution, DEConfig, DEConfigBuilder, Strategy};
 use autoeq_testfunctions::{levi13, levy_n13};
 
-extern crate blas_src;
 #[test]
 fn test_de_levi13_basic() {
     // Test Lévy N.13 function using basic DE config

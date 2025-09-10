@@ -29,5 +29,5 @@ ndarray = { workspace = true }
 reqwest = { workspace = true }
 urlencoding = { workspace = true }
 blas-src = { workspace = true }
-openblas-src = { workspace = true }
+# openblas-src = { workspace = true }  # Using Accelerate instead on macOS
 

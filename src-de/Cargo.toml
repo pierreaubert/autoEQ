@@ -11,7 +11,7 @@ repository = "https://github.com/pierreaubert/autoeq"
 # Core numerical computing
 ndarray = { workspace = true }
 blas-src = { workspace = true }
-openblas-src = { workspace = true }
+# openblas-src = { workspace = true }  # Using Accelerate instead on macOS
 rand = { workspace = true }
 csv = { workspace = true }
 clap = { workspace = true }

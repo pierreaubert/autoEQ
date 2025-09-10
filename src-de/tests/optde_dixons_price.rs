@@ -1,7 +1,6 @@
 use autoeq_de::{differential_evolution, DEConfigBuilder, Strategy};
 use autoeq_testfunctions::dixons_price;
 
-extern crate blas_src;
 #[test]
 fn test_de_dixons_price_2d() {
     // Test 2D Dixon's Price

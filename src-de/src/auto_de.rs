@@ -105,7 +105,6 @@ mod tests {
     use crate::auto_de_params::AutoDEParams;
     use autoeq_testfunctions::{create_bounds, quadratic};
 
-    extern crate blas_src;
 
     #[test]
     fn test_auto_de_custom_parameters() {

@@ -1,6 +1,5 @@
 use autoeq_de::{differential_evolution, DEConfigBuilder, Strategy};
 use autoeq_testfunctions::{binh_korn_constraint1, binh_korn_constraint2, binh_korn_weighted};
-extern crate blas_src;
 
 #[test]
 fn test_de_constrained_binh_korn() {

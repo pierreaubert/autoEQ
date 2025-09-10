@@ -3,7 +3,6 @@ use autoeq_de::{
 };
 use ndarray::Array1;
 
-extern crate blas_src;
 
 fn main() {
     // Ackley function (2D)

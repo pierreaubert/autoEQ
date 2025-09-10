@@ -1,7 +1,6 @@
 use autoeq_de::{auto_de, differential_evolution, AutoDEParams, DEConfigBuilder, Strategy};
 use autoeq_testfunctions::{create_bounds, lampinen_simplified};
 
-extern crate blas_src;
 #[test]
 fn test_de_lampinen_simplified() {
     // Test Lampinen simplified using direct DE interface

@@ -1,7 +1,6 @@
 use autoeq_de::{differential_evolution, DEConfigBuilder, Strategy};
 use autoeq_testfunctions::cosine_mixture;
 
-extern crate blas_src;
 #[test]
 fn test_de_cosine_mixture_2d() {
     // Test 2D Cosine Mixture function

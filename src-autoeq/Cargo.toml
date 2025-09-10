@@ -30,9 +30,9 @@ autoeq-iir = { path = "../src-iir" }
 autoeq-de = { path = "../src-de" }
 autoeq-cea2034 = { path = "../src-cea2034" }
 
-# External BLAS
+# External BLAS - using Apple Accelerate on macOS
 blas-src = { workspace = true }
-openblas-src = { workspace = true }
+# openblas-src = { workspace = true }  # Commented out in favor of Accelerate
 
 [[bin]]
 name = "autoeq"

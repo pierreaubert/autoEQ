@@ -1,7 +1,6 @@
 use autoeq_de::{differential_evolution, DEConfigBuilder, Strategy};
 use autoeq_testfunctions::ackley_n2;
 
-extern crate blas_src;
 
 #[test]
 fn test_de_ackley_n2_basic() {

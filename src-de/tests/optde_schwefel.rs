@@ -1,7 +1,6 @@
 use autoeq_de::{differential_evolution, DEConfigBuilder, Mutation, Strategy, run_recorded_differential_evolution};
 use autoeq_testfunctions::schwefel;
 
-extern crate blas_src;
 #[test]
 fn test_de_schwefel_2d() {
     // Test 2D Schwefel
@@ -44,13 +43,13 @@ fn test_de_schwefel_recorded() {
         .recombination(0.95)
         .mutation(Mutation::Range { min: 0.5, max: 1.2 })
         .build();
-    
+
     let result = run_recorded_differential_evolution("schwefel_2d", schwefel, &b2, config, "./data_generated/records");
     assert!(result.is_ok(), "Recorded optimization should succeed");
-    
+
     let (solution, _csv_path) = result.unwrap();
     assert!(solution.fun < 1e-1, "Solution quality should be good: {}", solution.fun);
-    
+
     // Check that solution is close to (420.9687, 420.9687) - global minimum of Schwefel
     for (i, &xi) in solution.x.iter().enumerate() {
         assert!((xi - 420.9687).abs() < 10.0, "x[{}] should be close to 420.9687: {}", i, xi);

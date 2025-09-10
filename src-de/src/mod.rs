@@ -154,7 +154,7 @@ impl Mutation {
             Mutation::Adaptive { initial_f } => initial_f, // Will be overridden by adaptive logic
         }
     }
-    
+
     /// Sample from Cauchy distribution for adaptive mutation (F parameter)
     #[allow(dead_code)]
     fn sample_cauchy<R: Rng + ?Sized>(&self, f_m: f64, _scale: f64, rng: &mut R) -> f64 {
@@ -208,7 +208,7 @@ impl LinearConstraintHelper {
     /// Apply helper by merging into DEConfig.linear_penalty (stacking rows if already present)
     pub fn apply_to(&self, cfg: &mut DEConfig, weight: f64) {
         use stack_linear_penalty::stack_linear_penalty;
-        
+
         let new_lp = LinearPenalty {
             a: self.a.clone(),
             lb: self.lb.clone(),
@@ -298,59 +298,59 @@ impl AdaptiveState {
             current_w: config.w_max, // Start with maximum weight
         }
     }
-    
+
     /// Update adaptive parameters based on successful trials
     fn update(&mut self, config: &AdaptiveConfig, iter: usize, max_iter: usize) {
         // Update linearly decreasing weight (Equation 19 from the paper)
         let iter_ratio = iter as f64 / max_iter as f64;
         self.current_w = config.w_max - (config.w_max - config.w_min) * iter_ratio;
-        
+
         // Update F_m using power mean of successful F values (Equations 8-10)
         if !self.successful_f.is_empty() {
             let power_mean_f = self.compute_power_mean(&self.successful_f);
             self.f_m = (1.0 - config.w_f) * self.f_m + config.w_f * power_mean_f;
         }
-        
+
         // Update CR_m using power mean of successful CR values (Equations 12-14)
         if !self.successful_cr.is_empty() {
             let power_mean_cr = self.compute_power_mean(&self.successful_cr);
             self.cr_m = (1.0 - config.w_cr) * self.cr_m + config.w_cr * power_mean_cr;
         }
-        
+
         // Clear successful values for next generation
         self.successful_f.clear();
         self.successful_cr.clear();
     }
-    
+
     /// Compute power mean as described in equation (10) from the paper
     fn compute_power_mean(&self, values: &[f64]) -> f64 {
         if values.is_empty() {
             return 0.5; // Default fallback
         }
-        
+
         let sum_powers: f64 = values.iter().map(|&x| x.powf(1.5)).sum();
         let sum_inv_powers: f64 = values.iter().map(|&x| x.powf(-1.5)).sum();
-        
+
         if sum_inv_powers > 0.0 {
             sum_powers / sum_inv_powers
         } else {
             values.iter().sum::<f64>() / values.len() as f64 // Fallback to arithmetic mean
         }
     }
-    
+
     /// Record successful parameter values
     fn record_success(&mut self, f_val: f64, cr_val: f64) {
         self.successful_f.push(f_val);
         self.successful_cr.push(cr_val);
     }
-    
+
     /// Sample adaptive F parameter using simple perturbation
     fn sample_f<R: Rng + ?Sized>(&self, rng: &mut R) -> f64 {
         let perturbation = (rng.random::<f64>() - 0.5) * 0.2;
         (self.f_m + perturbation).max(0.0).min(2.0) // Clamp to valid range
     }
-    
-    /// Sample adaptive CR parameter using simple perturbation  
+
+    /// Sample adaptive CR parameter using simple perturbation
     fn sample_cr<R: Rng + ?Sized>(&self, rng: &mut R) -> f64 {
         let perturbation = (rng.random::<f64>() - 0.5) * 0.2;
         (self.cr_m + perturbation).max(0.0).min(1.0) // Clamp to valid range
@@ -677,7 +677,7 @@ where
         use mutant_rand2::mutant_rand2;
         use mutant_rand_to_best1::mutant_rand_to_best1;
         use apply_wls::apply_wls;
-        
+
         let n = self.lower.len();
 
         // Identify fixed (equal-bounds) and free variables
@@ -819,13 +819,13 @@ where
         }
 
         // Initialize adaptive state if adaptive strategies are enabled
-        let mut adaptive_state = if matches!(self.config.strategy, Strategy::AdaptiveBin | Strategy::AdaptiveExp) || 
+        let mut adaptive_state = if matches!(self.config.strategy, Strategy::AdaptiveBin | Strategy::AdaptiveExp) ||
                                     self.config.adaptive.adaptive_mutation {
             Some(AdaptiveState::new(&self.config.adaptive))
         } else {
             None
         };
-        
+
         // Main loop
         let mut success = false;
         let mut message = String::new();
@@ -931,7 +931,7 @@ where
                 };
 
                 // Apply WLS if enabled
-                let wls_trial = if self.config.adaptive.wls_enabled && 
+                let wls_trial = if self.config.adaptive.wls_enabled &&
                                   rng.random::<f64>() < self.config.adaptive.wls_prob {
                     apply_wls(&trial, &self.lower, &self.upper, self.config.adaptive.wls_scale, &mut rng)
                 } else {
@@ -988,7 +988,7 @@ where
             let pop_mean = energies.mean().unwrap_or(0.0);
             let pop_std = energies.std(0.0);
             let convergence_threshold = self.config.atol + self.config.tol * pop_mean.abs();
-            
+
             if self.config.disp {
                 eprintln!(
                     "DE iter {:4}  best_f={:.6e}  std={:.3e}  accepted={}/{}, improved={}",
@@ -1065,8 +1065,7 @@ pub mod examples {
 mod strategy_tests {
     use super::*;
 
-    extern crate blas_src;
-    
+
     #[test]
     fn test_parse_strategy_variants() {
         assert!(matches!(

@@ -1,7 +1,6 @@
 use autoeq_de::{auto_de, differential_evolution, DEConfigBuilder, Strategy, run_recorded_differential_evolution};
 use autoeq_testfunctions::{alpine_n2, create_bounds};
 
-extern crate blas_src;
 
 #[test]
 fn test_de_alpine_n2_2d() {
@@ -14,10 +13,10 @@ fn test_de_alpine_n2_2d() {
         .strategy(Strategy::Best1Bin)
         .recombination(0.9)
         .build();
-    
+
     let result = differential_evolution(&alpine_n2, &bounds, config);
     assert!(result.fun < -7.0, "Solution quality too low: {}", result.fun);
-    
+
     // Check solution is close to global minimum (2.808, 2.808)
     for &xi in result.x.iter() {
         assert!((xi - 2.808).abs() < 0.5, "Solution coordinate not near 2.808: {}", xi);
@@ -35,11 +34,11 @@ fn test_de_alpine_n2_3d() {
         .strategy(Strategy::RandToBest1Bin)
         .recombination(0.95)
         .build();
-    
+
     let result = differential_evolution(&alpine_n2, &bounds, config);
     // For 3D: expected minimum is approximately -2.808^3 ≈ -22.2
     assert!(result.fun < -20.0, "Solution quality too low: {}", result.fun);
-    
+
     // Check solution is close to global minimum (2.808, 2.808, 2.808)
     for &xi in result.x.iter() {
         assert!((xi - 2.808).abs() < 0.5, "Solution coordinate not near 2.808: {}", xi);
@@ -71,15 +70,15 @@ fn test_de_alpine_n2_recorded() {
         .strategy(Strategy::Best1Bin)
         .recombination(0.9)
         .build();
-    
+
     let result = run_recorded_differential_evolution(
         "alpine_n2", alpine_n2, &bounds, config, "./data_generated/records"
     );
-    
+
     assert!(result.is_ok());
     let (report, _csv_path) = result.unwrap();
     assert!(report.fun < -7.0);
-    
+
     // Check that solution is close to global optimum (2.808, 2.808)
     for &actual in report.x.iter() {
         assert!((actual - 2.808).abs() < 0.5, "Solution not near 2.808: {}", actual);

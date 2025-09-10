@@ -34,8 +34,6 @@ use std::time::{Duration, Instant};
 use tokio::select;
 use tokio::sync::oneshot;
 
-extern crate blas_src;
-
 async fn load_input_curve(
     args: &autoeq::cli::Args,
 ) -> Result<(Curve, Option<HashMap<String, Curve>>), Box<dyn Error>> {

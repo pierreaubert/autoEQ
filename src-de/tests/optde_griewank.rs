@@ -1,7 +1,6 @@
 use autoeq_de::{differential_evolution, DEConfigBuilder, Strategy, run_recorded_differential_evolution};
 use autoeq_testfunctions::griewank;
 
-extern crate blas_src;
 #[test]
 fn test_de_griewank_2d() {
     // Test 2D Griewank
@@ -41,13 +40,13 @@ fn test_de_griewank_recorded() {
         .strategy(Strategy::RandToBest1Exp)
         .recombination(0.9)
         .build();
-    
+
     let result = run_recorded_differential_evolution("griewank_2d", griewank, &b2, config, "./data_generated/records");
     assert!(result.is_ok(), "Recorded optimization should succeed");
-    
+
     let (solution, _csv_path) = result.unwrap();
     assert!(solution.fun < 1e-1, "Solution quality should be good: {}", solution.fun);
-    
+
     // Check that solution is close to (0, 0) - global minimum of Griewank
     for (i, &xi) in solution.x.iter().enumerate() {
         assert!(xi.abs() < 1e-1, "x[{}] should be close to 0.0: {}", i, xi);

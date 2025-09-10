@@ -1,7 +1,6 @@
 use autoeq_de::{differential_evolution, DEConfigBuilder, Strategy};
 use autoeq_testfunctions::rotated_hyper_ellipsoid;
 
-extern crate blas_src;
 #[test]
 fn test_de_rotated_hyper_ellipsoid_2d() {
     // Test 2D Rotated Hyper-Ellipsoid function

@@ -2,7 +2,6 @@ use autoeq_de::auto_de;
 use autoeq_de::{differential_evolution, DEConfigBuilder, Strategy};
 use autoeq_testfunctions::{create_bounds, quadratic};
 
-extern crate blas_src;
 #[test]
 fn test_de_quadratic_2d() {
     // Test 2D quadratic function using direct DE interface

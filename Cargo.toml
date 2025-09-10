@@ -12,8 +12,12 @@ resolver = "2"
 [workspace.dependencies]
 # Core numerical computing
 ndarray = { version = "0.16.0", features = ["blas", "serde"] }
-blas-src = { version = "0.12.1", features = ["openblas"] }
-openblas-src = { version = "0.10", features = ["cblas", "system"] }
+# BLAS backend - choose one based on platform:
+# Option 1: Apple Accelerate (recommended for macOS)
+blas-src = { version = "0.12.1", features = ["accelerate"] }
+# Option 2: OpenBLAS (cross-platform, fallback for macOS)
+# blas-src = { version = "0.12.1", features = ["openblas"] }
+# openblas-src = { version = "0.10", features = ["cblas", "system"] }
 
 # Serialization and data
 serde = { version = "1.0", features = ["derive"] }

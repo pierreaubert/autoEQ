@@ -2,7 +2,6 @@ use autoeq_de::{differential_evolution, DEConfigBuilder, Mutation, Strategy};
 use autoeq_testfunctions::{
     keanes_bump_constraint1, keanes_bump_constraint2, keanes_bump_objective,
 };
-extern crate blas_src;
 
 #[test]
 fn test_de_constrained_keanes_bump() {

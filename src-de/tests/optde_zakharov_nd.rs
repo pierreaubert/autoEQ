@@ -1,7 +1,6 @@
 use autoeq_de::{differential_evolution, DEConfigBuilder, Strategy};
 use autoeq_testfunctions::zakharov;
 
-extern crate blas_src;
 
 #[test]
 fn test_de_zakharov_2d() {

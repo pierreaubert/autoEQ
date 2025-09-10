@@ -1,7 +1,6 @@
 use autoeq_de::{differential_evolution, DEConfig, DEConfigBuilder, Strategy, run_recorded_differential_evolution};
 use autoeq_testfunctions::booth;
 
-extern crate blas_src;
 
 #[test]
 fn test_de_booth() {
@@ -12,16 +11,16 @@ fn test_de_booth() {
     config.popsize = 40;
     config.recombination = 0.9;
     config.strategy = Strategy::RandToBest1Exp;
-    
+
     let result = differential_evolution(&booth, &bounds, config);
-    
+
     // Booth function: Global minimum f(x) = 0 at x = (1, 3)
     assert!(result.fun < 1e-5);
-    
+
     // Check that solution is close to expected optimum
     let expected = [1.0, 3.0];
     for (actual, expected) in result.x.iter().zip(expected.iter()) {
-        assert!((actual - expected).abs() < 0.1, 
+        assert!((actual - expected).abs() < 0.1,
                "Solution component {} should be close to {}", actual, expected);
     }
 }
@@ -35,9 +34,9 @@ fn test_de_booth_convergence() {
     config.popsize = 50;
     config.recombination = 0.8;
     config.strategy = Strategy::Best1Bin;
-    
+
     let result = differential_evolution(&booth, &bounds, config);
-    
+
     // Should achieve high precision
     assert!(result.fun < 1e-6);
 }
@@ -52,15 +51,15 @@ fn test_de_booth_recorded() {
         .strategy(Strategy::RandToBest1Exp)
         .recombination(0.9)
         .build();
-    
+
     let result = run_recorded_differential_evolution(
         "booth", booth, &bounds, config, "./data_generated/records"
     );
-    
+
     assert!(result.is_ok());
     let (report, _csv_path) = result.unwrap();
     assert!(report.fun < 1e-5);
-    
+
     // Check that solution is close to expected optimum (1, 3)
     let expected = [1.0, 3.0];
     for (actual, expected) in report.x.iter().zip(expected.iter()) {

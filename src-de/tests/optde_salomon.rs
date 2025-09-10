@@ -1,7 +1,6 @@
 use autoeq_de::{differential_evolution, DEConfigBuilder, Strategy, run_recorded_differential_evolution};
 use autoeq_testfunctions::salomon;
 
-extern crate blas_src;
 #[test]
 fn test_de_salomon_2d() {
     // Test 2D Salomon function (multimodal)
@@ -116,15 +115,15 @@ fn test_de_salomon_recorded() {
         .strategy(Strategy::Rand1Exp)
         .recombination(0.95)
         .build();
-    
+
     let result = run_recorded_differential_evolution(
         "salomon", salomon, &bounds, config, "./data_generated/records"
     );
-    
+
     assert!(result.is_ok());
     let (report, _csv_path) = result.unwrap();
     assert!(report.fun < 0.5); // Relaxed threshold for multimodal salomon
-    
+
     // Global minimum at origin (0, 0)
     assert!(report.x[0].abs() < 10.0, "x[0] should be reasonably close to 0.0: {}", report.x[0]);
     assert!(report.x[1].abs() < 10.0, "x[1] should be reasonably close to 0.0: {}", report.x[1]);

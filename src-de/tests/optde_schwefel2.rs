@@ -1,7 +1,6 @@
 use autoeq_de::{differential_evolution, DEConfigBuilder, Strategy, run_recorded_differential_evolution};
 use autoeq_testfunctions::schwefel2;
 
-extern crate blas_src;
 #[test]
 fn test_de_schwefel2() {
     let b = [(-500.0, 500.0), (-500.0, 500.0)];
@@ -25,15 +24,15 @@ fn test_de_schwefel2_recorded() {
         .strategy(Strategy::RandToBest1Exp)
         .recombination(0.95)
         .build();
-    
+
     let result = run_recorded_differential_evolution(
         "schwefel2", schwefel2, &bounds, config, "./data_generated/records"
     );
-    
+
     assert!(result.is_ok());
     let (report, _csv_path) = result.unwrap();
     assert!(report.fun < 200.0); // Relaxed threshold for schwefel2
-    
+
     // Check bounds
     assert!(report.x[0] >= -500.0 && report.x[0] <= 500.0);
     assert!(report.x[1] >= -500.0 && report.x[1] <= 500.0);

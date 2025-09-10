@@ -1,7 +1,6 @@
 use autoeq_de::{differential_evolution, DEConfigBuilder, Strategy};
 use autoeq_testfunctions::quartic;
 
-extern crate blas_src;
 #[test]
 fn test_de_quartic_2d() {
     // Test 2D Quartic function

@@ -1,7 +1,6 @@
 use autoeq_de::{auto_de, differential_evolution, DEConfigBuilder, Strategy, run_recorded_differential_evolution};
 use autoeq_testfunctions::{brown, get_function_bounds_vec};
 
-extern crate blas_src;
 
 #[test]
 fn test_de_brown_2d() {
@@ -14,10 +13,10 @@ fn test_de_brown_2d() {
         .strategy(Strategy::Best1Bin)
         .recombination(0.9)
         .build();
-    
+
     let result = differential_evolution(&brown, &bounds, config);
     assert!(result.fun < 1e-5, "Solution quality too low: {}", result.fun);
-    
+
     // Check solution is close to global minimum (0, 0)
     for &xi in result.x.iter() {
         assert!(xi.abs() < 1e-3, "Solution coordinate not near 0: {}", xi);
@@ -35,10 +34,10 @@ fn test_de_brown_4d() {
         .strategy(Strategy::RandToBest1Bin)
         .recombination(0.95)
         .build();
-    
+
     let result = differential_evolution(&brown, &bounds, config);
     assert!(result.fun < 1e-4, "Solution quality too low: {}", result.fun);
-    
+
     // Check solution is close to global minimum (0, 0, 0, 0)
     for &xi in result.x.iter() {
         assert!(xi.abs() < 1e-2, "Solution coordinate not near 0: {}", xi);
@@ -57,7 +56,7 @@ fn test_de_brown_high_precision() {
         .recombination(0.9)
         .tol(1e-12)  // Very tight tolerance
         .build();
-    
+
     let result = differential_evolution(&brown, &bounds, config);
     assert!(result.fun < 1e-8, "High precision solution not achieved: {}", result.fun);
 }
@@ -66,13 +65,13 @@ fn test_de_brown_high_precision() {
 fn test_de_brown_multiple_strategies() {
     // Test different strategies on this ill-conditioned function
     let bounds = vec![(-1.0, 4.0), (-1.0, 4.0)];
-    
+
     let strategies = [
         Strategy::Best1Bin,
         Strategy::RandToBest1Bin,
         Strategy::Best2Bin,
     ];
-    
+
     for (i, strategy) in strategies.iter().enumerate() {
         let config = DEConfigBuilder::new()
             .seed(110 + i as u64)
@@ -81,7 +80,7 @@ fn test_de_brown_multiple_strategies() {
             .strategy(*strategy)
             .recombination(0.9)
             .build();
-        
+
         let result = differential_evolution(&brown, &bounds, config);
         assert!(result.fun < 1e-3, "Strategy {:?} failed with value: {}", strategy, result.fun);
     }
@@ -113,15 +112,15 @@ fn test_de_brown_recorded() {
         .strategy(Strategy::Best1Bin)
         .recombination(0.9)
         .build();
-    
+
     let result = run_recorded_differential_evolution(
         "brown", brown, &bounds, config, "./data_generated/records"
     );
-    
+
     assert!(result.is_ok());
     let (report, _csv_path) = result.unwrap();
     assert!(report.fun < 1e-4);
-    
+
     // Check that solution is close to global optimum (0, 0)
     for &actual in report.x.iter() {
         assert!(actual.abs() < 1e-2, "Solution not near 0: {}", actual);
@@ -134,7 +133,7 @@ fn test_brown_known_minimum() {
     use ndarray::Array1;
     let x_star = Array1::from(vec![0.0, 0.0]);
     let f_star = brown(&x_star);
-    
+
     // Should be exactly 0.0
     assert!(f_star < 1e-15, "Known minimum doesn't match expected value: {}", f_star);
 }
@@ -143,20 +142,20 @@ fn test_brown_known_minimum() {
 fn test_brown_ill_conditioning() {
     // Test the ill-conditioned nature of the Brown function
     use ndarray::Array1;
-    
+
     // Test that small changes in x can lead to large changes in function value
     let x1 = Array1::from(vec![0.1, 0.1]);
     let x2 = Array1::from(vec![0.11, 0.11]);
     let f1 = brown(&x1);
     let f2 = brown(&x2);
-    
+
     assert!(f1.is_finite() && f2.is_finite(), "Function values should be finite");
-    
+
     // Test that function grows rapidly away from origin
     let x_far = Array1::from(vec![1.0, 1.0]);
     let f_far = brown(&x_far);
     let f_origin = brown(&Array1::from(vec![0.0, 0.0]));
-    
+
     assert!(f_far > f_origin, "Function should increase away from origin");
 }
 
@@ -164,15 +163,15 @@ fn test_brown_ill_conditioning() {
 fn test_brown_different_dimensions() {
     // Test function behavior in different dimensions
     use ndarray::Array1;
-    
+
     let dimensions = [2, 4, 6, 10];
-    
+
     for &dim in &dimensions {
         // Test at global minimum (all zeros)
         let x_zero = Array1::from(vec![0.0; dim]);
         let f_zero = brown(&x_zero);
         assert!(f_zero < 1e-15, "Function at zero not 0 for dim {}: {}", dim, f_zero);
-        
+
         // Test at small perturbation
         let x_small = Array1::from(vec![0.01; dim]);
         let f_small = brown(&x_small);
@@ -185,7 +184,7 @@ fn test_brown_different_dimensions() {
 fn test_brown_convergence_difficulty() {
     // Test that Brown function is indeed difficult to optimize (many iterations needed)
     let bounds = vec![(-1.0, 4.0), (-1.0, 4.0)];
-    
+
     // Test with insufficient iterations
     let config_short = DEConfigBuilder::new()
         .seed(114)
@@ -194,9 +193,9 @@ fn test_brown_convergence_difficulty() {
         .strategy(Strategy::Rand1Bin)
         .recombination(0.7)
         .build();
-    
+
     let result_short = differential_evolution(&brown, &bounds, config_short);
-    
+
     // Test with adequate iterations
     let config_long = DEConfigBuilder::new()
         .seed(114)  // Same seed
@@ -205,12 +204,12 @@ fn test_brown_convergence_difficulty() {
         .strategy(Strategy::Best1Bin)
         .recombination(0.9)
         .build();
-    
+
     let result_long = differential_evolution(&brown, &bounds, config_long);
-    
+
     // The longer run should achieve better results
-    assert!(result_long.fun <= result_short.fun, 
-           "Longer optimization should be better or equal: {} vs {}", 
+    assert!(result_long.fun <= result_short.fun,
+           "Longer optimization should be better or equal: {} vs {}",
            result_long.fun, result_short.fun);
 }
 
@@ -218,7 +217,7 @@ fn test_brown_convergence_difficulty() {
 fn test_brown_boundary_behavior() {
     // Test function behavior at boundaries
     use ndarray::Array1;
-    
+
     let test_points = vec![
         vec![-1.0, -1.0],
         vec![4.0, 4.0],
@@ -227,7 +226,7 @@ fn test_brown_boundary_behavior() {
         vec![0.0, 4.0],
         vec![0.0, -1.0],
     ];
-    
+
     for point in test_points {
         let x = Array1::from(point.clone());
         let f = brown(&x);

@@ -28,7 +28,6 @@ use tokio::select;
 
 use autoeq::constants::{DATA_CACHED, DATA_GENERATED};
 
-extern crate blas_src;
 
 #[derive(Parser, Debug, Clone)]
 #[command(
@@ -51,16 +50,16 @@ pub struct BenchArgs {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let args = BenchArgs::parse();
-    
+
     // Check if user wants to see algorithm list
     if args.base.algo_list {
         autoeq::cli::display_algorithm_list();
     }
-    
+
     // Set up signal handling for graceful shutdown
     let shutdown = Arc::new(AtomicBool::new(false));
     let shutdown_clone = Arc::clone(&shutdown);
-    
+
     // Spawn a dedicated signal handler task
     tokio::spawn(async move {
         let mut sigint_count = 0;
@@ -69,14 +68,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 eprintln!("⚠️ Error setting up signal handler: {}", e);
                 break;
             }
-            
+
             sigint_count += 1;
-            
+
             if sigint_count == 1 {
                 eprintln!("\n🛑 Received interrupt signal (1/2). Stopping benchmark gracefully...");
                 eprintln!("📝 Press Ctrl+C again within 5 seconds to force immediate termination.");
                 shutdown_clone.store(true, Ordering::Relaxed);
-                
+
                 // Wait 5 seconds for graceful shutdown (longer than autoeq since benchmarks can take time)
                 let start = Instant::now();
                 while start.elapsed() < Duration::from_secs(5) {
@@ -88,7 +87,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             }
         }
     });
-    
+
     // Validate CLI arguments
     autoeq::cli::validate_args_or_exit(&args.base);
 
@@ -212,7 +211,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut deltas_s2: Vec<f64> = Vec::new();
     let mut deltas_s3: Vec<f64> = Vec::new();
     let mut deltas_s4: Vec<f64> = Vec::new();
-    
+
     let mut completed_speakers = 0;
     let total_speakers = speakers.len();
 
@@ -224,7 +223,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     Some((speaker, s1, s2, s3, s4, meta_pref)) => {
                         completed_speakers += 1;
                         eprintln!("Completed {}/{} speakers: {}", completed_speakers, total_speakers, speaker);
-                        
+
                         wtr.write_record([
                             speaker.as_str(),
                             fmt_opt_f64(s1).as_str(),
@@ -266,11 +265,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 // Check for shutdown signal periodically
                 if shutdown.load(Ordering::Relaxed) {
                     eprintln!("\n🛑 Shutdown signal detected. Stopping benchmark gracefully...");
-                    
+
                     // Abort all pending tasks
                     set.abort_all();
-                    
-                    eprintln!("⏹️  Aborted {} pending tasks. Saving partial results...", 
+
+                    eprintln!("⏹️  Aborted {} pending tasks. Saving partial results...",
                              total_speakers - completed_speakers);
                     break;
                 }
@@ -283,12 +282,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
     while let Some(_res) = set.join_next().await {
         // ignore task result; errors are reflected as empty row fields
     }
-    
+
     if completed_speakers < total_speakers {
-        eprintln!("⚠️  Benchmark incomplete: {}/{} speakers processed due to early termination.", 
+        eprintln!("⚠️  Benchmark incomplete: {}/{} speakers processed due to early termination.",
                  completed_speakers, total_speakers);
     } else {
-        eprintln!("✅ Benchmark completed successfully: {}/{} speakers processed.", 
+        eprintln!("✅ Benchmark completed successfully: {}/{} speakers processed.",
                  completed_speakers, total_speakers);
     }
 
@@ -382,14 +381,14 @@ async fn run_one(args: &autoeq::cli::Args, shutdown: Arc<AtomicBool>) -> Result<
     if shutdown.load(Ordering::Relaxed) {
         return Err("Task cancelled due to shutdown".into());
     }
-    
+
     let (input_curve, spin_data) = load_input_curve(args).await.map_err(|e| e.to_string())?;
-    
+
     // Check for shutdown after data loading
     if shutdown.load(Ordering::Relaxed) {
         return Err("Task cancelled during data loading".into());
     }
-    
+
     let (inverted_curve, smoothed_curve) = build_target_curve(args, &input_curve);
     let target_curve = smoothed_curve.as_ref().unwrap_or(&inverted_curve);
     let (objective_data, use_cea) =
@@ -444,15 +443,15 @@ async fn perform_optimization(
     if shutdown.load(Ordering::Relaxed) {
         return Err("Optimization cancelled by shutdown".to_string());
     }
-    
+
     let args_clone = args.clone();
     let objective_data_clone = objective_data.clone();
-    
+
     let mut optimization_task = tokio::task::spawn_blocking(move || {
         autoeq::workflow::perform_optimization(&args_clone, &objective_data_clone)
             .map_err(|e| e.to_string())
     });
-    
+
     // Wait for optimization with periodic shutdown checks
     loop {
         select! {

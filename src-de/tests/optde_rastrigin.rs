@@ -2,7 +2,6 @@ use autoeq_de::auto_de;
 use autoeq_de::{differential_evolution, DEConfigBuilder, Strategy, run_recorded_differential_evolution};
 use autoeq_testfunctions::{create_bounds, rastrigin};
 
-extern crate blas_src;
 #[test]
 fn test_de_rastrigin_2d() {
     // Test 2D Rastrigin
@@ -59,13 +58,13 @@ fn test_de_rastrigin_recorded() {
         .strategy(Strategy::Rand1Exp)
         .recombination(0.9)
         .build();
-    
+
     let result = run_recorded_differential_evolution("rastrigin_2d", rastrigin, &b2, config, "./data_generated/records");
     assert!(result.is_ok(), "Recorded optimization should succeed");
-    
+
     let (solution, _csv_path) = result.unwrap();
     assert!(solution.fun < 1e-1, "Solution quality should be good: {}", solution.fun);
-    
+
     // Check that solution is close to (0, 0)
     for (i, &xi) in solution.x.iter().enumerate() {
         assert!(xi.abs() < 1e-1, "x[{}] should be close to 0.0: {}", i, xi);

@@ -1,6 +1,5 @@
 use autoeq_de::{differential_evolution, DEConfigBuilder, Mutation, Strategy};
 use autoeq_testfunctions::{mishras_bird_constraint, mishras_bird_objective};
-extern crate blas_src;
 
 #[test]
 fn test_de_constrained_mishras_bird() {

@@ -1,7 +1,6 @@
 use autoeq_de::{differential_evolution, DEConfigBuilder, Strategy};
 use autoeq_testfunctions::freudenstein_roth;
 
-extern crate blas_src;
 #[test]
 fn test_de_freudenstein_roth_basic() {
     // Test Freudenstein and Roth function

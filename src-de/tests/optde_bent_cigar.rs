@@ -1,7 +1,6 @@
 use autoeq_de::{differential_evolution, DEConfigBuilder, Strategy, run_recorded_differential_evolution};
 use autoeq_testfunctions::bent_cigar;
 
-extern crate blas_src;
 #[test]
 fn test_de_bent_cigar_2d() {
     // Test 2D Bent Cigar function
@@ -92,15 +91,15 @@ fn test_de_bent_cigar_recorded() {
         .strategy(Strategy::Best1Exp)
         .recombination(0.9)
         .build();
-    
+
     let result = run_recorded_differential_evolution(
         "bent_cigar", bent_cigar, &bounds, config, "./data_generated/records"
     );
-    
+
     assert!(result.is_ok());
     let (report, _csv_path) = result.unwrap();
     assert!(report.fun < 1e-2); // Relaxed threshold for ill-conditioned bent cigar
-    
+
     // Global minimum at origin (0, 0)
     assert!(report.x[0].abs() < 5.0, "x[0] should be reasonably close to 0.0: {}", report.x[0]);
     assert!(report.x[1].abs() < 0.5, "x[1] should be close to 0.0 due to high penalty: {}", report.x[1]);

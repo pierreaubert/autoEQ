@@ -5,7 +5,6 @@ use ndarray::Array1;
 use std::str::FromStr;
 use std::sync::Arc;
 
-extern crate blas_src;
 
 fn main() {
     // Himmelblau as objective, but with nonlinear constraints to demonstrate helper

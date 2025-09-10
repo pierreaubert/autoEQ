@@ -1,7 +1,6 @@
 use autoeq_de::{differential_evolution, DEConfigBuilder, Strategy};
 use autoeq_testfunctions::powell;
 
-extern crate blas_src;
 #[test]
 fn test_de_powell_4d() {
     // Test 4D Powell
