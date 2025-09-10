@@ -27,9 +27,9 @@ use serde_json::Value;
 use tokio::fs;
 use urlencoding;
 
-use crate::Curve;
 use super::constants::DATA_CACHED;
 use crate::cea2034 as score;
+use crate::Curve;
 
 #[derive(Debug, Deserialize)]
 struct CsvRecord {

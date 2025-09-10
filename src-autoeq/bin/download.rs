@@ -89,8 +89,8 @@ async fn write_json(path: &PathBuf, value: &Value) -> Result<(), Box<dyn Error>>
 
 #[cfg(test)]
 mod tests {
-    use autoeq::read;
     use autoeq::constants::DATA_CACHED;
+    use autoeq::read;
 
     #[test]
     fn sanitize_replaces_forbidden() {

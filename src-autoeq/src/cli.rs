@@ -16,9 +16,9 @@
 //! You should have received a copy of the GNU General Public License
 //! along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-use crate::LossType;
-use crate::de::Strategy;
 use super::optim::{get_all_algorithms, AlgorithmType};
+use crate::de::Strategy;
+use crate::LossType;
 use clap::Parser;
 use std::path::PathBuf;
 use std::process;
@@ -219,7 +219,9 @@ pub fn display_algorithm_list() -> ! {
 
                 // Add specific descriptions
                 let description = match algo.name {
-                    "nlopt:isres" => " | Improved Stochastic Ranking Evolution Strategy (recommended)",
+                    "nlopt:isres" => {
+                        " | Improved Stochastic Ranking Evolution Strategy (recommended)"
+                    }
                     "nlopt:ags" => " | Adaptive Geometric Search",
                     "nlopt:origdirect" => " | DIRECT global optimization (original version)",
                     "nlopt:crs2lm" => " | Controlled Random Search with local mutation",
@@ -322,7 +324,9 @@ pub fn display_algorithm_list() -> ! {
     println!("  🎯 For best results: nlopt:isres (global) + --refine with nlopt:cobyla (local)");
     println!("  ⚡ For speed: nlopt:cobyla (if you have a good initial guess)");
     println!("  🧪 For experimentation: mh:de or mh:pso from metaheuristics library");
-    println!("  ⚖️  For constrained problems: Prefer algorithms with ✅ Nonlinear constraint support");
+    println!(
+        "  ⚖️  For constrained problems: Prefer algorithms with ✅ Nonlinear constraint support"
+    );
 
     process::exit(0);
 }
@@ -333,25 +337,97 @@ pub fn display_strategy_list() -> ! {
     println!("===============================================\n");
 
     let strategies = [
-        ("best1bin", "Best1Bin", "Use best individual + 1 random difference (binomial crossover)", "Global exploration with fast convergence"),
-        ("best1exp", "Best1Exp", "Use best individual + 1 random difference (exponential crossover)", "Similar to best1bin with different crossover"),
-        ("rand1bin", "Rand1Bin", "Use random individual + 1 random difference (binomial crossover)", "Good diversity, slower convergence"),
-        ("rand1exp", "Rand1Exp", "Use random individual + 1 random difference (exponential crossover)", "Similar to rand1bin with different crossover"),
-        ("rand2bin", "Rand2Bin", "Use random individual + 2 random differences (binomial crossover)", "High exploration, may be slower"),
-        ("rand2exp", "Rand2Exp", "Use random individual + 2 random differences (exponential crossover)", "Similar to rand2bin with different crossover"),
-        ("currenttobest1bin", "CurrentToBest1Bin", "Blend current with best + random difference (binomial)", "Balanced exploration/exploitation (recommended)"),
-        ("currenttobest1exp", "CurrentToBest1Exp", "Blend current with best + random difference (exponential)", "Similar to currenttobest1bin"),
-        ("best2bin", "Best2Bin", "Use best individual + 2 random differences (binomial crossover)", "Fast convergence, may get trapped locally"),
-        ("best2exp", "Best2Exp", "Use best individual + 2 random differences (exponential crossover)", "Similar to best2bin"),
-        ("randtobest1bin", "RandToBest1Bin", "Blend random with best + random difference (binomial)", "Good balance of diversity and convergence"),
-        ("randtobest1exp", "RandToBest1Exp", "Blend random with best + random difference (exponential)", "Similar to randtobest1bin"),
-        ("adaptivebin", "AdaptiveBin", "Self-adaptive mutation with top-w% selection (binomial)", "Advanced adaptive strategy (experimental)"),
-        ("adaptiveexp", "AdaptiveExp", "Self-adaptive mutation with top-w% selection (exponential)", "Advanced adaptive strategy (experimental)"),
+        (
+            "best1bin",
+            "Best1Bin",
+            "Use best individual + 1 random difference (binomial crossover)",
+            "Global exploration with fast convergence",
+        ),
+        (
+            "best1exp",
+            "Best1Exp",
+            "Use best individual + 1 random difference (exponential crossover)",
+            "Similar to best1bin with different crossover",
+        ),
+        (
+            "rand1bin",
+            "Rand1Bin",
+            "Use random individual + 1 random difference (binomial crossover)",
+            "Good diversity, slower convergence",
+        ),
+        (
+            "rand1exp",
+            "Rand1Exp",
+            "Use random individual + 1 random difference (exponential crossover)",
+            "Similar to rand1bin with different crossover",
+        ),
+        (
+            "rand2bin",
+            "Rand2Bin",
+            "Use random individual + 2 random differences (binomial crossover)",
+            "High exploration, may be slower",
+        ),
+        (
+            "rand2exp",
+            "Rand2Exp",
+            "Use random individual + 2 random differences (exponential crossover)",
+            "Similar to rand2bin with different crossover",
+        ),
+        (
+            "currenttobest1bin",
+            "CurrentToBest1Bin",
+            "Blend current with best + random difference (binomial)",
+            "Balanced exploration/exploitation (recommended)",
+        ),
+        (
+            "currenttobest1exp",
+            "CurrentToBest1Exp",
+            "Blend current with best + random difference (exponential)",
+            "Similar to currenttobest1bin",
+        ),
+        (
+            "best2bin",
+            "Best2Bin",
+            "Use best individual + 2 random differences (binomial crossover)",
+            "Fast convergence, may get trapped locally",
+        ),
+        (
+            "best2exp",
+            "Best2Exp",
+            "Use best individual + 2 random differences (exponential crossover)",
+            "Similar to best2bin",
+        ),
+        (
+            "randtobest1bin",
+            "RandToBest1Bin",
+            "Blend random with best + random difference (binomial)",
+            "Good balance of diversity and convergence",
+        ),
+        (
+            "randtobest1exp",
+            "RandToBest1Exp",
+            "Blend random with best + random difference (exponential)",
+            "Similar to randtobest1bin",
+        ),
+        (
+            "adaptivebin",
+            "AdaptiveBin",
+            "Self-adaptive mutation with top-w% selection (binomial)",
+            "Advanced adaptive strategy (experimental)",
+        ),
+        (
+            "adaptiveexp",
+            "AdaptiveExp",
+            "Self-adaptive mutation with top-w% selection (exponential)",
+            "Advanced adaptive strategy (experimental)",
+        ),
     ];
 
     println!("🎯 Classic DE Strategies (well-tested, reliable):");
     for &(name, _enum_name, description, recommendation) in strategies.iter().take(12) {
-        if name.starts_with("adaptive") { continue; }
+        if name.starts_with("adaptive") {
+            continue;
+        }
         println!("   - {:<20} | {}", name, description);
         println!("     {:<20} | 💡 {}", "", recommendation);
         if name == "currenttobest1bin" {
@@ -362,10 +438,15 @@ pub fn display_strategy_list() -> ! {
 
     println!("🧬 Adaptive DE Strategies (experimental, research-based):");
     for &(name, _enum_name, description, recommendation) in strategies.iter() {
-        if !name.starts_with("adaptive") { continue; }
+        if !name.starts_with("adaptive") {
+            continue;
+        }
         println!("   - {:<20} | {}", name, description);
         println!("     {:<20} | 💡 {}", "", recommendation);
-        println!("     {:<20} | 🔧 Requires --adaptive-weight-f and --adaptive-weight-cr", "");
+        println!(
+            "     {:<20} | 🔧 Requires --adaptive-weight-f and --adaptive-weight-cr",
+            ""
+        );
         println!();
     }
 
@@ -386,10 +467,14 @@ pub fn display_strategy_list() -> ! {
 
     println!("Recommendations:");
     println!("===============\n");
-    println!("  ⭐ For general use: currenttobest1bin (good balance of exploration and exploitation)");
+    println!(
+        "  ⭐ For general use: currenttobest1bin (good balance of exploration and exploitation)"
+    );
     println!("  🚀 For fast convergence: best1bin or best2bin (may get trapped in local optima)");
     println!("  🌍 For thorough exploration: rand1bin or rand2bin (slower but more robust)");
-    println!("  🧪 For research/experimentation: adaptivebin or adaptiveexp (requires parameter tuning)");
+    println!(
+        "  🧪 For research/experimentation: adaptivebin or adaptiveexp (requires parameter tuning)"
+    );
 
     process::exit(0);
 }
@@ -654,7 +739,9 @@ mod tests {
         args.num_filters = 0;
         let result = validate_args(&args);
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("Number of filters must be > 0"));
+        assert!(result
+            .unwrap_err()
+            .contains("Number of filters must be > 0"));
     }
 
     #[test]
@@ -719,35 +806,45 @@ mod tests {
         args.atolerance = -0.1;
         let result = validate_args(&args);
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("Absolute tolerance must be >= 0"));
+        assert!(result
+            .unwrap_err()
+            .contains("Absolute tolerance must be >= 0"));
     }
 
     #[test]
     fn validate_args_invalid_adaptive_weights() {
         let mut args = Args::parse_from(["autoeq-test"]);
-        
+
         // Test adaptive_weight_f out of bounds
         args.adaptive_weight_f = -0.1;
         let result = validate_args(&args);
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("Adaptive weight for F must be between 0.0 and 1.0"));
+        assert!(result
+            .unwrap_err()
+            .contains("Adaptive weight for F must be between 0.0 and 1.0"));
 
         args.adaptive_weight_f = 1.1;
         let result = validate_args(&args);
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("Adaptive weight for F must be between 0.0 and 1.0"));
+        assert!(result
+            .unwrap_err()
+            .contains("Adaptive weight for F must be between 0.0 and 1.0"));
 
         // Reset and test adaptive_weight_cr out of bounds
         args.adaptive_weight_f = 0.5;
         args.adaptive_weight_cr = -0.1;
         let result = validate_args(&args);
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("Adaptive weight for CR must be between 0.0 and 1.0"));
+        assert!(result
+            .unwrap_err()
+            .contains("Adaptive weight for CR must be between 0.0 and 1.0"));
 
         args.adaptive_weight_cr = 1.1;
         let result = validate_args(&args);
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("Adaptive weight for CR must be between 0.0 and 1.0"));
+        assert!(result
+            .unwrap_err()
+            .contains("Adaptive weight for CR must be between 0.0 and 1.0"));
     }
 
     #[test]

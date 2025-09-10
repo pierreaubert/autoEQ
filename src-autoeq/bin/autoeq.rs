@@ -15,20 +15,20 @@
 //! You should have received a copy of the GNU General Public License
 //! along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-use autoeq::Curve;
+use autoeq::cea2034 as score;
 use autoeq::constants::DATA_GENERATED;
 use autoeq::iir;
 use autoeq::optim;
 use autoeq::optim::ObjectiveData;
 use autoeq::plot;
-use autoeq::cea2034 as score;
+use autoeq::Curve;
 use clap::Parser;
 use ndarray::Array1;
 use std::collections::HashMap;
 use std::error::Error;
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 use tokio::select;
@@ -425,9 +425,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
         let mut cea_metrics_before: Option<score::ScoreMetrics> = None;
         if use_cea {
-            let metrics =
-                score::compute_cea2034_metrics(&input_curve.freq, spin_data.as_ref().unwrap(), None)
-                    .await?;
+            let metrics = score::compute_cea2034_metrics(
+                &input_curve.freq,
+                spin_data.as_ref().unwrap(),
+                None,
+            )
+            .await?;
             cea_metrics_before = Some(metrics);
         }
 

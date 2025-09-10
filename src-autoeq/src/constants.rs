@@ -21,4 +21,3 @@ pub const DATA_CACHED: &str = "data_cached";
 
 /// Default directory name for generated data
 pub const DATA_GENERATED: &str = "data_generated";
-

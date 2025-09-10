@@ -19,16 +19,16 @@ use crate::iir::{Biquad, BiquadFilterType};
 use ndarray::Array1;
 
 /// Convert parameter vector to parametric EQ frequency response
-/// 
+///
 /// Computes the combined frequency response of all filters specified in the parameter vector.
 /// Each filter is defined by 3 consecutive parameters: log10(frequency), Q, and gain.
-/// 
+///
 /// # Arguments
 /// * `freqs` - Frequency points for evaluation (Hz)
 /// * `x` - Parameter vector with triplets [log10(freq), Q, gain] for each filter
 /// * `srate` - Sample rate in Hz
 /// * `iir_hp_pk` - If true, first filter is highpass; otherwise all are peak filters
-/// 
+///
 /// # Returns
 /// Frequency response in dB SPL at the specified frequency points
 pub fn x2peq(freqs: &Array1<f64>, x: &[f64], srate: f64, iir_hp_pk: bool) -> Array1<f64> {
@@ -155,23 +155,25 @@ pub fn constraint_min_gain(
             worst = short;
         }
     }
-    if worst.is_finite() { worst } else { 0.0 }
+    if worst.is_finite() {
+        worst
+    } else {
+        0.0
+    }
 }
-
-
 
 // ---------------- Penalty helpers (shared) ----------------
 
 /// Compute ceiling constraint violation from frequency response
-/// 
+///
 /// Calculates the maximum excess over the allowed SPL ceiling. Only applies
 /// in HP+PK mode where we need to limit the combined response.
-/// 
+///
 /// # Arguments
 /// * `peq_spl` - Frequency response in dB SPL
 /// * `max_db` - Maximum allowed SPL ceiling
 /// * `iir_hp_pk` - Whether HP+PK mode is enabled (constraint only active then)
-/// 
+///
 /// # Returns
 /// Maximum violation amount (0.0 if no violation or not HP+PK mode)
 pub fn viol_ceiling_from_spl(peq_spl: &Array1<f64>, max_db: f64, iir_hp_pk: bool) -> f64 {
@@ -189,14 +191,14 @@ pub fn viol_ceiling_from_spl(peq_spl: &Array1<f64>, max_db: f64, iir_hp_pk: bool
 }
 
 /// Compute spacing constraint violation from parameter vector
-/// 
+///
 /// Calculates how much the closest pair of filters violates the minimum
 /// spacing requirement in octaves.
-/// 
+///
 /// # Arguments
 /// * `xs` - Parameter vector with [log10(freq), Q, gain] triplets
 /// * `min_spacing_oct` - Minimum required spacing in octaves
-/// 
+///
 /// # Returns
 /// Spacing violation amount (0.0 if no violation or disabled)
 pub fn viol_spacing_from_xs(xs: &[f64], min_spacing_oct: f64) -> f64 {
@@ -223,15 +225,15 @@ pub fn viol_spacing_from_xs(xs: &[f64], min_spacing_oct: f64) -> f64 {
 }
 
 /// Compute minimum gain constraint violation from parameter vector
-/// 
+///
 /// Calculates the worst violation of minimum absolute gain requirement.
 /// Only applies to peak filters (skips highpass filter in HP+PK mode).
-/// 
+///
 /// # Arguments
 /// * `xs` - Parameter vector with [log10(freq), Q, gain] triplets
 /// * `iir_hp_pk` - Whether HP+PK mode is enabled (skip first filter)
 /// * `min_db` - Minimum required absolute gain in dB
-/// 
+///
 /// # Returns
 /// Worst gain deficiency (0.0 if no violation or disabled)
 pub fn viol_min_gain_from_xs(xs: &[f64], iir_hp_pk: bool, min_db: f64) -> f64 {
@@ -255,4 +257,3 @@ pub fn viol_min_gain_from_xs(xs: &[f64], iir_hp_pk: bool, min_db: f64) -> f64 {
     }
     worst_short
 }
-

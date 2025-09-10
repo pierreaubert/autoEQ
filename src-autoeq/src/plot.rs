@@ -109,7 +109,7 @@ fn create_cea2034_with_eq_combined_traces(
         if let Some(curve) = curves.get(*curve_name) {
             let trace = Scatter::new(curve.freq.to_vec(), (&curve.spl + eq_response).to_vec())
                 .mode(Mode::Lines)
-		.name(format!("{} w/EQ", shorten_curve_name(curve_name)))
+                .name(format!("{} w/EQ", shorten_curve_name(curve_name)))
                 .x_axis(x_axis)
                 .y_axis(y_axis)
                 .line(plotly::common::Line::new().color(filter_color(i)));
@@ -377,7 +377,7 @@ fn plot_filters(
         .y_axis(
             plotly::layout::Axis::new()
                 .title(plotly::common::Title::with_text("SPL (dB)"))
-		.dtick(1.0)
+                .dtick(1.0)
                 .range(vec![-5.0, 5.0]),
         )
         .x_axis2(
@@ -390,7 +390,7 @@ fn plot_filters(
         .y_axis2(
             plotly::layout::Axis::new()
                 .title(plotly::common::Title::with_text("SPL (dB)"))
-		.dtick(1.0)
+                .dtick(1.0)
                 .range(vec![-5.0, 5.0]),
         );
     plot.set_layout(layout);
@@ -559,33 +559,35 @@ fn plot_spin(
             LayoutGrid::new()
                 .rows(1)
                 .columns(2)
-                .pattern(GridPattern::Independent)
+                .pattern(GridPattern::Independent),
         )
         .width(1024)
         .height(450)
-	// cea2034
+        // cea2034
         .x_axis(
             plotly::layout::Axis::new()
                 .title(plotly::common::Title::with_text(&x_axis1_title))
                 .type_(AxisType::Log)
                 .range(vec![1.301, 4.301])
-                .domain(&[0., 0.4])
+                .domain(&[0., 0.4]),
         )
         .y_axis(
             plotly::layout::Axis::new()
                 .title(plotly::common::Title::with_text("SPL (dB)"))
-		.dtick(5.0)
-                .range(vec![-40.0, 10.0])
+                .dtick(5.0)
+                .range(vec![-40.0, 10.0]),
         )
         .y_axis2(
             plotly::layout::Axis::new()
-                .title(plotly::common::Title::with_text("DI (dB)                      ⌃"))
+                .title(plotly::common::Title::with_text(
+                    "DI (dB)                      ⌃",
+                ))
                 .range(vec![-5.0, 45.0])
                 .tick_values(vec![-5.0, 0.0, 5.0, 10.0, 15.0])
-		.overlaying("y")
-		.side(AxisSide::Right)
+                .overlaying("y")
+                .side(AxisSide::Right),
         )
-	// cea2034 with eq
+        // cea2034 with eq
         .x_axis3(
             plotly::layout::Axis::new()
                 .title(plotly::common::Title::with_text(&x_axis3_title))
@@ -596,18 +598,20 @@ fn plot_spin(
         .y_axis3(
             plotly::layout::Axis::new()
                 .title(plotly::common::Title::with_text("SPL (dB)"))
-		.dtick(5.0)
+                .dtick(5.0)
                 .range(vec![-40.0, 10.0])
-                .anchor("x3")
+                .anchor("x3"),
         )
         .y_axis4(
             plotly::layout::Axis::new()
-                .title(plotly::common::Title::with_text("DI (dB)                      ⌃"))
+                .title(plotly::common::Title::with_text(
+                    "DI (dB)                      ⌃",
+                ))
                 .range(vec![-5.0, 45.0])
                 .tick_values(vec![-5.0, 0.0, 5.0, 10.0, 15.0])
                 .anchor("x3")
-		.overlaying("y3")
-		.side(AxisSide::Right)
+                .overlaying("y3")
+                .side(AxisSide::Right),
         );
     plot.set_layout(layout);
 
@@ -711,8 +715,10 @@ pub fn plot_results(
 
         // Ensure parent directory exists for PNG files
         if let Some(parent) = img_path.parent() {
-            std::fs::create_dir_all(parent)
-                .expect(&format!("Failed to create PNG output directory: {:?}", parent));
+            std::fs::create_dir_all(parent).expect(&format!(
+                "Failed to create PNG output directory: {:?}",
+                parent
+            ));
         }
 
         exporter

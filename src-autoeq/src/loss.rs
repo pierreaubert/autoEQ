@@ -16,8 +16,8 @@
 //! You should have received a copy of the GNU General Public License
 //! along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-use crate::Curve;
 use crate::cea2034 as score;
+use crate::Curve;
 use clap::ValueEnum;
 use ndarray::Array1;
 use std::collections::HashMap;
@@ -234,8 +234,8 @@ pub fn curve_slope_per_octave_in_range(curve: &crate::Curve, fmin: f64, fmax: f6
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ndarray::Array1;
     use ndarray::array;
+    use ndarray::Array1;
     use std::collections::HashMap;
 
     #[test]

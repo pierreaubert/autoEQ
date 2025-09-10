@@ -9,9 +9,9 @@
 //! Input data is expected under data/{speaker}/{measurement}.json (Plotly JSON),
 //! optionally data/{speaker}/metadata.json for metadata preference score.
 
+use autoeq::cea2034 as score;
 use autoeq::iir;
 use autoeq::optim::ObjectiveData;
-use autoeq::cea2034 as score;
 use clap::Parser;
 use ndarray::Array1;
 use serde_json::Value;
@@ -19,15 +19,14 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::{Semaphore, mpsc};
-use tokio::task::JoinSet;
 use tokio::select;
+use tokio::sync::{mpsc, Semaphore};
+use tokio::task::JoinSet;
 
 use autoeq::constants::{DATA_CACHED, DATA_GENERATED};
-
 
 #[derive(Parser, Debug, Clone)]
 #[command(
@@ -113,8 +112,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
     eprintln!("Press Ctrl+C to gracefully stop the benchmark and save partial results...");
 
     // Channel for rows; writer runs on main task
-    let (tx, mut rx) =
-        mpsc::channel::<(String, Option<f64>, Option<f64>, Option<f64>, Option<f64>, Option<f64>)>(jobs * 2);
+    let (tx, mut rx) = mpsc::channel::<(
+        String,
+        Option<f64>,
+        Option<f64>,
+        Option<f64>,
+        Option<f64>,
+        Option<f64>,
+    )>(jobs * 2);
     let sem = std::sync::Arc::new(Semaphore::new(jobs));
     let mut set = JoinSet::new();
 
@@ -145,7 +150,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
             let s1 = if shutdown_clone.load(Ordering::Relaxed) {
                 None
             } else {
-                run_one(&a1, Arc::clone(&shutdown_clone)).await.ok().map(|m| m.pref_score)
+                run_one(&a1, Arc::clone(&shutdown_clone))
+                    .await
+                    .ok()
+                    .map(|m| m.pref_score)
             };
 
             // Scenario 2
@@ -158,7 +166,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
             let s2 = if shutdown_clone.load(Ordering::Relaxed) {
                 None
             } else {
-                run_one(&a2, Arc::clone(&shutdown_clone)).await.ok().map(|m| m.pref_score)
+                run_one(&a2, Arc::clone(&shutdown_clone))
+                    .await
+                    .ok()
+                    .map(|m| m.pref_score)
             };
 
             // Scenario 3: Score loss with nlopt:isres
@@ -171,7 +182,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
             let s3 = if shutdown_clone.load(Ordering::Relaxed) {
                 None
             } else {
-                run_one(&a3, Arc::clone(&shutdown_clone)).await.ok().map(|m| m.pref_score)
+                run_one(&a3, Arc::clone(&shutdown_clone))
+                    .await
+                    .ok()
+                    .map(|m| m.pref_score)
             };
 
             // Scenario 4: Score loss with autoeq:de
@@ -184,7 +198,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
             let s4 = if shutdown_clone.load(Ordering::Relaxed) {
                 None
             } else {
-                run_one(&a4, Arc::clone(&shutdown_clone)).await.ok().map(|m| m.pref_score)
+                run_one(&a4, Arc::clone(&shutdown_clone))
+                    .await
+                    .ok()
+                    .map(|m| m.pref_score)
             };
 
             // Metadata preference
@@ -196,7 +213,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     drop(tx); // close sender when tasks finish
 
     // CSV writer: header then rows as they arrive (unordered)
-    let mut wtr = csv::Writer::from_path(std::path::Path::new(DATA_GENERATED).join("benchmark.csv"))?;
+    let mut wtr =
+        csv::Writer::from_path(std::path::Path::new(DATA_GENERATED).join("benchmark.csv"))?;
     wtr.write_record([
         "speaker",
         "flat_cea2034_lw",
@@ -284,11 +302,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     if completed_speakers < total_speakers {
-        eprintln!("⚠️  Benchmark incomplete: {}/{} speakers processed due to early termination.",
-                 completed_speakers, total_speakers);
+        eprintln!(
+            "⚠️  Benchmark incomplete: {}/{} speakers processed due to early termination.",
+            completed_speakers, total_speakers
+        );
     } else {
-        eprintln!("✅ Benchmark completed successfully: {}/{} speakers processed.",
-                 completed_speakers, total_speakers);
+        eprintln!(
+            "✅ Benchmark completed successfully: {}/{} speakers processed.",
+            completed_speakers, total_speakers
+        );
     }
 
     // Print end-of-run statistics comparing scenarios to metadata
@@ -376,7 +398,10 @@ fn list_speakers<P: AsRef<Path>>(data_dir: P) -> Result<Vec<String>, Box<dyn Err
     Ok(out)
 }
 
-async fn run_one(args: &autoeq::cli::Args, shutdown: Arc<AtomicBool>) -> Result<score::ScoreMetrics, String> {
+async fn run_one(
+    args: &autoeq::cli::Args,
+    shutdown: Arc<AtomicBool>,
+) -> Result<score::ScoreMetrics, String> {
     // Check for shutdown before starting
     if shutdown.load(Ordering::Relaxed) {
         return Err("Task cancelled due to shutdown".into());
@@ -399,14 +424,17 @@ async fn run_one(args: &autoeq::cli::Args, shutdown: Arc<AtomicBool>) -> Result<
         return Err("Task cancelled before optimization".into());
     }
 
-    let x = perform_optimization(args, &objective_data, Arc::clone(&shutdown)).await.map_err(|e| e.to_string())?;
+    let x = perform_optimization(args, &objective_data, Arc::clone(&shutdown))
+        .await
+        .map_err(|e| e.to_string())?;
 
     if use_cea {
         let freq = &input_curve.freq;
         let peq_after = iir::compute_peq_response(freq, &x, args.sample_rate, args.iir_hp_pk);
         let metrics =
             score::compute_cea2034_metrics(freq, spin_data.as_ref().unwrap(), Some(&peq_after))
-                .await.map_err(|e| e.to_string())?;
+                .await
+                .map_err(|e| e.to_string())?;
         Ok(metrics)
     } else {
         Err("CEA2034 data required to compute preference score".to_string())
@@ -416,7 +444,9 @@ async fn run_one(args: &autoeq::cli::Args, shutdown: Arc<AtomicBool>) -> Result<
 async fn load_input_curve(
     args: &autoeq::cli::Args,
 ) -> Result<(autoeq::Curve, Option<HashMap<String, autoeq::Curve>>), String> {
-    autoeq::workflow::load_input_curve(args).await.map_err(|e| e.to_string())
+    autoeq::workflow::load_input_curve(args)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 fn build_target_curve(
@@ -472,7 +502,9 @@ async fn perform_optimization(
 }
 
 fn read_metadata_pref_score(speaker: &str) -> Result<Option<f64>, Box<dyn Error>> {
-    let p = PathBuf::from(DATA_CACHED).join(speaker).join("metadata.json");
+    let p = PathBuf::from(DATA_CACHED)
+        .join(speaker)
+        .join("metadata.json");
     let content = match fs::read_to_string(&p) {
         Ok(s) => s,
         Err(e) => {

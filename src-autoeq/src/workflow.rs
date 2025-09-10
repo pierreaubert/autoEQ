@@ -3,7 +3,7 @@
 //! This module centralizes the common pipeline steps for loading input data,
 //! building target curves, preparing objective data, and running optimization.
 
-use crate::{Curve, loss::ScoreLossData, optim, optim::ObjectiveData, read};
+use crate::{loss::ScoreLossData, optim, optim::ObjectiveData, read, Curve};
 use ndarray::Array1;
 use std::{collections::HashMap, error::Error};
 
@@ -231,6 +231,57 @@ pub fn perform_optimization(
         args.population,
         args.maxeval,
         args,
+    );
+
+    match result {
+        Ok((_status, _val)) => {}
+        Err((e, _final_value)) => {
+            return Err(std::io::Error::new(std::io::ErrorKind::Other, e).into());
+        }
+    };
+
+    if args.refine {
+        let local_result = optim::optimize_filters(
+            &mut x,
+            &lower_bounds,
+            &upper_bounds,
+            objective_data.clone(),
+            &args.local_algo,
+            args.population,
+            args.maxeval,
+            args,
+        );
+        match local_result {
+            Ok((_local_status, _local_val)) => {}
+            Err((e, _final_value)) => {
+                return Err(std::io::Error::new(std::io::ErrorKind::Other, e).into());
+            }
+        }
+    }
+
+    Ok(x)
+}
+
+/// Run optimization with a DE progress callback (only used for AutoEQ DE).
+pub fn perform_optimization_with_callback(
+    args: &crate::cli::Args,
+    objective_data: &ObjectiveData,
+    callback: Box<dyn FnMut(&crate::de::DEIntermediate) -> crate::de::CallbackAction + Send>,
+) -> Result<Vec<f64>, Box<dyn Error>> {
+    let (lower_bounds, upper_bounds) = setup_bounds(args);
+    let mut x = initial_guess(args, &lower_bounds, &upper_bounds);
+
+    // Only AutoEQ algorithms currently support callbacks
+    let result = optim::optimize_filters_autoeq_with_callback(
+        &mut x,
+        &lower_bounds,
+        &upper_bounds,
+        objective_data.clone(),
+        &args.algo,
+        args.population,
+        args.maxeval,
+        args,
+        callback,
     );
 
     match result {
