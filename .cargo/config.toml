@@ -1,9 +1,19 @@
 [env]
-# Set macOS deployment target to match your system version
+# macOS-specific configuration
 MACOSX_DEPLOYMENT_TARGET = "15.0"
-# Force OpenBLAS linking
+# OpenBLAS paths for macOS (Homebrew)
 OPENBLAS_LIB = "/opt/homebrew/opt/openblas/lib"
 OPENBLAS_INCLUDE = "/opt/homebrew/opt/openblas/include"
+
+# Linux OpenBLAS paths (uncomment if needed)
+# OPENBLAS_LIB = "/usr/lib/x86_64-linux-gnu"  # Ubuntu/Debian
+# OPENBLAS_INCLUDE = "/usr/include/openblas"   # Ubuntu/Debian
+# OPENBLAS_LIB = "/usr/lib64"                   # RHEL/CentOS/Fedora
+# OPENBLAS_INCLUDE = "/usr/include"             # RHEL/CentOS/Fedora
+
+# Windows OpenBLAS paths (uncomment if using vcpkg)
+# OPENBLAS_LIB = "C:\\vcpkg\\installed\\x64-windows\\lib"
+# OPENBLAS_INCLUDE = "C:\\vcpkg\\installed\\x64-windows\\include"
 
 [target.aarch64-apple-darwin]
 rustflags = [
@@ -18,3 +28,62 @@ rustflags = [
     "-C", "link-arg=-L/opt/homebrew/opt/openblas/lib",
     "-C", "link-arg=-lopenblas"
 ]
+
+# Linux x86_64 configuration
+[target.x86_64-unknown-linux-gnu]
+rustflags = [
+    # Link to system BLAS/LAPACK (typically provided by libopenblas-dev or libblas-dev)
+    "-C", "link-arg=-lopenblas",
+    # Alternative: use system BLAS/LAPACK if OpenBLAS not available
+    # "-C", "link-arg=-lblas",
+    # "-C", "link-arg=-llapack"
+]
+
+# Linux ARM64 configuration 
+[target.aarch64-unknown-linux-gnu]
+rustflags = [
+    "-C", "link-arg=-lopenblas"
+]
+
+# Windows MSVC x86_64 configuration
+[target.x86_64-pc-windows-msvc]
+rustflags = [
+    # Windows typically uses Intel MKL or OpenBLAS through vcpkg
+    # Uncomment and adjust paths if using vcpkg OpenBLAS:
+    # "-C", "link-arg=/LIBPATH:C:\\vcpkg\\installed\\x64-windows\\lib",
+    # "-C", "link-arg=openblas.lib"
+]
+
+# Windows GNU x86_64 configuration
+[target.x86_64-pc-windows-gnu]
+rustflags = [
+    # For MinGW/MSYS2 with OpenBLAS
+    # "-C", "link-arg=-lopenblas"
+]
+
+# Platform-specific setup instructions:
+#
+# === macOS ===
+# Install OpenBLAS via Homebrew:
+#   brew install openblas
+#
+# === Linux ===
+# Ubuntu/Debian:
+#   sudo apt-get install libopenblas-dev
+# RHEL/CentOS/Fedora:
+#   sudo yum install openblas-devel     # RHEL/CentOS
+#   sudo dnf install openblas-devel     # Fedora
+# Arch Linux:
+#   sudo pacman -S openblas
+#
+# === Windows ===
+# Option 1: Using vcpkg
+#   vcpkg install openblas:x64-windows
+#   Then uncomment and adjust the vcpkg paths above
+#
+# Option 2: Using MSYS2/MinGW64
+#   pacman -S mingw-w64-x86_64-openblas
+#
+# Option 3: Intel MKL (alternative to OpenBLAS)
+#   Download and install Intel oneAPI Math Kernel Library
+#   Set appropriate environment variables
