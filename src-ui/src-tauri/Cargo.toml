@@ -1,6 +1,6 @@
 [package]
 name = "autoeq-ui-tauri"
-version = "0.3.17"
+version = "0.3.18"
 description = "AutoEQ: optimise your speaker or your headset"
 authors = ["pierre@spinorama.org"]
 edition = "2024"

@@ -1,6 +1,6 @@
 [package]
 name = "autoeq-iir"
-version = "0.2.17"
+version = "0.2.18"
 edition = "2021"
 authors = ["Pierre Aubert <pierre@spinorama.org>"]
 license = "GPL-3.0-or-later"
