@@ -161,19 +161,12 @@
                     </optgroup>
                   </select>
                 </div>
-                <div class="param-item">
-                  <label>Local Algo</label>
-                  <select id="local-algo" name="local_algo">
-                    <option value="cobyla">COBYLA</option>
-                    <option value="bobyqa">BOBYQA</option>
-                    <option value="newuoa">NEWUOA</option>
-                  </select>
-                </div>
                 
                 <!-- Global Algorithm Parameters -->
                 <div class="param-item global-algo-param">
                   <label>Population</label>
-                  <input type="number" id="population" name="population" value="30000" step="5000">
+                  <input type="number" id="population" name="population" value="30000" step="5000" min="1">
+                  <div class="param-warning" id="population-warning" style="display: none; color: orange; font-size: 0.8em; margin-top: 2px;">⚠️ Values above 3000 may be very slow</div>
                 </div>
                 <div class="param-item global-algo-param">
                   <label>Max Eval</label>
@@ -235,17 +228,22 @@
                   <input type="number" id="adaptive-weight-cr" name="adaptive_weight_cr" value="0.7" step="0.1" min="0.1" max="1.0">
                 </div>
                 
-                <!-- Smoothing Parameters -->
-                <div class="param-item">
-                  <label>Smooth N</label>
-                  <input type="number" id="smooth-n" name="smooth_n" value="2" min="1" max="24">
-                </div>
               </div>
               
               <div class="param-group-section">
                 <div class="param-group-header">Refinement</div>
-                <div class="checkbox-group">
-                  <label><input type="checkbox" id="refine" name="refine"> Enable Refinement</label>
+                <div class="param-grid refinement-params">
+                  <div class="param-item">
+                    <label><input type="checkbox" id="refine" name="refine"> Enable Refinement</label>
+                  </div>
+                  <div class="param-item">
+                    <label>Local Algo</label>
+                    <select id="local-algo" name="local_algo" disabled>
+                      <option value="cobyla">COBYLA</option>
+                      <option value="bobyqa">BOBYQA</option>
+                      <option value="newuoa">NEWUOA</option>
+                    </select>
+                  </div>
                 </div>
               </div>
               
@@ -253,6 +251,12 @@
                 <div class="param-group-header">Smoothing</div>
                 <div class="checkbox-group">
                   <label><input type="checkbox" id="smooth" name="smooth" checked> Enable Smoothing</label>
+                </div>
+                <div class="param-grid smoothing-params">
+                  <div class="param-item">
+                    <label>Smooth N</label>
+                    <input type="number" id="smooth-n" name="smooth_n" value="2" min="1" max="24">
+                  </div>
                 </div>
               </div>
             </div>

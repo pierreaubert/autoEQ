@@ -169,6 +169,20 @@ body {
   margin-bottom: var(--spacing-sm);
 }
 
+/* Smoothing Parameters */
+.smoothing-params {
+  margin-top: var(--spacing-sm);
+}
+
+/* Refinement Parameters */
+.refinement-params {
+  margin-top: var(--spacing-sm);
+}
+
+.refinement-params .param-item:first-child {
+  grid-column: span 2; /* Make checkbox span full width */
+}
+
 .section-group {
   background: var(--bg-accent);
   border: 1px solid var(--border-color);
@@ -504,7 +518,32 @@ input[type="checkbox"] {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-sm);
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
+  /* Enable smooth scrolling */
+  scroll-behavior: smooth;
+  /* Custom scrollbar styling */
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
+}
+
+/* WebKit scrollbar styling */
+.plots-accordion::-webkit-scrollbar {
+  width: 8px;
+}
+
+.plots-accordion::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.plots-accordion::-webkit-scrollbar-thumb {
+  background-color: var(--border-color);
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+
+.plots-accordion::-webkit-scrollbar-thumb:hover {
+  background-color: var(--text-secondary);
 }
 
 .plot-section {

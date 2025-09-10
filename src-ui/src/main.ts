@@ -186,6 +186,18 @@ class AutoEQUI {
     strategySelect?.addEventListener('change', () => {
       this.updateConditionalParameters();
     });
+    
+    // Refinement checkbox handler for local algo dependency
+    const refineCheckbox = document.getElementById('refine') as HTMLInputElement;
+    refineCheckbox?.addEventListener('change', () => {
+      this.updateConditionalParameters();
+    });
+    
+    // Population input handler for validation warning
+    const populationInput = document.getElementById('population') as HTMLInputElement;
+    populationInput?.addEventListener('input', () => {
+      this.validatePopulation();
+    });
 
     // Version selection handler
     const versionSelect = document.getElementById('version') as HTMLSelectElement;
@@ -320,9 +332,19 @@ class AutoEQUI {
 
   private updateConditionalParameters(): void {
     const algo = (document.getElementById('algo') as HTMLSelectElement).value;
+    const refineEnabled = (document.getElementById('refine') as HTMLInputElement).checked;
+    const localAlgoSelect = document.getElementById('local-algo') as HTMLSelectElement;
     const globalAlgoParams = document.querySelectorAll('.global-algo-param');
     const deParams = document.querySelectorAll('.de-param');
     const adaptiveParams = document.querySelectorAll('.adaptive-param');
+    
+    // Enable/disable local algo based on refinement checkbox
+    localAlgoSelect.disabled = !refineEnabled;
+    if (refineEnabled) {
+      localAlgoSelect.style.color = 'var(--text-primary)';
+    } else {
+      localAlgoSelect.style.color = 'var(--text-secondary)';
+    }
     
     // Show population and maxeval for global algorithms
     const isGlobalAlgo = [
@@ -360,6 +382,30 @@ class AutoEQUI {
         (param as HTMLElement).style.display = 'none';
       });
     }
+    
+    // Validate population after parameter updates
+    this.validatePopulation();
+  }
+  
+  private validatePopulation(): void {
+    const populationInput = document.getElementById('population') as HTMLInputElement;
+    const warningElement = document.getElementById('population-warning') as HTMLElement;
+    
+    if (!populationInput || !warningElement) return;
+    
+    const population = parseInt(populationInput.value);
+    
+    // Show warning if population > 3000
+    if (population > 3000) {
+      warningElement.style.display = 'block';
+    } else {
+      warningElement.style.display = 'none';
+    }
+    
+    // Ensure minimum value is 1 (uint validation)
+    if (population < 1) {
+      populationInput.value = '1';
+    }
   }
   
   private expandPlotSection(plotElementId: string): void {
@@ -384,37 +430,129 @@ class AutoEQUI {
     
     plotHeaders.forEach((header, index) => {
       console.log('Setting up header', index, header);
+      
+      // Make header focusable for keyboard navigation
+      (header as HTMLElement).tabIndex = 0;
+      (header as HTMLElement).setAttribute('role', 'button');
+      (header as HTMLElement).setAttribute('aria-expanded', 'false');
+      
+      // Handle click events
       header.addEventListener('click', (e) => {
         e.preventDefault();
-        const target = header.getAttribute('data-plot');
-        const section = header.parentElement as HTMLElement;
-        const arrow = header.querySelector('.accordion-arrow');
-        
-        console.log('Accordion header clicked:', target);
-        
-        if (section && arrow) {
-          const isExpanded = section.classList.contains('expanded');
-          console.log('Current state - expanded:', isExpanded);
-          
-          if (isExpanded) {
-            // Collapse
-            console.log('Collapsing section:', target);
-            section.classList.remove('expanded');
-            section.classList.add('collapsed');
-            arrow.textContent = '▶';
-          } else {
-            // Expand
-            console.log('Expanding section:', target);
-            section.classList.remove('collapsed');
-            section.classList.add('expanded');
-            arrow.textContent = '▼';
-          }
+        this.toggleAccordionSection(header as HTMLElement);
+      });
+      
+      // Handle keyboard events
+      (header as HTMLElement).addEventListener('keydown', (e: KeyboardEvent) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          this.toggleAccordionSection(header as HTMLElement);
+        } else if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          this.focusNextAccordionHeader(header as HTMLElement);
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          this.focusPreviousAccordionHeader(header as HTMLElement);
         }
       });
     });
     
+    // Add scroll navigation support
+    this.setupScrollNavigation();
+    
     // Test accordion sections on startup
     this.testAccordionSections();
+  }
+  
+  private toggleAccordionSection(header: HTMLElement): void {
+    const target = header.getAttribute('data-plot');
+    const section = header.parentElement as HTMLElement;
+    const arrow = header.querySelector('.accordion-arrow');
+    
+    console.log('Toggling accordion section:', target);
+    
+    if (section && arrow) {
+      const isExpanded = section.classList.contains('expanded');
+      console.log('Current state - expanded:', isExpanded);
+      
+      if (isExpanded) {
+        // Collapse
+        console.log('Collapsing section:', target);
+        section.classList.remove('expanded');
+        section.classList.add('collapsed');
+        arrow.textContent = '▶';
+        header.setAttribute('aria-expanded', 'false');
+      } else {
+        // Expand
+        console.log('Expanding section:', target);
+        section.classList.remove('collapsed');
+        section.classList.add('expanded');
+        arrow.textContent = '▼';
+        header.setAttribute('aria-expanded', 'true');
+        
+        // Scroll the expanded section into view
+        setTimeout(() => {
+          section.scrollIntoView({ 
+            behavior: 'smooth', 
+            block: 'nearest',
+            inline: 'nearest'
+          });
+        }, 100);
+      }
+    }
+  }
+  
+  private focusNextAccordionHeader(currentHeader: HTMLElement): void {
+    const allHeaders = Array.from(document.querySelectorAll('.plot-header')) as HTMLElement[];
+    const currentIndex = allHeaders.indexOf(currentHeader);
+    const nextIndex = (currentIndex + 1) % allHeaders.length;
+    allHeaders[nextIndex].focus();
+  }
+  
+  private focusPreviousAccordionHeader(currentHeader: HTMLElement): void {
+    const allHeaders = Array.from(document.querySelectorAll('.plot-header')) as HTMLElement[];
+    const currentIndex = allHeaders.indexOf(currentHeader);
+    const previousIndex = currentIndex === 0 ? allHeaders.length - 1 : currentIndex - 1;
+    allHeaders[previousIndex].focus();
+  }
+  
+  private setupScrollNavigation(): void {
+    const accordionContainer = document.querySelector('.plots-accordion');
+    
+    if (!accordionContainer) return;
+    
+    // Add mouse wheel scroll support
+    accordionContainer.addEventListener('wheel', (e) => {
+      // Allow native scrolling behavior
+      // The CSS overflow-y: auto will handle this automatically
+    });
+    
+    // Add keyboard scroll support for the container
+    (accordionContainer as HTMLElement).addEventListener('keydown', (e: KeyboardEvent) => {
+      if (e.target === accordionContainer) {
+        switch (e.key) {
+          case 'PageUp':
+            e.preventDefault();
+            accordionContainer.scrollBy({ top: -300, behavior: 'smooth' });
+            break;
+          case 'PageDown':
+            e.preventDefault();
+            accordionContainer.scrollBy({ top: 300, behavior: 'smooth' });
+            break;
+          case 'Home':
+            e.preventDefault();
+            accordionContainer.scrollTo({ top: 0, behavior: 'smooth' });
+            break;
+          case 'End':
+            e.preventDefault();
+            accordionContainer.scrollTo({ top: accordionContainer.scrollHeight, behavior: 'smooth' });
+            break;
+        }
+      }
+    });
+    
+    // Make accordion container focusable for keyboard scrolling
+    (accordionContainer as HTMLElement).tabIndex = -1;
   }
   
   private testAccordionSections(): void {
