@@ -29,5 +29,6 @@ ndarray = { workspace = true }
 reqwest = { workspace = true }
 urlencoding = { workspace = true }
 blas-src = { workspace = true }
+tauri-plugin-clipboard-manager = "2"
 # openblas-src = { workspace = true }  # Using Accelerate instead on macOS
 

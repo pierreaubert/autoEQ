@@ -1,8 +1,9 @@
-use autoeq::{cli::Args as AutoEQArgs, LossType};
+use autoeq::{LossType, cli::Args as AutoEQArgs};
+use ndarray::Array1;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
-use ndarray::Array1;
+use tauri::{AppHandle, Emitter};
 
 #[derive(Debug, Clone, Deserialize)]
 struct OptimizationParams {
@@ -52,6 +53,14 @@ struct OptimizationResult {
 }
 
 #[derive(Debug, Clone, Serialize)]
+struct ProgressUpdate {
+    iteration: usize,
+    fitness: f64,
+    params: Vec<f64>,
+    convergence: f64,
+}
+
+#[derive(Debug, Clone, Serialize)]
 struct PlotData {
     frequencies: Vec<f64>,
     curves: HashMap<String, Vec<f64>>,
@@ -67,84 +76,81 @@ fn greet(name: &str) -> String {
 #[tauri::command]
 async fn get_speakers() -> Result<Vec<String>, String> {
     match reqwest::get("https://api.spinorama.org/v1/speakers").await {
-        Ok(response) => {
-            match response.json::<serde_json::Value>().await {
-                Ok(data) => {
-                    if let Some(speakers) = data.as_array() {
-                        let speaker_names: Vec<String> = speakers
-                            .iter()
-                            .filter_map(|s| s.as_str())
-                            .map(|s| s.to_string())
-                            .collect();
-                        Ok(speaker_names)
-                    } else {
-                        Err("Invalid response format".to_string())
-                    }
+        Ok(response) => match response.json::<serde_json::Value>().await {
+            Ok(data) => {
+                if let Some(speakers) = data.as_array() {
+                    let speaker_names: Vec<String> = speakers
+                        .iter()
+                        .filter_map(|s| s.as_str())
+                        .map(|s| s.to_string())
+                        .collect();
+                    Ok(speaker_names)
+                } else {
+                    Err("Invalid response format".to_string())
                 }
-                Err(e) => Err(format!("Failed to parse response: {}", e))
             }
-        }
-        Err(e) => Err(format!("Failed to fetch speakers: {}", e))
+            Err(e) => Err(format!("Failed to parse response: {}", e)),
+        },
+        Err(e) => Err(format!("Failed to fetch speakers: {}", e)),
     }
 }
 
 #[tauri::command]
 async fn get_versions(speaker: String) -> Result<Vec<String>, String> {
-    let url = format!("https://api.spinorama.org/v1/speaker/{}/versions", urlencoding::encode(&speaker));
+    let url = format!(
+        "https://api.spinorama.org/v1/speaker/{}/versions",
+        urlencoding::encode(&speaker)
+    );
     match reqwest::get(&url).await {
-        Ok(response) => {
-            match response.json::<serde_json::Value>().await {
-                Ok(data) => {
-                    if let Some(versions) = data.as_array() {
-                        let version_names: Vec<String> = versions
-                            .iter()
-                            .filter_map(|v| v.as_str())
-                            .map(|v| v.to_string())
-                            .collect();
-                        Ok(version_names)
-                    } else {
-                        Err("Invalid response format".to_string())
-                    }
+        Ok(response) => match response.json::<serde_json::Value>().await {
+            Ok(data) => {
+                if let Some(versions) = data.as_array() {
+                    let version_names: Vec<String> = versions
+                        .iter()
+                        .filter_map(|v| v.as_str())
+                        .map(|v| v.to_string())
+                        .collect();
+                    Ok(version_names)
+                } else {
+                    Err("Invalid response format".to_string())
                 }
-                Err(e) => Err(format!("Failed to parse response: {}", e))
             }
-        }
-        Err(e) => Err(format!("Failed to fetch versions: {}", e))
+            Err(e) => Err(format!("Failed to parse response: {}", e)),
+        },
+        Err(e) => Err(format!("Failed to fetch versions: {}", e)),
     }
 }
 
 #[tauri::command]
 async fn get_measurements(speaker: String, version: String) -> Result<Vec<String>, String> {
     let url = format!(
-        "https://api.spinorama.org/v1/speaker/{}/version/{}/measurements", 
+        "https://api.spinorama.org/v1/speaker/{}/version/{}/measurements",
         urlencoding::encode(&speaker),
         urlencoding::encode(&version)
     );
     match reqwest::get(&url).await {
-        Ok(response) => {
-            match response.json::<serde_json::Value>().await {
-                Ok(data) => {
-                    if let Some(measurements) = data.as_array() {
-                        let measurement_names: Vec<String> = measurements
-                            .iter()
-                            .filter_map(|m| m.as_str())
-                            .map(|m| m.to_string())
-                            .collect();
-                        Ok(measurement_names)
-                    } else {
-                        Err("Invalid response format".to_string())
-                    }
+        Ok(response) => match response.json::<serde_json::Value>().await {
+            Ok(data) => {
+                if let Some(measurements) = data.as_array() {
+                    let measurement_names: Vec<String> = measurements
+                        .iter()
+                        .filter_map(|m| m.as_str())
+                        .map(|m| m.to_string())
+                        .collect();
+                    Ok(measurement_names)
+                } else {
+                    Err("Invalid response format".to_string())
                 }
-                Err(e) => Err(format!("Failed to parse response: {}", e))
             }
-        }
-        Err(e) => Err(format!("Failed to fetch measurements: {}", e))
+            Err(e) => Err(format!("Failed to parse response: {}", e)),
+        },
+        Err(e) => Err(format!("Failed to fetch measurements: {}", e)),
     }
 }
 
 #[tauri::command]
-async fn run_optimization(params: OptimizationParams) -> OptimizationResult {
-    let result = run_optimization_internal(params).await;
+async fn run_optimization(params: OptimizationParams, app_handle: AppHandle) -> OptimizationResult {
+    let result = run_optimization_internal(params, app_handle).await;
     match result {
         Ok(res) => res,
         Err(e) => OptimizationResult {
@@ -160,7 +166,10 @@ async fn run_optimization(params: OptimizationParams) -> OptimizationResult {
     }
 }
 
-async fn run_optimization_internal(params: OptimizationParams) -> Result<OptimizationResult, Box<dyn std::error::Error + Send + Sync>> {
+async fn run_optimization_internal(
+    params: OptimizationParams,
+    app_handle: AppHandle,
+) -> Result<OptimizationResult, Box<dyn std::error::Error + Send + Sync>> {
     // Convert parameters to AutoEQ Args structure
     let args = AutoEQArgs {
         num_filters: params.num_filters,
@@ -195,63 +204,120 @@ async fn run_optimization_internal(params: OptimizationParams) -> Result<Optimiz
         },
         iir_hp_pk: params.iir_hp_pk,
         algo_list: false, // UI doesn't need to list algorithms
-        tolerance: 1e-3, // Default DE tolerance
+        tolerance: 1e-3,  // Default DE tolerance
         atolerance: 1e-4, // Default DE absolute tolerance
         recombination: params.de_cr.unwrap_or(0.9), // DE crossover probability
-        strategy: params.strategy.unwrap_or_else(|| "currenttobest1bin".to_string()), // DE strategy
+        strategy: params
+            .strategy
+            .unwrap_or_else(|| "currenttobest1bin".to_string()), // DE strategy
         strategy_list: false, // UI doesn't need to list strategies
         adaptive_weight_f: params.adaptive_weight_f.unwrap_or(0.8), // Adaptive weight for F
         adaptive_weight_cr: params.adaptive_weight_cr.unwrap_or(0.7), // Adaptive weight for CR
     };
 
     // Load input curve
-    let (input_curve, spin_data) = autoeq::workflow::load_input_curve(&args).await
-        .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { 
-            Box::new(std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))
-        })?;
-    
+    let (input_curve, spin_data) = autoeq::workflow::load_input_curve(&args).await.map_err(
+        |e| -> Box<dyn std::error::Error + Send + Sync> {
+            Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                e.to_string(),
+            ))
+        },
+    )?;
+
     // Build target curve
-    let (inverted_curve, smoothed_curve) = autoeq::workflow::build_target_curve(&args, &input_curve);
+    let (inverted_curve, smoothed_curve) =
+        autoeq::workflow::build_target_curve(&args, &input_curve);
     let target_curve = smoothed_curve.as_ref().unwrap_or(&inverted_curve);
-    
+
     // Setup objective data
-    let (objective_data, use_cea) = autoeq::workflow::setup_objective_data(&args, &input_curve, target_curve, &spin_data);
+    let (objective_data, use_cea) =
+        autoeq::workflow::setup_objective_data(&args, &input_curve, target_curve, &spin_data);
 
     // Get preference score before optimization if applicable
     let mut pref_score_before: Option<f64> = None;
     if use_cea {
-        if let Ok(metrics) = autoeq::cea2034::compute_cea2034_metrics(&input_curve.freq, spin_data.as_ref().unwrap(), None).await {
+        if let Ok(metrics) = autoeq::cea2034::compute_cea2034_metrics(
+            &input_curve.freq,
+            spin_data.as_ref().unwrap(),
+            None,
+        )
+        .await
+        {
             pref_score_before = Some(metrics.pref_score);
         }
     }
 
-    // Run optimization
-    let filter_params = autoeq::workflow::perform_optimization(&args, &objective_data)
-        .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { 
-            Box::new(std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))
-        })?;
+    // Run optimization with progress reporting for autoeq:de
+    let filter_params = if args.algo == "autoeq:de" {
+        autoeq::workflow::perform_optimization_with_callback(&args, &objective_data, Box::new(move |intermediate| {
+            let _ = app_handle.emit("progress_update", ProgressUpdate {
+                iteration: intermediate.iter,
+                fitness: intermediate.fun,
+                params: intermediate.x.to_vec(),
+                convergence: intermediate.convergence,
+            });
+            autoeq::de::CallbackAction::Continue
+        })).map_err(
+            |e| -> Box<dyn std::error::Error + Send + Sync> {
+                Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    e.to_string(),
+                ))
+            },
+        )?
+    } else {
+        autoeq::workflow::perform_optimization(&args, &objective_data).map_err(
+        |e| -> Box<dyn std::error::Error + Send + Sync> {
+            Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                e.to_string(),
+            ))
+            },
+        )?
+    };
 
     // Calculate preference score after optimization
     let mut pref_score_after: Option<f64> = None;
     if use_cea {
-        let peq_response = autoeq::iir::compute_peq_response(&input_curve.freq, &filter_params, args.sample_rate, args.iir_hp_pk);
-        if let Ok(metrics) = autoeq::cea2034::compute_cea2034_metrics(&input_curve.freq, spin_data.as_ref().unwrap(), Some(&peq_response)).await {
+        let peq_response = autoeq::iir::compute_peq_response(
+            &input_curve.freq,
+            &filter_params,
+            args.sample_rate,
+            args.iir_hp_pk,
+        );
+        if let Ok(metrics) = autoeq::cea2034::compute_cea2034_metrics(
+            &input_curve.freq,
+            spin_data.as_ref().unwrap(),
+            Some(&peq_response),
+        )
+        .await
+        {
             pref_score_after = Some(metrics.pref_score);
         }
     }
 
     // Generate plot data
-    let plot_freqs: Vec<f64> = (0..200).map(|i| 20.0 * (1.0355_f64.powf(i as f64))).collect();
+    let plot_freqs: Vec<f64> = (0..200)
+        .map(|i| 20.0 * (1.0355_f64.powf(i as f64)))
+        .collect();
     let plot_freqs_array = Array1::from(plot_freqs.clone());
-    
+
     // Generate filter response data
-    let eq_response = autoeq::iir::compute_peq_response(&plot_freqs_array, &filter_params, args.sample_rate, args.iir_hp_pk);
-    
+    let eq_response = autoeq::iir::compute_peq_response(
+        &plot_freqs_array,
+        &filter_params,
+        args.sample_rate,
+        args.iir_hp_pk,
+    );
+
     let mut filter_curves = HashMap::new();
     filter_curves.insert("EQ Response".to_string(), eq_response.to_vec());
-    filter_curves.insert("Target".to_string(), 
-        autoeq::read::interpolate(&plot_freqs_array, &input_curve.freq, target_curve).to_vec());
-    
+    filter_curves.insert(
+        "Target".to_string(),
+        autoeq::read::interpolate(&plot_freqs_array, &input_curve.freq, target_curve).to_vec(),
+    );
+
     let filter_response = PlotData {
         frequencies: plot_freqs.clone(),
         curves: filter_curves,
@@ -263,8 +329,10 @@ async fn run_optimization_internal(params: OptimizationParams) -> Result<Optimiz
     if let Some(ref spin) = spin_data {
         let mut spin_curves = HashMap::new();
         for (name, curve) in spin {
-            spin_curves.insert(name.clone(), 
-                autoeq::read::interpolate(&plot_freqs_array, &curve.freq, &curve.spl).to_vec());
+            spin_curves.insert(
+                name.clone(),
+                autoeq::read::interpolate(&plot_freqs_array, &curve.freq, &curve.spl).to_vec(),
+            );
         }
         spin_details = Some(PlotData {
             frequencies: plot_freqs,
@@ -293,13 +361,14 @@ fn exit_app(window: tauri::Window) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
-            greet, 
-            run_optimization, 
-            get_speakers, 
-            get_versions, 
+            greet,
+            run_optimization,
+            get_speakers,
+            get_versions,
             get_measurements,
             exit_app
         ])

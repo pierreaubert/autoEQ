@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen, UnlistenFn } from "@tauri-apps/api/event";
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import Plotly from 'plotly.js-dist-min';
 
@@ -79,6 +80,21 @@ class AutoEQUI {
   private startX: number = 0;
   private startWidth: number = 0;
 
+  // Modal elements
+  private optimizationModal: HTMLElement;
+  private progressStatus: HTMLElement;
+  private progressFill: HTMLElement;
+  private progressPercentage: HTMLElement;
+  private progressTableBody: HTMLElement;
+  private cancelOptimizationBtn: HTMLButtonElement;
+  private doneOptimizationBtn: HTMLButtonElement;
+  private modalCloseBtn: HTMLButtonElement;
+
+  // Optimization state
+  private isOptimizationRunning: boolean = false;
+  private progressUnlisten?: UnlistenFn;
+  private optimizationStages: { [key: string]: { status: string, startTime?: number, endTime?: number, details?: string } } = {};
+
   constructor() {
     this.form = document.getElementById('autoeq-form') as HTMLFormElement;
     this.optimizeBtn = document.getElementById('optimize-btn') as HTMLButtonElement;
@@ -94,8 +110,19 @@ class AutoEQUI {
     this.soundPowerPlotElement = document.getElementById('sound-power-plot') as HTMLElement;
     this.spinPlotElement = document.getElementById('spin-plot') as HTMLElement;
 
+    // Initialize modal elements
+    this.optimizationModal = document.getElementById('optimization-modal') as HTMLElement;
+    this.progressStatus = document.getElementById('progress-status') as HTMLElement;
+    this.progressFill = document.getElementById('progress-fill') as HTMLElement;
+    this.progressPercentage = document.getElementById('progress-percentage') as HTMLElement;
+    this.progressTableBody = document.getElementById('progress-table-body') as HTMLElement;
+    this.cancelOptimizationBtn = document.getElementById('cancel-optimization') as HTMLButtonElement;
+    this.doneOptimizationBtn = document.getElementById('done-optimization') as HTMLButtonElement;
+    this.modalCloseBtn = document.getElementById('modal-close') as HTMLButtonElement;
+
     this.setupEventListeners();
     this.setupUIInteractions();
+    this.setupModalEventListeners();
     this.setupResizer();
     this.setupAutocomplete();
     this.resetToDefaults();
@@ -212,6 +239,54 @@ class AutoEQUI {
     const measurementSelect = document.getElementById('measurement') as HTMLSelectElement;
     measurementSelect?.addEventListener('change', () => {
       this.validateForm();
+    });
+  }
+
+  private setupModalEventListeners(): void {
+    // Cancel optimization button
+    this.cancelOptimizationBtn?.addEventListener('click', () => {
+      this.cancelOptimization();
+    });
+
+    // Done optimization button
+    this.doneOptimizationBtn?.addEventListener('click', () => {
+      this.closeOptimizationModal();
+    });
+
+    // Modal close button
+    this.modalCloseBtn?.addEventListener('click', () => {
+      if (this.isOptimizationRunning) {
+        // Show confirmation before closing during optimization
+        if (confirm('Optimization is still running. Do you want to cancel it?')) {
+          this.cancelOptimization();
+        }
+      } else {
+        this.closeOptimizationModal();
+      }
+    });
+
+    // Close modal when clicking outside (optional)
+    this.optimizationModal?.addEventListener('click', (e) => {
+      if (e.target === this.optimizationModal) {
+        if (this.isOptimizationRunning) {
+          // Don't close during optimization
+          return;
+        }
+        this.closeOptimizationModal();
+      }
+    });
+
+    // Handle escape key
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && this.optimizationModal.style.display !== 'none') {
+        if (this.isOptimizationRunning) {
+          if (confirm('Optimization is still running. Do you want to cancel it?')) {
+            this.cancelOptimization();
+          }
+        } else {
+          this.closeOptimizationModal();
+        }
+      }
     });
   }
 
@@ -394,6 +469,108 @@ class AutoEQUI {
     }, 4000);
   }
 
+  private showOptimizationModal(): void {
+    this.optimizationModal.style.display = 'flex';
+    this.resetModalState();
+  }
+
+  private closeOptimizationModal(): void {
+    this.optimizationModal.style.display = 'none';
+    this.isOptimizationRunning = false;
+  }
+
+  private resetModalState(): void {
+    this.progressStatus.textContent = 'Initializing...';
+    this.progressFill.style.width = '0%';
+    this.progressPercentage.textContent = '0%';
+    this.progressTableBody.innerHTML = '';
+    this.cancelOptimizationBtn.style.display = 'inline-flex';
+    this.doneOptimizationBtn.style.display = 'none';
+    this.optimizationStages = {};
+  }
+
+  private updateProgress(stage: string, status: 'pending' | 'running' | 'completed' | 'error', details?: string, progress?: number): void {
+    const now = Date.now();
+    
+    if (!this.optimizationStages[stage]) {
+      this.optimizationStages[stage] = { status: 'pending' };
+    }
+    
+    const stageData = this.optimizationStages[stage];
+    const oldStatus = stageData.status;
+    
+    stageData.status = status;
+    stageData.details = details || '';
+    
+    if (status === 'running' && oldStatus !== 'running') {
+      stageData.startTime = now;
+    } else if ((status === 'completed' || status === 'error') && stageData.startTime) {
+      stageData.endTime = now;
+    }
+    
+    this.updateProgressTable();
+    
+    if (progress !== undefined) {
+      this.updateProgressBar(progress);
+    }
+    
+    // Update status text
+    if (status === 'running') {
+      this.progressStatus.textContent = `${stage}...`;
+    }
+  }
+
+  private updateProgressBar(percentage: number): void {
+    const clampedPercentage = Math.max(0, Math.min(100, percentage));
+    this.progressFill.style.width = `${clampedPercentage}%`;
+    this.progressPercentage.textContent = `${Math.round(clampedPercentage)}%`;
+  }
+
+  private updateProgressTable(): void {
+    const stages = Object.keys(this.optimizationStages);
+    
+    this.progressTableBody.innerHTML = '';
+    
+    stages.forEach(stageName => {
+      const stage = this.optimizationStages[stageName];
+      const row = document.createElement('tr');
+      
+      let duration = '';
+      if (stage.startTime) {
+        const endTime = stage.endTime || Date.now();
+        const durationMs = endTime - stage.startTime;
+        duration = `${(durationMs / 1000).toFixed(1)}s`;
+      }
+      
+      row.innerHTML = `
+        <td>${stageName}</td>
+        <td class="status-${stage.status}">${stage.status.charAt(0).toUpperCase() + stage.status.slice(1)}</td>
+        <td>${duration}</td>
+        <td>${stage.details || ''}</td>
+      `;
+      
+      this.progressTableBody.appendChild(row);
+    });
+  }
+
+  private cancelOptimization(): void {
+    if (this.isOptimizationRunning) {
+      this.isOptimizationRunning = false;
+      this.updateProgress('Optimization', 'error', 'Cancelled by user', 100);
+      this.progressStatus.textContent = 'Optimization cancelled';
+      this.cancelOptimizationBtn.style.display = 'none';
+      this.doneOptimizationBtn.style.display = 'inline-flex';
+    }
+  }
+
+  private optimizationCompleted(success: boolean, message?: string): void {
+    this.isOptimizationRunning = false;
+    this.updateProgress('Optimization', success ? 'completed' : 'error', message || (success ? 'Completed successfully' : 'Failed'), 100);
+    this.progressStatus.textContent = success ? 'Optimization completed!' : 'Optimization failed';
+    this.cancelOptimizationBtn.style.display = 'none';
+    this.doneOptimizationBtn.style.display = 'inline-flex';
+  }
+
   private resetToDefaults(): void {
     // Reset to API input mode (default)
     const fileTab = document.querySelector('[data-tab="file"]') as HTMLElement;
@@ -418,7 +595,7 @@ class AutoEQUI {
     (document.getElementById('max-freq') as HTMLInputElement).value = '16000';
     (document.getElementById('algo') as HTMLSelectElement).value = 'autoeq:de';
     (document.getElementById('loss') as HTMLSelectElement).value = 'flat';
-    (document.getElementById('population') as HTMLInputElement).value = '30000';
+    (document.getElementById('population') as HTMLInputElement).value = '300';
     (document.getElementById('maxeval') as HTMLInputElement).value = '200000';
     (document.getElementById('refine') as HTMLInputElement).checked = false;
     (document.getElementById('local-algo') as HTMLSelectElement).value = 'cobyla';
@@ -506,20 +683,25 @@ class AutoEQUI {
   
   private validatePopulation(): void {
     const populationInput = document.getElementById('population') as HTMLInputElement;
-    const warningElement = document.getElementById('population-warning') as HTMLElement;
+    const yellowWarningElement = document.getElementById('population-warning-yellow') as HTMLElement;
+    const redWarningElement = document.getElementById('population-warning-red') as HTMLElement;
     
-    if (!populationInput || !warningElement) return;
+    if (!populationInput || !yellowWarningElement || !redWarningElement) return;
     
     const population = parseInt(populationInput.value);
     
-    // Show warning if population > 3000
-    if (population > 3000) {
-      warningElement.style.display = 'block';
-    } else {
-      warningElement.style.display = 'none';
+    // Hide all warnings initially
+    yellowWarningElement.style.display = 'none';
+    redWarningElement.style.display = 'none';
+    
+    // Show appropriate warning based on population value
+    if (population > 30000) {
+      redWarningElement.style.display = 'block';
+    } else if (population > 3000) {
+      yellowWarningElement.style.display = 'block';
     }
     
-    // Ensure minimum value is 1 (uint validation)
+    // Ensure minimum value is 1 (positive integer validation)
     if (population < 1) {
       populationInput.value = '1';
     }
@@ -837,26 +1019,99 @@ class AutoEQUI {
 
     const params = this.getFormData();
     
+    // Conditionally show modal only for algorithms that report progress (autoeq:de)
+    const isAutoEQDE = params.algo === 'autoeq:de';
+    if (isAutoEQDE) {
+      this.showOptimizationModal();
+    }
+    this.isOptimizationRunning = true;
     this.setOptimizationRunning(true);
-    // Only clear errors, not plots
+
+    // Clear any previous errors
     this.errorElement.style.display = 'none';
-    this.updateStatus('Running optimization...');
-    this.showProgress(true);
 
     try {
+      // Setup progress listener for DE
+      if (isAutoEQDE) {
+        try {
+          this.progressUnlisten = await listen('progress_update', (event: any) => {
+            if (!this.isOptimizationRunning) return;
+            const p = event.payload as { iteration: number; fitness: number; params: number[]; convergence: number };
+            const details = `iter=${p.iteration}, f=${p.fitness.toExponential(6)}, conv=${p.convergence.toExponential(3)}`;
+            this.updateProgress('Optimization', 'running', details);
+          });
+        } catch (e) {
+          console.warn('Failed to attach progress listener:', e);
+        }
+      }
+
+      // Simulate progress stages for non-DE
+      if (!isAutoEQDE) {
+        this.updateProgress('Initialization', 'running', 'Loading parameters and validating input', 5);
+        await this.sleep(200); // Small delay to show progress
+      }
+      
+      if (!this.isOptimizationRunning) return; // Check for cancellation
+      
+      if (!isAutoEQDE) {
+        this.updateProgress('Initialization', 'completed', 'Parameters loaded successfully', 10);
+        this.updateProgress('Data Loading', 'running', 'Fetching measurement data', 15);
+        await this.sleep(300);
+      }
+      
+      if (!this.isOptimizationRunning) return;
+      
+      if (!isAutoEQDE) {
+        this.updateProgress('Data Loading', 'completed', 'Data loaded successfully', 25);
+        this.updateProgress('Optimization', 'running', 'Running optimization algorithm', 30);
+      }
+      
       const result: OptimizationResult = await invoke('run_optimization', { params });
       
+      if (!this.isOptimizationRunning) return; // Check for cancellation
+      
+      if (!isAutoEQDE) {
+        this.updateProgress('Optimization', 'completed', 'Algorithm completed', 85);
+        this.updateProgress('Results Processing', 'running', 'Processing results and generating plots', 90);
+      }
+      
       if (result.success) {
+        if (!isAutoEQDE) {
+          this.updateProgress('Results Processing', 'completed', 'Results processed successfully', 100);
+          this.optimizationCompleted(true, 'Optimization completed successfully');
+        } else {
+          // For DE, mark as completed directly via modal if it was shown
+          this.optimizationCompleted(true, 'Optimization completed successfully');
+        }
+        
+        // Update UI with results
         this.handleOptimizationSuccess(result);
       } else {
+        this.updateProgress('Results Processing', 'error', result.error_message || 'Unknown error', 100);
+        this.optimizationCompleted(false, result.error_message || 'Unknown error occurred');
         this.handleOptimizationError(result.error_message || 'Unknown error occurred');
       }
     } catch (error) {
-      this.handleOptimizationError(error as string);
+      if (this.isOptimizationRunning) {
+        this.updateProgress('Optimization', 'error', `Error: ${error}`, 100);
+        this.optimizationCompleted(false, `Error: ${error}`);
+        this.handleOptimizationError(error as string);
+      }
     } finally {
       this.setOptimizationRunning(false);
       this.showProgress(false);
+      if (this.progressUnlisten) {
+        try { this.progressUnlisten(); } catch {}
+        this.progressUnlisten = undefined;
+      }
+      if (!isAutoEQDE) {
+        this.closeOptimizationModal();
+      }
     }
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
 
   private setOptimizationRunning(running: boolean): void {

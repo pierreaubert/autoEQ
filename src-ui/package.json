@@ -11,8 +11,9 @@
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
-    "@tauri-apps/plugin-opener": "^2",
+    "@tauri-apps/plugin-clipboard-manager": "^2.3.0",
     "@tauri-apps/plugin-dialog": "^2",
+    "@tauri-apps/plugin-opener": "^2",
     "@types/plotly.js": "^3.0.3",
     "plotly.js-dist-min": "^3.1.0"
   },
