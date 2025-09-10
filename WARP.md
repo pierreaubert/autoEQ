@@ -254,3 +254,37 @@ Use custom evaluation recorder in `evaluation_recorder.rs` to trace optimization
 - **API rate limits** when downloading large datasets
 - **Memory usage** scales with population size in global optimizers
 - **TypeScript errors** in UI require fixes before Tauri builds work
+
+# Version Increment Rule
+
+**Important Rule**: Before committing any changes, increment the version number in the relevant Cargo.toml file(s) by 1 in the patch version (the third number in semantic versioning).
+
+## Version Increment Guidelines
+
+### For Individual Crate Changes
+- If changes are made to a specific crate (e.g., `src-de/`, `src-iir/`, `src-cea2034/`, etc.), increment the version in that crate's `Cargo.toml`
+- Example: `0.2.31` becomes `0.2.32`
+
+### For Main Application Changes
+- If changes are made to the main `autoeq` crate (`src-autoeq/`), increment the version in `src-autoeq/Cargo.toml`
+- Example: `0.2.190` becomes `0.2.191`
+
+### For Workspace-Wide Changes
+- If changes affect multiple crates or workspace-level configuration, increment the version in the main application crate (`src-autoeq/Cargo.toml`) as it represents the primary deliverable
+- Also increment versions in any directly modified crate's `Cargo.toml`
+
+### Version Format
+- Follow semantic versioning: `MAJOR.MINOR.PATCH`
+- For regular development: increment PATCH (third number)
+- Example transformations:
+  - `0.3.24` → `0.3.25`
+  - `0.2.190` → `0.2.191`
+  - `0.2.31` → `0.2.32`
+
+### Implementation
+1. Before running `git commit`, check which crates were modified
+2. Increment the appropriate version number(s) in the corresponding `Cargo.toml` file(s)
+3. Include the version bump in the same commit as the changes
+4. Use descriptive commit messages that mention the version increment
+
+This ensures proper version tracking and helps with release management and dependency resolution across the workspace.

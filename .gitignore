@@ -1,7 +1,7 @@
 .DS_Store
 /target
 /data
-/data_cached
+data_cached
 data_generated
 /dist
 autoeq_*.html

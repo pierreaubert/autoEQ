@@ -384,7 +384,7 @@ checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 
 [[package]]
 name = "autoeq"
-version = "0.2.188"
+version = "0.2.190"
 dependencies = [
  "autoeq-cea2034",
  "autoeq-de",
@@ -419,7 +419,7 @@ dependencies = [
 
 [[package]]
 name = "autoeq-de"
-version = "0.2.187"
+version = "0.2.31"
 dependencies = [
  "autoeq-testfunctions",
  "blas-src",
@@ -433,7 +433,7 @@ dependencies = [
 
 [[package]]
 name = "autoeq-iir"
-version = "0.2.187"
+version = "0.2.17"
 dependencies = [
  "ndarray",
  "num-complex",
@@ -442,14 +442,14 @@ dependencies = [
 
 [[package]]
 name = "autoeq-testfunctions"
-version = "0.2.187"
+version = "0.2.30"
 dependencies = [
  "ndarray",
 ]
 
 [[package]]
 name = "autoeq-ui-tauri"
-version = "0.3.0"
+version = "0.3.17"
 dependencies = [
  "autoeq",
  "blas-src",

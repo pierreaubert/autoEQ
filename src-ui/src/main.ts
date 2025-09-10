@@ -69,12 +69,12 @@ class AutoEQUI {
   private earlyReflectionsPlotElement: HTMLElement;
   private soundPowerPlotElement: HTMLElement;
   private spinPlotElement: HTMLElement;
-  
+
   // API data caching
   private speakers: string[] = [];
   private selectedSpeaker: string = '';
   private selectedVersion: string = '';
-  
+
   // Resizer state
   private isResizing: boolean = false;
   private startX: number = 0;
@@ -89,11 +89,16 @@ class AutoEQUI {
   private cancelOptimizationBtn: HTMLButtonElement;
   private doneOptimizationBtn: HTMLButtonElement;
   private modalCloseBtn: HTMLButtonElement;
+  private progressGraphElement: HTMLElement;
 
   // Optimization state
   private isOptimizationRunning: boolean = false;
   private progressUnlisten?: UnlistenFn;
   private optimizationStages: { [key: string]: { status: string, startTime?: number, endTime?: number, details?: string } } = {};
+
+  // Progress graph data
+  private progressGraphData: { iteration: number; fitness: number; convergence: number }[] = [];
+  private lastGraphUpdate: number = 0;
 
   constructor() {
     this.form = document.getElementById('autoeq-form') as HTMLFormElement;
@@ -119,6 +124,7 @@ class AutoEQUI {
     this.cancelOptimizationBtn = document.getElementById('cancel-optimization') as HTMLButtonElement;
     this.doneOptimizationBtn = document.getElementById('done-optimization') as HTMLButtonElement;
     this.modalCloseBtn = document.getElementById('modal-close') as HTMLButtonElement;
+    this.progressGraphElement = document.getElementById('progress-graph') as HTMLElement;
 
     this.setupEventListeners();
     this.setupUIInteractions();
@@ -127,11 +133,9 @@ class AutoEQUI {
     this.setupAutocomplete();
     this.resetToDefaults();
     this.updateConditionalParameters();
-    
-    // Add test plots for debugging (remove in production)
-    setTimeout(() => {
-      this.createAllTestPlots();
-    }, 1000);
+
+    // Ensure all accordion sections start collapsed
+    this.collapseAllAccordion();
   }
 
   private setupEventListeners(): void {
@@ -180,21 +184,21 @@ class AutoEQUI {
     // Input source tabs
     const tabLabels = document.querySelectorAll('.tab-label');
     const tabContents = document.querySelectorAll('.tab-content');
-    
+
     tabLabels.forEach(label => {
       label.addEventListener('click', () => {
         const target = label.getAttribute('data-tab');
-        
+
         // Update tab states
         tabLabels.forEach(l => l.classList.remove('active'));
         tabContents.forEach(c => c.classList.remove('active'));
-        
+
         label.classList.add('active');
         const targetContent = document.getElementById(target + '-inputs');
         if (targetContent) {
           targetContent.classList.add('active');
         }
-        
+
         this.validateForm();
       });
     });
@@ -206,20 +210,21 @@ class AutoEQUI {
     const algoSelect = document.getElementById('algo') as HTMLSelectElement;
     algoSelect?.addEventListener('change', () => {
       this.updateConditionalParameters();
+      this.clearAllPlots(); // Clear plots when algorithm changes
     });
-    
+
     // Strategy change handler for adaptive parameters
     const strategySelect = document.getElementById('strategy') as HTMLSelectElement;
     strategySelect?.addEventListener('change', () => {
       this.updateConditionalParameters();
     });
-    
+
     // Refinement checkbox handler for local algo dependency
     const refineCheckbox = document.getElementById('refine') as HTMLInputElement;
     refineCheckbox?.addEventListener('change', () => {
       this.updateConditionalParameters();
     });
-    
+
     // Population input handler for validation warning
     const populationInput = document.getElementById('population') as HTMLInputElement;
     populationInput?.addEventListener('input', () => {
@@ -239,6 +244,11 @@ class AutoEQUI {
     const measurementSelect = document.getElementById('measurement') as HTMLSelectElement;
     measurementSelect?.addEventListener('change', () => {
       this.validateForm();
+      // Open filter details when a measurement is selected via API
+      const val = measurementSelect.value;
+      if (val && val.trim() !== '') {
+        this.expandPlotSection('filter-details-plot');
+      }
     });
   }
 
@@ -298,10 +308,10 @@ class AutoEQUI {
         console.error('Input element not found:', inputId);
         return;
       }
-      
+
       console.log('Input element found:', input);
       console.log('Opening file dialog...');
-      
+
       // Enhanced dialog options for better macOS compatibility
       const result = await openDialog({
         multiple: false,
@@ -316,7 +326,7 @@ class AutoEQUI {
         defaultPath: undefined,
         title: inputId.includes('target') ? 'Select Target CSV File (Optional)' : 'Select Input CSV File'
       });
-      
+
       console.log('Dialog result:', result);
       if (result && typeof result === 'string') {
         console.log('Setting input value to:', result);
@@ -324,6 +334,12 @@ class AutoEQUI {
         input.dispatchEvent(new Event('input', { bubbles: true }));
         input.dispatchEvent(new Event('change', { bubbles: true }));
         this.validateForm();
+        // Clear plots when curve changes
+        this.clearAllPlots();
+        // Open filter details when a curve file is selected
+        if (inputId === 'curve-path') {
+          this.expandPlotSection('filter-details-plot');
+        }
         // Show success feedback
         this.showFileSelectionSuccess(inputId, result);
       } else if (result === null) {
@@ -336,7 +352,13 @@ class AutoEQUI {
         input.dispatchEvent(new Event('input', { bubbles: true }));
         input.dispatchEvent(new Event('change', { bubbles: true }));
         this.validateForm();
-        this.showFileSelectionSuccess(inputId, filePath);
+        // Clear plots when curve changes
+        this.clearAllPlots();
+        if (inputId === 'curve-path') {
+          this.expandPlotSection('filter-details-plot');
+        }
+        const baseName = (filePath.split('/').pop() || filePath);
+        this.showFallbackWarning(inputId, baseName);
       } else {
         console.log('No file selected or unexpected result format:', result);
       }
@@ -348,7 +370,7 @@ class AutoEQUI {
       this.fallbackFileDialog(inputId);
     }
   }
-  
+
   private fallbackFileDialog(inputId: string): void {
     console.log('Using fallback file dialog for:', inputId);
     const input = document.getElementById(inputId) as HTMLInputElement;
@@ -356,7 +378,7 @@ class AutoEQUI {
     fileInput.type = 'file';
     fileInput.accept = '.csv,text/csv';
     fileInput.style.display = 'none';
-    
+
     fileInput.onchange = (event) => {
       const file = (event.target as HTMLInputElement).files?.[0];
       if (file) {
@@ -366,21 +388,25 @@ class AutoEQUI {
         input.dispatchEvent(new Event('input', { bubbles: true }));
         input.dispatchEvent(new Event('change', { bubbles: true }));
         this.validateForm();
-        // Show warning about fallback mode
+        // Clear plots when curve changes
+        this.clearAllPlots();
+        if (inputId === 'curve-path') {
+          this.expandPlotSection('filter-details-plot');
+        }
         this.showFallbackWarning(inputId, file.name);
       }
     };
-    
+
     document.body.appendChild(fileInput);
     fileInput.click();
     document.body.removeChild(fileInput);
   }
-  
+
   private showFileSelectionSuccess(inputId: string, filePath: string): void {
     const fileName = filePath.split('/').pop() || filePath;
     const message = `Selected file: ${fileName}`;
     console.log('File selection success:', message);
-    
+
     // Add visual feedback to the input
     const input = document.getElementById(inputId) as HTMLInputElement;
     if (input) {
@@ -391,23 +417,23 @@ class AutoEQUI {
       }, 2000);
     }
   }
-  
+
   private showFileDialogError(error: any): void {
     console.error('File dialog error details:', error);
     const message = `File dialog failed: ${error?.message || error}. Using fallback file picker.`;
     console.warn(message);
-    
+
     // Show temporary error message to user
     this.showTemporaryMessage(message, 'error');
   }
-  
+
   private showFallbackWarning(inputId: string, fileName: string): void {
     const message = `Using fallback file picker. Selected: ${fileName}. Note: Full file path not available in browser mode.`;
     console.warn(`Fallback mode for ${inputId}:`, message);
-    
+
     // Show warning message
     this.showTemporaryMessage(message, 'warning');
-    
+
     // Add visual indication to the input
     const input = document.getElementById(inputId) as HTMLInputElement;
     if (input) {
@@ -418,7 +444,7 @@ class AutoEQUI {
       }, 3000);
     }
   }
-  
+
   private showTemporaryMessage(message: string, type: 'error' | 'warning' | 'success' = 'error'): void {
     // Create temporary message element
     const messageDiv = document.createElement('div');
@@ -434,11 +460,11 @@ class AutoEQUI {
       z-index: 10000;
       box-shadow: 0 4px 12px rgba(0,0,0,0.2);
       animation: slideIn 0.3s ease-out;
-      ${type === 'error' ? 'background-color: #dc3545; color: white;' : 
-        type === 'warning' ? 'background-color: #ffc107; color: black;' : 
+      ${type === 'error' ? 'background-color: #dc3545; color: white;' :
+        type === 'warning' ? 'background-color: #ffc107; color: black;' :
         'background-color: #28a745; color: white;'}
     `;
-    
+
     // Add animation keyframes if not already added
     if (!document.getElementById('temp-message-styles')) {
       const style = document.createElement('style');
@@ -455,9 +481,9 @@ class AutoEQUI {
       `;
       document.head.appendChild(style);
     }
-    
+
     document.body.appendChild(messageDiv);
-    
+
     // Remove after 4 seconds
     setTimeout(() => {
       messageDiv.style.animation = 'slideOut 0.3s ease-in forwards';
@@ -487,33 +513,38 @@ class AutoEQUI {
     this.cancelOptimizationBtn.style.display = 'inline-flex';
     this.doneOptimizationBtn.style.display = 'none';
     this.optimizationStages = {};
+
+    // Reset progress graph data
+    this.progressGraphData = [];
+    this.lastGraphUpdate = 0;
+    this.clearProgressGraph();
   }
 
   private updateProgress(stage: string, status: 'pending' | 'running' | 'completed' | 'error', details?: string, progress?: number): void {
     const now = Date.now();
-    
+
     if (!this.optimizationStages[stage]) {
       this.optimizationStages[stage] = { status: 'pending' };
     }
-    
+
     const stageData = this.optimizationStages[stage];
     const oldStatus = stageData.status;
-    
+
     stageData.status = status;
     stageData.details = details || '';
-    
+
     if (status === 'running' && oldStatus !== 'running') {
       stageData.startTime = now;
     } else if ((status === 'completed' || status === 'error') && stageData.startTime) {
       stageData.endTime = now;
     }
-    
+
     this.updateProgressTable();
-    
+
     if (progress !== undefined) {
       this.updateProgressBar(progress);
     }
-    
+
     // Update status text
     if (status === 'running') {
       this.progressStatus.textContent = `${stage}...`;
@@ -528,27 +559,27 @@ class AutoEQUI {
 
   private updateProgressTable(): void {
     const stages = Object.keys(this.optimizationStages);
-    
+
     this.progressTableBody.innerHTML = '';
-    
+
     stages.forEach(stageName => {
       const stage = this.optimizationStages[stageName];
       const row = document.createElement('tr');
-      
+
       let duration = '';
       if (stage.startTime) {
         const endTime = stage.endTime || Date.now();
         const durationMs = endTime - stage.startTime;
         duration = `${(durationMs / 1000).toFixed(1)}s`;
       }
-      
+
       row.innerHTML = `
         <td>${stageName}</td>
         <td class="status-${stage.status}">${stage.status.charAt(0).toUpperCase() + stage.status.slice(1)}</td>
         <td>${duration}</td>
         <td>${stage.details || ''}</td>
       `;
-      
+
       this.progressTableBody.appendChild(row);
     });
   }
@@ -569,6 +600,120 @@ class AutoEQUI {
     this.progressStatus.textContent = success ? 'Optimization completed!' : 'Optimization failed';
     this.cancelOptimizationBtn.style.display = 'none';
     this.doneOptimizationBtn.style.display = 'inline-flex';
+    // Final graph update
+    if (this.progressGraphData.length > 0) {
+      this.updateProgressGraph();
+    }
+  }
+
+  private clearProgressGraph(): void {
+    if (this.progressGraphElement) {
+      try {
+        Plotly.purge(this.progressGraphElement);
+      } catch (e) {
+        // Element may not have been plotted yet
+      }
+      this.progressGraphElement.innerHTML = '';
+    }
+  }
+
+  private updateProgressGraph(): void {
+    if (!this.progressGraphElement || this.progressGraphData.length === 0) {
+      return;
+    }
+
+    const iterations = this.progressGraphData.map(d => d.iteration);
+    const fitness = this.progressGraphData.map(d => d.fitness);
+    const convergence = this.progressGraphData.map(d => d.convergence);
+
+    const fitnessTrace = {
+      x: iterations,
+      y: fitness,
+      type: 'scatter' as const,
+      mode: 'lines+markers' as const,
+      name: 'Fitness (f)',
+      yaxis: 'y',
+      line: { color: '#007bff', width: 2 },
+      marker: { size: 4 }
+    };
+
+    const convergenceTrace = {
+      x: iterations,
+      y: convergence,
+      type: 'scatter' as const,
+      mode: 'lines+markers' as const,
+      name: 'Convergence',
+      yaxis: 'y2',
+      line: { color: '#ff7f0e', width: 2 },
+      marker: { size: 4 }
+    };
+
+    const layout = {
+      title: {
+        text: 'Optimization Progress',
+        font: { size: 14 }
+      },
+      width: 400,
+      height: 400,
+      margin: { l: 60, r: 60, t: 40, b: 40 },
+      xaxis: {
+        title: { text: 'Iterations' },
+        showgrid: true,
+        zeroline: false
+      },
+      yaxis: {
+        title: {
+          text: 'Fitness (f)',
+          font: { color: '#007bff' }
+        },
+        side: 'left' as const,
+        showgrid: true,
+        zeroline: false,
+        tickfont: { color: '#007bff' }
+      },
+      yaxis2: {
+        title: {
+          text: 'Convergence',
+          font: { color: '#ff7f0e' }
+        },
+        side: 'right' as const,
+        overlaying: 'y' as const,
+        showgrid: false,
+        zeroline: false,
+        tickfont: { color: '#ff7f0e' }
+      },
+      paper_bgcolor: 'rgba(0,0,0,0)',
+      plot_bgcolor: 'rgba(0,0,0,0)',
+      font: {
+        color: getComputedStyle(document.documentElement).getPropertyValue('--text-primary').trim(),
+        size: 11
+      },
+      showlegend: true,
+      legend: {
+        x: 0,
+        y: 1,
+        bgcolor: 'rgba(0,0,0,0)'
+      },
+      hovermode: 'x unified' as const
+    };
+
+    const config = {
+      responsive: false,
+      displayModeBar: false,
+      staticPlot: false
+    };
+
+    try {
+      if (this.progressGraphElement.hasChildNodes()) {
+        // Update existing plot
+        Plotly.react(this.progressGraphElement, [fitnessTrace, convergenceTrace], layout, config);
+      } else {
+        // Create new plot
+        Plotly.newPlot(this.progressGraphElement, [fitnessTrace, convergenceTrace], layout, config);
+      }
+    } catch (error) {
+      console.error('Error updating progress graph:', error);
+    }
   }
 
   private resetToDefaults(): void {
@@ -577,7 +722,7 @@ class AutoEQUI {
     const apiTab = document.querySelector('[data-tab="api"]') as HTMLElement;
     const fileContent = document.getElementById('file-inputs');
     const apiContent = document.getElementById('api-inputs');
-    
+
     fileTab?.classList.remove('active');
     apiTab?.classList.add('active');
     fileContent?.classList.remove('active');
@@ -631,7 +776,7 @@ class AutoEQUI {
     const globalAlgoParams = document.querySelectorAll('.global-algo-param');
     const deParams = document.querySelectorAll('.de-param');
     const adaptiveParams = document.querySelectorAll('.adaptive-param');
-    
+
     // Enable/disable local algo based on refinement checkbox
     localAlgoSelect.disabled = !refineEnabled;
     if (refineEnabled) {
@@ -639,7 +784,7 @@ class AutoEQUI {
     } else {
       localAlgoSelect.style.color = 'var(--text-secondary)';
     }
-    
+
     // Show population and maxeval for global algorithms
     const isGlobalAlgo = [
       'nlopt:isres', 'nlopt:ags', 'nlopt:origdirect', 'nlopt:crs2lm',
@@ -649,7 +794,7 @@ class AutoEQUI {
       // Legacy support
       'isres', 'de', 'pso', 'stogo', 'ags', 'origdirect'
     ].includes(algo);
-    
+
     globalAlgoParams.forEach(param => {
       if (isGlobalAlgo) {
         param.classList.add('show');
@@ -657,13 +802,13 @@ class AutoEQUI {
         param.classList.remove('show');
       }
     });
-    
+
     // Show DE parameters only for autoeq:de algorithm
     const isAutoEQDE = algo === 'autoeq:de';
     deParams.forEach(param => {
       (param as HTMLElement).style.display = isAutoEQDE ? 'flex' : 'none';
     });
-    
+
     // Show adaptive parameters only for adaptive strategies
     if (isAutoEQDE) {
       const strategy = (document.getElementById('strategy') as HTMLSelectElement).value;
@@ -676,37 +821,37 @@ class AutoEQUI {
         (param as HTMLElement).style.display = 'none';
       });
     }
-    
+
     // Validate population after parameter updates
     this.validatePopulation();
   }
-  
+
   private validatePopulation(): void {
     const populationInput = document.getElementById('population') as HTMLInputElement;
     const yellowWarningElement = document.getElementById('population-warning-yellow') as HTMLElement;
     const redWarningElement = document.getElementById('population-warning-red') as HTMLElement;
-    
+
     if (!populationInput || !yellowWarningElement || !redWarningElement) return;
-    
+
     const population = parseInt(populationInput.value);
-    
+
     // Hide all warnings initially
     yellowWarningElement.style.display = 'none';
     redWarningElement.style.display = 'none';
-    
+
     // Show appropriate warning based on population value
     if (population > 30000) {
       redWarningElement.style.display = 'block';
     } else if (population > 3000) {
       yellowWarningElement.style.display = 'block';
     }
-    
+
     // Ensure minimum value is 1 (positive integer validation)
     if (population < 1) {
       populationInput.value = '1';
     }
   }
-  
+
   private expandPlotSection(plotElementId: string): void {
     console.log('Expanding plot section for:', plotElementId);
     const plotElement = document.getElementById(plotElementId);
@@ -721,26 +866,71 @@ class AutoEQUI {
       }
     }
   }
-  
+
+  private collapseAllAccordion(): void {
+    const sections = document.querySelectorAll('.plot-section');
+    sections.forEach(section => {
+      section.classList.remove('expanded');
+      section.classList.add('collapsed');
+      const header = section.querySelector('.plot-header');
+      const arrow = section.querySelector('.accordion-arrow');
+      if (header) (header as HTMLElement).setAttribute('aria-expanded', 'false');
+      if (arrow) (arrow as HTMLElement).textContent = '▶';
+    });
+  }
+
+  private clearAllPlots(): void {
+    const allPlotElements = [
+      this.filterDetailsPlotElement,
+      this.filterPlotElement,
+      this.onAxisPlotElement,
+      this.listeningWindowPlotElement,
+      this.earlyReflectionsPlotElement,
+      this.soundPowerPlotElement,
+      this.spinPlotElement
+    ];
+
+    try {
+      allPlotElements.forEach(element => {
+        if (element) {
+          // Clear plotly plots if they exist
+          try {
+            Plotly.purge(element);
+          } catch (e) {
+            // Plot may not exist, ignore error
+          }
+          // Clear content and remove has-plot class
+          element.innerHTML = '';
+          element.classList.remove('has-plot');
+        }
+      });
+    } catch (e) {
+      console.log('No existing plots to purge');
+    }
+
+    // Collapse all accordion sections
+    this.collapseAllAccordion();
+  }
+
   private setupAccordionBehavior(): void {
     console.log('Setting up accordion behavior');
     const plotHeaders = document.querySelectorAll('.plot-header');
     console.log('Found plot headers:', plotHeaders.length);
-    
+
     plotHeaders.forEach((header, index) => {
       console.log('Setting up header', index, header);
-      
+
       // Make header focusable for keyboard navigation
       (header as HTMLElement).tabIndex = 0;
       (header as HTMLElement).setAttribute('role', 'button');
       (header as HTMLElement).setAttribute('aria-expanded', 'false');
-      
+
       // Handle click events
       header.addEventListener('click', (e) => {
         e.preventDefault();
         this.toggleAccordionSection(header as HTMLElement);
       });
-      
+
       // Handle keyboard events
       (header as HTMLElement).addEventListener('keydown', (e: KeyboardEvent) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -755,25 +945,25 @@ class AutoEQUI {
         }
       });
     });
-    
+
     // Add scroll navigation support
     this.setupScrollNavigation();
-    
+
     // Test accordion sections on startup
     this.testAccordionSections();
   }
-  
+
   private toggleAccordionSection(header: HTMLElement): void {
     const target = header.getAttribute('data-plot');
     const section = header.parentElement as HTMLElement;
     const arrow = header.querySelector('.accordion-arrow');
-    
+
     console.log('Toggling accordion section:', target);
-    
+
     if (section && arrow) {
       const isExpanded = section.classList.contains('expanded');
       console.log('Current state - expanded:', isExpanded);
-      
+
       if (isExpanded) {
         // Collapse
         console.log('Collapsing section:', target);
@@ -788,11 +978,11 @@ class AutoEQUI {
         section.classList.add('expanded');
         arrow.textContent = '▼';
         header.setAttribute('aria-expanded', 'true');
-        
+
         // Scroll the expanded section into view
         setTimeout(() => {
-          section.scrollIntoView({ 
-            behavior: 'smooth', 
+          section.scrollIntoView({
+            behavior: 'smooth',
             block: 'nearest',
             inline: 'nearest'
           });
@@ -800,32 +990,32 @@ class AutoEQUI {
       }
     }
   }
-  
+
   private focusNextAccordionHeader(currentHeader: HTMLElement): void {
     const allHeaders = Array.from(document.querySelectorAll('.plot-header')) as HTMLElement[];
     const currentIndex = allHeaders.indexOf(currentHeader);
     const nextIndex = (currentIndex + 1) % allHeaders.length;
     allHeaders[nextIndex].focus();
   }
-  
+
   private focusPreviousAccordionHeader(currentHeader: HTMLElement): void {
     const allHeaders = Array.from(document.querySelectorAll('.plot-header')) as HTMLElement[];
     const currentIndex = allHeaders.indexOf(currentHeader);
     const previousIndex = currentIndex === 0 ? allHeaders.length - 1 : currentIndex - 1;
     allHeaders[previousIndex].focus();
   }
-  
+
   private setupScrollNavigation(): void {
     const accordionContainer = document.querySelector('.plots-accordion');
-    
+
     if (!accordionContainer) return;
-    
+
     // Add mouse wheel scroll support
     accordionContainer.addEventListener('wheel', (e) => {
       // Allow native scrolling behavior
       // The CSS overflow-y: auto will handle this automatically
     });
-    
+
     // Add keyboard scroll support for the container
     (accordionContainer as HTMLElement).addEventListener('keydown', (e: KeyboardEvent) => {
       if (e.target === accordionContainer) {
@@ -849,11 +1039,11 @@ class AutoEQUI {
         }
       }
     });
-    
+
     // Make accordion container focusable for keyboard scrolling
     (accordionContainer as HTMLElement).tabIndex = -1;
   }
-  
+
   private testAccordionSections(): void {
     console.log('Testing accordion sections...');
     const sections = document.querySelectorAll('.plot-section');
@@ -863,7 +1053,7 @@ class AutoEQUI {
       const target = header?.getAttribute('data-plot');
       const isExpanded = section.classList.contains('expanded');
       const isCollapsed = section.classList.contains('collapsed');
-      
+
       console.log(`Section ${index} (${target}):`, {
         expanded: isExpanded,
         collapsed: isCollapsed,
@@ -872,59 +1062,11 @@ class AutoEQUI {
       });
     });
   }
-  
-  private createTestPlot(containerElement: HTMLElement, title: string): void {
-    console.log('Creating test plot in:', containerElement.id);
-    
-    // Clear and prepare container
-    containerElement.innerHTML = '';
-    containerElement.classList.add('has-plot');
-    containerElement.style.display = 'block';
-    containerElement.style.padding = '0';
-    
-    // Expand the section
-    this.expandPlotSection(containerElement.id);
-    
-    // Create simple test data
-    const x = [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000];
-    const y = [0, -1, 1, -0.5, 0.5, 0, -0.3, 0.8, -0.2, 0];
-    
-    const trace = {
-      x: x,
-      y: y,
-      type: 'scatter' as const,
-      mode: 'lines' as const,
-      name: title,
-      line: { width: 2, color: '#007bff' }
-    };
-    
-    const layout = {
-      title: { text: title },
-      xaxis: {
-        title: { text: 'Frequency (Hz)' },
-        type: 'log' as const
-      },
-      yaxis: {
-        title: { text: 'Magnitude (dB)' }
-      },
-      paper_bgcolor: 'rgba(0,0,0,0)',
-      plot_bgcolor: 'rgba(0,0,0,0)',
-      margin: { l: 40, r: 20, t: 40, b: 40 }
-    };
-    
-    Plotly.newPlot(containerElement, [trace], layout, {
-      responsive: true,
-      displayModeBar: false
-    }).then(() => {
-      console.log('Test plot created successfully in:', containerElement.id);
-    }).catch((error: any) => {
-      console.error('Error creating test plot:', error);
-    });
-  }
+
 
   private validateForm(): boolean {
     const activeTab = document.querySelector('.tab-label.active')?.getAttribute('data-tab');
-    
+
     let isValid = false;
     if (activeTab === 'file') {
       const curveInput = (document.getElementById('curve-path') as HTMLInputElement).value;
@@ -943,7 +1085,7 @@ class AutoEQUI {
   private getFormData(): OptimizationParams {
     const activeTab = document.querySelector('.tab-label.active')?.getAttribute('data-tab');
     const algo = (document.getElementById('algo') as HTMLSelectElement).value;
-    
+
     return {
       num_filters: parseInt((document.getElementById('num-filters') as HTMLInputElement).value),
       curve_path: activeTab === 'file' ? (document.getElementById('curve-path') as HTMLInputElement).value || undefined : undefined,
@@ -978,39 +1120,7 @@ class AutoEQUI {
       adaptive_weight_cr: algo === 'autoeq:de' ? parseFloat((document.getElementById('adaptive-weight-cr') as HTMLInputElement).value) : undefined,
     };
   }
-  
-  private createAllTestPlots(): void {
-    console.log('Creating test plots in all containers');
-    
-    // Create test plots for all containers
-    if (this.filterDetailsPlotElement) {
-      this.createTestPlot(this.filterDetailsPlotElement, 'Filter Details Test');
-    }
-    
-    if (this.filterPlotElement) {
-      this.createTestPlot(this.filterPlotElement, 'Filter Response Test');
-    }
-    
-    if (this.onAxisPlotElement) {
-      this.createTestPlot(this.onAxisPlotElement, 'On Axis Test');
-    }
-    
-    if (this.listeningWindowPlotElement) {
-      this.createTestPlot(this.listeningWindowPlotElement, 'Listening Window Test');
-    }
-    
-    if (this.earlyReflectionsPlotElement) {
-      this.createTestPlot(this.earlyReflectionsPlotElement, 'Early Reflections Test');
-    }
-    
-    if (this.soundPowerPlotElement) {
-      this.createTestPlot(this.soundPowerPlotElement, 'Sound Power Test');
-    }
-    
-    if (this.spinPlotElement) {
-      this.createTestPlot(this.spinPlotElement, 'Spinorama Test');
-    }
-  }
+
 
   private async runOptimization(): Promise<void> {
     if (!this.validateForm()) {
@@ -1018,7 +1128,7 @@ class AutoEQUI {
     }
 
     const params = this.getFormData();
-    
+
     // Conditionally show modal only for algorithms that report progress (autoeq:de)
     const isAutoEQDE = params.algo === 'autoeq:de';
     if (isAutoEQDE) {
@@ -1037,8 +1147,21 @@ class AutoEQUI {
           this.progressUnlisten = await listen('progress_update', (event: any) => {
             if (!this.isOptimizationRunning) return;
             const p = event.payload as { iteration: number; fitness: number; params: number[]; convergence: number };
-            const details = `iter=${p.iteration}, f=${p.fitness.toExponential(6)}, conv=${p.convergence.toExponential(3)}`;
+            const details = `iter=${p.iteration}, f=${p.fitness.toFixed(8)}, conv=${p.convergence.toFixed(4)}`;
             this.updateProgress('Optimization', 'running', details);
+
+            // Add data to progress graph
+            this.progressGraphData.push({
+              iteration: p.iteration,
+              fitness: p.fitness,
+              convergence: p.convergence
+            });
+
+            // Update graph every 5 iterations
+            if (p.iteration - this.lastGraphUpdate >= 5 || p.iteration <= 5) {
+              this.updateProgressGraph();
+              this.lastGraphUpdate = p.iteration;
+            }
           });
         } catch (e) {
           console.warn('Failed to attach progress listener:', e);
@@ -1050,31 +1173,31 @@ class AutoEQUI {
         this.updateProgress('Initialization', 'running', 'Loading parameters and validating input', 5);
         await this.sleep(200); // Small delay to show progress
       }
-      
+
       if (!this.isOptimizationRunning) return; // Check for cancellation
-      
+
       if (!isAutoEQDE) {
         this.updateProgress('Initialization', 'completed', 'Parameters loaded successfully', 10);
         this.updateProgress('Data Loading', 'running', 'Fetching measurement data', 15);
         await this.sleep(300);
       }
-      
+
       if (!this.isOptimizationRunning) return;
-      
+
       if (!isAutoEQDE) {
         this.updateProgress('Data Loading', 'completed', 'Data loaded successfully', 25);
         this.updateProgress('Optimization', 'running', 'Running optimization algorithm', 30);
       }
-      
+
       const result: OptimizationResult = await invoke('run_optimization', { params });
-      
+
       if (!this.isOptimizationRunning) return; // Check for cancellation
-      
+
       if (!isAutoEQDE) {
         this.updateProgress('Optimization', 'completed', 'Algorithm completed', 85);
         this.updateProgress('Results Processing', 'running', 'Processing results and generating plots', 90);
       }
-      
+
       if (result.success) {
         if (!isAutoEQDE) {
           this.updateProgress('Results Processing', 'completed', 'Results processed successfully', 100);
@@ -1083,7 +1206,7 @@ class AutoEQUI {
           // For DE, mark as completed directly via modal if it was shown
           this.optimizationCompleted(true, 'Optimization completed successfully');
         }
-        
+
         // Update UI with results
         this.handleOptimizationSuccess(result);
       } else {
@@ -1132,13 +1255,13 @@ class AutoEQUI {
     console.log('clearResults called');
     this.scoresElement.style.display = 'none';
     this.errorElement.style.display = 'none';
-    this.clearPlots();
+    this.clearAllPlots();
   }
 
   private handleOptimizationSuccess(result: OptimizationResult): void {
     console.log('Optimization success, result:', result);
     this.updateStatus('Optimization completed successfully!');
-    
+
     // Update scores if available
     if (result.preference_score_before !== undefined && result.preference_score_after !== undefined) {
       console.log('Updating scores:', result.preference_score_before, '->', result.preference_score_after);
@@ -1160,7 +1283,7 @@ class AutoEQUI {
     } else {
       console.log('No filter_response data in result');
     }
-    
+
     if (result.spin_details) {
       console.log('Updating individual plots with data:', result.spin_details);
       this.updateOnAxisPlot(result.spin_details, result.filter_response);
@@ -1180,12 +1303,12 @@ class AutoEQUI {
 
   private updateScores(before: number, after: number): void {
     const improvement = after - before;
-    
+
     (document.getElementById('score-before') as HTMLElement).textContent = before.toFixed(3);
     (document.getElementById('score-after') as HTMLElement).textContent = after.toFixed(3);
-    (document.getElementById('score-improvement') as HTMLElement).textContent = 
+    (document.getElementById('score-improvement') as HTMLElement).textContent =
       (improvement >= 0 ? '+' : '') + improvement.toFixed(3);
-    
+
     this.scoresElement.style.display = 'block';
   }
 
@@ -1199,20 +1322,19 @@ class AutoEQUI {
       console.error('Filter details plot element not found!');
       return;
     }
-    
+
     // Clear and prepare
     this.filterDetailsPlotElement.innerHTML = '';
     this.filterDetailsPlotElement.classList.add('has-plot');
     this.filterDetailsPlotElement.style.display = 'block';
     this.filterDetailsPlotElement.style.padding = '10px';
-    
+
     // Parse filter parameters (assuming they're in groups of 3: freq, Q, gain)
     const numFilters = Math.floor(filterParams.length / 3);
-    
+
     // Create table to display filter parameters
     let tableHTML = `
-      <div style="padding: 20px; font-family: monospace;">
-        <h4 style="margin-bottom: 15px; color: var(--text-primary);">Optimized Filter Parameters</h4>
+      <div style="padding: 15px; font-family: monospace;">
         <table style="width: 100%; border-collapse: collapse; background: var(--bg-secondary); border-radius: var(--radius);">
           <thead>
             <tr style="background: var(--bg-accent);">
@@ -1225,13 +1347,13 @@ class AutoEQUI {
           </thead>
           <tbody>
     `;
-    
+
     for (let i = 0; i < numFilters; i++) {
       const freq = Math.pow(10, filterParams[i * 3]).toFixed(1);
       const q = filterParams[i * 3 + 1].toFixed(2);
       const gain = filterParams[i * 3 + 2].toFixed(2);
       const filterType = Math.abs(parseFloat(gain)) > 0.1 ? 'PK (Peak)' : 'None';
-      
+
       tableHTML += `
         <tr style="${i % 2 === 0 ? 'background: var(--bg-secondary);' : 'background: var(--bg-primary);'}">
           <td style="padding: 10px; border: 1px solid var(--border-color); color: var(--text-primary); text-align: center; font-weight: 500;">${i + 1}</td>
@@ -1242,40 +1364,50 @@ class AutoEQUI {
         </tr>
       `;
     }
-    
+
     tableHTML += `
           </tbody>
         </table>
-        <div style="margin-top: 15px; font-size: 12px; color: var(--text-secondary); line-height: 1.4;">
-          <p><strong>Note:</strong> Frequency values are in Hz, Q factors control filter bandwidth (higher Q = narrower filter), and gain values show boost (+) or cut (-) in dB.</p>
-          <p>These parameters can be imported into your audio software or hardware EQ that supports parametric EQ with peak filters.</p>
-        </div>
       </div>
     `;
-    
+
+    // Create a container with max height and scrolling for large filter tables
+    const wrapper = document.createElement('div');
+    wrapper.style.cssText = `
+      max-height: 500px;
+      overflow-y: auto;
+      overflow-x: hidden;
+      border-radius: 8px;
+      border: 1px solid var(--border-color, #ddd);
+    `;
+    wrapper.innerHTML = tableHTML;
+
+    this.filterDetailsPlotElement.innerHTML = '';
+    this.filterDetailsPlotElement.appendChild(wrapper);
+
     this.filterDetailsPlotElement.innerHTML = tableHTML;
-    
+
     // Expand the plot section
     this.expandPlotSection('filter-details-plot');
-    
+
     console.log(`Filter details updated with ${numFilters} filters`);
   }
 
   private updateFilterPlot(data: PlotData): void {
     console.log('updateFilterPlot called with:', data);
     console.log('Filter plot element:', this.filterPlotElement);
-    
+
     if (!this.filterPlotElement) {
       console.error('Filter plot element not found!');
       return;
     }
-    
+
     // Clear any existing content and prepare for plot
     this.filterPlotElement.innerHTML = '';
     this.filterPlotElement.classList.add('has-plot');
     this.filterPlotElement.style.display = 'block';
     this.filterPlotElement.style.padding = '0';
-    
+
     const traces = Object.entries(data.curves).map(([name, values]) => ({
       x: data.frequencies,
       y: values,
@@ -1289,23 +1421,28 @@ class AutoEQUI {
 
     console.log('Created traces:', traces);
 
-    // Determine legend position based on screen size
-    const isWideScreen = window.innerWidth > 768;
-    const legendConfig = isWideScreen ? {
-      x: 1.02,
-      y: 1,
-      xanchor: 'left' as const,
-      yanchor: 'top' as const
-    } : {
+    // Read current form parameters for axis setup
+    const maxDbInput = document.getElementById('max-db') as HTMLInputElement;
+    const minFreqInput = document.getElementById('min-freq') as HTMLInputElement;
+    const maxFreqInput = document.getElementById('max-freq') as HTMLInputElement;
+    const maxDb = maxDbInput ? parseFloat(maxDbInput.value) : 5;
+    const minFreq = minFreqInput ? parseFloat(minFreqInput.value) : 20;
+    const maxFreq = maxFreqInput ? parseFloat(maxFreqInput.value) : 20000;
+
+    const yMin = -(maxDb + 2);
+    const yMax = (maxDb + 2);
+
+    // Always use horizontal legend below the plot for Filter Response
+    const legendConfig = {
       x: 0.5,
-      y: -0.1,
+      y: -0.15,
       xanchor: 'center' as const,
       yanchor: 'top' as const,
       orientation: 'h' as const
     };
-    
-    const rightMargin = isWideScreen ? 120 : 20; // More space for right legend
-    const bottomMargin = isWideScreen ? 40 : 80; // More space for bottom legend
+
+    const rightMargin = 20; // Standard right margin
+    const bottomMargin = 80; // More space for bottom legend
 
     const layout = {
       title: { text: '' },
@@ -1316,11 +1453,11 @@ class AutoEQUI {
       },
       yaxis: {
         title: { text: 'Magnitude (dB)' },
-        range: [-5, 5]
+        range: [yMin, yMax]
       },
       paper_bgcolor: 'rgba(0,0,0,0)',
       plot_bgcolor: 'rgba(0,0,0,0)',
-      font: { 
+      font: {
         color: getComputedStyle(document.documentElement).getPropertyValue('--text-primary').trim(),
         size: 12
       },
@@ -1329,20 +1466,46 @@ class AutoEQUI {
       legend: {
         ...legendConfig,
         bgcolor: 'rgba(0,0,0,0)'
-      }
+      },
+      shapes: [
+        // Left green rectangle: 20 Hz to min_freq
+        {
+          type: 'rect' as const,
+          xref: 'x' as const,
+          yref: 'paper' as const,
+          x0: 20,
+          x1: Math.max(20, minFreq),
+          y0: 0,
+          y1: 1,
+          fillcolor: 'rgba(0, 200, 0, 0.08)',
+          line: { width: 0 }
+        },
+        // Right green rectangle: max_freq to 20 kHz
+        {
+          type: 'rect' as const,
+          xref: 'x' as const,
+          yref: 'paper' as const,
+          x0: Math.min(maxFreq, 20000),
+          x1: 20000,
+          y0: 0,
+          y1: 1,
+          fillcolor: 'rgba(0, 200, 0, 0.08)',
+          line: { width: 0 }
+        }
+      ]
     };
 
     // Ensure container is visible
     console.log('Container dimensions:', this.filterPlotElement.offsetWidth, 'x', this.filterPlotElement.offsetHeight);
-    
+
     // Expand the accordion section for this plot
     this.expandPlotSection('filter-plot');
-    
+
     console.log('Creating Plotly plot immediately');
-    
-    Plotly.newPlot(this.filterPlotElement, traces, layout, { 
-      responsive: true, 
-      displayModeBar: false 
+
+    Plotly.newPlot(this.filterPlotElement, traces, layout, {
+      responsive: true,
+      displayModeBar: false
     }).then(() => {
       console.log('Filter Plotly plot created successfully');
       // Force immediate resize
@@ -1355,34 +1518,34 @@ class AutoEQUI {
   private updateOnAxisPlot(spinData: PlotData, filterData?: PlotData): void {
     this.updateIndividualPlotWithFilter(this.onAxisPlotElement, 'on-axis-plot', spinData, filterData, 'On Axis', ['On Axis']);
   }
-  
+
   private updateListeningWindowPlot(spinData: PlotData, filterData?: PlotData): void {
     this.updateIndividualPlotWithFilter(this.listeningWindowPlotElement, 'listening-window-plot', spinData, filterData, 'Listening Window', ['Listening Window']);
   }
-  
+
   private updateEarlyReflectionsPlot(data: PlotData): void {
-    this.updateDualAxisPlot(this.earlyReflectionsPlotElement, 'early-reflections-plot', data, 'Early Reflections', ['Early Reflections'], 'ERDI');
+    this.updateDualAxisPlot(this.earlyReflectionsPlotElement, 'early-reflections-plot', data, 'Early Reflections', ['Early Reflections'], 'Early Reflections DI');
   }
-  
+
   private updateSoundPowerPlot(data: PlotData): void {
-    this.updateDualAxisPlot(this.soundPowerPlotElement, 'sound-power-plot', data, 'Sound Power', ['Sound Power'], 'SPDI');
+    this.updateDualAxisPlot(this.soundPowerPlotElement, 'sound-power-plot', data, 'Sound Power', ['Sound Power'], 'Sound Power DI');
   }
-  
+
   // Plot function for On-Axis and Listening Window with original + optimized curves
   private updateIndividualPlotWithFilter(plotElement: HTMLElement | null, plotId: string, spinData: PlotData, filterData: PlotData | undefined, title: string, curveNames: string[]): void {
     if (!plotElement) {
       console.error(`Plot element not found for ${plotId}`);
       return;
     }
-    
+
     // Clear and prepare
     plotElement.innerHTML = '';
     plotElement.classList.add('has-plot');
     plotElement.style.display = 'block';
     plotElement.style.padding = '0';
-    
+
     const traces: any[] = [];
-    
+
     // Add original measurement curves
     Object.entries(spinData.curves)
       .filter(([name]) => curveNames.some(curveName => name.includes(curveName)))
@@ -1396,7 +1559,7 @@ class AutoEQUI {
           line: { width: 2, color: '#1f77b4' }
         });
       });
-    
+
     // Add optimized curves if available
     if (filterData) {
       // Apply filter to the original curve to show optimized result
@@ -1419,12 +1582,12 @@ class AutoEQUI {
           }
         });
     }
-    
+
     if (traces.length === 0) {
       plotElement.innerHTML = `<div style="display: flex; align-items: center; justify-content: center; height: 400px; color: var(--text-secondary);">No ${title} data available</div>`;
       return;
     }
-    
+
     const layout = {
       title: { text: '' },
       xaxis: {
@@ -1438,7 +1601,7 @@ class AutoEQUI {
       },
       paper_bgcolor: 'rgba(0,0,0,0)',
       plot_bgcolor: 'rgba(0,0,0,0)',
-      font: { 
+      font: {
         color: getComputedStyle(document.documentElement).getPropertyValue('--text-primary').trim(),
         size: 12
       },
@@ -1453,12 +1616,12 @@ class AutoEQUI {
         bgcolor: 'rgba(0,0,0,0)'
       }
     };
-    
+
     this.expandPlotSection(plotId);
-    
-    Plotly.newPlot(plotElement, traces, layout, { 
-      responsive: true, 
-      displayModeBar: false 
+
+    Plotly.newPlot(plotElement, traces, layout, {
+      responsive: true,
+      displayModeBar: false
     }).then(() => {
       console.log(`${title} plot created successfully`);
       Plotly.Plots.resize(plotElement);
@@ -1466,25 +1629,30 @@ class AutoEQUI {
       console.error(`Error creating ${title} plot:`, error);
     });
   }
-  
+
   // Plot function for Early Reflections and Sound Power with dual axes
   private updateDualAxisPlot(plotElement: HTMLElement | null, plotId: string, data: PlotData, title: string, curveNames: string[], diCurveName: string): void {
     if (!plotElement) {
       console.error(`Plot element not found for ${plotId}`);
       return;
     }
-    
+
     // Clear and prepare
     plotElement.innerHTML = '';
     plotElement.classList.add('has-plot');
     plotElement.style.display = 'block';
     plotElement.style.padding = '0';
-    
+
     const traces: any[] = [];
-    
-    // Add main measurement curves (left axis)
+
+    // Add main measurement curves (left axis) - filter out DI curves
     Object.entries(data.curves)
-      .filter(([name]) => curveNames.some(curveName => name.includes(curveName)) && !name.includes(diCurveName))
+      .filter(([name]) => {
+        // Include curves that match curveNames but exclude any DI curves
+        const matchesCurveName = curveNames.some(curveName => name.includes(curveName));
+        const isDICurve = name.includes('DI') || name.toLowerCase().includes('di');
+        return matchesCurveName && !isDICurve;
+      })
       .forEach(([name, values]) => {
         traces.push({
           x: data.frequencies,
@@ -1496,10 +1664,13 @@ class AutoEQUI {
           line: { width: 2 }
         });
       });
-    
-    // Add DI curves (right axis)
+
+    // Add specific DI curve (right axis) - find curves containing diCurveName
     Object.entries(data.curves)
-      .filter(([name]) => name.includes(diCurveName))
+      .filter(([name]) => {
+        // Look for curves that contain the DI curve name (e.g., "ERDI", "SPDI")
+        return name.includes(diCurveName);
+      })
       .forEach(([name, values]) => {
         traces.push({
           x: data.frequencies,
@@ -1507,19 +1678,20 @@ class AutoEQUI {
           type: 'scatter' as const,
           mode: 'lines' as const,
           name: name,
-          yaxis: 'y2',
-          line: { 
-            width: 2.5, 
-            ...(name.includes('DI') ? { dash: 'dash' as const } : {})
+          yaxis: 'y2', // Always use right axis for DI curves
+          line: {
+            width: 2.5,
+            dash: 'dash' as const,
+            color: '#ff7f0e' // Orange color to match axis
           }
         });
       });
-    
+
     if (traces.length === 0) {
       plotElement.innerHTML = `<div style="display: flex; align-items: center; justify-content: center; height: 400px; color: var(--text-secondary);">No ${title} data available</div>`;
       return;
     }
-    
+
     const layout = {
       title: { text: '' },
       xaxis: {
@@ -1528,7 +1700,7 @@ class AutoEQUI {
         range: [Math.log10(20), Math.log10(20000)]
       },
       yaxis: {
-        title: { 
+        title: {
           text: 'SPL (dB)',
           font: { color: getComputedStyle(document.documentElement).getPropertyValue('--text-primary').trim() }
         },
@@ -1537,7 +1709,7 @@ class AutoEQUI {
         tickfont: { color: getComputedStyle(document.documentElement).getPropertyValue('--text-primary').trim() }
       },
       yaxis2: {
-        title: { 
+        title: {
           text: 'Directivity Index (dB)',
           font: { color: '#ff7f0e' }
         },
@@ -1548,7 +1720,7 @@ class AutoEQUI {
       },
       paper_bgcolor: 'rgba(0,0,0,0)',
       plot_bgcolor: 'rgba(0,0,0,0)',
-      font: { 
+      font: {
         color: getComputedStyle(document.documentElement).getPropertyValue('--text-primary').trim(),
         size: 12
       },
@@ -1564,12 +1736,12 @@ class AutoEQUI {
       },
       hovermode: 'x unified' as const
     };
-    
+
     this.expandPlotSection(plotId);
-    
-    Plotly.newPlot(plotElement, traces, layout, { 
-      responsive: true, 
-      displayModeBar: false 
+
+    Plotly.newPlot(plotElement, traces, layout, {
+      responsive: true,
+      displayModeBar: false
     }).then(() => {
       console.log(`${title} plot created successfully`);
       Plotly.Plots.resize(plotElement);
@@ -1580,25 +1752,25 @@ class AutoEQUI {
 
   private updateSpinPlot(data: PlotData): void {
     console.log('updateSpinPlot called with:', data);
-    
+
     if (!this.spinPlotElement) {
       console.error('Spin plot element not found!');
       return;
     }
-    
+
     // Clear any existing content and prepare for plot
     this.spinPlotElement.innerHTML = '';
     this.spinPlotElement.classList.add('has-plot');
     this.spinPlotElement.style.display = 'block';
     this.spinPlotElement.style.padding = '0';
-    
+
     const traces = Object.entries(data.curves).map(([name, values]) => {
       // Check if this is a DI curve (Directivity Index)
-      const isDICurve = name.toLowerCase().includes('di') || 
+      const isDICurve = name.toLowerCase().includes('di') ||
                        name.toLowerCase().includes('directivity') ||
                        name === 'Early Reflections DI' ||
                        name === 'Sound Power DI';
-      
+
       return {
         x: data.frequencies,
         y: values,
@@ -1621,7 +1793,7 @@ class AutoEQUI {
       yanchor: 'top' as const,
       orientation: 'h' as const
     };
-    
+
     const rightMargin = 140; // Space for dual Y-axis
     const bottomMargin = 120; // More space for horizontal legend
 
@@ -1633,7 +1805,7 @@ class AutoEQUI {
         range: [Math.log10(20), Math.log10(20000)]
       },
       yaxis: {
-        title: { 
+        title: {
           text: 'SPL (dB)',
           font: { color: getComputedStyle(document.documentElement).getPropertyValue('--text-primary').trim() }
         },
@@ -1642,7 +1814,7 @@ class AutoEQUI {
         tickfont: { color: getComputedStyle(document.documentElement).getPropertyValue('--text-primary').trim() }
       },
       yaxis2: {
-        title: { 
+        title: {
           text: 'Directivity Index (dB)',
           font: { color: '#ff7f0e' } // Orange color for DI axis
         },
@@ -1653,7 +1825,7 @@ class AutoEQUI {
       },
       paper_bgcolor: 'rgba(0,0,0,0)',
       plot_bgcolor: 'rgba(0,0,0,0)',
-      font: { 
+      font: {
         color: getComputedStyle(document.documentElement).getPropertyValue('--text-primary').trim(),
         size: 12
       },
@@ -1668,15 +1840,18 @@ class AutoEQUI {
 
     // Ensure container is visible
     console.log('Spin container dimensions:', this.spinPlotElement.offsetWidth, 'x', this.spinPlotElement.offsetHeight);
-    
+
+    // Add extra height for Spinorama plot
+    this.spinPlotElement.style.minHeight = '500px';
+
     // Expand the accordion section for this plot
     this.expandPlotSection('spin-plot');
-    
+
     console.log('Creating Spin Plotly plot immediately');
-    
-    Plotly.newPlot(this.spinPlotElement, traces, layout, { 
-      responsive: true, 
-      displayModeBar: false 
+
+    Plotly.newPlot(this.spinPlotElement, traces, layout, {
+      responsive: true,
+      displayModeBar: false
     }).then(() => {
       console.log('Spin Plotly plot created successfully');
       // Force immediate resize
@@ -1686,37 +1861,14 @@ class AutoEQUI {
     });
   }
 
-  private clearPlots(): void {
-    console.log('clearPlots called');
-    const allPlotElements = [
-      this.filterDetailsPlotElement,
-      this.filterPlotElement,
-      this.onAxisPlotElement,
-      this.listeningWindowPlotElement,
-      this.earlyReflectionsPlotElement,
-      this.soundPowerPlotElement,
-      this.spinPlotElement
-    ];
-    
-    try {
-      allPlotElements.forEach(element => {
-        if (element) {
-          Plotly.purge(element);
-          element.classList.remove('has-plot');
-        }
-      });
-    } catch (e) {
-      console.log('No existing plots to purge');
-    }
-  }
 
   private setupResizer(): void {
     const resizer = document.getElementById('resizer');
     const leftPanel = document.getElementById('left-panel');
     const rightPanel = document.getElementById('right-panel');
-    
+
     if (!resizer || !leftPanel || !rightPanel) return;
-    
+
     resizer.addEventListener('mousedown', (e) => {
       this.isResizing = true;
       this.startX = e.clientX;
@@ -1725,15 +1877,15 @@ class AutoEQUI {
       document.body.style.cursor = 'col-resize';
       document.body.style.userSelect = 'none';
     });
-    
+
     document.addEventListener('mousemove', (e) => {
       if (!this.isResizing) return;
-      
+
       const diff = e.clientX - this.startX;
       const newWidth = Math.max(280, Math.min(600, this.startWidth + diff));
       document.documentElement.style.setProperty('--left-panel-width', newWidth + 'px');
     });
-    
+
     document.addEventListener('mouseup', () => {
       if (this.isResizing) {
         this.isResizing = false;
@@ -1754,18 +1906,18 @@ class AutoEQUI {
 
     const speakerInput = document.getElementById('speaker') as HTMLInputElement;
     const dropdown = document.getElementById('speaker-dropdown');
-    
+
     if (!speakerInput || !dropdown) return;
-    
+
     speakerInput.addEventListener('input', (e) => {
       const query = (e.target as HTMLInputElement).value.toLowerCase();
       this.showSpeakerSuggestions(query);
     });
-    
+
     speakerInput.addEventListener('focus', () => {
       this.showSpeakerSuggestions(speakerInput.value.toLowerCase());
     });
-    
+
     document.addEventListener('click', (e) => {
       if (!speakerInput.contains(e.target as Node) && !dropdown.contains(e.target as Node)) {
         dropdown.style.display = 'none';
@@ -1776,16 +1928,16 @@ class AutoEQUI {
   private showSpeakerSuggestions(query: string): void {
     const dropdown = document.getElementById('speaker-dropdown');
     if (!dropdown) return;
-    
-    const filtered = this.speakers.filter(speaker => 
+
+    const filtered = this.speakers.filter(speaker =>
       speaker.toLowerCase().includes(query)
     ).slice(0, 10); // Limit to 10 results
-    
+
     if (filtered.length === 0 || (filtered.length === 1 && filtered[0].toLowerCase() === query)) {
       dropdown.style.display = 'none';
       return;
     }
-    
+
     dropdown.innerHTML = '';
     filtered.forEach(speaker => {
       const item = document.createElement('div');
@@ -1796,7 +1948,7 @@ class AutoEQUI {
       });
       dropdown.appendChild(item);
     });
-    
+
     dropdown.style.display = 'block';
   }
 
@@ -1805,17 +1957,20 @@ class AutoEQUI {
     const versionSelect = document.getElementById('version') as HTMLSelectElement;
     const measurementSelect = document.getElementById('measurement') as HTMLSelectElement;
     const dropdown = document.getElementById('speaker-dropdown');
-    
+
     speakerInput.value = speaker;
     this.selectedSpeaker = speaker;
     dropdown!.style.display = 'none';
-    
+
+    // Clear plots when speaker changes
+    this.clearAllPlots();
+
     // Reset dependent fields
     versionSelect.innerHTML = '<option value="">Loading versions...</option>';
     versionSelect.disabled = true;
     measurementSelect.innerHTML = '<option value="">Select Measurement</option>';
     measurementSelect.disabled = true;
-    
+
     try {
       const versions = await invoke('get_versions', { speaker }) as string[];
       versionSelect.innerHTML = '<option value="">Select Version</option>';
@@ -1825,7 +1980,7 @@ class AutoEQUI {
         option.textContent = version;
         versionSelect.appendChild(option);
       });
-      
+
       // Auto-select if only one version available
       if (versions.length === 1) {
         versionSelect.value = versions[0];
@@ -1840,24 +1995,24 @@ class AutoEQUI {
       console.error('Failed to load versions:', error);
       versionSelect.innerHTML = '<option value="">Error loading versions</option>';
     }
-    
+
     this.validateForm();
   }
 
   private async selectVersion(version: string): Promise<void> {
     const measurementSelect = document.getElementById('measurement') as HTMLSelectElement;
     this.selectedVersion = version;
-    
+
     // Reset measurement field
     measurementSelect.innerHTML = '<option value="">Loading measurements...</option>';
     measurementSelect.disabled = true;
-    
+
     try {
-      const measurements = await invoke('get_measurements', { 
-        speaker: this.selectedSpeaker, 
-        version 
+      const measurements = await invoke('get_measurements', {
+        speaker: this.selectedSpeaker,
+        version
       }) as string[];
-      
+
       measurementSelect.innerHTML = '<option value="">Select Measurement</option>';
       measurements.forEach(measurement => {
         const option = document.createElement('option');
@@ -1865,7 +2020,7 @@ class AutoEQUI {
         option.textContent = measurement;
         measurementSelect.appendChild(option);
       });
-      
+
       // Smart measurement selection: CEA2034 > Listening Window > none
       let selectedMeasurement = '';
       if (measurements.includes('CEA2034')) {
@@ -1873,17 +2028,17 @@ class AutoEQUI {
       } else if (measurements.includes('Listening Window')) {
         selectedMeasurement = 'Listening Window';
       }
-      
+
       if (selectedMeasurement) {
         measurementSelect.value = selectedMeasurement;
       }
-      
+
       measurementSelect.disabled = false;
     } catch (error) {
       console.error('Failed to load measurements:', error);
       measurementSelect.innerHTML = '<option value="">Error loading measurements</option>';
     }
-    
+
     this.validateForm();
   }
 }

@@ -15,7 +15,7 @@
           <form id="autoeq-form" class="parameter-form">
             <!-- Data Source -->
             <div class="section-group">
-              <h3>Select Data</h3>
+              <h3>Data Acquisition</h3>
               <div class="input-source-tabs">
                 <label class="tab-label" data-tab="file">
                   <input type="radio" name="input-source" value="file">
@@ -162,6 +162,27 @@
                   </select>
                 </div>
 
+                <!-- DE Strategy Parameters (conditional) -->
+                <div class="param-item de-param" id="strategy-param" style="display: none;">
+                  <label>Strategy</label>
+                  <select id="strategy" name="strategy">
+                    <option value="currenttobest1bin" selected>Current-to-Best/1/Bin (Recommended)</option>
+                    <option value="rand1bin">Rand/1/Bin</option>
+                    <option value="best1bin">Best/1/Bin</option>
+                    <option value="rand2bin">Rand/2/Bin</option>
+                    <option value="best2bin">Best/2/Bin</option>
+                    <option value="randtobest1bin">Rand-to-Best/1/Bin</option>
+                    <option value="rand1exp">Rand/1/Exp</option>
+                    <option value="best1exp">Best/1/Exp</option>
+                    <option value="rand2exp">Rand/2/Exp</option>
+                    <option value="best2exp">Best/2/Exp</option>
+                    <option value="currenttobest1exp">Current-to-Best/1/Exp</option>
+                    <option value="randtobest1exp">Rand-to-Best/1/Exp</option>
+                    <option value="adaptivebin">Adaptive/Bin (Experimental)</option>
+                    <option value="adaptiveexp">Adaptive/Exp (Experimental)</option>
+                  </select>
+                </div>
+
                 <!-- Global Algorithm Parameters -->
                 <div class="param-item global-algo-param">
                   <label>Population</label>
@@ -182,27 +203,6 @@
                 <div class="param-item">
                   <label>Spacing Weight</label>
                   <input type="number" id="spacing-weight" name="spacing_weight" value="20.0" step="1">
-                </div>
-
-                <!-- DE Strategy Parameters (conditional) -->
-                <div class="param-item de-param" id="strategy-param" style="display: none;">
-                  <label>Strategy</label>
-                  <select id="strategy" name="strategy">
-                    <option value="currenttobest1bin" selected>Current-to-Best/1/Bin (Recommended)</option>
-                    <option value="rand1bin">Rand/1/Bin</option>
-                    <option value="best1bin">Best/1/Bin</option>
-                    <option value="rand2bin">Rand/2/Bin</option>
-                    <option value="best2bin">Best/2/Bin</option>
-                    <option value="randtobest1bin">Rand-to-Best/1/Bin</option>
-                    <option value="rand1exp">Rand/1/Exp</option>
-                    <option value="best1exp">Best/1/Exp</option>
-                    <option value="rand2exp">Rand/2/Exp</option>
-                    <option value="best2exp">Best/2/Exp</option>
-                    <option value="currenttobest1exp">Current-to-Best/1/Exp</option>
-                    <option value="randtobest1exp">Rand-to-Best/1/Exp</option>
-                    <option value="adaptivebin">Adaptive/Bin (Experimental)</option>
-                    <option value="adaptiveexp">Adaptive/Exp (Experimental)</option>
-                  </select>
                 </div>
 
                 <!-- Adaptive F Parameter (conditional) -->
@@ -235,10 +235,10 @@
                 <div class="param-group-header">Refinement</div>
                 <div class="param-grid refinement-params">
                   <div class="param-item">
-                    <label><input type="checkbox" id="refine" name="refine"> Enable Refinement</label>
+                    <label><input type="checkbox" id="refine" name="refine">Enable</label>
                   </div>
                   <div class="param-item">
-                    <label>Local Algo</label>
+                    <label>Local Optimiser</label>
                     <select id="local-algo" name="local_algo" disabled>
                       <option value="cobyla">COBYLA</option>
                       <option value="bobyqa">BOBYQA</option>
@@ -251,7 +251,7 @@
               <div class="param-group-section">
                 <div class="param-group-header">Smoothing</div>
                 <div class="checkbox-group">
-                  <label><input type="checkbox" id="smooth" name="smooth" checked> Enable Smoothing</label>
+                  <label><input type="checkbox" id="smooth" name="smooth" checked>Enable</label>
                 </div>
                 <div class="param-grid smoothing-params">
                   <div class="param-item">
@@ -298,7 +298,9 @@
           <div class="plots-accordion">
             <div class="plot-section expanded">
               <div class="plot-header" data-plot="filter-details">
-                <h4>Filter Details</h4>
+                <h4>Filter Details
+                  <span class="help-tooltip" title="Frequency values are in Hz, Q factors control filter bandwidth (higher Q = narrower filter), and gain values show boost (+) or cut (-) in dB. These parameters can be imported into your audio software or hardware EQ that supports parametric EQ with peak filters.">❓</span>
+                </h4>
                 <span class="accordion-arrow">▼</span>
               </div>
               <div id="filter-details-plot" class="plot-container">No data to display</div>
@@ -346,7 +348,7 @@
 
             <div class="plot-section collapsed">
               <div class="plot-header" data-plot="spin">
-                <h4>Spinorama Combined</h4>
+                <h4>Spinorama</h4>
                 <span class="accordion-arrow">▶</span>
               </div>
               <div id="spin-plot" class="plot-container">No data to display</div>
@@ -377,6 +379,11 @@
               </div>
               <div class="progress-percentage" id="progress-percentage">0%</div>
             </div>
+          </div>
+
+          <!-- Progress Graph -->
+          <div class="progress-graph-container">
+            <div id="progress-graph" style="width: 400px; height: 400px;"></div>
           </div>
 
           <div class="progress-table-container">

@@ -1,6 +1,6 @@
 [package]
 name = "autoeq-testfunctions"
-version = "0.2.187"
+version = "0.2.30"
 edition = "2021"
 authors = ["Pierre Aubert <pierre@spinorama.org>"]
 license = "GPL-3.0-or-later"

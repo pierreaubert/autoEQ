@@ -954,6 +954,21 @@ input[type="checkbox"] {
   font-weight: 500;
 }
 
+/* Progress Graph */
+.progress-graph-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: var(--spacing-md) 0;
+  min-height: 400px;
+}
+
+.progress-graph-container > div {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  background: var(--bg-secondary);
+}
+
 .modal-footer {
   background: var(--bg-accent);
   padding: var(--spacing-md) var(--spacing-lg);
@@ -1025,4 +1040,57 @@ input[type="checkbox"] {
   .progress-table td {
     padding: var(--spacing-xs) var(--spacing-sm);
   }
+}
+
+/* Help tooltip styling */
+.help-tooltip {
+  display: inline-block;
+  margin-left: 6px;
+  color: var(--text-secondary);
+  cursor: help;
+  font-size: 14px;
+  opacity: 0.7;
+  transition: opacity 0.2s, color 0.2s;
+  position: relative;
+}
+
+.help-tooltip:hover {
+  opacity: 1;
+  color: var(--info-color);
+}
+
+.help-tooltip[title]:hover::after {
+  content: attr(title);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: normal;
+  width: 300px;
+  box-shadow: var(--shadow-md);
+  border: 1px solid var(--border-color);
+  z-index: 1000;
+  pointer-events: none;
+  margin-bottom: 4px;
+}
+
+.help-tooltip[title]:hover::before {
+  content: '';
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 6px solid var(--border-color);
+  z-index: 1001;
+  margin-bottom: -2px;
 }

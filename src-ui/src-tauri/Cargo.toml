@@ -1,6 +1,6 @@
 [package]
 name = "autoeq-ui-tauri"
-version = "0.3.0"
+version = "0.3.17"
 description = "AutoEQ: optimise your speaker or your headset"
 authors = ["pierre@spinorama.org"]
 edition = "2024"
@@ -30,5 +30,5 @@ reqwest = { workspace = true }
 urlencoding = { workspace = true }
 blas-src = { workspace = true }
 tauri-plugin-clipboard-manager = "2"
-# openblas-src = { workspace = true }  # Using Accelerate instead on macOS
+
 
