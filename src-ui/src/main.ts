@@ -227,15 +227,19 @@ class AutoEQUI {
       console.log('Input element found:', input);
       console.log('Opening file dialog...');
       
+      // Enhanced dialog options for better macOS compatibility
       const result = await openDialog({
         multiple: false,
         directory: false,
         filters: [{
           name: 'CSV Files',
           extensions: ['csv']
+        }, {
+          name: 'All Files',
+          extensions: ['*']
         }],
         defaultPath: undefined,
-        title: 'Select CSV File'
+        title: inputId.includes('target') ? 'Select Target CSV File (Optional)' : 'Select Input CSV File'
       });
       
       console.log('Dialog result:', result);
@@ -243,38 +247,151 @@ class AutoEQUI {
         console.log('Setting input value to:', result);
         input.value = result;
         input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
         this.validateForm();
+        // Show success feedback
+        this.showFileSelectionSuccess(inputId, result);
       } else if (result === null) {
         console.log('Dialog cancelled by user');
+      } else if (Array.isArray(result) && result.length > 0) {
+        // Handle array result (shouldn't happen with multiple: false, but just in case)
+        const filePath = result[0];
+        console.log('Setting input value to (from array):', filePath);
+        input.value = filePath;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+        this.validateForm();
+        this.showFileSelectionSuccess(inputId, filePath);
       } else {
-        console.log('No file selected');
+        console.log('No file selected or unexpected result format:', result);
       }
     } catch (error) {
       console.error('Error opening file dialog:', error);
+      // Show error message to user
+      this.showFileDialogError(error);
       // Fallback: try to trigger a native file input
       this.fallbackFileDialog(inputId);
     }
   }
   
   private fallbackFileDialog(inputId: string): void {
+    console.log('Using fallback file dialog for:', inputId);
     const input = document.getElementById(inputId) as HTMLInputElement;
     const fileInput = document.createElement('input');
     fileInput.type = 'file';
-    fileInput.accept = '.csv';
+    fileInput.accept = '.csv,text/csv';
     fileInput.style.display = 'none';
     
     fileInput.onchange = (event) => {
       const file = (event.target as HTMLInputElement).files?.[0];
       if (file) {
+        // In fallback mode, we can only get the filename, not the full path
+        // This is a browser security limitation
         input.value = file.name; // Note: This gives filename, not full path
         input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
         this.validateForm();
+        // Show warning about fallback mode
+        this.showFallbackWarning(inputId, file.name);
       }
     };
     
     document.body.appendChild(fileInput);
     fileInput.click();
     document.body.removeChild(fileInput);
+  }
+  
+  private showFileSelectionSuccess(inputId: string, filePath: string): void {
+    const fileName = filePath.split('/').pop() || filePath;
+    const message = `Selected file: ${fileName}`;
+    console.log('File selection success:', message);
+    
+    // Add visual feedback to the input
+    const input = document.getElementById(inputId) as HTMLInputElement;
+    if (input) {
+      input.style.borderColor = '#28a745'; // Green border for success
+      input.title = `Selected: ${filePath}`;
+      setTimeout(() => {
+        input.style.borderColor = ''; // Reset border after 2 seconds
+      }, 2000);
+    }
+  }
+  
+  private showFileDialogError(error: any): void {
+    console.error('File dialog error details:', error);
+    const message = `File dialog failed: ${error?.message || error}. Using fallback file picker.`;
+    console.warn(message);
+    
+    // Show temporary error message to user
+    this.showTemporaryMessage(message, 'error');
+  }
+  
+  private showFallbackWarning(inputId: string, fileName: string): void {
+    const message = `Using fallback file picker. Selected: ${fileName}. Note: Full file path not available in browser mode.`;
+    console.warn(`Fallback mode for ${inputId}:`, message);
+    
+    // Show warning message
+    this.showTemporaryMessage(message, 'warning');
+    
+    // Add visual indication to the input
+    const input = document.getElementById(inputId) as HTMLInputElement;
+    if (input) {
+      input.style.borderColor = '#ffc107'; // Yellow border for warning
+      input.title = `Fallback mode: ${fileName} (full path not available)`;
+      setTimeout(() => {
+        input.style.borderColor = ''; // Reset border after 3 seconds
+      }, 3000);
+    }
+  }
+  
+  private showTemporaryMessage(message: string, type: 'error' | 'warning' | 'success' = 'error'): void {
+    // Create temporary message element
+    const messageDiv = document.createElement('div');
+    messageDiv.textContent = message;
+    messageDiv.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      max-width: 400px;
+      padding: 12px 16px;
+      border-radius: 6px;
+      font-size: 14px;
+      z-index: 10000;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+      animation: slideIn 0.3s ease-out;
+      ${type === 'error' ? 'background-color: #dc3545; color: white;' : 
+        type === 'warning' ? 'background-color: #ffc107; color: black;' : 
+        'background-color: #28a745; color: white;'}
+    `;
+    
+    // Add animation keyframes if not already added
+    if (!document.getElementById('temp-message-styles')) {
+      const style = document.createElement('style');
+      style.id = 'temp-message-styles';
+      style.textContent = `
+        @keyframes slideIn {
+          from { transform: translateX(100%); opacity: 0; }
+          to { transform: translateX(0); opacity: 1; }
+        }
+        @keyframes slideOut {
+          from { transform: translateX(0); opacity: 1; }
+          to { transform: translateX(100%); opacity: 0; }
+        }
+      `;
+      document.head.appendChild(style);
+    }
+    
+    document.body.appendChild(messageDiv);
+    
+    // Remove after 4 seconds
+    setTimeout(() => {
+      messageDiv.style.animation = 'slideOut 0.3s ease-in forwards';
+      setTimeout(() => {
+        if (messageDiv.parentNode) {
+          messageDiv.parentNode.removeChild(messageDiv);
+        }
+      }, 300);
+    }, 4000);
   }
 
   private resetToDefaults(): void {
