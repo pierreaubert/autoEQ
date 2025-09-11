@@ -375,6 +375,8 @@ async fn run_optimization_internal(
         strategy_list: false, // UI doesn't need to list strategies
         adaptive_weight_f: params.adaptive_weight_f.unwrap_or(0.8), // Adaptive weight for F
         adaptive_weight_cr: params.adaptive_weight_cr.unwrap_or(0.7), // Adaptive weight for CR
+        no_parallel: false,
+        parallel_threads: 0,
     };
 
     // Load input curve

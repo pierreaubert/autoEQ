@@ -22,41 +22,50 @@ use ndarray::{Array1, Array2};
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 
-// Module declarations for extracted functions
-pub mod mutant_rand_to_best1;
-pub mod mutant_adaptive;
 pub mod stack_linear_penalty;
+
 pub mod apply_wls;
 pub mod apply_integrality;
-pub mod argmin;
+
 pub mod init_random;
 pub mod init_latin_hypercube;
 pub mod distinct_indices;
+
+pub mod mutant_rand_to_best1;
+pub mod mutant_adaptive;
 pub mod mutant_best1;
 pub mod mutant_rand1;
 pub mod mutant_rand2;
 pub mod mutant_current_to_best1;
 pub mod mutant_best2;
+
 pub mod crossover_binomial;
 pub mod crossover_exponential;
+
 pub mod differential_evolution;
 pub mod impl_helpers;
-pub mod auto_de_params;
 pub mod auto_de;
 pub mod recorder;
-pub mod recorded_de;
-pub mod tests;
-pub mod adaptive;
 pub mod metadata;
 pub mod parallel_eval;
 
-// Re-exports for public API
-pub use auto_de_params::AutoDEParams;
+pub use auto_de::AutoDEParams;
 pub use auto_de::auto_de;
 pub use differential_evolution::differential_evolution;
 pub use recorder::{OptimizationRecorder, OptimizationRecord};
-pub use recorded_de::run_recorded_differential_evolution;
 pub use parallel_eval::ParallelConfig;
+
+pub(crate) fn argmin(v: &Array1<f64>) -> (usize, f64) {
+    let mut best_i = 0usize;
+    let mut best_v = v[0];
+    for (i, &val) in v.iter().enumerate() {
+        if val < best_v {
+            best_v = val;
+            best_i = i;
+        }
+    }
+    (best_i, best_v)
+}
 
 /// Differential Evolution strategy
 #[derive(Debug, Clone, Copy)]
@@ -247,7 +256,7 @@ impl NonlinearConstraintHelper {
             if (u - l).abs() < 1e-18 {
                 let fi = f.clone();
                 cfg.penalty_eq.push((
-                    Box::new(move |x: &Array1<f64>| {
+                    Arc::new(move |x: &Array1<f64>| {
                         let y = (fi)(x);
                         y[i] - l
                     }),
@@ -256,7 +265,7 @@ impl NonlinearConstraintHelper {
             } else {
                 let fi_u = f.clone();
                 cfg.penalty_ineq.push((
-                    Box::new(move |x: &Array1<f64>| {
+                    Arc::new(move |x: &Array1<f64>| {
                         let y = (fi_u)(x);
                         y[i] - u
                     }),
@@ -264,7 +273,7 @@ impl NonlinearConstraintHelper {
                 ));
                 let fi_l = f.clone();
                 cfg.penalty_ineq.push((
-                    Box::new(move |x: &Array1<f64>| {
+                    Arc::new(move |x: &Array1<f64>| {
                         let y = (fi_l)(x);
                         l - y[i]
                     }),
@@ -429,11 +438,11 @@ pub struct DEConfig {
     /// Print objective best at each iteration
     pub disp: bool,
     /// Optional per-iteration callback (may stop early)
-    pub callback: Option<Box<dyn FnMut(&DEIntermediate) -> CallbackAction + Send>>,
+    pub callback: Option<Box<dyn FnMut(&DEIntermediate) -> CallbackAction>>,
     /// Penalty-based inequality constraints: fc(x) <= 0
-    pub penalty_ineq: Vec<(Box<dyn Fn(&Array1<f64>) -> f64 + Send + Sync>, f64)>,
+    pub penalty_ineq: Vec<(Arc<dyn Fn(&Array1<f64>) -> f64 + Send + Sync>, f64)>,
     /// Penalty-based equality constraints: h(x) = 0
-    pub penalty_eq: Vec<(Box<dyn Fn(&Array1<f64>) -> f64 + Send + Sync>, f64)>,
+    pub penalty_eq: Vec<(Arc<dyn Fn(&Array1<f64>) -> f64 + Send + Sync>, f64)>,
     /// Optional linear constraints treated by penalty: lb <= A x <= ub (component-wise)
     pub linear_penalty: Option<LinearPenalty>,
     /// Polishing configuration (optional)
@@ -536,25 +545,31 @@ impl DEConfigBuilder {
     }
     pub fn callback(
         mut self,
-        cb: Box<dyn FnMut(&DEIntermediate) -> CallbackAction + Send>,
+        cb: Box<dyn FnMut(&DEIntermediate) -> CallbackAction>,
     ) -> Self {
         self.cfg.callback = Some(cb);
         self
     }
-    pub fn add_penalty_ineq(
+    pub fn add_penalty_ineq<FN>(
         mut self,
-        f: Box<dyn Fn(&Array1<f64>) -> f64 + Send + Sync>,
+        f: FN,
         w: f64,
-    ) -> Self {
-        self.cfg.penalty_ineq.push((f, w));
+    ) -> Self 
+    where
+        FN: Fn(&Array1<f64>) -> f64 + Send + Sync + 'static,
+    {
+        self.cfg.penalty_ineq.push((Arc::new(f), w));
         self
     }
-    pub fn add_penalty_eq(
+    pub fn add_penalty_eq<FN>(
         mut self,
-        f: Box<dyn Fn(&Array1<f64>) -> f64 + Send + Sync>,
+        f: FN,
         w: f64,
-    ) -> Self {
-        self.cfg.penalty_eq.push((f, w));
+    ) -> Self 
+    where
+        FN: Fn(&Array1<f64>) -> f64 + Send + Sync + 'static,
+    {
+        self.cfg.penalty_eq.push((Arc::new(f), w));
         self
     }
     pub fn linear_penalty(mut self, lp: LinearPenalty) -> Self {
@@ -681,7 +696,6 @@ where
     /// Run the optimization and return a report
     pub fn solve(&mut self) -> DEReport {
         use apply_integrality::apply_integrality;
-        use argmin::argmin;
         use crossover_binomial::binomial_crossover;
         use crossover_exponential::exponential_crossover;
         use init_latin_hypercube::init_latin_hypercube;
@@ -786,36 +800,46 @@ where
             }
         }
         
-        // Evaluate initial population
-        let has_penalties = !self.config.penalty_ineq.is_empty() || 
-                           !self.config.penalty_eq.is_empty() || 
-                           self.config.linear_penalty.is_some();
+        // Build thread-safe energy function that includes penalties
+        let func_ref = self.func;
+        let penalty_ineq_vec: Vec<(Arc<dyn Fn(&Array1<f64>) -> f64 + Send + Sync>, f64)> = self.config.penalty_ineq.iter().map(|(f,w)| (f.clone(), *w)).collect();
+        let penalty_eq_vec: Vec<(Arc<dyn Fn(&Array1<f64>) -> f64 + Send + Sync>, f64)> = self.config.penalty_eq.iter().map(|(f,w)| (f.clone(), *w)).collect();
+        let linear_penalty = self.config.linear_penalty.clone();
         
-        let mut energies = if self.config.parallel.enabled && !has_penalties {
-            // Parallel evaluation only when there are no penalty functions
-            // (penalty functions contain non-cloneable closures)
-            if self.config.disp {
-                eprintln!("  Using parallel evaluation with {} threads", 
-                    self.config.parallel.num_threads.map_or("default".to_string(), |n| n.to_string()));
+        let energy_fn = Arc::new(move |x: &Array1<f64>| -> f64 {
+            let base = (func_ref)(x);
+            let mut p = 0.0;
+            for (f, w) in &penalty_ineq_vec {
+                let v = f(x);
+                let viol = v.max(0.0);
+                p += w * viol * viol;
             }
-            let func_ref = self.func;
-            let energy_fn = Arc::new(move |x: &Array1<f64>| -> f64 {
-                func_ref(x)
-            });
-            parallel_eval::evaluate_population_parallel(&eval_pop, energy_fn, &self.config.parallel)
-        } else {
-            // Sequential evaluation (with or without penalties)
-            if self.config.disp && self.config.parallel.enabled && has_penalties {
-                eprintln!("  Note: Parallel evaluation disabled due to penalty functions");
+            for (h, w) in &penalty_eq_vec {
+                let v = h(x);
+                p += w * v * v;
             }
-            let mut energies = Array1::zeros(npop);
-            for i in 0..npop {
-                let individual = eval_pop.row(i).to_owned();
-                energies[i] = self.energy(&individual);
+            if let Some(ref lp) = linear_penalty {
+                let ax = lp.a.dot(&x.view());
+                for i in 0..ax.len() {
+                    let v = ax[i];
+                    let lo = lp.lb[i];
+                    let hi = lp.ub[i];
+                    if v < lo {
+                        let d = lo - v;
+                        p += lp.weight * d * d;
+                    }
+                    if v > hi {
+                        let d = v - hi;
+                        p += lp.weight * d * d;
+                    }
+                }
             }
-            energies
-        };
+            base + p
+        });
+        
+        let mut energies = parallel_eval::evaluate_population_parallel(&eval_pop, energy_fn, &self.config.parallel);
         nfev += npop;
+
 
         // Report initial population statistics
         let pop_mean = energies.mean().unwrap_or(0.0);
@@ -891,7 +915,7 @@ where
             // Generate all trials first, then evaluate in parallel
             let mut trials = Vec::with_capacity(npop);
             let mut trial_params = Vec::with_capacity(npop); // Store (f, cr) for adaptive updates
-            
+
             for i in 0..npop {
                 // Sample mutation factor and crossover rate (adaptive or fixed)
                 let (f, cr) = if let Some(ref adaptive) = adaptive_state {
@@ -1006,29 +1030,50 @@ where
                 trials.push(trial_clipped);
                 trial_params.push((f, cr));
             }
+            // Evaluate all trials including penalties, possibly in parallel
+            let func_ref = self.func;
+            let penalty_ineq_vec: Vec<(Arc<dyn Fn(&Array1<f64>) -> f64 + Send + Sync>, f64)> = self.config.penalty_ineq.iter().map(|(f,w)| (f.clone(), *w)).collect();
+            let penalty_eq_vec: Vec<(Arc<dyn Fn(&Array1<f64>) -> f64 + Send + Sync>, f64)> = self.config.penalty_eq.iter().map(|(f,w)| (f.clone(), *w)).collect();
+            let linear_penalty = self.config.linear_penalty.clone();
             
-            // Evaluate all trials
-            let has_penalties = !self.config.penalty_ineq.is_empty() || 
-                               !self.config.penalty_eq.is_empty() || 
-                               self.config.linear_penalty.is_some();
+            let energy_fn_loop = Arc::new(move |x: &Array1<f64>| -> f64 {
+                let base = (func_ref)(x);
+                let mut p = 0.0;
+                for (f, w) in &penalty_ineq_vec {
+                    let v = f(x);
+                    let viol = v.max(0.0);
+                    p += w * viol * viol;
+                }
+                for (h, w) in &penalty_eq_vec {
+                    let v = h(x);
+                    p += w * v * v;
+                }
+                if let Some(ref lp) = linear_penalty {
+                    let ax = lp.a.dot(&x.view());
+                    for i in 0..ax.len() {
+                        let v = ax[i];
+                        let lo = lp.lb[i];
+                        let hi = lp.ub[i];
+                        if v < lo {
+                            let d = lo - v;
+                            p += lp.weight * d * d;
+                        }
+                        if v > hi {
+                            let d = v - hi;
+                            p += lp.weight * d * d;
+                        }
+                    }
+                }
+                base + p
+            });
             
-            let trial_energies = if self.config.parallel.enabled && !has_penalties {
-                // Parallel evaluation only when there are no penalty functions
-                let func_ref = self.func;
-                let energy_fn_loop = Arc::new(move |x: &Array1<f64>| -> f64 {
-                    func_ref(x)
-                });
-                evaluate_trials_parallel(trials.clone(), energy_fn_loop, &self.config.parallel)
-            } else {
-                // Sequential evaluation
-                trials.iter().map(|trial| self.energy(trial)).collect()
-            };
+            let trial_energies = evaluate_trials_parallel(trials.clone(), energy_fn_loop, &self.config.parallel);
             nfev += npop;
-            
+
             // Selection phase: update population based on trial results
             for (i, (trial, trial_energy)) in trials.into_iter().zip(trial_energies.iter()).enumerate() {
                 let (f, cr) = trial_params[i];
-                
+
                 // Selection: replace if better
                 if *trial_energy <= energies[i] {
                     pop.row_mut(i).assign(&trial.view());
@@ -1130,11 +1175,6 @@ where
             nfev + polish_nfev,
         )
     }
-}
-
-/// Examples for using the differential evolution optimizer
-pub mod examples {
-    //! Example programs demonstrating differential evolution usage
 }
 
 #[cfg(test)]

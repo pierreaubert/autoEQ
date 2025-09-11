@@ -1000,7 +1000,7 @@ fn optimize_filters_autoeq(
         }
     };
     config_builder = config_builder.add_penalty_ineq(
-        Box::new(ceiling_penalty),
+        ceiling_penalty,
         setup.penalty_data.penalty_w_ceiling,
     );
 

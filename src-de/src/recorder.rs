@@ -79,8 +79,8 @@ impl OptimizationRecorder {
         let mut eval_counter_guard = self.eval_counter.lock().unwrap();
         *eval_counter_guard += 1;
         let eval_id = *eval_counter_guard;
-        
-        
+
+
         drop(eval_counter_guard);
 
         // Update best value
@@ -89,7 +89,7 @@ impl OptimizationRecorder {
             Some(best) => f_value < best,
             None => true,
         };
-        
+
         let best_so_far = if is_improvement {
             *best_guard = Some(f_value);
             f_value
@@ -115,13 +115,13 @@ impl OptimizationRecorder {
             let records_to_save = records_guard.clone();
             records_guard.clear();
             drop(records_guard);
-            
+
             // Save block in background
             let mut block_counter = self.block_counter.lock().unwrap();
             *block_counter += 1;
             let block_id = *block_counter;
             drop(block_counter);
-            
+
             if let Err(e) = self.save_block_to_csv(&records_to_save, block_id) {
                 eprintln!("Warning: Failed to save evaluation block {}: {}", block_id, e);
             }
@@ -183,27 +183,27 @@ impl OptimizationRecorder {
     /// Save any remaining records and finalize
     pub fn finalize(&self) -> Result<Vec<String>, Box<dyn std::error::Error>> {
         let mut saved_files = Vec::new();
-        
+
         // Save any remaining records
         let mut records_guard = self.records.lock().unwrap();
         if !records_guard.is_empty() {
             let records_to_save = records_guard.clone();
             records_guard.clear();
             drop(records_guard);
-            
+
             let mut block_counter = self.block_counter.lock().unwrap();
             *block_counter += 1;
             let block_id = *block_counter;
             drop(block_counter);
-            
+
             let filename = format!("{}/{}_block_{:04}.csv", self.output_dir, self.function_name, block_id);
             self.save_block_to_csv(&records_to_save, block_id)?;
             saved_files.push(filename);
         }
-        
+
         // Create a summary file with metadata
         self.save_summary(&saved_files)?;
-        
+
         Ok(saved_files)
     }
 
@@ -211,21 +211,21 @@ impl OptimizationRecorder {
     fn save_summary(&self, block_files: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         let summary_filename = format!("{}/{}_summary.txt", self.output_dir, self.function_name);
         let mut file = File::create(&summary_filename)?;
-        
+
         let total_evaluations = *self.eval_counter.lock().unwrap();
         let total_blocks = *self.block_counter.lock().unwrap();
         let best_value = *self.best_value.lock().unwrap();
-        
+
         writeln!(file, "Function: {}", self.function_name)?;
         writeln!(file, "Total evaluations: {}", total_evaluations)?;
         writeln!(file, "Total blocks: {}", total_blocks)?;
         writeln!(file, "Best value found: {:?}", best_value)?;
         writeln!(file, "Block files:")?;
-        
+
         for (i, _) in block_files.iter().enumerate() {
             writeln!(file, "  {}_block_{:04}.csv", self.function_name, i + 1)?;
         }
-        
+
         Ok(())
     }
 
@@ -293,5 +293,86 @@ impl OptimizationRecorder {
         } else {
             None
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use ndarray::Array1;
+    use crate::{
+        recorder::OptimizationRecorder,
+        run_recorded_differential_evolution, DEConfigBuilder,
+    };
+    use autoeq_testfunctions::quadratic;
+
+    #[test]
+    fn test_optimization_recorder() {
+        let recorder = OptimizationRecorder::new("test_function".to_string());
+
+        // Test recording evaluations directly
+        let x1 = Array1::from(vec![1.0, 2.0]);
+        recorder.set_generation(0);
+        recorder.record_evaluation(&x1, 5.0);
+
+        let x2 = Array1::from(vec![0.5, 1.0]);
+        recorder.set_generation(1);
+        recorder.record_evaluation(&x2, 1.25);
+
+        // Check records using test method
+        let records = recorder.get_test_records();
+        assert_eq!(records.len(), 2);
+
+        assert_eq!(records[0].iteration, 0);
+        assert_eq!(records[0].x, vec![1.0, 2.0]);
+        assert_eq!(records[0].best_result, 5.0);
+        assert!(records[0].is_improvement);
+
+        assert_eq!(records[1].iteration, 1);
+        assert_eq!(records[1].x, vec![0.5, 1.0]);
+        assert_eq!(records[1].best_result, 1.25);
+        assert!(records[1].is_improvement);
+    }
+
+    #[test]
+    fn test_recorded_optimization() {
+        // Test recording with simple quadratic function
+        let bounds = vec![(-5.0, 5.0), (-5.0, 5.0)];
+        let config = DEConfigBuilder::new()
+            .seed(42)
+            .maxiter(50) // Keep it short for testing
+            .popsize(10)
+            .build();
+
+        let result = run_recorded_differential_evolution(
+            "quadratic",
+            quadratic,
+            &bounds,
+            config,
+            "./data_generated/records",
+        );
+
+        assert!(result.is_ok());
+        let (_de_report, csv_path) = result.unwrap();
+
+        // Check that CSV file was created
+        assert!(std::path::Path::new(&csv_path).exists());
+        println!("CSV saved to: {}", csv_path);
+
+        // Read and verify CSV content
+        let csv_content = std::fs::read_to_string(&csv_path).expect("Failed to read CSV");
+        let lines: Vec<&str> = csv_content.trim().split('\n').collect();
+
+        // Should have header plus at least a few iterations
+        assert!(lines.len() > 1, "CSV should have header plus data rows");
+
+        // Check header format
+        let header = lines[0];
+        assert!(header.starts_with("eval_id,generation,x0,x1,f_value,best_so_far,is_improvement"));
+
+        println!(
+            "Recording test passed - {} iterations recorded",
+            lines.len() - 1
+        );
+
     }
 }
