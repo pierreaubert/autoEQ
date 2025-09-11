@@ -166,6 +166,14 @@ pub struct Args {
     /// Adaptive weight for CR parameter (DE adaptive strategies only)
     #[arg(long, default_value_t = 0.9)]
     pub adaptive_weight_cr: f64,
+
+    /// Disable parallel evaluation for DE algorithm (default: parallel is enabled)
+    #[arg(long = "no-parallel", default_value_t = false)]
+    pub no_parallel: bool,
+
+    /// Number of threads to use for parallel evaluation (0 = use all available cores)
+    #[arg(long, default_value_t = 0)]
+    pub parallel_threads: usize,
 }
 
 /// Display available optimization algorithms with descriptions and exit

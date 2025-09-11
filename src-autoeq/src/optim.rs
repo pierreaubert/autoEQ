@@ -34,8 +34,8 @@ use mh::{Bounded as MhBounded, Fitness as MhFitness, ObjFunc as MhObjFunc, Solve
 
 use super::loss::{flat_loss, mixed_loss, score_loss, LossType, ScoreLossData};
 use crate::de::{
-    differential_evolution, CallbackAction, DEConfigBuilder, DEIntermediate, DEReport, Init,
-    Mutation, Strategy,
+    differential_evolution, CallbackAction, DEConfigBuilder, DEIntermediate, DEReport,
+    Init, Mutation, ParallelConfig, Strategy,
 };
 // use ndarray::Array2; // unused
 use super::init_sobol::init_sobol;
@@ -965,6 +965,25 @@ fn optimize_filters_autoeq(
         config_builder = config_builder.adaptive(adaptive_cfg);
     }
 
+    // Configure parallel evaluation
+    let parallel_config = ParallelConfig {
+        enabled: !cli_args.no_parallel,
+        num_threads: if cli_args.parallel_threads == 0 {
+            None // Use all available cores
+        } else {
+            Some(cli_args.parallel_threads)
+        },
+    };
+    config_builder = config_builder.parallel(parallel_config);
+
+    if !cli_args.no_parallel {
+        eprintln!(
+            "🚄 Parallel evaluation enabled with {} threads",
+            cli_args.parallel_threads.eq(&0).then(|| "all available".to_string())
+                .unwrap_or_else(|| cli_args.parallel_threads.to_string())
+        );
+    }
+
     // Add native constraint penalties for ceiling and spacing constraints
     let ceiling_penalty = {
         let penalty_data = setup.penalty_data.clone();
@@ -1097,6 +1116,17 @@ pub fn optimize_filters_autoeq_with_callback(
     if let Some(adaptive_cfg) = adaptive_config {
         config_builder = config_builder.adaptive(adaptive_cfg);
     }
+
+    // Configure parallel evaluation
+    let parallel_config = ParallelConfig {
+        enabled: !cli_args.no_parallel,
+        num_threads: if cli_args.parallel_threads == 0 {
+            None // Use all available cores
+        } else {
+            Some(cli_args.parallel_threads)
+        },
+    };
+    config_builder = config_builder.parallel(parallel_config);
 
     let config = config_builder.build();
     let result = differential_evolution(&base_objective_fn, &setup.bounds, config);
