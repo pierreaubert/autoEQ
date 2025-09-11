@@ -1,6 +1,6 @@
 [package]
 name = "autoeq-de"
-version = "0.2.32"
+version = "0.2.33"
 edition = "2021"
 authors = ["Pierre Aubert <pierre@spinorama.org>"]
 license = "GPL-3.0-or-later"
@@ -13,6 +13,7 @@ ndarray = { workspace = true }
 blas-src = { workspace = true }
 # openblas-src = { workspace = true }  # Using Accelerate instead on macOS
 rand = { workspace = true }
+rayon = { workspace = true }
 csv = { workspace = true }
 clap = { workspace = true }
 plotly = { workspace = true }

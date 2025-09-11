@@ -48,6 +48,7 @@ pub mod recorded_de;
 pub mod tests;
 pub mod adaptive;
 pub mod metadata;
+pub mod parallel_eval;
 
 // Re-exports for public API
 pub use auto_de_params::AutoDEParams;
@@ -55,6 +56,7 @@ pub use auto_de::auto_de;
 pub use differential_evolution::differential_evolution;
 pub use optimization_recorder::{OptimizationRecorder, OptimizationRecord};
 pub use recorded_de::run_recorded_differential_evolution;
+pub use parallel_eval::ParallelConfig;
 
 /// Differential Evolution strategy
 #[derive(Debug, Clone, Copy)]
@@ -438,6 +440,8 @@ pub struct DEConfig {
     pub polish: Option<PolishConfig>,
     /// Adaptive differential evolution configuration
     pub adaptive: AdaptiveConfig,
+    /// Parallel evaluation configuration
+    pub parallel: parallel_eval::ParallelConfig,
 }
 
 impl Default for DEConfig {
@@ -463,6 +467,7 @@ impl Default for DEConfig {
             linear_penalty: None,
             polish: None,
             adaptive: AdaptiveConfig::default(),
+            parallel: parallel_eval::ParallelConfig::default(),
         }
     }
 }
@@ -577,6 +582,18 @@ impl DEConfigBuilder {
         self.cfg.adaptive.w_min = w_min;
         self
     }
+    pub fn parallel(mut self, parallel: parallel_eval::ParallelConfig) -> Self {
+        self.cfg.parallel = parallel;
+        self
+    }
+    pub fn enable_parallel(mut self, enable: bool) -> Self {
+        self.cfg.parallel.enabled = enable;
+        self
+    }
+    pub fn parallel_threads(mut self, num_threads: usize) -> Self {
+        self.cfg.parallel.num_threads = Some(num_threads);
+        self
+    }
     pub fn build(self) -> DEConfig {
         self.cfg
     }
@@ -677,6 +694,8 @@ where
         use mutant_rand2::mutant_rand2;
         use mutant_rand_to_best1::mutant_rand_to_best1;
         use apply_wls::apply_wls;
+        use parallel_eval::evaluate_trials_parallel;
+        use std::sync::Arc;
 
         let n = self.lower.len();
 
@@ -752,20 +771,51 @@ where
 
         // Evaluate energies (objective + penalties)
         let mut nfev: usize = 0;
-        let mut energies = Array1::zeros(npop);
         if self.config.disp {
             eprintln!("  Evaluating initial population of {} individuals...", npop);
         }
-        for i in 0..npop {
-            let xi = pop.row(i).to_owned();
-            let mut x_eval = xi.clone();
-            if let Some(mask) = &self.config.integrality {
+        
+        // Prepare population for evaluation (apply integrality constraints)
+        let mut eval_pop = pop.clone();
+        if let Some(mask) = &self.config.integrality {
+            for i in 0..npop {
+                let mut row = eval_pop.row_mut(i);
+                let mut x_eval = row.to_owned();
                 apply_integrality(&mut x_eval, mask, &self.lower, &self.upper);
+                row.assign(&x_eval);
             }
-            let fi = self.energy(&x_eval);
-            energies[i] = fi;
-            nfev += 1;
         }
+        
+        // Evaluate initial population
+        let has_penalties = !self.config.penalty_ineq.is_empty() || 
+                           !self.config.penalty_eq.is_empty() || 
+                           self.config.linear_penalty.is_some();
+        
+        let mut energies = if self.config.parallel.enabled && !has_penalties {
+            // Parallel evaluation only when there are no penalty functions
+            // (penalty functions contain non-cloneable closures)
+            if self.config.disp {
+                eprintln!("  Using parallel evaluation with {} threads", 
+                    self.config.parallel.num_threads.map_or("default".to_string(), |n| n.to_string()));
+            }
+            let func_ref = self.func;
+            let energy_fn = Arc::new(move |x: &Array1<f64>| -> f64 {
+                func_ref(x)
+            });
+            parallel_eval::evaluate_population_parallel(&eval_pop, energy_fn, &self.config.parallel)
+        } else {
+            // Sequential evaluation (with or without penalties)
+            if self.config.disp && self.config.parallel.enabled && has_penalties {
+                eprintln!("  Note: Parallel evaluation disabled due to penalty functions");
+            }
+            let mut energies = Array1::zeros(npop);
+            for i in 0..npop {
+                let individual = eval_pop.row(i).to_owned();
+                energies[i] = self.energy(&individual);
+            }
+            energies
+        };
+        nfev += npop;
 
         // Report initial population statistics
         let pop_mean = energies.mean().unwrap_or(0.0);
@@ -838,7 +888,10 @@ where
             accepted_trials = 0;
             improvement_count = 0;
 
-            // For deferred updating we build a new population in place
+            // Generate all trials first, then evaluate in parallel
+            let mut trials = Vec::with_capacity(npop);
+            let mut trial_params = Vec::with_capacity(npop); // Store (f, cr) for adaptive updates
+            
             for i in 0..npop {
                 // Sample mutation factor and crossover rate (adaptive or fixed)
                 let (f, cr) = if let Some(ref adaptive) = adaptive_state {
@@ -949,14 +1002,37 @@ where
                     apply_integrality(&mut trial_clipped, mask, &self.lower, &self.upper);
                 }
 
-                // Evaluate energy
-                let trial_energy = self.energy(&trial_clipped);
-                nfev += 1;
-
+                // Collect trial for parallel evaluation
+                trials.push(trial_clipped);
+                trial_params.push((f, cr));
+            }
+            
+            // Evaluate all trials
+            let has_penalties = !self.config.penalty_ineq.is_empty() || 
+                               !self.config.penalty_eq.is_empty() || 
+                               self.config.linear_penalty.is_some();
+            
+            let trial_energies = if self.config.parallel.enabled && !has_penalties {
+                // Parallel evaluation only when there are no penalty functions
+                let func_ref = self.func;
+                let energy_fn_loop = Arc::new(move |x: &Array1<f64>| -> f64 {
+                    func_ref(x)
+                });
+                evaluate_trials_parallel(trials.clone(), energy_fn_loop, &self.config.parallel)
+            } else {
+                // Sequential evaluation
+                trials.iter().map(|trial| self.energy(trial)).collect()
+            };
+            nfev += npop;
+            
+            // Selection phase: update population based on trial results
+            for (i, (trial, trial_energy)) in trials.into_iter().zip(trial_energies.iter()).enumerate() {
+                let (f, cr) = trial_params[i];
+                
                 // Selection: replace if better
-                if trial_energy <= energies[i] {
-                    pop.row_mut(i).assign(&trial_clipped);
-                    energies[i] = trial_energy;
+                if *trial_energy <= energies[i] {
+                    pop.row_mut(i).assign(&trial.view());
+                    energies[i] = *trial_energy;
                     accepted_trials += 1;
 
                     // Update adaptive parameters if improvement
@@ -965,7 +1041,7 @@ where
                     }
 
                     // Track if this is an improvement over the current best
-                    if trial_energy < best_f {
+                    if *trial_energy < best_f {
                         improvement_count += 1;
                     }
                 }
