@@ -2,7 +2,7 @@
 mod tests {
     use ndarray::Array1;
     use crate::{
-        OptimizationRecorder,
+        recorder::OptimizationRecorder,
         run_recorded_differential_evolution, DEConfigBuilder,
     };
     use autoeq_testfunctions::quadratic;

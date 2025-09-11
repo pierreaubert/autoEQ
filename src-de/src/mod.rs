@@ -37,13 +37,13 @@ pub mod mutant_rand1;
 pub mod mutant_rand2;
 pub mod mutant_current_to_best1;
 pub mod mutant_best2;
-pub mod binomial_crossover;
-pub mod exponential_crossover;
+pub mod crossover_binomial;
+pub mod crossover_exponential;
 pub mod differential_evolution;
 pub mod impl_helpers;
 pub mod auto_de_params;
 pub mod auto_de;
-pub mod optimization_recorder;
+pub mod recorder;
 pub mod recorded_de;
 pub mod tests;
 pub mod adaptive;
@@ -54,7 +54,7 @@ pub mod parallel_eval;
 pub use auto_de_params::AutoDEParams;
 pub use auto_de::auto_de;
 pub use differential_evolution::differential_evolution;
-pub use optimization_recorder::{OptimizationRecorder, OptimizationRecord};
+pub use recorder::{OptimizationRecorder, OptimizationRecord};
 pub use recorded_de::run_recorded_differential_evolution;
 pub use parallel_eval::ParallelConfig;
 
@@ -682,8 +682,8 @@ where
     pub fn solve(&mut self) -> DEReport {
         use apply_integrality::apply_integrality;
         use argmin::argmin;
-        use binomial_crossover::binomial_crossover;
-        use exponential_crossover::exponential_crossover;
+        use crossover_binomial::binomial_crossover;
+        use crossover_exponential::exponential_crossover;
         use init_latin_hypercube::init_latin_hypercube;
         use init_random::init_random;
         use mutant_adaptive::mutant_adaptive;

@@ -1,5 +1,6 @@
 use ndarray::Array1;
-use crate::{DEConfig, DEReport, OptimizationRecorder};
+use crate::{DEConfig, DEReport};
+use crate::recorder::OptimizationRecorder;
 use crate::differential_evolution::differential_evolution;
 use std::sync::Arc;
 
