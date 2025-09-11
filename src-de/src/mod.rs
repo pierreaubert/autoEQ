@@ -21,6 +21,7 @@ use std::sync::Arc;
 use ndarray::{Array1, Array2};
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
+use std::time::Instant;
 
 pub mod stack_linear_penalty;
 
@@ -46,6 +47,7 @@ pub mod differential_evolution;
 pub mod impl_helpers;
 pub mod auto_de;
 pub mod recorder;
+pub mod run_recorded;
 pub mod metadata;
 pub mod parallel_eval;
 
@@ -53,7 +55,9 @@ pub use auto_de::AutoDEParams;
 pub use auto_de::auto_de;
 pub use differential_evolution::differential_evolution;
 pub use recorder::{OptimizationRecorder, OptimizationRecord};
+pub use run_recorded::run_recorded_differential_evolution;
 pub use parallel_eval::ParallelConfig;
+
 
 pub(crate) fn argmin(v: &Array1<f64>) -> (usize, f64) {
     let mut best_i = 0usize;
@@ -758,6 +762,15 @@ where
             );
         }
 
+        // Timing toggle via env var
+        let timing_enabled = std::env::var("AUTOEQ_DE_TIMING").map(|v| v != "0").unwrap_or(false);
+
+        // Configure global rayon thread pool once if requested
+        if let Some(n) = self.config.parallel.num_threads {
+            // Ignore error if global pool already set
+            let _ = rayon::ThreadPoolBuilder::new().num_threads(n).build_global();
+        }
+
         // RNG
         let mut rng: StdRng = match self.config.seed {
             Some(s) => StdRng::seed_from_u64(s),
@@ -791,6 +804,7 @@ where
         
         // Prepare population for evaluation (apply integrality constraints)
         let mut eval_pop = pop.clone();
+        let t_integrality0 = Instant::now();
         if let Some(mask) = &self.config.integrality {
             for i in 0..npop {
                 let mut row = eval_pop.row_mut(i);
@@ -799,6 +813,7 @@ where
                 row.assign(&x_eval);
             }
         }
+        let t_integrality = t_integrality0.elapsed();
         
         // Build thread-safe energy function that includes penalties
         let func_ref = self.func;
@@ -837,8 +852,13 @@ where
             base + p
         });
         
+        let t_eval0 = Instant::now();
         let mut energies = parallel_eval::evaluate_population_parallel(&eval_pop, energy_fn, &self.config.parallel);
+        let t_eval_init = t_eval0.elapsed();
         nfev += npop;
+        if timing_enabled {
+            eprintln!("TIMING init: integrality={:.3} ms, eval={:.3} ms", t_integrality.as_secs_f64()*1e3, t_eval_init.as_secs_f64()*1e3);
+        }
 
 
         // Report initial population statistics
@@ -907,127 +927,150 @@ where
         let mut accepted_trials;
         let mut improvement_count;
 
+        let mut t_build_tot = std::time::Duration::ZERO;
+        let mut t_eval_tot = std::time::Duration::ZERO;
+        let mut t_select_tot = std::time::Duration::ZERO;
+        let mut t_iter_tot = std::time::Duration::ZERO;
+
         for iter in 1..=self.config.maxiter {
             nit = iter;
             accepted_trials = 0;
             improvement_count = 0;
 
+            let iter_start = Instant::now();
             // Generate all trials first, then evaluate in parallel
+            let t_build0 = Instant::now();
+            
+            // Parallelize trial generation using rayon
+            use rayon::prelude::*;
+            let trial_data: Vec<(Array1<f64>, f64, f64)> = (0..npop)
+                .into_par_iter()
+                .map(|i| {
+                    // Create thread-local RNG from base seed + iteration + individual index
+                    let mut local_rng: StdRng = if let Some(base_seed) = self.config.seed {
+                        StdRng::seed_from_u64(base_seed.wrapping_add((iter as u64) << 32).wrapping_add(i as u64))
+                    } else {
+                        // Use thread_rng for unseeded runs
+                        let mut thread_rng = rand::rng();
+                        StdRng::from_rng(&mut thread_rng)
+                    };
+
+                    // Sample mutation factor and crossover rate (adaptive or fixed)
+                    let (f, cr) = if let Some(ref adaptive) = adaptive_state {
+                        // Use adaptive parameter sampling
+                        let adaptive_f = adaptive.sample_f(&mut local_rng);
+                        let adaptive_cr = adaptive.sample_cr(&mut local_rng);
+                        (adaptive_f, adaptive_cr)
+                    } else {
+                        // Use fixed or dithered parameters
+                        (self.config.mutation.sample(&mut local_rng), self.config.recombination)
+                    };
+
+                    // Generate mutant and apply crossover based on strategy
+                    let (mutant, cross) = match self.config.strategy {
+                        Strategy::Best1Bin => (
+                            mutant_best1(i, &pop, best_idx, f, &mut local_rng),
+                            Crossover::Binomial,
+                        ),
+                        Strategy::Best1Exp => (
+                            mutant_best1(i, &pop, best_idx, f, &mut local_rng),
+                            Crossover::Exponential,
+                        ),
+                        Strategy::Rand1Bin => (mutant_rand1(i, &pop, f, &mut local_rng), Crossover::Binomial),
+                        Strategy::Rand1Exp => (
+                            mutant_rand1(i, &pop, f, &mut local_rng),
+                            Crossover::Exponential,
+                        ),
+                        Strategy::Rand2Bin => (mutant_rand2(i, &pop, f, &mut local_rng), Crossover::Binomial),
+                        Strategy::Rand2Exp => (
+                            mutant_rand2(i, &pop, f, &mut local_rng),
+                            Crossover::Exponential,
+                        ),
+                        Strategy::CurrentToBest1Bin => (
+                            mutant_current_to_best1(i, &pop, best_idx, f, &mut local_rng),
+                            Crossover::Binomial,
+                        ),
+                        Strategy::CurrentToBest1Exp => (
+                            mutant_current_to_best1(i, &pop, best_idx, f, &mut local_rng),
+                            Crossover::Exponential,
+                        ),
+                        Strategy::Best2Bin => (mutant_best2(i, &pop, best_idx, f, &mut local_rng), Crossover::Binomial),
+                        Strategy::Best2Exp => (
+                            mutant_best2(i, &pop, best_idx, f, &mut local_rng),
+                            Crossover::Exponential,
+                        ),
+                        Strategy::RandToBest1Bin => (
+                            mutant_rand_to_best1(i, &pop, best_idx, f, &mut local_rng),
+                            Crossover::Binomial,
+                        ),
+                        Strategy::RandToBest1Exp => (
+                            mutant_rand_to_best1(i, &pop, best_idx, f, &mut local_rng),
+                            Crossover::Exponential,
+                        ),
+                        Strategy::AdaptiveBin => {
+                            if let Some(ref adaptive) = adaptive_state {
+                                (
+                                    mutant_adaptive(i, &pop, &energies, adaptive.current_w, f, &mut local_rng),
+                                    Crossover::Binomial,
+                                )
+                            } else {
+                                // Fallback to rand1 if adaptive state not available
+                                (mutant_rand1(i, &pop, f, &mut local_rng), Crossover::Binomial)
+                            }
+                        },
+                        Strategy::AdaptiveExp => {
+                            if let Some(ref adaptive) = adaptive_state {
+                                (
+                                    mutant_adaptive(i, &pop, &energies, adaptive.current_w, f, &mut local_rng),
+                                    Crossover::Exponential,
+                                )
+                            } else {
+                                // Fallback to rand1 if adaptive state not available
+                                (mutant_rand1(i, &pop, f, &mut local_rng), Crossover::Exponential)
+                            }
+                        },
+                    };
+
+                    // If strategy didn't dictate crossover, fallback to config
+                    let crossover = cross;
+                    let trial = match crossover {
+                        Crossover::Binomial => {
+                            binomial_crossover(&pop.row(i).to_owned(), &mutant, cr, &mut local_rng)
+                        }
+                        Crossover::Exponential => {
+                            exponential_crossover(&pop.row(i).to_owned(), &mutant, cr, &mut local_rng)
+                        }
+                    };
+
+                    // Apply WLS if enabled
+                    let wls_trial = if self.config.adaptive.wls_enabled &&
+                                      local_rng.random::<f64>() < self.config.adaptive.wls_prob {
+                        apply_wls(&trial, &self.lower, &self.upper, self.config.adaptive.wls_scale, &mut local_rng)
+                    } else {
+                        trial.clone()
+                    };
+
+                    // Clip to bounds using ndarray
+                    let mut trial_clipped = wls_trial;
+                    for j in 0..trial_clipped.len() {
+                        trial_clipped[j] = trial_clipped[j].clamp(self.lower[j], self.upper[j]);
+                    }
+
+                    // Apply integrality if provided
+                    if let Some(mask) = &self.config.integrality {
+                        apply_integrality(&mut trial_clipped, mask, &self.lower, &self.upper);
+                    }
+
+                    // Return trial and parameters
+                    (trial_clipped, f, cr)
+                })
+                .collect();
+
+            // Unpack trials and parameters
             let mut trials = Vec::with_capacity(npop);
-            let mut trial_params = Vec::with_capacity(npop); // Store (f, cr) for adaptive updates
-
-            for i in 0..npop {
-                // Sample mutation factor and crossover rate (adaptive or fixed)
-                let (f, cr) = if let Some(ref adaptive) = adaptive_state {
-                    // Use adaptive parameter sampling
-                    let adaptive_f = adaptive.sample_f(&mut rng);
-                    let adaptive_cr = adaptive.sample_cr(&mut rng);
-                    (adaptive_f, adaptive_cr)
-                } else {
-                    // Use traditional parameter sampling
-                    let traditional_f = self.config.mutation.sample(&mut rng);
-                    let traditional_cr = self.config.recombination;
-                    (traditional_f, traditional_cr)
-                };
-
-                // Build mutant and pick crossover type from strategy when explicit, else from config
-                let (mutant, cross) = match self.config.strategy {
-                    Strategy::Best1Bin => (
-                        mutant_best1(i, &pop, best_idx, f, &mut rng),
-                        Crossover::Binomial,
-                    ),
-                    Strategy::Best1Exp => (
-                        mutant_best1(i, &pop, best_idx, f, &mut rng),
-                        Crossover::Exponential,
-                    ),
-                    Strategy::Rand1Bin => (mutant_rand1(i, &pop, f, &mut rng), Crossover::Binomial),
-                    Strategy::Rand1Exp => {
-                        (mutant_rand1(i, &pop, f, &mut rng), Crossover::Exponential)
-                    }
-                    Strategy::Rand2Bin => (mutant_rand2(i, &pop, f, &mut rng), Crossover::Binomial),
-                    Strategy::Rand2Exp => {
-                        (mutant_rand2(i, &pop, f, &mut rng), Crossover::Exponential)
-                    }
-                    Strategy::CurrentToBest1Bin => (
-                        mutant_current_to_best1(i, &pop, best_idx, f, &mut rng),
-                        Crossover::Binomial,
-                    ),
-                    Strategy::CurrentToBest1Exp => (
-                        mutant_current_to_best1(i, &pop, best_idx, f, &mut rng),
-                        Crossover::Exponential,
-                    ),
-                    Strategy::Best2Bin => (
-                        mutant_best2(i, &pop, best_idx, f, &mut rng),
-                        Crossover::Binomial,
-                    ),
-                    Strategy::Best2Exp => (
-                        mutant_best2(i, &pop, best_idx, f, &mut rng),
-                        Crossover::Exponential,
-                    ),
-                    Strategy::RandToBest1Bin => (
-                        mutant_rand_to_best1(i, &pop, best_idx, f, &mut rng),
-                        Crossover::Binomial,
-                    ),
-                    Strategy::RandToBest1Exp => (
-                        mutant_rand_to_best1(i, &pop, best_idx, f, &mut rng),
-                        Crossover::Exponential,
-                    ),
-                    Strategy::AdaptiveBin => {
-                        if let Some(ref adaptive) = adaptive_state {
-                            (
-                                mutant_adaptive(i, &pop, &energies, adaptive.current_w, f, &mut rng),
-                                Crossover::Binomial,
-                            )
-                        } else {
-                            // Fallback to rand1 if adaptive state not available
-                            (mutant_rand1(i, &pop, f, &mut rng), Crossover::Binomial)
-                        }
-                    },
-                    Strategy::AdaptiveExp => {
-                        if let Some(ref adaptive) = adaptive_state {
-                            (
-                                mutant_adaptive(i, &pop, &energies, adaptive.current_w, f, &mut rng),
-                                Crossover::Exponential,
-                            )
-                        } else {
-                            // Fallback to rand1 if adaptive state not available
-                            (mutant_rand1(i, &pop, f, &mut rng), Crossover::Exponential)
-                        }
-                    },
-                };
-
-                // If strategy didn't dictate crossover, fallback to config
-                let crossover = cross;
-                let trial = match crossover {
-                    Crossover::Binomial => {
-                        binomial_crossover(&pop.row(i).to_owned(), &mutant, cr, &mut rng)
-                    }
-                    Crossover::Exponential => {
-                        exponential_crossover(&pop.row(i).to_owned(), &mutant, cr, &mut rng)
-                    }
-                };
-
-                // Apply WLS if enabled
-                let wls_trial = if self.config.adaptive.wls_enabled &&
-                                  rng.random::<f64>() < self.config.adaptive.wls_prob {
-                    apply_wls(&trial, &self.lower, &self.upper, self.config.adaptive.wls_scale, &mut rng)
-                } else {
-                    trial.clone()
-                };
-
-                // Clip to bounds using ndarray
-                let mut trial_clipped = wls_trial;
-                for i in 0..trial_clipped.len() {
-                    trial_clipped[i] = trial_clipped[i].clamp(self.lower[i], self.upper[i]);
-                }
-
-                // Apply integrality if provided
-                if let Some(mask) = &self.config.integrality {
-                    apply_integrality(&mut trial_clipped, mask, &self.lower, &self.upper);
-                }
-
-                // Collect trial for parallel evaluation
-                trials.push(trial_clipped);
+            let mut trial_params = Vec::with_capacity(npop);
+            for (trial, f, cr) in trial_data {
+                trials.push(trial);
                 trial_params.push((f, cr));
             }
             // Evaluate all trials including penalties, possibly in parallel
@@ -1067,9 +1110,13 @@ where
                 base + p
             });
             
+            let t_build = t_build0.elapsed();
+            let t_eval0 = Instant::now();
             let trial_energies = evaluate_trials_parallel(trials.clone(), energy_fn_loop, &self.config.parallel);
+            let t_eval = t_eval0.elapsed();
             nfev += npop;
 
+            let t_select0 = Instant::now();
             // Selection phase: update population based on trial results
             for (i, (trial, trial_energy)) in trials.into_iter().zip(trial_energies.iter()).enumerate() {
                 let (f, cr) = trial_params[i];
@@ -1090,6 +1137,24 @@ where
                         improvement_count += 1;
                     }
                 }
+            }
+            let t_select = t_select0.elapsed();
+
+            t_build_tot += t_build;
+            t_eval_tot += t_eval;
+            t_select_tot += t_select;
+            let iter_dur = iter_start.elapsed();
+            t_iter_tot += iter_dur;
+
+            if timing_enabled && (iter <= 5 || iter % 10 == 0) {
+                eprintln!(
+                    "TIMING iter {:4}: build={:.3} ms, eval={:.3} ms, select={:.3} ms, total={:.3} ms",
+                    iter,
+                    t_build.as_secs_f64()*1e3,
+                    t_eval.as_secs_f64()*1e3,
+                    t_select.as_secs_f64()*1e3,
+                    iter_dur.as_secs_f64()*1e3,
+                );
             }
 
             // Update adaptive parameters after each generation
@@ -1163,6 +1228,16 @@ where
         } else {
             (best_x.clone(), best_f, 0)
         };
+
+        if timing_enabled {
+            eprintln!(
+                "TIMING total: build={:.3} s, eval={:.3} s, select={:.3} s, iter_total={:.3} s",
+                t_build_tot.as_secs_f64(),
+                t_eval_tot.as_secs_f64(),
+                t_select_tot.as_secs_f64(),
+                t_iter_tot.as_secs_f64()
+            );
+        }
 
         self.finish_report(
             pop,

@@ -49,38 +49,15 @@ where
         return energies;
     }
     
-    // Set thread pool size if specified
-    let pool = if let Some(num_threads) = config.num_threads {
-        rayon::ThreadPoolBuilder::new()
-            .num_threads(num_threads)
-            .build()
-    } else {
-        // Use global thread pool with default settings
-        Ok(rayon::ThreadPoolBuilder::new().build().unwrap())
-    };
-    
-    let results = if let Ok(pool) = pool {
-        // Use custom thread pool
-        pool.install(|| {
-            (0..npop)
-                .into_par_iter()
-                .map(|i| {
-                    let individual = population.row(i).to_owned();
-                    eval_fn(&individual)
-                })
-                .collect::<Vec<f64>>()
+    // Always use global thread pool (configured once in solver)
+    let results = (0..npop)
+        .into_par_iter()
+        .map(|i| {
+            let individual = population.row(i).to_owned();
+            eval_fn(&individual)
         })
-    } else {
-        // Fallback to global thread pool
-        (0..npop)
-            .into_par_iter()
-            .map(|i| {
-                let individual = population.row(i).to_owned();
-                eval_fn(&individual)
-            })
-            .collect::<Vec<f64>>()
-    };
-    
+        .collect::<Vec<f64>>();
+
     Array1::from_vec(results)
 }
 
@@ -109,23 +86,7 @@ where
         return trials.iter().map(|trial| eval_fn(trial)).collect();
     }
     
-    // Set thread pool size if specified
-    if let Some(num_threads) = config.num_threads {
-        if let Ok(pool) = rayon::ThreadPoolBuilder::new()
-            .num_threads(num_threads)
-            .build()
-        {
-            // Use custom thread pool
-            return pool.install(|| {
-                trials
-                    .par_iter()
-                    .map(|trial| eval_fn(trial))
-                    .collect()
-            });
-        }
-    }
-    
-    // Use global thread pool
+    // Always use global thread pool (configured once in solver)
     trials
         .par_iter()
         .map(|trial| eval_fn(trial))
@@ -165,8 +126,8 @@ where
         return results;
     }
     
-    // Parallel evaluation
-    let results: Vec<IndexedEvaluation> = (0..npop)
+    // Parallel evaluation (global thread pool)
+    (0..npop)
         .into_par_iter()
         .map(|i| {
             let individual = population.row(i).to_owned();
@@ -177,9 +138,7 @@ where
                 fitness,
             }
         })
-        .collect();
-    
-    results
+        .collect()
 }
 
 #[cfg(test)]

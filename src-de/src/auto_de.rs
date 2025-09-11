@@ -135,7 +135,6 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::auto_de_params::AutoDEParams;
     use autoeq_testfunctions::{create_bounds, quadratic};
 
 
