@@ -19,11 +19,15 @@
               <div class="input-source-tabs">
                 <label class="tab-label" data-tab="file">
                   <input type="radio" name="input-source" value="file">
-                  File Input
+                  Files
                 </label>
                 <label class="tab-label active" data-tab="api">
                   <input type="radio" name="input-source" value="api" checked>
-                  API Data
+                  Speakers
+                </label>
+                <label class="tab-label" data-tab="capture">
+                  <input type="radio" name="input-source" value="capture">
+                  Capture
                 </label>
               </div>
 
@@ -49,6 +53,28 @@
                 <select id="measurement" name="measurement" disabled>
                   <option value="">Select Measurement</option>
                 </select>
+              </div>
+
+              <div id="capture-inputs" class="tab-content">
+                <div class="capture-controls">
+                  <button type="button" id="capture-btn" class="capture-button">🎤 Start Capture</button>
+                  <div id="capture-status" class="capture-status" style="display: none;">
+                    <div class="capture-progress">
+                      <span id="capture-status-text">Ready</span>
+                      <div class="capture-progress-bar" style="display: none;">
+                        <div class="capture-progress-fill" id="capture-progress-fill"></div>
+                      </div>
+                    </div>
+                    <canvas id="capture-waveform" class="capture-waveform" style="display: none;"></canvas>
+                  </div>
+                  <div id="capture-result" class="capture-result" style="display: none;">
+                    <div class="capture-result-info">
+                      <span>✅ Captured response ready</span>
+                      <button type="button" id="capture-clear" class="capture-clear-btn">Clear</button>
+                    </div>
+                    <div id="capture-plot" class="capture-plot"></div>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -195,6 +221,16 @@
                   <input type="number" id="maxeval" name="maxeval" value="200000" step="1">
                 </div>
 
+                <!-- DE Parameters for mutation and recombination -->
+                <div class="param-item de-param" id="mutation-param">
+                  <label>F/Mutation</label>
+                  <input type="number" id="de-f" name="de_f" value="0.8" step="0.01" min="0.0" max="2.0">
+                </div>
+                <div class="param-item de-param" id="recombination-param">
+                  <label>CR/Recombination</label>
+                  <input type="number" id="de-cr" name="de_cr" value="0.9" step="0.01" min="0.0" max="1.0">
+                </div>
+
                 <!-- Spacing Parameters -->
                 <div class="param-item">
                   <label>Min Spacing</label>
@@ -208,34 +244,23 @@
                 <!-- Tolerance Parameters -->
                 <div class="param-item">
                   <label>Tolerance</label>
-                  <input type="number" id="tolerance" name="tolerance" value="1.e-4" step="1.e-6" min="1e-12">
+                  <input type="number" id="tolerance" name="tolerance" value="1e-3" step="1e-12" min="1e-12">
                 </div>
                 <div class="param-item">
                   <label>Abs Tolerance</label>
-                  <input type="number" id="abs-tolerance" name="abs_tolerance" value="1e-6" step="1e-8" min="1e-12">
+                  <input type="number" id="abs-tolerance" name="abs_tolerance" value="1e-4" step="1e-15" min="1e-15">
                 </div>
 
-                <!-- Adaptive F Parameter (conditional) -->
-                <div class="param-item adaptive-param" id="adaptive-f-param" style="display: none;">
-                  <label>F (Mutation)</label>
-                  <input type="number" id="de-f" name="de_f" value="0.8" step="0.01" min="0.1" max="2.0">
-                </div>
-
-                <!-- Adaptive CR Parameter (conditional) -->
-                <div class="param-item adaptive-param" id="adaptive-cr-param" style="display: none;">
-                  <label>CR (Crossover)</label>
-                  <input type="number" id="de-cr" name="de_cr" value="0.9" step="0.01" min="0.0" max="1.0">
-                </div>
 
                 <!-- Adaptive Weight F (conditional) -->
                 <div class="param-item adaptive-param" id="adaptive-weight-f-param" style="display: none;">
-                  <label>Adaptive Weight F</label>
+                  <label>Adaptive F</label>
                   <input type="number" id="adaptive-weight-f" name="adaptive_weight_f" value="0.8" step="0.01" min="0.1" max="1.0">
                 </div>
 
                 <!-- Adaptive Weight CR (conditional) -->
                 <div class="param-item adaptive-param" id="adaptive-weight-cr-param" style="display: none;">
-                  <label>Adaptive Weight CR</label>
+                  <label>Adaptive CR</label>
                   <input type="number" id="adaptive-weight-cr" name="adaptive_weight_cr" value="0.7" step="0.01" min="0.1" max="1.0">
                 </div>
 
@@ -243,11 +268,11 @@
 
               <div class="param-group-section">
                 <div class="param-group-header">Refinement</div>
-                <div class="param-grid refinement-params">
-                  <div class="param-item">
-                    <label><input type="checkbox" id="refine" name="refine">Enable</label>
+                <div class="inline-params">
+                  <div class="inline-item checkbox-item">
+                    <label class="checkbox-label"><input type="checkbox" id="refine" name="refine">Enable</label>
                   </div>
-                  <div class="param-item">
+                  <div class="inline-item flex-grow">
                     <label>Local Optimiser</label>
                     <select id="local-algo" name="local_algo" disabled>
                       <option value="cobyla">COBYLA</option>
@@ -260,11 +285,11 @@
 
               <div class="param-group-section">
                 <div class="param-group-header">Smoothing</div>
-                <div class="checkbox-group">
-                  <label><input type="checkbox" id="smooth" name="smooth" checked>Enable</label>
-                </div>
-                <div class="param-grid smoothing-params">
-                  <div class="param-item">
+                <div class="inline-params">
+                  <div class="inline-item checkbox-item">
+                    <label class="checkbox-label"><input type="checkbox" id="smooth" name="smooth" checked>Enable</label>
+                  </div>
+                  <div class="inline-item">
                     <label>Smooth N</label>
                     <input type="number" id="smooth-n" name="smooth_n" value="2" min="1" max="24">
                   </div>
@@ -353,6 +378,7 @@
                 <span class="accordion-arrow">▶</span>
               </div>
               <div id="spin-plot" class="plot-container">No data to display</div>
+              <div id="spin-plot-corrected" class="plot-container" style="margin-top: 20px;">No data to display</div>
             </div>
 
             <div class="plot-section expanded">
@@ -362,7 +388,10 @@
                 </h4>
                 <span class="accordion-arrow">▼</span>
               </div>
-              <div id="filter-details-plot" class="plot-container">No data to display</div>
+              <div id="filter-details-plot" class="plot-container">
+                <div id="filter-details-table">No data to display</div>
+                <div id="filter-details-graph" style="margin-top: 20px; min-height: 400px;"></div>
+              </div>
             </div>
           </div>
 
@@ -370,22 +399,26 @@
             <h4>Error</h4>
             <div id="error-message" class="error-message"></div>
           </div>
+        </div>
 
-          <!-- Audio Testing Controls -->
-          <div class="audio-testing-controls">
-            <div class="audio-control-row">
-              <div class="audio-left-controls">
-		<label for="demo-audio-select">Demo Track</label>
-		<select id="demo-audio-select" name="demo_audio">
-                  <option value="">Select track...</option>
-                  <option value="classical">Classical</option>
-                  <option value="rock">Rock</option>
-                  <option value="female_vocal">Female Vocal</option>
-		</select>
-              </div>
+        <!-- Audio Testing Controls - moved outside right panel -->
+        <div class="audio-testing-controls">
+          <div class="audio-control-row">
+            <div class="audio-left-controls">
+              <label for="demo-audio-select">Demo Track</label>
+              <select id="demo-audio-select" name="demo_audio">
+                <option value="">Select track...</option>
+                <option value="classical">Classical</option>
+                <option value="edm">EDM</option>
+                <option value="female_vocal">Female Vocal</option>
+                <option value="piano">Piano</option>
+                <option value="rock">Rock</option>
+              </select>
+            </div>
 
-              <div class="audio-center-controls">
-		<div class="audio-status" id="audio-status" style="display: none;">
+            <div class="audio-center-controls">
+              <div class="audio-playback-container">
+                <div class="audio-status" id="audio-status" style="display: none;">
                   <div class="audio-info-compact">
                     <span id="audio-status-text">Ready</span> •
                     <span id="audio-position">--:--</span> •
@@ -396,21 +429,35 @@
                       <div class="audio-progress-fill" id="audio-progress-fill" style="width: 0%;"></div>
                     </div>
                   </div>
-		</div>
-              </div>
+                </div>
 
-              <div class="audio-right-controls">
-		<div class="eq-toggle-buttons">
-                  <button type="button" id="eq-on-btn" class="eq-toggle-btn active">On</button>
-                  <button type="button" id="eq-off-btn" class="eq-toggle-btn">Off</button>
-		</div>
-		<button type="button" id="listen-btn" class="listen-button" disabled>
-                  🎵 Listen
-		</button>
-		<button type="button" id="stop-btn" class="stop-button" style="display: none;">
-                  ⏹️ Stop
-		</button>
+                <!-- Frequency Spectrum Analyzer -->
+                <div class="frequency-analyzer" id="frequency-analyzer" style="display: none;">
+                  <canvas id="spectrum-canvas"></canvas>
+                  <div class="frequency-labels">
+                    <span class="freq-label" data-range="sub-bass">Sub Bass<br><small>&lt;60Hz</small></span>
+                    <span class="freq-label" data-range="bass">Bass<br><small>60-250Hz</small></span>
+                    <span class="freq-label" data-range="low-mid">Low Mid<br><small>250-500Hz</small></span>
+                    <span class="freq-label" data-range="mid">Mid<br><small>500-2kHz</small></span>
+                    <span class="freq-label" data-range="high-mid">High Mid<br><small>2-4kHz</small></span>
+                    <span class="freq-label" data-range="presence">Presence<br><small>4-6kHz</small></span>
+                    <span class="freq-label" data-range="brilliance">Brilliance<br><small>6-20kHz</small></span>
+                  </div>
+                </div>
               </div>
+            </div>
+
+            <div class="audio-right-controls">
+              <div class="eq-toggle-buttons">
+                <button type="button" id="eq-on-btn" class="eq-toggle-btn active">On</button>
+                <button type="button" id="eq-off-btn" class="eq-toggle-btn">Off</button>
+              </div>
+              <button type="button" id="listen-btn" class="listen-button" disabled>
+                🎵 Listen
+              </button>
+              <button type="button" id="stop-btn" class="stop-button" style="display: none;">
+                ⏹️ Stop
+              </button>
             </div>
           </div>
         </div>

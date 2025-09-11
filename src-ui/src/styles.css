@@ -35,6 +35,8 @@
     --border-active: #5865f2;
     --button-primary: #5865f2;
     --button-primary-hover: #4752c4;
+    --button-secondary: #4e5058;
+    --button-secondary-hover: #5d6269;
     --success-color: #57f287;
     --warning-color: #fee75c;
     --danger-color: #ed4245;
@@ -67,6 +69,7 @@ body {
   display: flex;
   overflow: hidden;
   position: relative;
+  padding-bottom: 56px; /* Space for fixed audio bar */
 }
 
 .left-panel {
@@ -109,6 +112,7 @@ body {
   padding: var(--spacing-md);
   gap: var(--spacing-md);
   overflow: hidden;
+  min-height: 0; /* Allow shrinking */
 }
 
 /* Form Styling */
@@ -127,6 +131,7 @@ body {
   gap: var(--spacing-sm);
   flex-shrink: 0;
   margin-top: 0;
+  justify-content: space-between;
 }
 
 /* Conditional Parameters */
@@ -174,7 +179,63 @@ body {
   margin-top: var(--spacing-sm);
 }
 
-/* Refinement Parameters */
+/* Inline Parameters (Refinement & Smoothing) */
+.inline-params {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--spacing-md);
+  margin-top: var(--spacing-sm);
+}
+
+.inline-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.inline-item label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  margin-bottom: 2px;
+}
+
+.inline-item label input[type="checkbox"] {
+  margin: 0;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--button-primary);
+  cursor: pointer;
+}
+
+/* Checkbox items have different label styling */
+.inline-item.checkbox-item label,
+.inline-item label.checkbox-label {
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: 12px;
+  color: var(--text-primary);
+  margin-bottom: 0;
+  align-self: center;
+  padding-top: 18px; /* Align with other controls that have labels */
+}
+
+.inline-item.flex-grow {
+  flex: 1;
+}
+
+.inline-item select,
+.inline-item input[type="number"] {
+  width: 100%;
+  max-width: none;
+}
+
+/* Legacy styles - kept for backward compatibility */
 .refinement-params {
   margin-top: var(--spacing-sm);
 }
@@ -388,7 +449,6 @@ input[type="checkbox"] {
 
 .optimize-button,
 .reset-button {
-  flex: 1;
   height: 36px;
   border: none;
   border-radius: var(--radius);
@@ -399,27 +459,33 @@ input[type="checkbox"] {
 }
 
 .optimize-button {
+  flex: 1;
   background: var(--button-primary);
   color: white;
 }
 
 .optimize-button:hover:not(:disabled) {
   background: var(--button-primary-hover);
+  color: white;
 }
 
 .optimize-button:disabled {
   background: var(--text-secondary);
   cursor: not-allowed;
+  opacity: 0.6;
 }
 
 .reset-button {
-  background: var(--bg-accent);
-  border: 1px solid var(--border-color);
-  color: var(--text-primary);
+  padding: 0 var(--spacing-lg);
+  background: var(--button-secondary);
+  border: 1px solid var(--button-secondary);
+  color: white;
 }
 
 .reset-button:hover {
-  background: var(--border-color);
+  background: var(--button-secondary-hover);
+  border-color: var(--button-secondary-hover);
+  color: white;
 }
 
 /* Right Panel */
@@ -672,6 +738,118 @@ input[type="checkbox"] {
   border-left: 4px solid var(--danger-color);
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+/* Capture Interface Styles */
+.capture-controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.capture-button {
+  width: 100%;
+  padding: var(--spacing-md);
+  background: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: var(--radius);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.capture-button:hover:not(:disabled) {
+  background: var(--primary-hover);
+}
+
+.capture-button:disabled {
+  background: var(--text-secondary);
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.capture-button.recording {
+  background: var(--danger-color);
+  animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+.capture-status {
+  background: var(--bg-accent);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  padding: var(--spacing-md);
+}
+
+.capture-progress {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.capture-progress-bar {
+  width: 100%;
+  height: 6px;
+  background: var(--bg-secondary);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.capture-progress-fill {
+  height: 100%;
+  background: var(--primary-color);
+  transition: width 0.1s linear;
+}
+
+.capture-waveform {
+  width: 100%;
+  height: 100px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  background: var(--bg-primary);
+  margin-top: var(--spacing-sm);
+}
+
+.capture-result {
+  background: var(--bg-accent);
+  border: 1px solid var(--success-color);
+  border-radius: var(--radius);
+  padding: var(--spacing-md);
+}
+
+.capture-result-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-md);
+}
+
+.capture-clear-btn {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background: var(--danger-color);
+  color: white;
+  border: none;
+  border-radius: var(--radius);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.capture-clear-btn:hover {
+  background: var(--danger-hover);
+}
+
+.capture-plot {
+  width: 100%;
+  height: 200px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  background: var(--bg-primary);
 }
 
 /* Responsive Design */
@@ -1099,32 +1277,36 @@ input[type="checkbox"] {
 
 /* Audio Testing Controls */
 .audio-testing-controls {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  width: 100%;
   background: var(--bg-secondary);
   border-top: 1px solid var(--border-color);
-  padding: 8px;
-  margin: 0 calc(-1 * var(--spacing-md)) 0 calc(-1 * var(--spacing-md)); /* Negative margin to offset right-panel padding */
-  margin-top: auto; /* Push to bottom */
-  flex-shrink: 0;
+  padding: var(--spacing-sm) var(--spacing-md);
+  display: flex;
+  align-items: center;
+  z-index: 1000;
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.1);
 }
 
 /* Remove the header styles as there's no h4 anymore */
 
 .audio-control-row {
-  margin-bottom: var(--spacing-md);
+  width: 100%;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--spacing-sm);
-}
-
-.audio-control-row:last-child {
-  margin-bottom: 0;
+  gap: var(--spacing-md);
+  height: 40px; /* Fixed height for consistent alignment */
 }
 
 .audio-left-controls {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
+  flex: 0 0 auto;
 }
 
 .audio-left-controls label {
@@ -1139,24 +1321,25 @@ input[type="checkbox"] {
   align-items: center;
   justify-content: center;
   flex: 1;
-  max-width: 300px;
+  margin: 0 var(--spacing-sm);
 }
 
 .audio-right-controls {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
+  flex: 0 0 auto;
 }
 
 #demo-audio-select {
-  width: 120px;
+  width: 140px;
   height: 32px;
-  padding: var(--spacing-sm);
+  padding: 4px 8px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius);
   background: var(--bg-primary);
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: 12px;
   cursor: pointer;
 }
 
@@ -1179,8 +1362,8 @@ input[type="checkbox"] {
 .eq-toggle-btn {
   flex: 1;
   border: none;
-  background: var(--bg-primary);
-  color: var(--text-secondary);
+  background: var(--bg-accent);
+  color: var(--text-primary);
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
@@ -1193,8 +1376,8 @@ input[type="checkbox"] {
 }
 
 .eq-toggle-btn:hover {
-  background: var(--bg-accent);
-  color: var(--text-primary);
+  background: var(--button-secondary);
+  color: white;
 }
 
 .eq-toggle-btn.active {
@@ -1205,8 +1388,8 @@ input[type="checkbox"] {
 
 .eq-toggle-btn.active:hover {
   background: var(--button-primary-hover);
+  color: white;
 }
-
 .listen-button, .stop-button {
   width: 80px;
   height: 32px;
@@ -1246,11 +1429,22 @@ input[type="checkbox"] {
   transform: none !important;
 }
 
-.audio-center-controls .audio-status {
+.audio-playback-container {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
   width: 100%;
+}
+
+.audio-center-controls .audio-status {
   border: none;
   padding: 0;
   margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
 .audio-info-compact {
@@ -1261,7 +1455,7 @@ input[type="checkbox"] {
   white-space: nowrap;
   font-size: 11px;
   color: var(--text-secondary);
-  margin-bottom: var(--spacing-xs);
+  margin-bottom: 4px;
 }
 
 .audio-info-compact span {
@@ -1270,18 +1464,18 @@ input[type="checkbox"] {
 }
 
 .audio-center-controls .audio-progress {
-  width: 100%;
-  max-width: 200px;
+  width: 100px;
   display: flex;
   justify-content: center;
 }
 
 .audio-center-controls .audio-progress-bar {
   width: 100%;
-  height: 3px;
+  height: 4px;
   background: var(--bg-accent);
-  border-radius: 1.5px;
+  border-radius: 2px;
   overflow: hidden;
+  position: relative;
 }
 
 .audio-center-controls .audio-progress-fill {
@@ -1289,6 +1483,89 @@ input[type="checkbox"] {
   background: var(--button-primary);
   border-radius: 1.5px;
   transition: width 0.1s ease;
+}
+
+/* Frequency Analyzer */
+.frequency-analyzer {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  flex: 1;
+  padding: 2px 4px;
+  background: var(--bg-primary);
+  border-radius: var(--radius);
+  border: 1px solid var(--border-color);
+  overflow: hidden;
+}
+
+#spectrum-canvas {
+  display: block;
+  height: 28px;
+  width: 100%;
+  image-rendering: crisp-edges;
+  image-rendering: pixelated;
+}
+
+/* Frequency Labels */
+.frequency-labels {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 2px 0;
+  margin-top: 2px;
+  border-top: 1px solid var(--border-color);
+  min-height: 24px;
+}
+
+.freq-label {
+  flex: 1;
+  text-align: center;
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0 2px;
+}
+
+.freq-label small {
+  display: block;
+  font-size: 8px;
+  font-weight: 400;
+  color: var(--text-tertiary);
+  opacity: 0.8;
+}
+
+/* Color coding for frequency ranges */
+.freq-label[data-range="sub-bass"] {
+  color: #ff3333;
+}
+
+.freq-label[data-range="bass"] {
+  color: #ff6633;
+}
+
+.freq-label[data-range="low-mid"] {
+  color: #ffaa33;
+}
+
+.freq-label[data-range="mid"] {
+  color: #88cc33;
+}
+
+.freq-label[data-range="high-mid"] {
+  color: #33cc88;
+}
+
+.freq-label[data-range="presence"] {
+  color: #3388ff;
+}
+
+.freq-label[data-range="brilliance"] {
+  color: #aa33ff;
 }
 
 /* Responsive adjustments for audio controls */
@@ -1299,24 +1576,38 @@ input[type="checkbox"] {
 
   .audio-control-row {
     gap: var(--spacing-xs);
-    flex-direction: column;
-    align-items: stretch;
+    flex-wrap: wrap;
   }
 
   .audio-left-controls {
     justify-content: flex-start;
     order: 1;
+    flex: 0 0 auto;
   }
 
   .audio-center-controls {
     order: 2;
-    margin: var(--spacing-sm) 0;
-    max-width: none;
+    flex: 1 1 100%;
+    margin: var(--spacing-xs) 0;
+  }
+  
+  .audio-playback-container {
+    flex-direction: column;
+    gap: var(--spacing-xs);
+  }
+  
+  .audio-center-controls .audio-status {
+    width: 100%;
+  }
+  
+  .frequency-analyzer {
+    width: 100%;
   }
 
   .audio-right-controls {
     justify-content: flex-end;
     order: 3;
+    flex: 0 0 auto;
   }
 
   .audio-left-controls label {

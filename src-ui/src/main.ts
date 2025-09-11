@@ -39,6 +39,9 @@ interface OptimizationParams {
   // Tolerance parameters
   tolerance: number;
   atolerance: number;
+  // Captured curve data
+  captured_frequencies?: number[];
+  captured_magnitudes?: number[];
 }
 
 interface PlotData {
@@ -56,6 +59,7 @@ interface OptimizationResult {
   preference_score_after?: number;
   filter_response?: PlotData;
   spin_details?: PlotData;
+  filter_plots?: PlotData;
 }
 
 class AutoEQUI {
@@ -72,6 +76,7 @@ class AutoEQUI {
   private earlyReflectionsPlotElement: HTMLElement;
   private soundPowerPlotElement: HTMLElement;
   private spinPlotElement: HTMLElement;
+  private spinPlotCorrectedElement: HTMLElement;
 
   // API data caching
   private speakers: string[] = [];
@@ -115,6 +120,10 @@ class AutoEQUI {
   private audioDuration: HTMLElement;
   private audioPosition: HTMLElement;
   private audioProgressFill: HTMLElement;
+  
+  // Filter plots data
+  private filterPlotsData: PlotData | null = null;
+  private lastSpinDetails: PlotData | null = null;
 
   // Web Audio API state
   private audioContext: AudioContext | null = null;
@@ -127,6 +136,27 @@ class AutoEQUI {
   private audioAnimationFrame: number | null = null;
   private currentFilterParams: number[] = [];
   private originalFilterParams: number[] = [];
+  
+  // Frequency analyzer
+  private analyserNode: AnalyserNode | null = null;
+  private spectrumCanvas: HTMLCanvasElement | null = null;
+  private spectrumCtx: CanvasRenderingContext2D | null = null;
+  private spectrumAnimationFrame: number | null = null;
+  private frequencyBinRanges: { start: number; end: number }[] = [];
+
+  // Capture state
+  private captureBtn: HTMLButtonElement | null = null;
+  private captureStatus: HTMLElement | null = null;
+  private captureStatusText: HTMLElement | null = null;
+  private captureProgressFill: HTMLElement | null = null;
+  private captureWaveform: HTMLCanvasElement | null = null;
+  private captureWaveformCtx: CanvasRenderingContext2D | null = null;
+  private captureResult: HTMLElement | null = null;
+  private captureClearBtn: HTMLButtonElement | null = null;
+  private capturePlot: HTMLElement | null = null;
+  private isCapturing: boolean = false;
+  private captureController: AbortController | null = null;
+  private capturedCurve: PlotData | null = null;
 
   constructor() {
     this.form = document.getElementById('autoeq-form') as HTMLFormElement;
@@ -142,6 +172,7 @@ class AutoEQUI {
     this.earlyReflectionsPlotElement = document.getElementById('early-reflections-plot') as HTMLElement;
     this.soundPowerPlotElement = document.getElementById('sound-power-plot') as HTMLElement;
     this.spinPlotElement = document.getElementById('spin-plot') as HTMLElement;
+    this.spinPlotCorrectedElement = document.getElementById('spin-plot-corrected') as HTMLElement;
 
     // Initialize modal elements
     this.optimizationModal = document.getElementById('optimization-modal') as HTMLElement;
@@ -166,12 +197,24 @@ class AutoEQUI {
     this.audioPosition = document.getElementById('audio-position') as HTMLElement;
     this.audioProgressFill = document.getElementById('audio-progress-fill') as HTMLElement;
 
+    // Capture elements
+    this.captureBtn = document.getElementById('capture-btn') as HTMLButtonElement;
+    this.captureStatus = document.getElementById('capture-status') as HTMLElement;
+    this.captureStatusText = document.getElementById('capture-status-text') as HTMLElement;
+    this.captureProgressFill = document.getElementById('capture-progress-fill') as HTMLElement;
+    this.captureWaveform = document.getElementById('capture-waveform') as HTMLCanvasElement;
+    this.captureWaveformCtx = this.captureWaveform ? this.captureWaveform.getContext('2d') : null;
+    this.captureResult = document.getElementById('capture-result') as HTMLElement;
+    this.captureClearBtn = document.getElementById('capture-clear') as HTMLButtonElement;
+    this.capturePlot = document.getElementById('capture-plot') as HTMLElement;
+
     this.setupEventListeners();
     this.setupUIInteractions();
     this.setupModalEventListeners();
     this.setupResizer();
     this.setupAutocomplete();
     this.setupAudioEventListeners();
+    this.setupSpectrumAnalyzer();
     this.resetToDefaults();
     this.updateConditionalParameters();
 
@@ -194,6 +237,18 @@ class AutoEQUI {
       this.resetToDefaults();
     });
 
+
+    // Capture button
+    this.captureBtn?.addEventListener('click', async () => {
+      if (this.isCapturing) {
+        this.stopCapture();
+      } else {
+        await this.startCapture();
+      }
+    });
+    this.captureClearBtn?.addEventListener('click', () => {
+      this.clearCapture();
+    });
 
     // File browser buttons
     const browseCurveBtn = document.getElementById('browse-curve');
@@ -225,6 +280,14 @@ class AutoEQUI {
   }
 
   private setupUIInteractions(): void {
+    // Initialize capture UI state
+    this.updateCaptureUI('Ready', false, 0);
+    
+    // Check if capture is supported
+    if (!this.isCaptureSupported()) {
+      // Show warning but allow simulated capture
+      this.updateCaptureUI('Note: Using simulated capture (microphone not available)', false, 0);
+    }
     // Input source tabs
     const tabLabels = document.querySelectorAll('.tab-label');
     const tabContents = document.querySelectorAll('.tab-content');
@@ -773,7 +836,7 @@ class AutoEQUI {
     apiContent?.classList.add('active');
 
     // Reset form fields
-    (document.getElementById('num-filters') as HTMLInputElement).value = '7';
+    (document.getElementById('num-filters') as HTMLInputElement).value = '5';
     (document.getElementById('sample-rate') as HTMLInputElement).value = '48000';
     (document.getElementById('curve-name') as HTMLSelectElement).value = 'Listening Window';
     (document.getElementById('max-db') as HTMLInputElement).value = '3.0';
@@ -785,7 +848,7 @@ class AutoEQUI {
     (document.getElementById('algo') as HTMLSelectElement).value = 'autoeq:de';
     (document.getElementById('loss') as HTMLSelectElement).value = 'flat';
     (document.getElementById('population') as HTMLInputElement).value = '300';
-    (document.getElementById('maxeval') as HTMLInputElement).value = '200000';
+    (document.getElementById('maxeval') as HTMLInputElement).value = '20000';
     (document.getElementById('refine') as HTMLInputElement).checked = false;
     (document.getElementById('local-algo') as HTMLSelectElement).value = 'cobyla';
     (document.getElementById('min-spacing-oct') as HTMLInputElement).value = '0.5';
@@ -803,8 +866,8 @@ class AutoEQUI {
     (document.getElementById('de-cr') as HTMLInputElement).value = '0.9';
     (document.getElementById('adaptive-weight-f') as HTMLInputElement).value = '0.8';
     (document.getElementById('adaptive-weight-cr') as HTMLInputElement).value = '0.7';
-    (document.getElementById('tolerance') as HTMLInputElement).value = '1e-6';
-    (document.getElementById('abs-tolerance') as HTMLInputElement).value = '1e-6';
+    (document.getElementById('tolerance') as HTMLInputElement).value = '1e-3';
+    (document.getElementById('abs-tolerance') as HTMLInputElement).value = '1e-4';
 
     // Update conditional parameters
     this.updateConditionalParameters();
@@ -852,7 +915,11 @@ class AutoEQUI {
     // Show DE parameters only for autoeq:de algorithm
     const isAutoEQDE = algo === 'autoeq:de';
     deParams.forEach(param => {
-      (param as HTMLElement).style.display = isAutoEQDE ? 'flex' : 'none';
+      const paramElement = param as HTMLElement;
+      // Don't show adaptive parameters here - they're handled separately
+      if (!paramElement.classList.contains('adaptive-param')) {
+        paramElement.style.display = isAutoEQDE ? 'flex' : 'none';
+      }
     });
 
     // Show adaptive parameters only for adaptive strategies
@@ -933,7 +1000,8 @@ class AutoEQUI {
       this.listeningWindowPlotElement,
       this.earlyReflectionsPlotElement,
       this.soundPowerPlotElement,
-      this.spinPlotElement
+      this.spinPlotElement,
+      this.spinPlotCorrectedElement
     ];
 
     try {
@@ -1122,6 +1190,9 @@ class AutoEQUI {
       const version = (document.getElementById('version') as HTMLInputElement).value;
       const measurement = (document.getElementById('measurement') as HTMLSelectElement).value;
       isValid = speaker.trim() !== '' && version.trim() !== '' && measurement.trim() !== '';
+    } else if (activeTab === 'capture') {
+      // Valid if we have captured data
+      isValid = this.capturedCurve !== null;
     }
 
     this.optimizeBtn.disabled = !isValid;
@@ -1132,7 +1203,7 @@ class AutoEQUI {
     const activeTab = document.querySelector('.tab-label.active')?.getAttribute('data-tab');
     const algo = (document.getElementById('algo') as HTMLSelectElement).value;
 
-    return {
+    const params: OptimizationParams = {
       num_filters: parseInt((document.getElementById('num-filters') as HTMLInputElement).value),
       curve_path: activeTab === 'file' ? (document.getElementById('curve-path') as HTMLInputElement).value || undefined : undefined,
       target_path: activeTab === 'file' ? (document.getElementById('target-path') as HTMLInputElement).value || undefined : undefined,
@@ -1168,6 +1239,14 @@ class AutoEQUI {
       tolerance: parseFloat((document.getElementById('tolerance') as HTMLInputElement).value),
       atolerance: parseFloat((document.getElementById('abs-tolerance') as HTMLInputElement).value),
     };
+
+    // Add captured curve data if in capture mode
+    if (activeTab === 'capture' && this.capturedCurve) {
+      params.captured_frequencies = this.capturedCurve.frequencies;
+      params.captured_magnitudes = this.capturedCurve.curves['Captured Response'];
+    }
+
+    return params;
   }
 
 
@@ -1321,7 +1400,7 @@ class AutoEQUI {
     if (result.filter_params) {
       console.log('Updating filter details with parameters:', result.filter_params);
       this.updateFilterDetailsPlot(result.filter_params);
-      
+
       // Convert log frequencies to linear for audio filters
       const linearFilterParams = [];
       for (let i = 0; i < result.filter_params.length; i += 3) {
@@ -1331,9 +1410,21 @@ class AutoEQUI {
           linearFilterParams.push(result.filter_params[i + 2]); // Gain
         }
       }
-      
+
       // Update audio filter parameters
       this.updateFilterParams(linearFilterParams);
+
+      // Display filter plots graph if available
+      if (result.filter_plots) {
+        console.log('Updating filter plots graph with data:', result.filter_plots);
+        this.filterPlotsData = result.filter_plots;  // Store for later updates
+        this.updateFilterPlotsGraph(result.filter_plots);
+        this.tryUpdateSpinWithEQ();
+        // Also set up the recalculation for manual changes
+        setTimeout(() => {
+          this.recalculateFilterGraph();
+        }, 100);
+      }
     } else {
       console.log('No filter_params data in result');
     }
@@ -1348,11 +1439,13 @@ class AutoEQUI {
 
     if (result.spin_details) {
       console.log('Updating individual plots with data:', result.spin_details);
+      this.lastSpinDetails = result.spin_details;
       this.updateOnAxisPlot(result.spin_details, result.filter_response);
       this.updateListeningWindowPlot(result.spin_details, result.filter_response);
       this.updateEarlyReflectionsPlot(result.spin_details, result.filter_response);
       this.updateSoundPowerPlot(result.spin_details, result.filter_response);
       this.updateSpinPlot(result.spin_details);
+      this.tryUpdateSpinWithEQ();
     } else {
       console.log('No spin_details data in result');
     }
@@ -1386,7 +1479,10 @@ class AutoEQUI {
     }
 
     // Clear and prepare
-    this.filterDetailsPlotElement.innerHTML = '';
+    this.filterDetailsPlotElement.innerHTML = `
+      <div id="filter-details-table"></div>
+      <div id="filter-details-graph" style="margin-top: 20px; min-height: 400px;"></div>
+    `;
     this.filterDetailsPlotElement.classList.add('has-plot');
     this.filterDetailsPlotElement.style.display = 'block';
     this.filterDetailsPlotElement.style.padding = '10px';
@@ -1396,17 +1492,27 @@ class AutoEQUI {
 
     // Store original parameters for reference
     this.originalFilterParams = [...filterParams];
-    
-    // Create interactive table
-    this.createInteractiveFilterTable(numFilters, filterParams);
+
+    // Create interactive table in the table div
+    const tableDiv = document.getElementById('filter-details-table');
+    if (tableDiv) {
+      this.createInteractiveFilterTable(numFilters, filterParams, tableDiv);
+    }
 
     // Expand the plot section
     this.expandPlotSection('filter-details-plot');
 
     console.log(`Interactive filter details updated with ${numFilters} filters`);
+    
+    // Initialize the graph with current parameters if we have filter plots data
+    if (this.filterPlotsData) {
+      setTimeout(() => {
+        this.recalculateFilterGraph();
+      }, 100);
+    }
   }
 
-  private createInteractiveFilterTable(numFilters: number, filterParams: number[]): void {
+  private createInteractiveFilterTable(numFilters: number, filterParams: number[], targetElement: HTMLElement): void {
     const container = document.createElement('div');
     container.style.cssText = `
       max-height: 500px;
@@ -1456,18 +1562,18 @@ class AutoEQUI {
     table.appendChild(tbody);
 
     container.appendChild(table);
-    this.filterDetailsPlotElement.appendChild(container);
+    targetElement.appendChild(container);
   }
 
   private createFilterRow(index: number, filterParams: number[]): HTMLTableRowElement {
     const row = document.createElement('tr');
     row.style.background = index % 2 === 0 ? 'var(--bg-secondary)' : 'var(--bg-primary)';
-    
+
     const freq = Math.pow(10, filterParams[index * 3]);
     const q = filterParams[index * 3 + 1];
     const gain = filterParams[index * 3 + 2];
     const isActive = Math.abs(gain) > 0.1;
-    
+
     // Active checkbox
     const activeCell = document.createElement('td');
     activeCell.style.cssText = 'padding: 10px; border: 1px solid var(--border-color); text-align: center;';
@@ -1478,13 +1584,13 @@ class AutoEQUI {
     activeCheckbox.addEventListener('change', () => this.onFilterActiveChange(index));
     activeCell.appendChild(activeCheckbox);
     row.appendChild(activeCell);
-    
+
     // Filter number
     const numberCell = document.createElement('td');
     numberCell.style.cssText = 'padding: 10px; border: 1px solid var(--border-color); color: var(--text-primary); text-align: center; font-weight: 500;';
     numberCell.textContent = (index + 1).toString();
     row.appendChild(numberCell);
-    
+
     // Frequency input
     const freqCell = document.createElement('td');
     freqCell.style.cssText = 'padding: 5px; border: 1px solid var(--border-color);';
@@ -1507,7 +1613,7 @@ class AutoEQUI {
     freqInput.addEventListener('change', () => this.onFilterParamChange());
     freqCell.appendChild(freqInput);
     row.appendChild(freqCell);
-    
+
     // Q factor input
     const qCell = document.createElement('td');
     qCell.style.cssText = 'padding: 5px; border: 1px solid var(--border-color);';
@@ -1530,7 +1636,7 @@ class AutoEQUI {
     qInput.addEventListener('change', () => this.onFilterParamChange());
     qCell.appendChild(qInput);
     row.appendChild(qCell);
-    
+
     // Gain input
     const gainCell = document.createElement('td');
     gainCell.style.cssText = 'padding: 5px; border: 1px solid var(--border-color);';
@@ -1557,14 +1663,14 @@ class AutoEQUI {
     });
     gainCell.appendChild(gainInput);
     row.appendChild(gainCell);
-    
+
     // Filter type
     const typeCell = document.createElement('td');
     typeCell.style.cssText = 'padding: 10px; border: 1px solid var(--border-color); color: var(--text-secondary); text-align: center; font-size: 11px;';
     typeCell.textContent = isActive ? 'PK (Peak)' : 'Disabled';
     typeCell.id = `filter-type-${index}`;
     row.appendChild(typeCell);
-    
+
     return row;
   }
 
@@ -1572,7 +1678,7 @@ class AutoEQUI {
     const activeCheckbox = document.getElementById(`filter-active-${index}`) as HTMLInputElement;
     const gainInput = document.getElementById(`filter-gain-${index}`) as HTMLInputElement;
     const typeCell = document.getElementById(`filter-type-${index}`) as HTMLElement;
-    
+
     if (!activeCheckbox.checked) {
       // Disable filter by setting gain to 0
       gainInput.value = '0.00';
@@ -1585,7 +1691,7 @@ class AutoEQUI {
       gainInput.style.color = originalGain > 0 ? 'var(--success-color)' : originalGain < 0 ? 'var(--danger-color)' : 'var(--text-primary)';
       typeCell.textContent = 'PK (Peak)';
     }
-    
+
     this.onFilterParamChange();
   }
 
@@ -1615,6 +1721,9 @@ class AutoEQUI {
       this.reconnectAudioChain(); // Reconnect the audio chain
     }
     
+    // Recalculate and redraw the filter response graph
+    this.recalculateFilterGraph();
+    
     console.log('Filter parameters updated in real-time:', newFilterParams);
   }
 
@@ -1622,7 +1731,7 @@ class AutoEQUI {
     const gain = parseFloat(gainInput.value);
     const typeCell = document.getElementById(`filter-type-${index}`) as HTMLElement;
     const activeCheckbox = document.getElementById(`filter-active-${index}`) as HTMLInputElement;
-    
+
     if (Math.abs(gain) <= 0.1) {
       gainInput.style.color = 'var(--text-primary)';
       if (typeCell) typeCell.textContent = 'Disabled';
@@ -1632,6 +1741,227 @@ class AutoEQUI {
       if (typeCell) typeCell.textContent = 'PK (Peak)';
       if (activeCheckbox) activeCheckbox.checked = true;
     }
+  }
+
+  private recalculateFilterGraph(): void {
+    // Don't recalculate if we don't have data yet
+    if (!this.currentFilterParams || this.currentFilterParams.length === 0) {
+      console.log('No filter parameters available for graph calculation');
+      return;
+    }
+    
+    // Get sample rate from form
+    const sampleRateInput = document.getElementById('sample-rate') as HTMLInputElement;
+    const sampleRate = sampleRateInput ? parseFloat(sampleRateInput.value) : 48000;
+    
+    // Create frequency array (logarithmic from 20 to 20000 Hz)
+    const frequencies: number[] = [];
+    let freq = 20;
+    while (freq <= 20000) {
+      frequencies.push(freq);
+      freq *= 1.0355;  // Same logarithmic spacing as backend
+    }
+    
+    // Collect filter parameters from the table
+    const filterRows = document.querySelectorAll('#filter-details-table tbody tr');
+    const newCurves: { [name: string]: number[] } = {};
+    let combinedResponse = new Array(frequencies.length).fill(0);
+    let activeFilterCount = 0;
+    
+    console.log('Recalculating filter graph with', filterRows.length, 'filters');
+    
+    filterRows.forEach((row, index) => {
+      const activeCheckbox = document.getElementById(`filter-active-${index}`) as HTMLInputElement;
+      const freqInput = document.getElementById(`filter-freq-${index}`) as HTMLInputElement;
+      const qInput = document.getElementById(`filter-q-${index}`) as HTMLInputElement;
+      const gainInput = document.getElementById(`filter-gain-${index}`) as HTMLInputElement;
+      
+      if (activeCheckbox && freqInput && qInput && gainInput) {
+        const isActive = activeCheckbox.checked;
+        const freq = parseFloat(freqInput.value);
+        const q = parseFloat(qInput.value);
+        const gain = parseFloat(gainInput.value);
+        
+        console.log(`Filter ${index}: active=${isActive}, freq=${freq}, q=${q}, gain=${gain}`);
+        
+        // Skip inactive filters or filters with zero gain
+        if (!isActive || Math.abs(gain) < 0.1) {
+          console.log(`  Skipping filter ${index} (inactive or zero gain)`);
+          return;
+        }
+        
+        activeFilterCount++;
+        
+        // Calculate filter response for each frequency
+        const filterResponse: number[] = [];
+        frequencies.forEach(f => {
+          // Biquad peak filter magnitude response calculation
+          const omega = 2 * Math.PI * freq / sampleRate;  // Use filter's center frequency
+          const sin = Math.sin(omega);
+          const cos = Math.cos(omega);
+          const A = Math.pow(10, gain / 40);
+          const alpha = sin / (2 * q);
+          
+          // Peak filter coefficients
+          const b0 = 1 + alpha * A;
+          const b1 = -2 * cos;
+          const b2 = 1 - alpha * A;
+          const a0 = 1 + alpha / A;
+          const a1 = -2 * cos;
+          const a2 = 1 - alpha / A;
+          
+          // Normalize coefficients
+          const nb0 = b0 / a0;
+          const nb1 = b1 / a0;
+          const nb2 = b2 / a0;
+          const na1 = a1 / a0;
+          const na2 = a2 / a0;
+          
+          // Calculate frequency response at evaluation frequency f
+          const w = 2 * Math.PI * f / sampleRate;
+          const cosw = Math.cos(w);
+          const cos2w = Math.cos(2 * w);
+          const sinw = Math.sin(w);
+          const sin2w = Math.sin(2 * w);
+          
+          // H(z) = (b0 + b1*z^-1 + b2*z^-2) / (1 + a1*z^-1 + a2*z^-2)
+          // where z = e^(jw)
+          const realNum = nb0 + nb1 * cosw + nb2 * cos2w;
+          const imagNum = -nb1 * sinw - nb2 * sin2w;
+          const realDen = 1 + na1 * cosw + na2 * cos2w;
+          const imagDen = -na1 * sinw - na2 * sin2w;
+          
+          // Calculate magnitude
+          const magNum = Math.sqrt(realNum * realNum + imagNum * imagNum);
+          const magDen = Math.sqrt(realDen * realDen + imagDen * imagDen);
+          const mag = magNum / magDen;
+          
+          const db = 20 * Math.log10(mag);
+          filterResponse.push(db);
+        });
+        
+        // Add to combined response
+        filterResponse.forEach((db, i) => {
+          combinedResponse[i] += db;
+        });
+        
+        // Store individual filter response
+        const label = `PK ${index + 1} at ${freq.toFixed(0)}Hz`;
+        newCurves[label] = filterResponse;
+        console.log(`  Added filter curve: ${label}`);
+      }
+    });
+    
+    console.log(`Total active filters: ${activeFilterCount}`);
+    
+    // Only add sum if we have active filters
+    if (activeFilterCount > 0) {
+      newCurves['Sum'] = combinedResponse;
+    }
+    
+    // Update the plot with new data
+    const updatedData: PlotData = {
+      frequencies: frequencies,
+      curves: newCurves,
+      metadata: {}
+    };
+    
+    console.log('Updating graph with', Object.keys(newCurves).length, 'curves');
+    this.updateFilterPlotsGraph(updatedData);
+    // Update stored filter plots and refresh Spinorama with EQ
+    this.filterPlotsData = updatedData;
+    this.tryUpdateSpinWithEQ();
+  }
+
+  private updateFilterPlotsGraph(data: PlotData): void {
+    const graphElement = document.getElementById('filter-details-graph');
+    if (!graphElement) {
+      console.error('Filter details graph element not found!');
+      return;
+    }
+
+    // Get max_db from the form for Y-axis range
+    const maxDbInput = document.getElementById('max-db') as HTMLInputElement;
+    const maxDb = maxDbInput ? parseFloat(maxDbInput.value) : 5;
+    const yRange = maxDb + 1;
+
+    // Define color palette for individual filters
+    const colorPalette = [
+      '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
+      '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'
+    ];
+
+    const traces: any[] = [];
+    let colorIndex = 0;
+
+    // Add individual filter traces and the sum
+    Object.entries(data.curves).forEach(([name, values]) => {
+      const isSum = name === 'Sum';
+      const trace = {
+        x: data.frequencies,
+        y: values,
+        type: 'scatter' as const,
+        mode: 'lines' as const,
+        name: name,
+        line: {
+          color: isSum ? '#000000' : colorPalette[colorIndex % colorPalette.length],
+          width: isSum ? 3 : 1.5,
+          dash: isSum ? undefined : undefined
+        },
+        opacity: isSum ? 1.0 : 0.8,
+        showlegend: false
+      };
+      traces.push(trace);
+      if (!isSum) colorIndex++;
+    });
+
+    // Sort traces to ensure Sum appears last (on top)
+    traces.sort((a, b) => {
+      if (a.name === 'Sum') return 1;
+      if (b.name === 'Sum') return -1;
+      return 0;
+    });
+
+    const layout = {
+      xaxis: {
+        title: { text: 'Frequency (Hz)' },
+        type: 'log' as const,
+        range: [Math.log10(20), Math.log10(20000)],
+        showgrid: true,
+        gridcolor: 'rgba(128, 128, 128, 0.2)',
+        dtick: 1 // Log scale tick marks at powers of 10
+      },
+      yaxis: {
+        title: { text: 'Magnitude (dB)' },
+        range: [-yRange, yRange],
+        showgrid: true,
+        gridcolor: 'rgba(128, 128, 128, 0.2)',
+        dtick: Math.ceil(yRange / 5),
+        zeroline: true,
+        zerolinecolor: 'rgba(128, 128, 128, 0.5)',
+        zerolinewidth: 1
+      },
+      paper_bgcolor: 'rgba(0,0,0,0)',
+      plot_bgcolor: 'rgba(0,0,0,0)',
+      font: {
+        color: getComputedStyle(document.documentElement).getPropertyValue('--text-primary').trim(),
+        size: 11
+      },
+      margin: { l: 50, r: 20, t: 20, b: 60 },
+      showlegend: false,
+      hovermode: 'x unified' as const
+    };
+
+    const config = {
+      responsive: true,
+      displayModeBar: false
+    };
+
+    Plotly.newPlot(graphElement, traces, layout, config).then(() => {
+      console.log('Filter plots graph created successfully');
+    }).catch((error: any) => {
+      console.error('Error creating filter plots graph:', error);
+    });
   }
 
   private updateFilterPlot(data: PlotData): void {
@@ -2249,6 +2579,178 @@ class AutoEQUI {
     });
   }
 
+  // Compute and render Spinorama with EQ applied when both datasets are available
+  private tryUpdateSpinWithEQ(): void {
+    if (!this.lastSpinDetails || !this.filterPlotsData) return;
+    this.updateSpinPlotCorrected(this.lastSpinDetails, this.filterPlotsData);
+  }
+
+  private isDICurve(name: string): boolean {
+    const n = name.toLowerCase();
+    return (
+      n.includes('di') ||
+      n.includes('directivity') ||
+      n === 'early reflections di' ||
+      n === 'sound power di' ||
+      n.endsWith(' di')
+    );
+  }
+
+  // Linear interpolation in log-frequency domain
+  private interpolateToTargets(srcFreqs: number[], srcValues: number[], targetFreqs: number[]): number[] {
+    if (srcFreqs.length !== srcValues.length || srcFreqs.length === 0) {
+      return new Array(targetFreqs.length).fill(0);
+    }
+
+    const srcLog = srcFreqs.map(f => Math.log10(f));
+    const tgtLog = targetFreqs.map(f => Math.log10(f));
+
+    const result: number[] = new Array(targetFreqs.length);
+    let i = 0;
+
+    for (let k = 0; k < tgtLog.length; k++) {
+      const x = tgtLog[k];
+
+      if (x <= srcLog[0]) {
+        result[k] = srcValues[0];
+        continue;
+      }
+      if (x >= srcLog[srcLog.length - 1]) {
+        result[k] = srcValues[srcValues.length - 1];
+        continue;
+      }
+
+      while (i < srcLog.length - 2 && srcLog[i + 1] < x) i++;
+      const x0 = srcLog[i];
+      const x1 = srcLog[i + 1];
+      const y0 = srcValues[i];
+      const y1 = srcValues[i + 1];
+      const t = (x - x0) / (x1 - x0);
+      result[k] = y0 + t * (y1 - y0);
+    }
+
+    return result;
+  }
+
+  private updateSpinPlotCorrected(spinData: PlotData, filterData: PlotData): void {
+    if (!this.spinPlotCorrectedElement) {
+      console.error('Spin corrected plot element not found!');
+      return;
+    }
+
+    // Prepare container
+    this.spinPlotCorrectedElement.innerHTML = '';
+    this.spinPlotCorrectedElement.classList.add('has-plot');
+    this.spinPlotCorrectedElement.style.display = 'block';
+    this.spinPlotCorrectedElement.style.padding = '0';
+    this.spinPlotCorrectedElement.style.minHeight = '500px';
+
+    // Determine filter sum curve
+    let sumCurve = filterData.curves['Sum'];
+    if (!sumCurve) {
+      const names = Object.keys(filterData.curves);
+      if (names.length === 0) {
+        this.spinPlotCorrectedElement.textContent = 'No filter data available to compute corrected plot';
+        return;
+      }
+      const len = filterData.frequencies.length;
+      const sum = new Array(len).fill(0);
+      for (const [name, vals] of Object.entries(filterData.curves)) {
+        for (let i = 0; i < len; i++) sum[i] += vals[i] || 0;
+      }
+      sumCurve = sum;
+    }
+
+    // Interpolate filter to Spinorama frequencies
+    const filterAtSpin = this.interpolateToTargets(filterData.frequencies, sumCurve, spinData.frequencies);
+
+    // Build corrected curves (skip DI and Target curves)
+    const correctedCurves: { [name: string]: number[] } = {};
+    for (const [name, values] of Object.entries(spinData.curves)) {
+      const isDI = this.isDICurve(name);
+      const isTarget = name.toLowerCase().includes('target');
+      if (isDI || isTarget) {
+        correctedCurves[name] = values.slice();
+      } else {
+        correctedCurves[name] = values.map((v, idx) => v + filterAtSpin[idx]);
+      }
+    }
+
+    // Convert to traces (same styling rules as base Spinorama)
+    const traces = Object.entries(correctedCurves).map(([name, values]) => {
+      const isDI = this.isDICurve(name);
+      return {
+        x: spinData.frequencies,
+        y: values,
+        type: 'scatter' as const,
+        mode: 'lines' as const,
+        name,
+        yaxis: isDI ? 'y2' : 'y',
+        line: {
+          width: isDI ? 2.5 : 1.5,
+          ...(isDI ? { dash: 'dash' as const } : {})
+        }
+      };
+    });
+
+    const rightMargin = 140;
+    const bottomMargin = 120;
+
+    const layout = {
+      title: { text: 'With EQ Applied' },
+      xaxis: {
+        title: { text: 'Frequency (Hz)' },
+        type: 'log' as const,
+        range: [Math.log10(20), Math.log10(20000)]
+      },
+      yaxis: {
+        title: {
+          text: 'SPL (dB)',
+          font: { color: getComputedStyle(document.documentElement).getPropertyValue('--text-primary').trim() }
+        },
+        range: [-40, 10],
+        side: 'left' as const,
+        tickfont: { color: getComputedStyle(document.documentElement).getPropertyValue('--text-primary').trim() }
+      },
+      yaxis2: {
+        title: {
+          text: 'Directivity Index (dB)',
+          font: { color: '#ff7f0e' }
+        },
+        range: [-5, 45],
+        side: 'right' as const,
+        overlaying: 'y' as const,
+        tickfont: { color: '#ff7f0e' }
+      },
+      paper_bgcolor: 'rgba(0,0,0,0)',
+      plot_bgcolor: 'rgba(0,0,0,0)',
+      font: {
+        color: getComputedStyle(document.documentElement).getPropertyValue('--text-primary').trim(),
+        size: 12
+      },
+      margin: { l: 50, r: rightMargin, t: 30, b: bottomMargin },
+      showlegend: true,
+      legend: {
+        x: 0.5,
+        y: -0.2,
+        xanchor: 'center' as const,
+        yanchor: 'top' as const,
+        orientation: 'h' as const,
+        bgcolor: 'rgba(0,0,0,0)'
+      },
+      hovermode: 'x unified' as const
+    };
+
+    Plotly.newPlot(this.spinPlotCorrectedElement, traces, layout, {
+      responsive: true,
+      displayModeBar: false
+    }).then(() => {
+      Plotly.Plots.resize(this.spinPlotCorrectedElement);
+    }).catch((error: any) => {
+      console.error('Error creating Spinorama corrected plot:', error);
+    });
+  }
+
 
   private setupResizer(): void {
     const resizer = document.getElementById('resizer');
@@ -2431,6 +2933,190 @@ class AutoEQUI {
   }
 
   // Audio Testing Methods
+  private setupSpectrumAnalyzer(): void {
+    this.spectrumCanvas = document.getElementById('spectrum-canvas') as HTMLCanvasElement;
+    if (this.spectrumCanvas) {
+      this.spectrumCtx = this.spectrumCanvas.getContext('2d');
+      
+      // Set up resize observer to adjust canvas size
+      this.resizeSpectrumCanvas();
+      
+      // Calculate frequency bin ranges
+      // Logarithmic distribution from 20Hz to 20kHz
+      const minFreq = 20;
+      const maxFreq = 20000;
+      const logMin = Math.log10(minFreq);
+      const logMax = Math.log10(maxFreq);
+      
+      this.frequencyBinRanges = [];
+      // We'll calculate the actual number of bars based on available width
+    }
+  }
+  
+  private resizeSpectrumCanvas(): void {
+    if (!this.spectrumCanvas) return;
+    
+    const container = this.spectrumCanvas.parentElement;
+    if (!container) return;
+    
+    // Get available width
+    const availableWidth = container.clientWidth - 8; // Account for padding
+    
+    // Calculate number of bars that fit (2px per bar + 1px spacing)
+    const barWidth = 2;
+    const barSpacing = 1;
+    const numBars = Math.floor(availableWidth / (barWidth + barSpacing));
+    
+    // Set canvas size
+    this.spectrumCanvas.width = numBars * (barWidth + barSpacing);
+    this.spectrumCanvas.height = 28;
+    
+    // Recalculate frequency bin ranges
+    this.frequencyBinRanges = [];
+    const minFreq = 20;
+    const maxFreq = 20000;
+    const logMin = Math.log10(minFreq);
+    const logMax = Math.log10(maxFreq);
+    
+    for (let i = 0; i < numBars; i++) {
+      const logStart = logMin + (logMax - logMin) * (i / numBars);
+      const logEnd = logMin + (logMax - logMin) * ((i + 1) / numBars);
+      const freqStart = Math.pow(10, logStart);
+      const freqEnd = Math.pow(10, logEnd);
+      
+      this.frequencyBinRanges.push({
+        start: freqStart,
+        end: freqEnd
+      });
+    }
+    
+    console.log(`Spectrum analyzer: ${numBars} bars, canvas width: ${this.spectrumCanvas.width}px`);
+  }
+
+  private startSpectrumAnalyzer(): void {
+    if (!this.analyserNode || !this.spectrumCtx || !this.spectrumCanvas) return;
+    
+    const bufferLength = this.analyserNode.frequencyBinCount;
+    const dataArray = new Uint8Array(bufferLength);
+    const nyquist = this.audioContext!.sampleRate / 2;
+    
+    const draw = () => {
+      this.spectrumAnimationFrame = requestAnimationFrame(draw);
+      
+      // Get frequency data
+      this.analyserNode!.getByteFrequencyData(dataArray);
+      
+      // Clear canvas
+      this.spectrumCtx!.fillStyle = getComputedStyle(document.documentElement)
+        .getPropertyValue('--bg-primary').trim();
+      this.spectrumCtx!.fillRect(0, 0, this.spectrumCanvas!.width, this.spectrumCanvas!.height);
+      
+      // Draw bars and track band intensities
+      const barWidth = 2;
+      const barSpacing = 1;
+      const canvasHeight = this.spectrumCanvas!.height;
+      const bandIntensities: { [key: string]: number } = {
+        'sub-bass': 0,
+        'bass': 0,
+        'low-mid': 0,
+        'mid': 0,
+        'high-mid': 0,
+        'presence': 0,
+        'brilliance': 0
+      };
+      const bandCounts: { [key: string]: number } = {
+        'sub-bass': 0,
+        'bass': 0,
+        'low-mid': 0,
+        'mid': 0,
+        'high-mid': 0,
+        'presence': 0,
+        'brilliance': 0
+      };
+      
+      for (let i = 0; i < this.frequencyBinRanges.length; i++) {
+        const range = this.frequencyBinRanges[i];
+        const centerFreq = Math.sqrt(range.start * range.end);
+        
+        // Determine which band this frequency belongs to
+        let band = 'brilliance';
+        if (centerFreq < 60) band = 'sub-bass';
+        else if (centerFreq < 250) band = 'bass';
+        else if (centerFreq < 500) band = 'low-mid';
+        else if (centerFreq < 2000) band = 'mid';
+        else if (centerFreq < 4000) band = 'high-mid';
+        else if (centerFreq < 6000) band = 'presence';
+        
+        // Convert frequency range to FFT bin indices
+        const startBin = Math.floor((range.start / nyquist) * bufferLength);
+        const endBin = Math.ceil((range.end / nyquist) * bufferLength);
+        
+        // Calculate average magnitude for this frequency range
+        let sum = 0;
+        let count = 0;
+        for (let j = startBin; j <= endBin && j < bufferLength; j++) {
+          sum += dataArray[j];
+          count++;
+        }
+        
+        const average = count > 0 ? sum / count : 0;
+        const normalizedHeight = average / 255; // Normalize to 0-1
+        const barHeight = normalizedHeight * canvasHeight * 0.95; // Use 95% of canvas height
+        
+        // Track band intensity
+        bandIntensities[band] += normalizedHeight;
+        bandCounts[band]++;
+        
+        // Color based on intensity with improved gradient
+        const hue = 120 - (normalizedHeight * 100); // Green to yellow to red
+        const saturation = 60 + (normalizedHeight * 40);
+        const lightness = 45 + (normalizedHeight * 10);
+        this.spectrumCtx!.fillStyle = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+        
+        // Draw bar
+        const x = i * (barWidth + barSpacing);
+        const y = canvasHeight - barHeight;
+        this.spectrumCtx!.fillRect(x, y, barWidth, barHeight);
+      }
+      
+      // Update frequency label highlights based on intensity
+      this.updateFrequencyLabelHighlights(bandIntensities, bandCounts);
+    };
+    
+    draw();
+  }
+  
+  private updateFrequencyLabelHighlights(intensities: { [key: string]: number }, counts: { [key: string]: number }): void {
+    const labels = document.querySelectorAll('.freq-label');
+    
+    labels.forEach(label => {
+      const range = label.getAttribute('data-range');
+      if (range && counts[range] > 0) {
+        const avgIntensity = intensities[range] / counts[range];
+        const opacity = 0.4 + (avgIntensity * 0.6); // Scale opacity from 0.4 to 1.0
+        const scale = 1.0 + (avgIntensity * 0.1); // Subtle scale effect
+        
+        (label as HTMLElement).style.opacity = opacity.toString();
+        (label as HTMLElement).style.transform = `scale(${scale})`;
+        (label as HTMLElement).style.transition = 'opacity 0.1s, transform 0.1s';
+      }
+    });
+  }
+
+  private stopSpectrumAnalyzer(): void {
+    if (this.spectrumAnimationFrame) {
+      cancelAnimationFrame(this.spectrumAnimationFrame);
+      this.spectrumAnimationFrame = null;
+    }
+    
+    // Clear canvas
+    if (this.spectrumCtx && this.spectrumCanvas) {
+      this.spectrumCtx.fillStyle = getComputedStyle(document.documentElement)
+        .getPropertyValue('--bg-primary').trim();
+      this.spectrumCtx.fillRect(0, 0, this.spectrumCanvas.width, this.spectrumCanvas.height);
+    }
+  }
+
   private setupAudioEventListeners(): void {
     // Listen button
     this.listenBtn.addEventListener('click', () => {
@@ -2479,7 +3165,7 @@ class AutoEQUI {
 
   private async loadAudioFile(): Promise<void> {
     const selectedAudio = this.demoAudioSelect.value;
-    
+
     // If no track selected, disable controls and clear audio
     if (!selectedAudio) {
       this.audioBuffer = null;
@@ -2488,7 +3174,7 @@ class AutoEQUI {
       this.audioDuration.textContent = '--:--';
       return;
     }
-    
+
     const audioUrl = `/demo-audio/${selectedAudio}.wav`;
     this.setAudioStatus('Loading audio file...');
     this.listenBtn.disabled = true;
@@ -2503,22 +3189,22 @@ class AutoEQUI {
       }
 
       const arrayBuffer = await response.arrayBuffer();
-      
+
       // Decode audio data
       this.audioBuffer = await this.audioContext!.decodeAudioData(arrayBuffer);
-      
+
       // Update UI
       const duration = this.formatTime(this.audioBuffer.duration);
       this.audioDuration.textContent = duration;
       this.setAudioStatus('Ready');
       this.listenBtn.disabled = false;
-      
+
       console.log('Audio loaded:', {
         duration: this.audioBuffer.duration,
         sampleRate: this.audioBuffer.sampleRate,
         channels: this.audioBuffer.numberOfChannels
       });
-      
+
     } catch (error) {
       console.error('Failed to load audio:', error);
       this.showAudioError('Failed to load audio file');
@@ -2544,6 +3230,13 @@ class AutoEQUI {
       this.gainNode = this.audioContext.createGain();
       this.gainNode.gain.value = 0.7; // Reduce volume slightly
 
+      // Create analyser node for spectrum visualization
+      if (!this.analyserNode) {
+        this.analyserNode = this.audioContext.createAnalyser();
+        this.analyserNode.fftSize = 2048;
+        this.analyserNode.smoothingTimeConstant = 0.8;
+      }
+
       // Connect source to gain
       this.audioSource.connect(this.gainNode);
 
@@ -2552,7 +3245,7 @@ class AutoEQUI {
 
       // Connect the audio chain
       let currentNode: AudioNode = this.gainNode;
-      
+
       // Chain EQ filters if enabled
       if (this.eqEnabled && this.eqFilters.length > 0) {
         for (const filter of this.eqFilters) {
@@ -2561,13 +3254,14 @@ class AutoEQUI {
         }
       }
 
-      // Connect to destination (speakers)
-      currentNode.connect(this.audioContext.destination);
+      // Connect to analyser then to destination
+      currentNode.connect(this.analyserNode);
+      this.analyserNode.connect(this.audioContext.destination);
 
       // Set up playback tracking
       this.audioStartTime = this.audioContext.currentTime;
       this.isAudioPlaying = true;
-      
+
       // Handle end of playback
       this.audioSource.onended = () => {
         this.handleAudioEnded();
@@ -2575,17 +3269,28 @@ class AutoEQUI {
 
       // Start playback
       this.audioSource.start(0);
-      
+
       // Update UI
       this.updateAudioControls(true);
       this.setAudioStatus('Playing');
       this.audioStatus.style.display = 'block';
-      
+
+      // Show and start spectrum analyzer
+      const analyzerElement = document.getElementById('frequency-analyzer');
+      if (analyzerElement) {
+        analyzerElement.style.display = 'flex';
+        // Resize canvas to fit available space
+        setTimeout(() => {
+          this.resizeSpectrumCanvas();
+          this.startSpectrumAnalyzer();
+        }, 10);
+      }
+
       // Start position tracking
       this.startPositionTracking();
-      
+
       console.log('Audio playback started');
-      
+
     } catch (error) {
       console.error('Failed to start audio playback:', error);
       this.showAudioError('Failed to start audio playback');
@@ -2621,13 +3326,28 @@ class AutoEQUI {
       this.gainNode = null;
     }
 
+    // Stop spectrum analyzer
+    this.stopSpectrumAnalyzer();
+    const analyzerElement = document.getElementById('frequency-analyzer');
+    if (analyzerElement) {
+      analyzerElement.style.display = 'none';
+    }
+
+    if (this.analyserNode) {
+      try {
+        this.analyserNode.disconnect();
+      } catch (error) {
+        // Analyser might already be disconnected
+      }
+    }
+
     this.isAudioPlaying = false;
     this.stopPositionTracking();
     this.updateAudioControls(false);
     this.setAudioStatus('Stopped');
     this.audioPosition.textContent = '00:00';
     this.audioProgressFill.style.width = '0%';
-    
+
     console.log('Audio playback stopped');
   }
 
@@ -2650,8 +3370,13 @@ class AutoEQUI {
       return;
     }
 
+    // Check if highpass filter should be used for the first filter
+    const iirHpPkInput = document.getElementById('iir-hp-pk') as HTMLInputElement;
+    const useHighpass = iirHpPkInput ? iirHpPkInput.checked : false;
+
     // Create biquad filters for each EQ band
     // EQ parameters come in groups of 3: [frequency, Q, gain]
+    let filterIndex = 0;
     for (let i = 0; i < this.currentFilterParams.length; i += 3) {
       if (i + 2 >= this.currentFilterParams.length) break;
 
@@ -2659,30 +3384,43 @@ class AutoEQUI {
       const q = this.currentFilterParams[i + 1];
       const gain = this.currentFilterParams[i + 2];
 
-      // Skip filters with very low gain to reduce processing
-      if (Math.abs(gain) < 0.1) continue;
+      // Skip filters with very low gain to reduce processing (except for highpass)
+      if (filterIndex > 0 && Math.abs(gain) < 0.1) {
+        filterIndex++;
+        continue;
+      }
 
       const filter = this.audioContext.createBiquadFilter();
-      filter.type = 'peaking';
-      filter.frequency.value = frequency;
-      filter.Q.value = q;
-      filter.gain.value = gain;
+      
+      // First filter is highpass if iir_hp_pk is enabled
+      if (filterIndex === 0 && useHighpass) {
+        filter.type = 'highpass';
+        filter.frequency.value = frequency;
+        filter.Q.value = q;
+        // Highpass filters don't use the gain parameter
+        console.log(`Created HP filter: ${frequency.toFixed(1)}Hz, Q=${q.toFixed(2)}`);
+      } else {
+        filter.type = 'peaking';
+        filter.frequency.value = frequency;
+        filter.Q.value = q;
+        filter.gain.value = gain;
+        console.log(`Created PK filter: ${frequency.toFixed(1)}Hz, Q=${q.toFixed(2)}, Gain=${gain.toFixed(1)}dB`);
+      }
 
       this.eqFilters.push(filter);
-      
-      console.log(`Created EQ filter: ${frequency.toFixed(1)}Hz, Q=${q.toFixed(2)}, Gain=${gain.toFixed(1)}dB`);
+      filterIndex++;
     }
 
-    console.log(`Created ${this.eqFilters.length} EQ filters`);
+    console.log(`Created ${this.eqFilters.length} EQ filters (HP+PK: ${useHighpass})`);
   }
 
   private setEQEnabled(enabled: boolean): void {
     this.eqEnabled = enabled;
-    
+
     // Update button states
     this.eqOnBtn.classList.toggle('active', enabled);
     this.eqOffBtn.classList.toggle('active', !enabled);
-    
+
     // Update audio if playing
     this.updateAudioEQ();
   }
@@ -2719,8 +3457,13 @@ class AutoEQUI {
         }
       }
 
-      // Connect final node to destination
-      currentNode.connect(this.audioContext.destination);
+      // Connect to analyser then to destination
+      if (this.analyserNode) {
+        currentNode.connect(this.analyserNode);
+        this.analyserNode.connect(this.audioContext.destination);
+      } else {
+        currentNode.connect(this.audioContext.destination);
+      }
 
       console.log(`Audio chain reconnected with EQ ${this.eqEnabled ? 'enabled' : 'disabled'}`);
     } catch (error) {
@@ -2733,11 +3476,11 @@ class AutoEQUI {
     this.stopPositionTracking();
     this.updateAudioControls(false);
     this.setAudioStatus('Finished');
-    
+
     // Reset progress
     this.audioPosition.textContent = this.audioDuration.textContent || '00:00';
     this.audioProgressFill.style.width = '100%';
-    
+
     // Hide status after a delay
     setTimeout(() => {
       if (!this.isAudioPlaying) {
@@ -2757,15 +3500,15 @@ class AutoEQUI {
       const currentTime = this.audioContext.currentTime - this.audioStartTime;
       const duration = this.audioBuffer.duration;
       const progress = Math.min(currentTime / duration, 1);
-      
+
       this.audioPosition.textContent = this.formatTime(currentTime);
       this.audioProgressFill.style.width = `${progress * 100}%`;
-      
+
       if (this.isAudioPlaying) {
         this.audioAnimationFrame = requestAnimationFrame(updatePosition);
       }
     };
-    
+
     updatePosition();
   }
 
@@ -2789,7 +3532,7 @@ class AutoEQUI {
   private showAudioError(message: string): void {
     this.setAudioStatus(`Error: ${message}`);
     this.audioStatus.style.display = 'block';
-    
+
     // Hide error after delay
     setTimeout(() => {
       this.audioStatus.style.display = 'none';
@@ -2806,7 +3549,7 @@ class AutoEQUI {
   private updateFilterParams(filterParams: number[]): void {
     this.currentFilterParams = [...filterParams];
     console.log('Updated EQ parameters:', this.currentFilterParams);
-    
+
     // Auto-switch EQ state based on filter availability
     if (filterParams.length === 0) {
       // No filters available - switch to EQ Off
@@ -2819,11 +3562,480 @@ class AutoEQUI {
         console.log('EQ filters loaded - automatically switched to EQ On');
       }
     }
-    
+
     // Enable listen button if we have both audio and EQ parameters
     if (this.audioBuffer && this.currentFilterParams.length > 0) {
       this.listenBtn.disabled = false;
     }
+  }
+
+  // Capture implementation
+  private async startCapture(): Promise<void> {
+    if (this.isCapturing) return;
+
+    try {
+      // Check if getUserMedia is available
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        // Fallback: Generate simulated capture data for testing
+        console.warn('getUserMedia not available, using simulated capture');
+        await this.simulatedCapture();
+        return;
+      }
+      
+      // Request microphone permission
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false
+        }
+      });
+      
+      this.isCapturing = true;
+      this.captureController = new AbortController();
+      
+      if (this.captureBtn) {
+        this.captureBtn.textContent = '⏹️ Stop Capture';
+        this.captureBtn.classList.add('recording');
+      }
+      
+      // Initialize audio context for capture
+      if (!this.audioContext) {
+        this.audioContext = new AudioContext({ sampleRate: 48000 });
+      }
+      
+      // Create microphone source
+      const micSource = this.audioContext.createMediaStreamSource(stream);
+      
+      // Create recording processor
+      const recorder = this.audioContext.createScriptProcessor(4096, 1, 1);
+      const recordedChunks: Float32Array[] = [];
+      
+      // Generate and play sine sweep
+      const sweep = this.generateSineSweep(20, 20000, 10, this.audioContext.sampleRate);
+      const sweepBuffer = this.audioContext.createBuffer(1, sweep.length, this.audioContext.sampleRate);
+      sweepBuffer.copyToChannel(sweep, 0);
+      
+      const sweepSource = this.audioContext.createBufferSource();
+      sweepSource.buffer = sweepBuffer;
+      sweepSource.connect(this.audioContext.destination);
+      
+      // Start recording
+      const startTime = this.audioContext.currentTime;
+      recorder.onaudioprocess = (e) => {
+        if (!this.isCapturing) return;
+        
+        const inputData = e.inputBuffer.getChannelData(0);
+        recordedChunks.push(new Float32Array(inputData));
+        
+        // Update progress
+        const elapsed = this.audioContext!.currentTime - startTime;
+        const progress = Math.min(100, (elapsed / 10) * 100);
+        this.updateCaptureUI(`Recording... ${elapsed.toFixed(1)}s`, true, progress);
+        
+        // Visualize waveform
+        this.visualizeCaptureWaveform(inputData);
+        
+        // Stop after 10 seconds
+        if (elapsed >= 10) {
+          this.stopCapture();
+        }
+      };
+      
+      micSource.connect(recorder);
+      recorder.connect(this.audioContext.destination);
+      sweepSource.start();
+      
+      // Store references for cleanup
+      this.captureController.signal.addEventListener('abort', () => {
+        sweepSource.stop();
+        recorder.disconnect();
+        micSource.disconnect();
+        stream.getTracks().forEach(track => track.stop());
+        
+        if (recordedChunks.length > 0) {
+          // Process recorded data
+          const totalLength = recordedChunks.reduce((acc, chunk) => acc + chunk.length, 0);
+          const recorded = new Float32Array(totalLength);
+          let offset = 0;
+          for (const chunk of recordedChunks) {
+            recorded.set(chunk, offset);
+            offset += chunk.length;
+          }
+          
+          // Analyze frequency response
+          this.analyzeFrequencyResponse(sweep, recorded);
+        }
+      });
+      
+    } catch (error) {
+      console.error('Failed to start capture:', error);
+      this.updateCaptureUI('Error: ' + error, false, 0);
+      this.isCapturing = false;
+    }
+  }
+  
+  private stopCapture(): void {
+    if (!this.isCapturing) return;
+    
+    this.isCapturing = false;
+    this.captureController?.abort();
+    
+    if (this.captureBtn) {
+      this.captureBtn.textContent = '🎤 Start Capture';
+      this.captureBtn.classList.remove('recording');
+    }
+    
+    this.updateCaptureUI('Processing...', false, 100);
+  }
+  
+  private clearCapture(): void {
+    this.capturedCurve = null;
+    if (this.captureResult) {
+      this.captureResult.style.display = 'none';
+    }
+    if (this.capturePlot) {
+      Plotly.purge(this.capturePlot);
+    }
+    this.updateCaptureUI('Ready', false, 0);
+    
+    // Revalidate form since captured data is cleared
+    this.validateForm();
+  }
+  
+  private updateCaptureUI(status: string, showProgress: boolean, progress: number): void {
+    if (this.captureStatusText) {
+      this.captureStatusText.textContent = status;
+    }
+    
+    if (this.captureStatus) {
+      this.captureStatus.style.display = 'block';
+    }
+    
+    const progressBar = this.captureStatus?.querySelector('.capture-progress-bar') as HTMLElement;
+    if (progressBar) {
+      progressBar.style.display = showProgress ? 'block' : 'none';
+      if (this.captureProgressFill) {
+        this.captureProgressFill.style.width = `${progress}%`;
+      }
+    }
+    
+    if (this.captureWaveform) {
+      this.captureWaveform.style.display = showProgress ? 'block' : 'none';
+    }
+  }
+  
+  private visualizeCaptureWaveform(data: Float32Array): void {
+    if (!this.captureWaveformCtx || !this.captureWaveform) return;
+    
+    const width = this.captureWaveform.width;
+    const height = this.captureWaveform.height;
+    const ctx = this.captureWaveformCtx;
+    
+    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--bg-primary').trim();
+    ctx.fillRect(0, 0, width, height);
+    
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--primary-color').trim();
+    ctx.beginPath();
+    
+    const sliceWidth = width / data.length;
+    let x = 0;
+    
+    for (let i = 0; i < data.length; i++) {
+      const v = (data[i] + 1) / 2;
+      const y = v * height;
+      
+      if (i === 0) {
+        ctx.moveTo(x, y);
+      } else {
+        ctx.lineTo(x, y);
+      }
+      
+      x += sliceWidth;
+    }
+    
+    ctx.stroke();
+  }
+  
+  private generateSineSweep(startFreq: number, endFreq: number, duration: number, sampleRate: number): Float32Array {
+    const numSamples = Math.floor(duration * sampleRate);
+    const sweep = new Float32Array(numSamples);
+    
+    // Logarithmic sweep
+    const k = Math.log(endFreq / startFreq) / duration;
+    
+    for (let i = 0; i < numSamples; i++) {
+      const t = i / sampleRate;
+      const instantFreq = startFreq * Math.exp(k * t);
+      const phase = 2 * Math.PI * startFreq * (Math.exp(k * t) - 1) / k;
+      sweep[i] = Math.sin(phase) * 0.8; // 80% amplitude to avoid clipping
+    }
+    
+    // Apply fade in/out to avoid clicks
+    const fadeLength = Math.floor(0.05 * sampleRate); // 50ms fade
+    for (let i = 0; i < fadeLength; i++) {
+      const fade = i / fadeLength;
+      sweep[i] *= fade;
+      sweep[numSamples - 1 - i] *= fade;
+    }
+    
+    return sweep;
+  }
+  
+  private analyzeFrequencyResponse(sweep: Float32Array, recorded: Float32Array): void {
+    // Generate 200 logarithmically spaced frequencies
+    const frequencies: number[] = [];
+    const minFreq = 20;
+    const maxFreq = 20000;
+    const numPoints = 200;
+    
+    for (let i = 0; i < numPoints; i++) {
+      const logFreq = Math.log10(minFreq) + (i / (numPoints - 1)) * (Math.log10(maxFreq) - Math.log10(minFreq));
+      frequencies.push(Math.pow(10, logFreq));
+    }
+    
+    // Compute frequency response using FFT correlation
+    const sampleRate = this.audioContext!.sampleRate;
+    const response = this.computeFrequencyResponse(sweep, recorded, frequencies, sampleRate);
+    
+    // Convert to dB
+    const magnitudes = response.magnitudes.map(m => 20 * Math.log10(Math.max(1e-10, m)));
+    
+    // Normalize to 0dB at 1kHz
+    const refIndex = frequencies.findIndex(f => f >= 1000);
+    const refLevel = magnitudes[refIndex];
+    const normalizedMagnitudes = magnitudes.map(m => m - refLevel);
+    
+    // Create plot data
+    this.capturedCurve = {
+      frequencies: frequencies,
+      curves: {
+        'Captured Response': normalizedMagnitudes
+      },
+      metadata: {
+        phases: response.phases
+      }
+    };
+    
+    // Display result
+    this.displayCaptureResult(this.capturedCurve);
+    this.updateCaptureUI('Capture complete', false, 0);
+    
+    // Enable optimize button since we now have captured data
+    this.validateForm();
+  }
+  
+  private computeFrequencyResponse(
+    sweep: Float32Array,
+    recorded: Float32Array,
+    frequencies: number[],
+    sampleRate: number
+  ): { magnitudes: number[], phases: number[] } {
+    const magnitudes: number[] = [];
+    const phases: number[] = [];
+    
+    // Simple frequency-by-frequency analysis
+    for (const freq of frequencies) {
+      // Find the time when this frequency occurs in the sweep
+      const sweepDuration = 10;
+      const k = Math.log(20000 / 20) / sweepDuration;
+      const time = Math.log(freq / 20) / k;
+      const sampleIndex = Math.floor(time * sampleRate);
+      
+      // Extract a window around this point
+      const windowSize = Math.floor(sampleRate / freq * 10); // 10 periods
+      const halfWindow = Math.floor(windowSize / 2);
+      const startIdx = Math.max(0, sampleIndex - halfWindow);
+      const endIdx = Math.min(recorded.length, sampleIndex + halfWindow);
+      
+      if (endIdx <= startIdx) {
+        magnitudes.push(0);
+        phases.push(0);
+        continue;
+      }
+      
+      // Apply window function
+      const windowLength = endIdx - startIdx;
+      const windowed = new Float32Array(windowLength);
+      for (let i = 0; i < windowLength; i++) {
+        const window = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / (windowLength - 1)); // Hann window
+        windowed[i] = recorded[startIdx + i] * window;
+      }
+      
+      // Compute DFT at target frequency
+      let real = 0;
+      let imag = 0;
+      for (let i = 0; i < windowLength; i++) {
+        const t = i / sampleRate;
+        const angle = 2 * Math.PI * freq * t;
+        real += windowed[i] * Math.cos(angle);
+        imag -= windowed[i] * Math.sin(angle);
+      }
+      
+      const magnitude = Math.sqrt(real * real + imag * imag) * 2 / windowLength;
+      const phase = Math.atan2(imag, real) * 180 / Math.PI;
+      
+      magnitudes.push(magnitude);
+      phases.push(phase);
+    }
+    
+    return { magnitudes, phases };
+  }
+  
+  private isCaptureSupported(): boolean {
+    // Check if we're in a secure context (HTTPS or localhost)
+    if (!window.isSecureContext) {
+      console.warn('Not in a secure context - audio capture may not work');
+    }
+    
+    // Check if getUserMedia is available
+    return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+  }
+  
+  private async simulatedCapture(): Promise<void> {
+    this.isCapturing = true;
+    
+    if (this.captureBtn) {
+      this.captureBtn.textContent = '⏹️ Stop Capture';
+      this.captureBtn.classList.add('recording');
+    }
+    
+    // Simulate 10 second capture with progress updates
+    const duration = 10000; // 10 seconds
+    const updateInterval = 100; // Update every 100ms
+    let elapsed = 0;
+    
+    // Store the timer ID for cleanup
+    const captureAbortController = new AbortController();
+    this.captureController = captureAbortController;
+    
+    const progressTimer = setInterval(() => {
+      elapsed += updateInterval;
+      const progress = Math.min(100, (elapsed / duration) * 100);
+      this.updateCaptureUI(`Simulating capture... ${(elapsed / 1000).toFixed(1)}s`, true, progress);
+      
+      // Generate fake waveform data
+      const fakeWaveform = new Float32Array(128);
+      for (let i = 0; i < fakeWaveform.length; i++) {
+        fakeWaveform[i] = (Math.random() - 0.5) * 0.5;
+      }
+      this.visualizeCaptureWaveform(fakeWaveform);
+      
+      if (elapsed >= duration || !this.isCapturing || captureAbortController.signal.aborted) {
+        clearInterval(progressTimer);
+        
+        if (this.isCapturing && !captureAbortController.signal.aborted) {
+          // Generate simulated frequency response
+          this.generateSimulatedResponse();
+        } else {
+          this.updateCaptureUI('Capture stopped', false, 0);
+        }
+        
+        this.isCapturing = false;
+        if (this.captureBtn) {
+          this.captureBtn.textContent = '🎤 Start Capture';
+          this.captureBtn.classList.remove('recording');
+        }
+      }
+    }, updateInterval);
+  }
+  
+  private generateSimulatedResponse(): void {
+    // Generate 200 logarithmically spaced frequencies
+    const frequencies: number[] = [];
+    const magnitudes: number[] = [];
+    const phases: number[] = [];
+    const minFreq = 20;
+    const maxFreq = 20000;
+    const numPoints = 200;
+    
+    for (let i = 0; i < numPoints; i++) {
+      const logFreq = Math.log10(minFreq) + (i / (numPoints - 1)) * (Math.log10(maxFreq) - Math.log10(minFreq));
+      const freq = Math.pow(10, logFreq);
+      frequencies.push(freq);
+      
+      // Generate a realistic-looking frequency response
+      // Bass boost below 100Hz
+      let magnitude = 0;
+      if (freq < 100) {
+        magnitude = 3 * (1 - freq / 100);
+      }
+      // Room modes
+      magnitude += 2 * Math.sin(Math.log10(freq) * 5) * Math.exp(-freq / 5000);
+      // High frequency rolloff
+      if (freq > 10000) {
+        magnitude -= 3 * ((freq - 10000) / 10000);
+      }
+      // Add some random variation
+      magnitude += (Math.random() - 0.5) * 0.5;
+      
+      magnitudes.push(magnitude);
+      phases.push((Math.random() - 0.5) * 180);
+    }
+    
+    // Create plot data
+    this.capturedCurve = {
+      frequencies: frequencies,
+      curves: {
+        'Captured Response': magnitudes
+      },
+      metadata: {
+        phases: phases,
+        simulated: true
+      }
+    };
+    
+    // Display result
+    this.displayCaptureResult(this.capturedCurve);
+    this.updateCaptureUI('Simulated capture complete', false, 0);
+    
+    // Enable optimize button
+    this.validateForm();
+  }
+  
+  private displayCaptureResult(data: PlotData): void {
+    if (!this.captureResult || !this.capturePlot) return;
+    
+    // Show result container
+    this.captureResult.style.display = 'block';
+    
+    // Create plot
+    const trace = {
+      x: data.frequencies,
+      y: data.curves['Captured Response'],
+      type: 'scatter' as const,
+      mode: 'lines' as const,
+      name: 'Magnitude',
+      line: { color: getComputedStyle(document.documentElement).getPropertyValue('--primary-color').trim() }
+    };
+    
+    const layout = {
+      title: { text: 'Captured Frequency Response', font: { size: 12 } },
+      xaxis: {
+        title: { text: 'Frequency (Hz)', font: { size: 10 } },
+        type: 'log' as const,
+        range: [Math.log10(20), Math.log10(20000)]
+      },
+      yaxis: {
+        title: { text: 'Magnitude (dB)', font: { size: 10 } },
+        range: [-30, 10]
+      },
+      paper_bgcolor: 'rgba(0,0,0,0)',
+      plot_bgcolor: 'rgba(0,0,0,0)',
+      font: {
+        color: getComputedStyle(document.documentElement).getPropertyValue('--text-primary').trim(),
+        size: 10
+      },
+      margin: { l: 40, r: 20, t: 30, b: 30 },
+      showlegend: false,
+      hovermode: 'x unified' as const
+    };
+    
+    Plotly.newPlot(this.capturePlot, [trace], layout, {
+      responsive: true,
+      displayModeBar: false
+    });
   }
 }
 

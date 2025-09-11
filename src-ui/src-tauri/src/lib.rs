@@ -38,6 +38,9 @@ struct OptimizationParams {
     de_cr: Option<f64>,
     adaptive_weight_f: Option<f64>,
     adaptive_weight_cr: Option<f64>,
+    // Tolerance parameters
+    tolerance: Option<f64>,
+    atolerance: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -50,6 +53,7 @@ struct OptimizationResult {
     preference_score_after: Option<f64>,
     filter_response: Option<PlotData>,
     spin_details: Option<PlotData>,
+    filter_plots: Option<PlotData>, // Individual filter responses and sum
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -148,6 +152,160 @@ async fn get_measurements(speaker: String, version: String) -> Result<Vec<String
     }
 }
 
+fn validate_params(
+    params: &OptimizationParams,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    // Validate number of filters
+    if params.num_filters == 0 {
+        return Err("Number of filters must be at least 1".into());
+    }
+    if params.num_filters > 50 {
+        return Err(format!(
+            "Number of filters must be between 1 and 50 (got: {})",
+            params.num_filters
+        )
+        .into());
+    }
+
+    // Validate tolerance (lower bound 1e-12, no upper bound)
+    if let Some(tol) = params.tolerance {
+        if tol < 1e-12 {
+            return Err(format!("Tolerance must be >= 1e-12 (got: {})", tol).into());
+        }
+    }
+
+    // Validate absolute tolerance (lower bound 0, no upper bound)
+    if let Some(atol) = params.atolerance {
+        if atol < 1e-15 {
+            return Err(format!("Absolute tolerance must be >= 1e-15 (got: {})", atol).into());
+        }
+    }
+
+    // Validate frequency range
+    if params.min_freq >= params.max_freq {
+        return Err(format!(
+            "Minimum frequency ({} Hz) must be less than maximum frequency ({} Hz)",
+            params.min_freq, params.max_freq
+        )
+        .into());
+    }
+    if params.min_freq < 20.0 {
+        return Err(format!(
+            "Minimum frequency must be >= 20 Hz (got: {} Hz)",
+            params.min_freq
+        )
+        .into());
+    }
+    if params.max_freq > 20000.0 {
+        return Err(format!(
+            "Maximum frequency must be <= 20,000 Hz (got: {} Hz)",
+            params.max_freq
+        )
+        .into());
+    }
+
+    // Validate Q range
+    if params.min_q >= params.max_q {
+        return Err(format!(
+            "Minimum Q ({}) must be less than maximum Q ({})",
+            params.min_q, params.max_q
+        )
+        .into());
+    }
+    if params.min_q < 0.1 {
+        return Err(format!("Minimum Q must be >= 0.1 (got: {})", params.min_q).into());
+    }
+    if params.max_q > 20.0 {
+        return Err(format!("Maximum Q must be <= 100 (got: {})", params.max_q).into());
+    }
+
+    // Validate dB range
+    if params.min_db > params.max_db {
+        return Err(format!(
+            "Minimum dB ({}) must be <= maximum dB ({})",
+            params.min_db, params.max_db
+        )
+        .into());
+    }
+    if params.min_db < 0.25 {
+        return Err(format!("Minimum dB must be >= 0.25 (got: {})", params.min_db).into());
+    }
+    if params.max_db > 20.0 {
+        return Err(format!("Maximum dB must be <= 20 (got: {})", params.max_db).into());
+    }
+
+    // Validate sample rate
+    if params.sample_rate < 8000.0 || params.sample_rate > 192000.0 {
+        return Err(format!(
+            "Sample rate must be between 8,000 and 192,000 Hz (got: {} Hz)",
+            params.sample_rate
+        )
+        .into());
+    }
+
+    // Validate population size
+    if params.population == 0 {
+        return Err("Population size must be at least 1".into());
+    }
+    if params.population > 10000 {
+        return Err(format!(
+            "Population size must be between 1 and 10,000 (got: {})",
+            params.population
+        )
+        .into());
+    }
+
+    // Validate max evaluations
+    if params.maxeval == 0 {
+        return Err("Maximum evaluations must be at least 1".into());
+    }
+
+    // Validate smoothing N
+    if params.smooth_n < 1 || params.smooth_n > 24 {
+        return Err(format!(
+            "Smoothing N must be between 1 and 24 (got: {})",
+            params.smooth_n
+        )
+        .into());
+    }
+
+    // Validate DE parameters if present
+    if let Some(de_f) = params.de_f {
+        if de_f < 0.0 || de_f > 2.0 {
+            return Err(format!(
+                "Mutation factor (F) must be between 0 and 2 (got: {})",
+                de_f
+            )
+            .into());
+        }
+    }
+
+    if let Some(de_cr) = params.de_cr {
+        if de_cr < 0.0 || de_cr > 1.0 {
+            return Err(format!(
+                "Recombination probability (CR) must be between 0 and 1 (got: {})",
+                de_cr
+            )
+            .into());
+        }
+    }
+
+    // Validate adaptive weights
+    if let Some(w) = params.adaptive_weight_f {
+        if w < 0.0 || w > 1.0 {
+            return Err(format!("Adaptive weight F must be between 0 and 1 (got: {})", w).into());
+        }
+    }
+
+    if let Some(w) = params.adaptive_weight_cr {
+        if w < 0.0 || w > 1.0 {
+            return Err(format!("Adaptive weight CR must be between 0 and 1 (got: {})", w).into());
+        }
+    }
+
+    Ok(())
+}
+
 #[tauri::command]
 async fn run_optimization(params: OptimizationParams, app_handle: AppHandle) -> OptimizationResult {
     let result = run_optimization_internal(params, app_handle).await;
@@ -162,6 +320,7 @@ async fn run_optimization(params: OptimizationParams, app_handle: AppHandle) -> 
             preference_score_after: None,
             filter_response: None,
             spin_details: None,
+            filter_plots: None,
         },
     }
 }
@@ -170,6 +329,9 @@ async fn run_optimization_internal(
     params: OptimizationParams,
     app_handle: AppHandle,
 ) -> Result<OptimizationResult, Box<dyn std::error::Error + Send + Sync>> {
+    // Validate parameters first
+    validate_params(&params)?;
+
     // Convert parameters to AutoEQ Args structure
     let args = AutoEQArgs {
         num_filters: params.num_filters,
@@ -204,8 +366,8 @@ async fn run_optimization_internal(
         },
         iir_hp_pk: params.iir_hp_pk,
         algo_list: false, // UI doesn't need to list algorithms
-        tolerance: 1e-3,  // Default DE tolerance
-        atolerance: 1e-4, // Default DE absolute tolerance
+        tolerance: params.tolerance.unwrap_or(1e-3), // Use provided tolerance or default
+        atolerance: params.atolerance.unwrap_or(1e-4), // Use provided atolerance or default
         recombination: params.de_cr.unwrap_or(0.9), // DE crossover probability
         strategy: params
             .strategy
@@ -250,29 +412,35 @@ async fn run_optimization_internal(
 
     // Run optimization with progress reporting for autoeq:de
     let filter_params = if args.algo == "autoeq:de" {
-        autoeq::workflow::perform_optimization_with_callback(&args, &objective_data, Box::new(move |intermediate| {
-            let _ = app_handle.emit("progress_update", ProgressUpdate {
-                iteration: intermediate.iter,
-                fitness: intermediate.fun,
-                params: intermediate.x.to_vec(),
-                convergence: intermediate.convergence,
-            });
-            autoeq::de::CallbackAction::Continue
-        })).map_err(
+        autoeq::workflow::perform_optimization_with_callback(
+            &args,
+            &objective_data,
+            Box::new(move |intermediate| {
+                let _ = app_handle.emit(
+                    "progress_update",
+                    ProgressUpdate {
+                        iteration: intermediate.iter,
+                        fitness: intermediate.fun,
+                        params: intermediate.x.to_vec(),
+                        convergence: intermediate.convergence,
+                    },
+                );
+                autoeq::de::CallbackAction::Continue
+            }),
+        )
+        .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
+            Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                e.to_string(),
+            ))
+        })?
+    } else {
+        autoeq::workflow::perform_optimization(&args, &objective_data).map_err(
             |e| -> Box<dyn std::error::Error + Send + Sync> {
                 Box::new(std::io::Error::new(
                     std::io::ErrorKind::Other,
                     e.to_string(),
                 ))
-            },
-        )?
-    } else {
-        autoeq::workflow::perform_optimization(&args, &objective_data).map_err(
-        |e| -> Box<dyn std::error::Error + Send + Sync> {
-            Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                e.to_string(),
-            ))
             },
         )?
     };
@@ -324,6 +492,55 @@ async fn run_optimization_internal(
         metadata: HashMap::new(),
     };
 
+    // Generate individual filter plots
+    let mut individual_filter_curves = HashMap::new();
+    let mut combined_response = Array1::zeros(plot_freqs_array.len());
+
+    // Sort filters by frequency for consistent display
+    let mut filters: Vec<(usize, f64, f64, f64)> = (0..args.num_filters)
+        .map(|i| {
+            (
+                i,
+                10f64.powf(filter_params[i * 3]), // Convert from log to linear frequency
+                filter_params[i * 3 + 1],         // Q
+                filter_params[i * 3 + 2],         // Gain
+            )
+        })
+        .collect();
+    filters.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+
+    // Generate response for each filter
+    for (display_idx, (orig_i, f0, q, gain)) in filters.into_iter().enumerate() {
+        use autoeq::iir::{Biquad, BiquadFilterType};
+
+        let ftype = if args.iir_hp_pk && orig_i == 0 {
+            BiquadFilterType::Highpass
+        } else {
+            BiquadFilterType::Peak
+        };
+
+        let filter = Biquad::new(ftype, f0, args.sample_rate, q, gain);
+        let filter_response = filter.np_log_result(&plot_freqs_array);
+        combined_response = &combined_response + &filter_response;
+
+        let label = if args.iir_hp_pk && orig_i == 0 {
+            format!("HPQ {} at {:.0}Hz", orig_i + 1, f0)
+        } else {
+            format!("PK {} at {:.0}Hz", orig_i + 1, f0)
+        };
+
+        individual_filter_curves.insert(label, filter_response.to_vec());
+    }
+
+    // Add the combined sum
+    individual_filter_curves.insert("Sum".to_string(), combined_response.to_vec());
+
+    let filter_plots = PlotData {
+        frequencies: plot_freqs.clone(),
+        curves: individual_filter_curves,
+        metadata: HashMap::new(),
+    };
+
     // Generate spin details data if available
     let mut spin_details = None;
     if let Some(ref spin) = spin_data {
@@ -350,6 +567,7 @@ async fn run_optimization_internal(
         preference_score_after: pref_score_after,
         filter_response: Some(filter_response),
         spin_details,
+        filter_plots: Some(filter_plots),
     })
 }
 
@@ -361,6 +579,7 @@ fn exit_app(window: tauri::Window) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, args, cwd| {}))
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
