@@ -34,8 +34,8 @@ use mh::{Bounded as MhBounded, Fitness as MhFitness, ObjFunc as MhObjFunc, Solve
 
 use super::loss::{flat_loss, mixed_loss, score_loss, LossType, ScoreLossData};
 use crate::de::{
-    differential_evolution, CallbackAction, DEConfigBuilder, DEIntermediate, DEReport,
-    Init, Mutation, ParallelConfig, Strategy,
+    differential_evolution, CallbackAction, DEConfigBuilder, DEIntermediate, DEReport, Init,
+    Mutation, ParallelConfig, Strategy,
 };
 // use ndarray::Array2; // unused
 use super::init_sobol::init_sobol;
@@ -979,7 +979,10 @@ fn optimize_filters_autoeq(
     if !cli_args.no_parallel {
         eprintln!(
             "🚄 Parallel evaluation enabled with {} threads",
-            cli_args.parallel_threads.eq(&0).then(|| "all available".to_string())
+            cli_args
+                .parallel_threads
+                .eq(&0)
+                .then(|| "all available".to_string())
                 .unwrap_or_else(|| cli_args.parallel_threads.to_string())
         );
     }
@@ -999,10 +1002,8 @@ fn optimize_filters_autoeq(
             viol
         }
     };
-    config_builder = config_builder.add_penalty_ineq(
-        ceiling_penalty,
-        setup.penalty_data.penalty_w_ceiling,
-    );
+    config_builder =
+        config_builder.add_penalty_ineq(ceiling_penalty, setup.penalty_data.penalty_w_ceiling);
 
     // Add spacing constraint as penalty
     // let spacing_penalty = {

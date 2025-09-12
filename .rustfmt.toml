@@ -1,2 +1,8 @@
 edition = "2024"
 max_width=100
+hard_tabs = true
+use_small_heuristics = "Max"
+
+reorder_imports = true
+
+newline_style = "Unix"

@@ -1,5 +1,5 @@
 //! AutoEQ - A library for audio equalization and filter optimization
-//! Common command-line interface definitions shared across binaries
+//! Common constants shared across all AutoEQ workspace members
 //!
 //! Copyright (C) 2025 Pierre Aubert pierre(at)spinorama(dot)org
 //!

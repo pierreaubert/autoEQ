@@ -505,13 +505,13 @@ pub fn build_sorted_filters(x: &[f64], iir_hp_pk: bool) -> Vec<FilterRow> {
 }
 
 /// Check if two PEQs are equal
-/// 
+///
 /// Compares two PEQ vectors for equality, checking both weights and biquad parameters
 pub fn peq_equal(left: &Peq, right: &Peq) -> bool {
     if left.len() != right.len() {
         return false;
     }
-    
+
     left.iter().zip(right.iter()).all(|((w1, b1), (w2, b2))| {
         // Compare weights
         (w1 - w2).abs() < f64::EPSILON &&
@@ -525,58 +525,71 @@ pub fn peq_equal(left: &Peq, right: &Peq) -> bool {
 }
 
 /// Compute SPL for each frequency given a PEQ
-/// 
+///
 /// # Arguments
 /// * `freq` - Array of frequencies to compute response for
 /// * `peq` - PEQ vector containing weighted biquad filters
-/// 
+///
 /// # Returns
 /// * Array of SPL values in dB for each frequency
 pub fn peq_spl(freq: &Array1<f64>, peq: &Peq) -> Array1<f64> {
     let mut current_filter = Array1::zeros(freq.len());
-    
+
     for (weight, iir) in peq {
         current_filter += &(iir.np_log_result(freq) * *weight);
     }
-    
+
     current_filter
 }
 
 /// Compute preamp gain for a PEQ: well adapted to computers
-/// 
+///
 /// # Arguments
 /// * `peq` - PEQ vector containing weighted biquad filters
-/// 
+///
 /// # Returns
 /// * Preamp gain in dB (negative value to prevent clipping)
 pub fn peq_preamp_gain(peq: &Peq) -> f64 {
     // Generate logarithmic frequency array from 20Hz to 20kHz with 1000 points
-    let freq = Array1::logspace(10.0, (2.0f64 * 10.0).log10(), (2.0f64 * 10000.0).log10(), 1000);
+    let freq = Array1::logspace(
+        10.0,
+        (2.0f64 * 10.0).log10(),
+        (2.0f64 * 10000.0).log10(),
+        1000,
+    );
     let spl = peq_spl(&freq, peq);
-    
+
     // Find maximum positive gain and return its negative
-    let overall = spl.iter().cloned().fold(0.0f64, |acc, x| acc.max(x.max(0.0)));
+    let overall = spl
+        .iter()
+        .cloned()
+        .fold(0.0f64, |acc, x| acc.max(x.max(0.0)));
     -overall
 }
 
 /// Compute preamp gain for a PEQ and look at the worst case
-/// 
+///
 /// Note that we add 0.2 dB to have a margin for clipping
-/// 
+///
 /// # Arguments
 /// * `peq` - PEQ vector containing weighted biquad filters
-/// 
+///
 /// # Returns
 /// * Preamp gain in dB (negative value to prevent clipping)
 pub fn peq_preamp_gain_max(peq: &Peq) -> f64 {
     if peq.is_empty() {
         return 0.0;
     }
-    
-    // Generate logarithmic frequency array from 20Hz to 20kHz with 1000 points 
-    let freq = Array1::logspace(10.0, (2.0f64 * 10.0).log10(), (2.0f64 * 10000.0).log10(), 1000);
+
+    // Generate logarithmic frequency array from 20Hz to 20kHz with 1000 points
+    let freq = Array1::logspace(
+        10.0,
+        (2.0f64 * 10.0).log10(),
+        (2.0f64 * 10000.0).log10(),
+        1000,
+    );
     let spl = peq_spl(&freq, peq);
-    
+
     // Find maximum individual filter contribution
     let mut individual: f64 = 0.0;
     for (_, iir) in peq {
@@ -585,20 +598,23 @@ pub fn peq_preamp_gain_max(peq: &Peq) -> f64 {
         let single_max = single_spl.iter().cloned().fold(0.0f64, |acc, x| acc.max(x));
         individual = individual.max(single_max);
     }
-    
+
     // Find overall maximum positive gain
-    let overall = spl.iter().cloned().fold(0.0f64, |acc, x| acc.max(x.max(0.0)));
-    
+    let overall = spl
+        .iter()
+        .cloned()
+        .fold(0.0f64, |acc, x| acc.max(x.max(0.0)));
+
     // Take worst case and add safety margin
     -(individual.max(overall) + 0.2)
 }
 
 /// Format PEQ as APO configuration string
-/// 
+///
 /// # Arguments
 /// * `comment` - Comment string to include at the top
 /// * `peq` - PEQ vector containing weighted biquad filters
-/// 
+///
 /// # Returns
 /// * String formatted for EqualizerAPO
 pub fn peq_format_apo(comment: &str, peq: &Peq) -> String {
@@ -606,7 +622,7 @@ pub fn peq_format_apo(comment: &str, peq: &Peq) -> String {
     res.push(comment.to_string());
     res.push(format!("Preamp: {:.1} dB", peq_preamp_gain(peq)));
     res.push(String::new());
-    
+
     for (i, (_, iir)) in peq.iter().enumerate() {
         match iir.filter_type {
             BiquadFilterType::Peak | BiquadFilterType::Notch | BiquadFilterType::Bandpass => {
@@ -657,79 +673,89 @@ pub fn peq_format_apo(comment: &str, peq: &Peq) -> String {
             }
         }
     }
-    
+
     res.push(String::new());
     res.join("\n")
 }
 
 /// Compute Q values for Butterworth filters
-/// 
+///
 /// # Arguments
 /// * `order` - Filter order
-/// 
+///
 /// # Returns
 /// * Vector of Q values for each biquad section
 pub fn peq_butterworth_q(order: usize) -> Vec<f64> {
     let odd = (order % 2) > 0;
     let mut q_values = Vec::new();
-    
+
     for i in 0..order / 2 {
         let q = 2.0 * (PI / order as f64 * (i as f64 + 0.5)).sin();
         q_values.push(1.0 / q);
     }
-    
+
     if odd {
         q_values.push(-1.0);
     }
-    
+
     q_values
 }
 
 /// Create Butterworth lowpass filter
-/// 
+///
 /// # Arguments
 /// * `order` - Filter order
 /// * `freq` - Cutoff frequency in Hz
 /// * `srate` - Sample rate in Hz
-/// 
+///
 /// # Returns
 /// * PEQ containing the Butterworth lowpass filter sections
 pub fn peq_butterworth_lowpass(order: usize, freq: f64, srate: f64) -> Peq {
     let q_values = peq_butterworth_q(order);
     q_values
         .into_iter()
-        .map(|q| (1.0, Biquad::new(BiquadFilterType::Lowpass, freq, srate, q, 0.0)))
+        .map(|q| {
+            (
+                1.0,
+                Biquad::new(BiquadFilterType::Lowpass, freq, srate, q, 0.0),
+            )
+        })
         .collect()
 }
 
 /// Create Butterworth highpass filter
-/// 
+///
 /// # Arguments
 /// * `order` - Filter order
 /// * `freq` - Cutoff frequency in Hz
 /// * `srate` - Sample rate in Hz
-/// 
+///
 /// # Returns
 /// * PEQ containing the Butterworth highpass filter sections
 pub fn peq_butterworth_highpass(order: usize, freq: f64, srate: f64) -> Peq {
     let q_values = peq_butterworth_q(order);
     q_values
         .into_iter()
-        .map(|q| (1.0, Biquad::new(BiquadFilterType::Highpass, freq, srate, q, 0.0)))
+        .map(|q| {
+            (
+                1.0,
+                Biquad::new(BiquadFilterType::Highpass, freq, srate, q, 0.0),
+            )
+        })
         .collect()
 }
 
 /// Compute Q values for Linkwitz-Riley filters
-/// 
+///
 /// # Arguments
 /// * `order` - Filter order
-/// 
+///
 /// # Returns
 /// * Vector of Q values for each biquad section
 pub fn peq_linkwitzriley_q(order: usize) -> Vec<f64> {
     let q_bw = peq_butterworth_q(order / 2);
     let mut q_values = Vec::new();
-    
+
     if order % 4 > 0 {
         // Odd number of pairs
         q_values.extend_from_slice(&q_bw[..q_bw.len() - 1]);
@@ -740,41 +766,51 @@ pub fn peq_linkwitzriley_q(order: usize) -> Vec<f64> {
         q_values.extend_from_slice(&q_bw);
         q_values.extend_from_slice(&q_bw);
     }
-    
+
     q_values
 }
 
 /// Create Linkwitz-Riley lowpass filter
-/// 
+///
 /// # Arguments
 /// * `order` - Filter order
 /// * `freq` - Cutoff frequency in Hz
 /// * `srate` - Sample rate in Hz
-/// 
+///
 /// # Returns
 /// * PEQ containing the Linkwitz-Riley lowpass filter sections
 pub fn peq_linkwitzriley_lowpass(order: usize, freq: f64, srate: f64) -> Peq {
     let q_values = peq_linkwitzriley_q(order);
     q_values
         .into_iter()
-        .map(|q| (1.0, Biquad::new(BiquadFilterType::Lowpass, freq, srate, q, 0.0)))
+        .map(|q| {
+            (
+                1.0,
+                Biquad::new(BiquadFilterType::Lowpass, freq, srate, q, 0.0),
+            )
+        })
         .collect()
 }
 
 /// Create Linkwitz-Riley highpass filter
-/// 
+///
 /// # Arguments
 /// * `order` - Filter order
 /// * `freq` - Cutoff frequency in Hz
 /// * `srate` - Sample rate in Hz
-/// 
+///
 /// # Returns
 /// * PEQ containing the Linkwitz-Riley highpass filter sections
 pub fn peq_linkwitzriley_highpass(order: usize, freq: f64, srate: f64) -> Peq {
     let q_values = peq_linkwitzriley_q(order);
     q_values
         .into_iter()
-        .map(|q| (1.0, Biquad::new(BiquadFilterType::Highpass, freq, srate, q, 0.0)))
+        .map(|q| {
+            (
+                1.0,
+                Biquad::new(BiquadFilterType::Highpass, freq, srate, q, 0.0),
+            )
+        })
         .collect()
 }
 
@@ -872,51 +908,51 @@ mod peq_tests {
         let bq1 = Biquad::new(BiquadFilterType::Peak, 1000.0, 48000.0, 1.0, 3.0);
         let bq2 = Biquad::new(BiquadFilterType::Peak, 1000.0, 48000.0, 1.0, 3.0);
         let bq3 = Biquad::new(BiquadFilterType::Peak, 1000.0, 48000.0, 1.0, 4.0);
-        
+
         let peq1 = vec![(1.0, bq1.clone()), (0.5, bq2.clone())];
         let peq2 = vec![(1.0, bq1), (0.5, bq2)];
         let peq3 = vec![(1.0, bq3)];
-        
+
         assert!(peq_equal(&peq1, &peq2));
         assert!(!peq_equal(&peq1, &peq3));
         assert!(!peq_equal(&peq1, &vec![]));
     }
-    
+
     #[test]
     fn test_peq_spl() {
         let bq = Biquad::new(BiquadFilterType::Peak, 1000.0, 48000.0, 1.0, 6.0);
         let peq = vec![(1.0, bq)];
         let freq = array![100.0, 1000.0, 10000.0];
-        
+
         let spl = peq_spl(&freq, &peq);
-        
+
         // Should have gain close to 6 dB at 1kHz
         assert!(spl[1] > 5.0 && spl[1] < 7.0);
         // Should have less gain at other frequencies
         assert!(spl[0].abs() < 1.0);
         assert!(spl[2].abs() < 1.0);
     }
-    
-    #[test] 
+
+    #[test]
     fn test_peq_preamp_gain() {
         let bq = Biquad::new(BiquadFilterType::Peak, 1000.0, 48000.0, 1.0, 6.0);
         let peq = vec![(1.0, bq)];
-        
+
         let gain = peq_preamp_gain(&peq);
-        
+
         // Should be negative to prevent clipping
         assert!(gain < 0.0);
         // Should be around -6 dB to compensate for the +6 dB boost
         assert!(gain > -7.0 && gain < -5.0);
     }
-    
+
     #[test]
     fn test_peq_format_apo() {
         let bq = Biquad::new(BiquadFilterType::Peak, 1000.0, 48000.0, 1.0, 3.0);
         let peq = vec![(1.0, bq)];
-        
+
         let apo_str = peq_format_apo("Test EQ", &peq);
-        
+
         assert!(apo_str.contains("Test EQ"));
         assert!(apo_str.contains("Preamp:"));
         assert!(apo_str.contains("Filter  1:"));
@@ -924,48 +960,48 @@ mod peq_tests {
         assert!(apo_str.contains("1000 Hz"));
         assert!(apo_str.contains("+3.00 dB"));
     }
-    
+
     #[test]
     fn test_butterworth_q() {
         let q_values = peq_butterworth_q(4);
         assert_eq!(q_values.len(), 2);
-        
+
         // For 4th order Butterworth, should have specific Q values
         assert!((q_values[0] - 1.3065630).abs() < 1e-6);
         assert!((q_values[1] - 0.5411961).abs() < 1e-6);
     }
-    
-    #[test] 
+
+    #[test]
     fn test_butterworth_filters() {
         let lp = peq_butterworth_lowpass(4, 1000.0, 48000.0);
         let hp = peq_butterworth_highpass(4, 1000.0, 48000.0);
-        
+
         assert_eq!(lp.len(), 2);
         assert_eq!(hp.len(), 2);
-        
+
         // All filters should have weight 1.0 and correct type
         for (weight, bq) in &lp {
             assert_eq!(*weight, 1.0);
             assert_eq!(bq.filter_type, BiquadFilterType::Lowpass);
             assert_eq!(bq.freq, 1000.0);
         }
-        
+
         for (weight, bq) in &hp {
             assert_eq!(*weight, 1.0);
             assert_eq!(bq.filter_type, BiquadFilterType::Highpass);
             assert_eq!(bq.freq, 1000.0);
         }
     }
-    
+
     #[test]
     fn test_linkwitzriley_filters() {
         let lp = peq_linkwitzriley_lowpass(4, 1000.0, 48000.0);
         let hp = peq_linkwitzriley_highpass(4, 1000.0, 48000.0);
-        
+
         // 4th order LR should have 2 sections (each with Q = 0.7071...)
         assert_eq!(lp.len(), 2);
         assert_eq!(hp.len(), 2);
-        
+
         // All should be unit weight
         for (weight, _) in &lp {
             assert_eq!(*weight, 1.0);

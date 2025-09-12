@@ -5,6 +5,7 @@ members = [
     "src-de",
     "src-cea2034",
     "src-testfunctions",
+    "src-env",
     "src-ui/src-tauri"
 ]
 resolver = "2"
@@ -34,6 +35,7 @@ clap = { version = "4.5", features = ["derive"] }
 signal-hook-tokio = { version = "0.3", features = ["futures-v0_3"] }
 signal-hook = "0.3"
 num_cpus = "1.16"
+thiserror = "1.0"
 
 # Optimization and math
 nlopt = "0.8.1"

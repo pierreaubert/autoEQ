@@ -8,7 +8,9 @@ use ndarray::Array1;
 pub fn keanes_bump_objective(x: &Array1<f64>) -> f64 {
     let sum_cos4: f64 = x.iter().map(|&xi| xi.cos().powi(4)).sum();
     let prod_cos2: f64 = x.iter().map(|&xi| xi.cos().powi(2)).product();
-    let sum_i_xi2: f64 = x.iter().enumerate()
+    let sum_i_xi2: f64 = x
+        .iter()
+        .enumerate()
         .map(|(i, &xi)| (i + 1) as f64 * xi.powi(2))
         .sum();
 

@@ -1,9 +1,9 @@
 //! Test script for additional SFU optimization functions
-//! 
+//!
 //! This example tests all the newly added functions beyond the core SFU set
 
-use ndarray::Array1;
 use autoeq_testfunctions::*;
+use ndarray::Array1;
 
 fn main() {
     println!("Testing additional optimization functions:");
@@ -23,7 +23,7 @@ fn main() {
     println!("Discus Function:");
     println!("  x = [{:.1}, {:.1}]", x_discus[0], x_discus[1]);
     println!("  f(x) = {:.6} (expected = 0.0)", f_discus);
-    
+
     // Test with non-zero to see ill-conditioning
     let x_discus2 = Array1::from_vec(vec![0.1, 0.1]);
     let f_discus2 = discus(&x_discus2);
@@ -114,21 +114,35 @@ fn main() {
     // Test function metadata retrieval for new functions
     println!("Testing function metadata for additional functions:");
     let metadata = get_function_metadata();
-    
+
     let new_functions = [
-        "xin_she_yang_n1", "discus", "elliptic", "cigar", "tablet", 
-        "different_powers", "ridge", "sharp_ridge", "katsuura", 
-        "happycat", "expanded_griewank_rosenbrock"
+        "xin_she_yang_n1",
+        "discus",
+        "elliptic",
+        "cigar",
+        "tablet",
+        "different_powers",
+        "ridge",
+        "sharp_ridge",
+        "katsuura",
+        "happycat",
+        "expanded_griewank_rosenbrock",
     ];
-    
+
     for func_name in &new_functions {
         if let Some(meta) = metadata.get(*func_name) {
-            println!("  {}: {} ({} dimensions available)", 
-                     meta.name, 
-                     if meta.multimodal { "multimodal" } else { "unimodal" },
-                     meta.dimensions.len());
+            println!(
+                "  {}: {} ({} dimensions available)",
+                meta.name,
+                if meta.multimodal {
+                    "multimodal"
+                } else {
+                    "unimodal"
+                },
+                meta.dimensions.len()
+            );
         }
     }
-    
+
     println!("\nTotal functions in metadata: {}", metadata.len());
 }

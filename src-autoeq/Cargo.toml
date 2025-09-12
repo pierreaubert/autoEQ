@@ -1,6 +1,6 @@
 [package]
 name = "autoeq"
-version = "0.2.212"
+version = "0.2.211"
 edition = "2021"
 authors = ["Pierre Aubert <pierre@spinorama.org>"]
 license = "GPL-3.0-or-later"
@@ -29,6 +29,7 @@ plotly_static = { workspace = true }
 autoeq-iir = { path = "../src-iir" }
 autoeq-de = { path = "../src-de" }
 autoeq-cea2034 = { path = "../src-cea2034" }
+autoeq-env = { path = "../src-env" }
 
 # External BLAS - using Apple Accelerate on macOS
 blas-src = { workspace = true }

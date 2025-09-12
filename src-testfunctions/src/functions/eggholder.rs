@@ -8,6 +8,6 @@ use ndarray::Array1;
 pub fn eggholder(x: &Array1<f64>) -> f64 {
     let x1 = x[0];
     let x2 = x[1];
-    -(x2 + 47.0) * (x2 + x1/2.0 + 47.0).abs().sqrt().sin() -
-    x1 * (x1 - x2 - 47.0).abs().sqrt().sin()
+    -(x2 + 47.0) * (x2 + x1 / 2.0 + 47.0).abs().sqrt().sin()
+        - x1 * (x1 - x2 - 47.0).abs().sqrt().sin()
 }

@@ -8,6 +8,7 @@ use ndarray::Array1;
 pub fn easom(x: &Array1<f64>) -> f64 {
     let x1 = x[0];
     let x2 = x[1];
-    -x1.cos() * x2.cos() *
-        (-(x1 - std::f64::consts::PI).powi(2) - (x2 - std::f64::consts::PI).powi(2)).exp()
+    -x1.cos()
+        * x2.cos()
+        * (-(x1 - std::f64::consts::PI).powi(2) - (x2 - std::f64::consts::PI).powi(2)).exp()
 }

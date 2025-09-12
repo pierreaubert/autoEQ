@@ -26,7 +26,7 @@ use tokio::select;
 use tokio::sync::{mpsc, Semaphore};
 use tokio::task::JoinSet;
 
-use autoeq::constants::{DATA_CACHED, DATA_GENERATED};
+use autoeq_env::{DATA_CACHED, DATA_GENERATED};
 
 #[derive(Parser, Debug, Clone)]
 #[command(

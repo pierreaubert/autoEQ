@@ -17,5 +17,5 @@ pub fn lampinen_simplified(x: &Array1<f64>) -> f64 {
         sum -= x[i];
     }
 
-    -sum  // Minimize negative (i.e., maximize original)
+    -sum // Minimize negative (i.e., maximize original)
 }

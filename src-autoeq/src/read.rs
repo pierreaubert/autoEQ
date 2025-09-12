@@ -27,7 +27,7 @@ use serde_json::Value;
 use tokio::fs;
 use urlencoding;
 
-use super::constants::DATA_CACHED;
+use autoeq_env::DATA_CACHED;
 use crate::cea2034 as score;
 use crate::Curve;
 

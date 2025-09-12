@@ -20,9 +20,13 @@ pub fn hartman_6d(x: &Array1<f64>) -> f64 {
         [0.4047, 0.8828, 0.8732, 0.5743, 0.1091, 0.0381],
     ];
 
-    -c.iter().enumerate()
+    -c.iter()
+        .enumerate()
         .map(|(i, &ci)| {
-            let inner_sum = a[i].iter().zip(p[i].iter()).enumerate()
+            let inner_sum = a[i]
+                .iter()
+                .zip(p[i].iter())
+                .enumerate()
                 .map(|(j, (&aij, &pij))| aij * (x[j] - pij).powi(2))
                 .sum::<f64>();
             ci * (-inner_sum).exp()

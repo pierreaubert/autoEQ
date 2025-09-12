@@ -16,7 +16,7 @@
 //! along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 use autoeq::cea2034 as score;
-use autoeq::constants::DATA_GENERATED;
+use autoeq_env::DATA_GENERATED;
 use autoeq::iir;
 use autoeq::optim;
 use autoeq::optim::ObjectiveData;

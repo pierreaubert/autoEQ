@@ -330,7 +330,11 @@ pub fn nbd(intervals: &[(usize, usize)], spl: &Array1<f64>) -> f64 {
             cnt += 1.0;
         }
     }
-    if cnt == 0.0 { f64::NAN } else { sum / cnt }
+    if cnt == 0.0 {
+        f64::NAN
+    } else {
+        sum / cnt
+    }
 }
 
 /// Compute the Low Frequency Extension (LFX) metric

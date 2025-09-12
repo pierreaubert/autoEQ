@@ -88,6 +88,18 @@ chmod +x ./scripts/build-cross.sh
 ```
 
 ### Testing
+
+**Important**: Tests that use recording functionality require the `AUTOEQ_DIR` environment variable to be set to the project root directory:
+
+```bash
+# Set the environment variable for your shell session
+export AUTOEQ_DIR=/path/to/your/autoeq/project
+
+# Or set it just for the test command
+AUTOEQ_DIR=/path/to/your/autoeq/project cargo test --lib
+```
+
+Test commands:
 ```bash
 # Run lib tests (fast)
 cargo test --lib
@@ -107,6 +119,8 @@ cargo test test_recording
 # Check all workspace members
 cargo check --workspace
 ```
+
+**Note**: The `AUTOEQ_DIR` environment variable is used by the test infrastructure to determine where to write CSV trace files and other generated data. Without it, tests that record optimization traces will fail.
 
 ### Running Tools
 ```bash
@@ -139,7 +153,13 @@ npm run tauri build
 ```
 
 ### Differential Evolution Examples
+
+Note: Some examples and tools that generate data files require `AUTOEQ_DIR` to be set:
+
 ```bash
+# Set environment variable first
+export AUTOEQ_DIR=/path/to/your/autoeq/project
+
 # Run basic DE example
 cargo run --example optde_basic
 
@@ -148,6 +168,9 @@ cargo run --example optde_linear_constraints
 
 # Run nonlinear constraints example
 cargo run --example optde_nonlinear_constraints
+
+# Plot function visualizations with optimization traces
+cargo run --bin plot_functions --release -- --show_traces
 ```
 
 ## Key Technical Concepts

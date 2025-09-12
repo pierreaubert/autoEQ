@@ -1,0 +1,11 @@
+[package]
+name = "autoeq-env"
+version = "0.2.1"
+edition = "2021"
+authors = ["Pierre Aubert <pierre@spinorama.org>"]
+license = "GPL-3.0-or-later"
+description = "Environment utilities and constants for AutoEQ"
+repository = "https://github.com/pierreaubert/autoeq"
+
+[dependencies]
+thiserror = { workspace = true }

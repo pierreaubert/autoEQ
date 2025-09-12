@@ -8,10 +8,12 @@ use ndarray::Array1;
 pub fn shubert(x: &Array1<f64>) -> f64 {
     x.iter()
         .map(|&xi| {
-            (1..=5).map(|i| {
-                let i_f64 = i as f64;
-                i_f64 * ((i_f64 + 1.0) * xi + i_f64).cos()
-            }).sum::<f64>()
+            (1..=5)
+                .map(|i| {
+                    let i_f64 = i as f64;
+                    i_f64 * ((i_f64 + 1.0) * xi + i_f64).cos()
+                })
+                .sum::<f64>()
         })
         .product()
 }

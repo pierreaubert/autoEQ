@@ -13,6 +13,20 @@ cargo build --release
 
 If not install [rustup](https://rustup.rs/) first.
 
+## Development Setup
+
+For testing and development, you need to set the `AUTOEQ_DIR` environment variable to point to your project root directory:
+
+```bash
+# Set the environment variable
+export AUTOEQ_DIR=/path/to/your/autoeq/project
+
+# Now you can run tests
+cargo test --workspace --release
+```
+
+This environment variable is used by the test infrastructure to determine where to write CSV trace files and other generated data.
+
 ## Using the optimiser
 
 There are a lot of options, so we will go after them one by one. You can either provide your own data or use spinorama.org data.

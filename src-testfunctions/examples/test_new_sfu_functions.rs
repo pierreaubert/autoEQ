@@ -1,9 +1,9 @@
 //! Test script for newly added SFU optimization functions
-//! 
+//!
 //! This example demonstrates the newly implemented functions from the SFU Virtual Library
 
-use ndarray::Array1;
 use autoeq_testfunctions::*;
+use ndarray::Array1;
 
 fn main() {
     println!("Testing newly implemented SFU optimization functions:");
@@ -31,7 +31,7 @@ fn main() {
     println!("Sum Squares Function:");
     println!("  x = [{:.1}, {:.1}]", x_sum_sq[0], x_sum_sq[1]);
     println!("  f(x) = {:.6} (expected = 0.0)", f_sum_sq);
-    
+
     // Test with non-zero values to see the weighted effect
     let x_sum_sq2 = Array1::from_vec(vec![1.0, 1.0]);
     let f_sum_sq2 = sum_squares(&x_sum_sq2);
@@ -59,8 +59,10 @@ fn main() {
     let x_hart4d = Array1::from_vec(vec![0.1873, 0.1936, 0.5576, 0.2647]);
     let f_hart4d = hartman_4d(&x_hart4d);
     println!("Hartmann 4-D Function:");
-    println!("  x = [{:.4}, {:.4}, {:.4}, {:.4}]", 
-             x_hart4d[0], x_hart4d[1], x_hart4d[2], x_hart4d[3]);
+    println!(
+        "  x = [{:.4}, {:.4}, {:.4}, {:.4}]",
+        x_hart4d[0], x_hart4d[1], x_hart4d[2], x_hart4d[3]
+    );
     println!("  f(x) = {:.6} (expected ≈ -3.72983)", f_hart4d);
     println!();
 
@@ -76,8 +78,10 @@ fn main() {
     let x_shekel = Array1::from_vec(vec![4.0, 4.0, 4.0, 4.0]);
     let f_shekel = shekel(&x_shekel);
     println!("Shekel Function:");
-    println!("  x = [{:.1}, {:.1}, {:.1}, {:.1}]", 
-             x_shekel[0], x_shekel[1], x_shekel[2], x_shekel[3]);
+    println!(
+        "  x = [{:.1}, {:.1}, {:.1}, {:.1}]",
+        x_shekel[0], x_shekel[1], x_shekel[2], x_shekel[3]
+    );
     println!("  f(x) = {:.6} (expected ≈ -10.5364)", f_shekel);
     println!();
 
@@ -86,10 +90,16 @@ fn main() {
     let metadata = get_function_metadata();
     for func_name in ["gramacy_lee_2012", "sum_squares", "power_sum", "shekel"] {
         if let Some(meta) = metadata.get(func_name) {
-            println!("  {}: {} ({} dimensions)", 
-                     meta.name, 
-                     if meta.multimodal { "multimodal" } else { "unimodal" },
-                     meta.dimensions.len());
+            println!(
+                "  {}: {} ({} dimensions)",
+                meta.name,
+                if meta.multimodal {
+                    "multimodal"
+                } else {
+                    "unimodal"
+                },
+                meta.dimensions.len()
+            );
         }
     }
 }

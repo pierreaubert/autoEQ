@@ -9,6 +9,6 @@ pub fn happy_cat(x: &Array1<f64>) -> f64 {
     let n = x.len() as f64;
     let sum_squares: f64 = x.iter().map(|&xi| xi.powi(2)).sum();
     let sum_x: f64 = x.iter().sum();
-    
+
     ((sum_squares - n).powi(2)).powf(0.25) + (0.5 * sum_squares + sum_x) / n + 0.5
 }

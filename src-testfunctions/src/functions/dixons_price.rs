@@ -7,7 +7,10 @@ use ndarray::Array1;
 /// Bounds: x_i in [-10, 10]
 pub fn dixons_price(x: &Array1<f64>) -> f64 {
     let first_term = (x[0] - 1.0).powi(2);
-    let sum_term: f64 = x.iter().skip(1).enumerate()
+    let sum_term: f64 = x
+        .iter()
+        .skip(1)
+        .enumerate()
         .map(|(i, &xi)| (i + 2) as f64 * (2.0 * xi.powi(2) - x[i]).powi(2))
         .sum();
     first_term + sum_term

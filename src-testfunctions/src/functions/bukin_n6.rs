@@ -8,5 +8,5 @@ use ndarray::Array1;
 pub fn bukin_n6(x: &Array1<f64>) -> f64 {
     let x1 = x[0];
     let x2 = x[1];
-    100.0 * (x2 - 0.01*x1.powi(2)).abs().sqrt() + 0.01 * (x1 + 10.0).abs()
+    100.0 * (x2 - 0.01 * x1.powi(2)).abs().sqrt() + 0.01 * (x1 + 10.0).abs()
 }

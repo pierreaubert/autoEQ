@@ -64,7 +64,7 @@ fn van_der_corput(mut n: usize, base: usize) -> f64 {
 #[cfg(test)]
 mod init_sobol_tests {
     use super::*;
-    
+
     #[test]
     fn test_van_der_corput() {
         // Test basic Van der Corput sequence properties

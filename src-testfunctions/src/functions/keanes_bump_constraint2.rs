@@ -7,5 +7,5 @@ use ndarray::Array1;
 pub fn keanes_bump_constraint2(x: &Array1<f64>) -> f64 {
     let sum: f64 = x.iter().sum();
     let limit = 7.5 * x.len() as f64;
-    sum - limit  // Constraint: sum <= limit, so violation is sum - limit
+    sum - limit // Constraint: sum <= limit, so violation is sum - limit
 }

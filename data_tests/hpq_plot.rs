@@ -1,5 +1,5 @@
 use autoeq::{Biquad, BiquadFilterType};
-use autoeq::constants::DATA_GENERATED;
+const DATA_GENERATED: &str = "data_generated";
 use ndarray::Array1;
 use plotly::common::{Mode, Title};
 use plotly::{Layout, Plot, Scatter};
