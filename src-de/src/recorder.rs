@@ -187,8 +187,6 @@ impl OptimizationRecorder {
 
 	/// Save any remaining records and finalize
 	pub fn finalize(&self) -> Result<Vec<String>, Box<dyn std::error::Error>> {
-		let mut saved_files = Vec::new();
-
 		// Save any remaining records
 		let mut records_guard = self.records.lock().unwrap();
 		if !records_guard.is_empty() {
@@ -201,20 +199,29 @@ impl OptimizationRecorder {
 			let block_id = *block_counter;
 			drop(block_counter);
 
-			let filename =
-				format!("{}/{}_block_{:04}.csv", self.output_dir, self.function_name, block_id);
 			self.save_block_to_csv(&records_to_save, block_id)?;
-			saved_files.push(filename);
+		} else {
+			drop(records_guard);
 		}
 
 		// Create a summary file with metadata
-		self.save_summary(&saved_files)?;
+		self.save_summary(&[])?;
+
+		// Return all saved CSV files
+		let total_blocks = *self.block_counter.lock().unwrap();
+		let mut saved_files = Vec::new();
+		for block_id in 1..=total_blocks {
+			saved_files.push(format!(
+				"{}/{}_block_{:04}.csv",
+				self.output_dir, self.function_name, block_id
+			));
+		}
 
 		Ok(saved_files)
 	}
 
 	/// Save summary file with metadata
-	fn save_summary(&self, block_files: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+	fn save_summary(&self, _block_files: &[String]) -> Result<(), Box<dyn std::error::Error>> {
 		let summary_filename = format!("{}/{}_summary.txt", self.output_dir, self.function_name);
 		let mut file = File::create(&summary_filename)?;
 
@@ -228,8 +235,9 @@ impl OptimizationRecorder {
 		writeln!(file, "Best value found: {:?}", best_value)?;
 		writeln!(file, "Block files:")?;
 
-		for (i, _) in block_files.iter().enumerate() {
-			writeln!(file, "  {}_block_{:04}.csv", self.function_name, i + 1)?;
+		// List all block files that were saved (from 1 to total_blocks)
+		for block_id in 1..=total_blocks {
+			writeln!(file, "  {}_block_{:04}.csv", self.function_name, block_id)?;
 		}
 
 		Ok(())

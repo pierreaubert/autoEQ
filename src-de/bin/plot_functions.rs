@@ -11,13 +11,11 @@ use std::path::Path;
 // Import environment utilities
 use autoeq_env::{get_data_generated_dir, get_records_dir};
 
-// Import the test functions and metadata - using universal import
-use autoeq_testfunctions::{
-	get_function_metadata,
-	FunctionMetadata,
-	// Import all test functions dynamically (this will be replaced by a macro or reflection system)
-	*,
-};
+// Import the test functions and metadata
+use autoeq_testfunctions::{get_function_metadata, FunctionMetadata};
+
+// Import shared function registry
+use autoeq_de::function_registry::TestFunction;
 
 /// CLI arguments for plotting test functions
 #[derive(Parser)]
@@ -73,8 +71,7 @@ struct Args {
 	convergence_plots: bool,
 }
 
-// Test function type definition
-type TestFunction = fn(&Array1<f64>) -> f64;
+// TestFunction type now imported from shared function_registry
 
 #[derive(Debug, Clone)]
 struct OptimizationPoint {
@@ -236,20 +233,8 @@ fn read_csv_trace(csv_path: &str) -> Result<OptimizationTrace, Box<dyn std::erro
 	Ok(OptimizationTrace { function_name, points })
 }
 
-fn find_csv_for_function(csv_dir: &str, function_name: &str) -> Option<String> {
-	// Try old format first
-	let csv_path = format!("{}/{}.csv", csv_dir, function_name);
-	if Path::new(&csv_path).exists() {
-		return Some(csv_path);
-	}
-
-	// Try new block-based format
-	let block_path = format!("{}/{}_block_0001.csv", csv_dir, function_name);
-	if Path::new(&block_path).exists() {
-		return Some(block_path);
-	}
-
-	None
+fn find_csv_for_function(csv_dir: &str, function_name: &str) -> Vec<String> {
+	autoeq_de::function_registry::find_csv_files_for_function(csv_dir, function_name)
 }
 
 fn add_optimization_trace(
@@ -515,16 +500,32 @@ fn main() {
 
 		// Load optimization trace if requested
 		let trace = if args.show_traces || args.convergence_plots {
-			if let Some(csv_path) = find_csv_for_function(&csv_dir, &name) {
-				match read_csv_trace(&csv_path) {
-					Ok(trace) => {
-						println!("  Loaded optimization trace with {} points", trace.points.len());
-						Some(trace)
+			let csv_files = find_csv_for_function(&csv_dir, &name);
+			if !csv_files.is_empty() {
+				// Read and combine all block files
+				let mut combined_trace = OptimizationTrace {
+					function_name: name.clone(),
+					points: Vec::new(),
+				};
+				
+				for csv_path in &csv_files {
+					match read_csv_trace(csv_path) {
+						Ok(mut trace) => {
+							combined_trace.points.append(&mut trace.points);
+						}
+						Err(e) => {
+							eprintln!("  Warning: Failed to load trace from {}: {}", csv_path, e);
+						}
 					}
-					Err(e) => {
-						eprintln!("  Warning: Failed to load trace from {}: {}", csv_path, e);
-						None
-					}
+				}
+				
+				if !combined_trace.points.is_empty() {
+					println!("  Loaded optimization trace with {} points from {} file(s)", 
+						combined_trace.points.len(), csv_files.len());
+					Some(combined_trace)
+				} else {
+					println!("  No valid trace data found in {} file(s)", csv_files.len());
+					None
 				}
 			} else {
 				println!("  No trace file found for function '{}'", name);
@@ -659,20 +660,19 @@ fn plot_function(
 	plot.write_html(&filename);
 }
 
-/// Automatically get all test functions by using the metadata registry
-/// This ensures that new functions are automatically included when added to metadata
+/// Automatically get all test functions using the shared registry
 fn get_test_functions() -> Vec<(String, TestFunction)> {
+	let registry = autoeq_de::function_registry::FunctionRegistry::new();
 	let metadata = get_function_metadata();
 	let mut functions = Vec::new();
 
-	// Build function registry dynamically based on available metadata
-	// This uses a macro-like approach to map function names to actual function pointers
+	// Build function list from registry and metadata
 	for (name, _meta) in metadata.iter() {
-		if let Some(func) = get_function_by_name(name) {
+		if let Some(func) = registry.get(name) {
 			functions.push((name.clone(), func));
 		} else {
 			eprintln!(
-				"Warning: Function '{}' found in metadata but not available for plotting",
+				"Warning: Function '{}' found in metadata but not in registry",
 				name
 			);
 		}
@@ -681,130 +681,11 @@ fn get_test_functions() -> Vec<(String, TestFunction)> {
 	// Sort functions alphabetically for consistent ordering
 	functions.sort_by(|a, b| a.0.cmp(&b.0));
 
-	eprintln!("Discovered {} plottable functions from metadata", functions.len());
+	eprintln!("Discovered {} plottable functions from registry", functions.len());
 	functions
 }
 
-/// Map function names to actual function pointers
-/// This is the only place that needs to be updated when adding new functions
-fn get_function_by_name(name: &str) -> Option<TestFunction> {
-	match name {
-		// Core mathematical functions (alphabetically ordered)
-		"ackley" => Some(ackley),
-		"ackley_n2" => Some(ackley_n2),
-		"ackley_n3" => Some(ackley_n3),
-		"alpine_n1" => Some(alpine_n1),
-		"alpine_n2" => Some(alpine_n2),
-		"beale" => Some(beale),
-		"bent_cigar" => Some(bent_cigar),
-		"bent_cigar_alt" => Some(bent_cigar_alt),
-		"bird" => Some(bird),
-		"bohachevsky1" => Some(bohachevsky1),
-		"bohachevsky2" => Some(bohachevsky2),
-		"bohachevsky3" => Some(bohachevsky3),
-		"booth" => Some(booth),
-		"branin" => Some(branin),
-		"brown" => Some(brown),
-		"bukin_n6" => Some(bukin_n6),
-		"chung_reynolds" => Some(chung_reynolds),
-		"cigar" => Some(cigar),
-		"colville" => Some(colville),
-		"cosine_mixture" => Some(cosine_mixture),
-		"cross_in_tray" => Some(cross_in_tray),
-		"de_jong_step2" => Some(de_jong_step2),
-		"dejong_f5_foxholes" => Some(dejong_f5_foxholes),
-		"different_powers" => Some(different_powers),
-		"discus" => Some(discus),
-		"dixons_price" => Some(dixons_price),
-		"drop_wave" => Some(drop_wave),
-		"easom" => Some(easom),
-		"eggholder" => Some(eggholder),
-		"elliptic" => Some(elliptic),
-		"epistatic_michalewicz" => Some(epistatic_michalewicz),
-		"expanded_griewank_rosenbrock" => Some(expanded_griewank_rosenbrock),
-		"exponential" => Some(exponential),
-		"forrester_2008" => Some(forrester_2008),
-		"freudenstein_roth" => Some(freudenstein_roth),
-		"goldstein_price" => Some(goldstein_price),
-		"gramacy_lee_2012" => Some(gramacy_lee_2012),
-		"gramacy_lee_function" => Some(gramacy_lee_function),
-		"griewank" => Some(griewank),
-		"griewank2" => Some(griewank2),
-		"happy_cat" => Some(happy_cat),
-		"happycat" => Some(happycat),
-		"hartman_3d" => Some(hartman_3d),
-		"hartman_4d" => Some(hartman_4d),
-		"hartman_6d" => Some(hartman_6d),
-		"himmelblau" => Some(himmelblau),
-		"holder_table" => Some(holder_table),
-		"katsuura" => Some(katsuura),
-		"lampinen_simplified" => Some(lampinen_simplified),
-		"langermann" => Some(langermann),
-		"levi13" => Some(levi13),
-		"levy" => Some(levy),
-		"levy_n13" => Some(levy_n13),
-		"matyas" => Some(matyas),
-		"mccormick" => Some(mccormick),
-		"michalewicz" => Some(michalewicz),
-		"periodic" => Some(periodic),
-		"perm_0_d_beta" => Some(perm_0_d_beta),
-		"perm_d_beta" => Some(perm_d_beta),
-		"pinter" => Some(pinter),
-		"powell" => Some(powell),
-		"power_sum" => Some(power_sum),
-		"qing" => Some(qing),
-		"quadratic" => Some(quadratic),
-		"quartic" => Some(quartic),
-		"rastrigin" => Some(rastrigin),
-		"ridge" => Some(ridge),
-		"rosenbrock" => Some(rosenbrock),
-		"rotated_hyper_ellipsoid" => Some(rotated_hyper_ellipsoid),
-		"salomon" => Some(salomon),
-		"salomon_corrected" => Some(salomon_corrected),
-		"schaffer_n2" => Some(schaffer_n2),
-		"schaffer_n4" => Some(schaffer_n4),
-		"schwefel" => Some(schwefel),
-		"schwefel2" => Some(schwefel2),
-		"sharp_ridge" => Some(sharp_ridge),
-		"shekel" => Some(shekel),
-		"shubert" => Some(shubert),
-		"six_hump_camel" => Some(six_hump_camel),
-		"sphere" => Some(sphere),
-		"step" => Some(step),
-		"styblinski_tang2" => Some(styblinski_tang2),
-		"sum_of_different_powers" => Some(sum_of_different_powers),
-		"sum_squares" => Some(sum_squares),
-		"tablet" => Some(tablet),
-		"three_hump_camel" => Some(three_hump_camel),
-		"trid" => Some(trid),
-		"vincent" => Some(vincent),
-		"whitley" => Some(whitley),
-		"xin_she_yang_n1" => Some(xin_she_yang_n1),
-		"xin_she_yang_n2" => Some(xin_she_yang_n2),
-		"xin_she_yang_n3" => Some(xin_she_yang_n3),
-		"xin_she_yang_n4" => Some(xin_she_yang_n4),
-		"zakharov" => Some(zakharov),
-		"zakharov2" => Some(zakharov2),
-
-		// Constraint functions (typically not plotted directly but included for completeness)
-		"binh_korn_constraint1" => Some(binh_korn_constraint1),
-		"binh_korn_constraint2" => Some(binh_korn_constraint2),
-		"binh_korn_weighted" => Some(binh_korn_weighted),
-		"keanes_bump_constraint1" => Some(keanes_bump_constraint1),
-		"keanes_bump_constraint2" => Some(keanes_bump_constraint2),
-		"keanes_bump_objective" => Some(keanes_bump_objective),
-		"mishras_bird_constraint" => Some(mishras_bird_constraint),
-		"mishras_bird_objective" => Some(mishras_bird_objective),
-		"rosenbrock_disk_constraint" => Some(rosenbrock_disk_constraint),
-		"rosenbrock_objective" => Some(rosenbrock_objective),
-
-		// Unknown function
-		_ => {
-			eprintln!("  Unknown function: '{}' - add it to get_function_by_name()", name);
-			None
-		}
-	}
-}
+// Function mapping now handled by shared FunctionRegistry
 
 /// Add global minima markers to the plot
 fn add_global_minima(

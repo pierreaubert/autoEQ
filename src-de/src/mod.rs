@@ -49,6 +49,7 @@ pub mod metadata;
 pub mod parallel_eval;
 pub mod recorder;
 pub mod run_recorded;
+pub mod function_registry;
 pub use differential_evolution::differential_evolution;
 pub use parallel_eval::ParallelConfig;
 pub use recorder::{OptimizationRecord, OptimizationRecorder};
