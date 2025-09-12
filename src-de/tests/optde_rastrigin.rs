@@ -1,5 +1,5 @@
 use autoeq_de::{run_recorded_differential_evolution, DEConfigBuilder, Strategy};
-use autoeq_testfunctions::{create_bounds, rastrigin};
+use autoeq_testfunctions::rastrigin;
 
 #[test]
 fn test_de_rastrigin_2d() {

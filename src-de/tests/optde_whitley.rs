@@ -1,5 +1,5 @@
 use autoeq_de::{run_recorded_differential_evolution, DEConfigBuilder, Strategy};
-use autoeq_testfunctions::{create_bounds, whitley};
+use autoeq_testfunctions::whitley;
 
 #[test]
 fn test_de_whitley_5d() {

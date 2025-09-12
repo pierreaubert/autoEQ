@@ -1,5 +1,5 @@
 use autoeq_de::{run_recorded_differential_evolution, DEConfigBuilder, Strategy};
-use autoeq_testfunctions::{create_bounds, rastrigin, sphere};
+use autoeq_testfunctions::sphere;
 
 #[test]
 fn test_de_sphere_2d() {

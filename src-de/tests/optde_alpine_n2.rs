@@ -1,5 +1,5 @@
 use autoeq_de::{run_recorded_differential_evolution, DEConfigBuilder, Strategy};
-use autoeq_testfunctions::{alpine_n2, create_bounds};
+use autoeq_testfunctions::alpine_n2;
 
 #[test]
 fn test_de_alpine_n2_2d() {

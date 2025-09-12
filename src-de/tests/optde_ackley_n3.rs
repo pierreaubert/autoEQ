@@ -1,5 +1,5 @@
 use autoeq_de::{run_recorded_differential_evolution, DEConfigBuilder, Strategy};
-use autoeq_testfunctions::{ackley_n3, create_bounds};
+use autoeq_testfunctions::ackley_n3;
 
 #[test]
 fn test_de_ackley_n3_different_strategies() {

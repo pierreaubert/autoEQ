@@ -2,6 +2,7 @@ use autoeq_de::{
 	differential_evolution, CallbackAction, Crossover, DEConfig, Mutation, PolishConfig, Strategy,
 };
 use ndarray::Array1;
+use std::sync::Arc;
 
 fn main() {
 	// Ackley function (2D)
@@ -27,7 +28,7 @@ fn main() {
 
 	// Penalty examples (here just a dummy inequality fc(x) <= 0):
 	// Circle of radius 3: x0^2 + x1^2 - 9 <= 0
-	cfg.penalty_ineq.push((Box::new(|x: &Array1<f64>| x[0] * x[0] + x[1] * x[1] - 9.0), 1e3));
+cfg.penalty_ineq.push((Arc::new(|x: &Array1<f64>| x[0] * x[0] + x[1] * x[1] - 9.0), 1e3));
 
 	// Callback every generation: stop early when convergence small enough
 	let mut iter_log = 0usize;

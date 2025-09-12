@@ -1,5 +1,5 @@
 use autoeq_de::{run_recorded_differential_evolution, DEConfigBuilder, Strategy};
-use autoeq_testfunctions::{create_bounds, exponential};
+use autoeq_testfunctions::exponential;
 
 #[test]
 fn test_de_exponential_2d() {

@@ -1,5 +1,5 @@
 use autoeq_de::{
-	differential_evolution, run_recorded_differential_evolution, DEConfigBuilder, Strategy,
+	run_recorded_differential_evolution, DEConfigBuilder, Strategy,
 };
 use autoeq_testfunctions::branin;
 

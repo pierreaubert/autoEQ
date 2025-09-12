@@ -1,5 +1,5 @@
 use autoeq_de::{run_recorded_differential_evolution, DEConfigBuilder, Strategy};
-use autoeq_testfunctions::{chung_reynolds, create_bounds};
+use autoeq_testfunctions::chung_reynolds;
 
 #[test]
 fn test_de_chung_reynolds_2d() {

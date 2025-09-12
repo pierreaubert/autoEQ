@@ -1,4 +1,4 @@
-use autoeq_de::{run_recorded_differential_evolution, DEConfigBuilder, Strategy};
+use autoeq_de::{run_recorded_differential_evolution, DEConfigBuilder};
 use autoeq_testfunctions::zakharov2;
 
 #[test]

@@ -1,5 +1,5 @@
 use autoeq_de::{run_recorded_differential_evolution, DEConfigBuilder, Strategy};
-use autoeq_testfunctions::{create_bounds, vincent};
+use autoeq_testfunctions::vincent;
 
 #[test]
 fn test_de_vincent_2d() {

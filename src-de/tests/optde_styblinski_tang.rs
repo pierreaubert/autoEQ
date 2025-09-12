@@ -1,5 +1,5 @@
 use autoeq_de::{
-	run_recorded_differential_evolution, DEConfig, DEConfigBuilder, Mutation, Strategy,
+	run_recorded_differential_evolution, DEConfig, Mutation,
 };
 use autoeq_testfunctions::styblinski_tang2;
 

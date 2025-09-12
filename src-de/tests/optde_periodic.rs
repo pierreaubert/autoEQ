@@ -1,5 +1,5 @@
 use autoeq_de::{run_recorded_differential_evolution, DEConfigBuilder, Strategy};
-use autoeq_testfunctions::{get_function_bounds_vec, periodic};
+use autoeq_testfunctions::periodic;
 
 #[test]
 fn test_de_periodic_2d() {

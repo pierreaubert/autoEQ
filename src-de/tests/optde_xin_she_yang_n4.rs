@@ -1,5 +1,5 @@
 use autoeq_de::{run_recorded_differential_evolution, DEConfigBuilder, Strategy};
-use autoeq_testfunctions::{create_bounds, xin_she_yang_n4};
+use autoeq_testfunctions::xin_she_yang_n4;
 
 #[test]
 fn test_de_xin_she_yang_n4_2d() {

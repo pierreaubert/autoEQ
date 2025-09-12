@@ -1,5 +1,5 @@
 use autoeq_de::{run_recorded_differential_evolution, DEConfigBuilder, Strategy};
-use autoeq_testfunctions::{create_bounds, lampinen_simplified};
+use autoeq_testfunctions::lampinen_simplified;
 
 #[test]
 fn test_de_lampinen_simplified() {

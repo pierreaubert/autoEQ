@@ -1,5 +1,5 @@
 use autoeq_de::{run_recorded_differential_evolution, DEConfigBuilder, Strategy};
-use autoeq_testfunctions::{create_bounds, qing};
+use autoeq_testfunctions::qing;
 
 #[test]
 fn test_de_qing_2d() {

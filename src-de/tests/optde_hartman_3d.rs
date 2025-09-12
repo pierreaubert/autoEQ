@@ -1,5 +1,5 @@
 use autoeq_de::{run_recorded_differential_evolution, DEConfigBuilder, Strategy};
-use autoeq_testfunctions::{create_bounds, hartman_3d};
+use autoeq_testfunctions::hartman_3d;
 
 #[test]
 fn test_de_hartman_3d() {

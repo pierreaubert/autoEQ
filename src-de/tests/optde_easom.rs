@@ -1,5 +1,5 @@
 use autoeq_de::{
-	differential_evolution, run_recorded_differential_evolution, DEConfig, DEConfigBuilder,
+	run_recorded_differential_evolution, DEConfigBuilder,
 	Mutation, Strategy,
 };
 use autoeq_testfunctions::easom;

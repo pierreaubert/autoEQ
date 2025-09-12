@@ -1,5 +1,5 @@
 use autoeq_de::{run_recorded_differential_evolution, DEConfigBuilder, Strategy};
-use autoeq_testfunctions::{create_bounds, happy_cat};
+use autoeq_testfunctions::happy_cat;
 
 #[test]
 fn test_de_happy_cat_2d() {

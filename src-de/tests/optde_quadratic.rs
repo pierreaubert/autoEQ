@@ -1,5 +1,5 @@
 use autoeq_de::{run_recorded_differential_evolution, DEConfigBuilder, Strategy};
-use autoeq_testfunctions::{create_bounds, quadratic};
+use autoeq_testfunctions::quadratic;
 
 #[test]
 fn test_de_quadratic_2d() {

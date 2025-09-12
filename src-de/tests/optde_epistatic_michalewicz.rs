@@ -1,5 +1,5 @@
 use autoeq_de::{run_recorded_differential_evolution, DEConfigBuilder, Strategy};
-use autoeq_testfunctions::{create_bounds, epistatic_michalewicz};
+use autoeq_testfunctions::epistatic_michalewicz;
 
 #[test]
 fn test_de_epistatic_michalewicz_2d() {

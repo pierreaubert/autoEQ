@@ -1,4 +1,4 @@
-use autoeq_de::{run_recorded_differential_evolution, DEConfig, DEConfigBuilder, Strategy};
+use autoeq_de::{run_recorded_differential_evolution, DEConfig};
 use autoeq_testfunctions::mccormick;
 
 #[test]

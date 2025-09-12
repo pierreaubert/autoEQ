@@ -1,5 +1,5 @@
 use autoeq_de::{run_recorded_differential_evolution, DEConfigBuilder, Strategy};
-use autoeq_testfunctions::{create_bounds, rosenbrock};
+use autoeq_testfunctions::rosenbrock;
 
 #[test]
 fn test_de_rosenbrock_10d() {

@@ -1,5 +1,5 @@
 use autoeq_de::{run_recorded_differential_evolution, DEConfigBuilder, Strategy};
-use autoeq_testfunctions::{create_bounds, pinter};
+use autoeq_testfunctions::pinter;
 
 #[test]
 fn test_de_pinter_2d() {

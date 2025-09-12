@@ -1,5 +1,5 @@
 use autoeq_de::{run_recorded_differential_evolution, DEConfigBuilder, Strategy};
-use autoeq_testfunctions::{brown, get_function_bounds_vec};
+use autoeq_testfunctions::brown;
 
 #[test]
 fn test_de_brown_2d() {
