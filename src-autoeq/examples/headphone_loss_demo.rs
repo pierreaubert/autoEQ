@@ -3,7 +3,7 @@
 //! Usage:
 //!   cargo run --example headphone_loss_demo -- --spl <file> [--target <file>]
 
-use autoeq::loss::{headphone_loss, headphone_loss_with_target};
+use autoeq::loss::headphone_loss;
 use clap::Parser;
 use ndarray::Array1;
 use std::fs::File;
@@ -27,13 +27,16 @@ struct Args {
 }
 
 /// Load frequency response data from a CSV or text file
-/// Expected format: frequency,spl (comma or whitespace separated)
+/// Expected formats:
+/// - 2 columns: frequency, spl
+/// - 4 columns: freq_left, spl_left, freq_right, spl_right (averaged)
 fn load_frequency_response(path: &PathBuf) -> Result<(Array1<f64>, Array1<f64>), Box<dyn std::error::Error>> {
     let file = File::open(path)?;
     let reader = BufReader::new(file);
     
     let mut frequencies = Vec::new();
     let mut spl_values = Vec::new();
+    let mut detected_columns = 0;
     
     for (line_num, line) in reader.lines().enumerate() {
         let line = line?;
@@ -56,11 +59,28 @@ fn load_frequency_response(path: &PathBuf) -> Result<(Array1<f64>, Array1<f64>),
             line.split_whitespace().collect()
         };
         
-        if parts.len() >= 2 {
-            // Try to parse frequency and SPL
+        // Detect number of columns on first data line
+        if detected_columns == 0 && parts.len() >= 2 {
+            detected_columns = parts.len();
+            if detected_columns == 4 {
+                println!("    Detected 4-column format (stereo) - averaging left and right channels");
+            }
+        }
+        
+        if detected_columns == 2 && parts.len() >= 2 {
+            // 2-column format: freq, spl
             if let (Ok(freq), Ok(spl)) = (parts[0].parse::<f64>(), parts[1].parse::<f64>()) {
                 frequencies.push(freq);
                 spl_values.push(spl);
+            }
+        } else if detected_columns == 4 && parts.len() >= 4 {
+            // 4-column format: freq_left, spl_left, freq_right, spl_right
+            // Assume frequencies are the same for left and right, average the SPL
+            if let (Ok(freq_l), Ok(spl_l), Ok(_freq_r), Ok(spl_r)) = 
+                (parts[0].parse::<f64>(), parts[1].parse::<f64>(),
+                 parts[2].parse::<f64>(), parts[3].parse::<f64>()) {
+                frequencies.push(freq_l);
+                spl_values.push((spl_l + spl_r) / 2.0); // Average left and right
             }
         }
     }
@@ -136,6 +156,32 @@ fn create_log_frequency_grid(n_points: usize, f_min: f64, f_max: f64) -> Array1<
     Array1::logspace(10.0, f_min.log10(), f_max.log10(), n_points)
 }
 
+/// Normalize frequency response by subtracting mean in 100Hz-12kHz range
+fn normalize_response(
+    freq: &Array1<f64>,
+    spl: &Array1<f64>,
+    f_min: f64,
+    f_max: f64,
+) -> Array1<f64> {
+    let mut sum = 0.0;
+    let mut count = 0;
+    
+    // Calculate mean in the specified frequency range
+    for i in 0..freq.len() {
+        if freq[i] >= f_min && freq[i] <= f_max {
+            sum += spl[i];
+            count += 1;
+        }
+    }
+    
+    if count > 0 {
+        let mean = sum / count as f64;
+        spl - mean // Subtract mean from all values
+    } else {
+        spl.clone() // Return unchanged if no points in range
+    }
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
     
@@ -157,10 +203,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             freq.iter().zip(target_freq.iter())
                 .all(|(f1, f2)| (f1 - f2).abs() / f1.max(*f2) < 0.01); // 1% tolerance
         
+        // Normalize both curves before comparison (mean in 100Hz-12kHz range)
+        println!("  Normalizing curves (mean in 100Hz-12kHz range)");
+        
         if frequencies_match {
-            // Same frequency grid - use directly
+            // Same frequency grid - normalize and use directly
+            let spl_norm = normalize_response(&freq, &spl, 100.0, 12000.0);
+            let target_norm = normalize_response(&target_freq, &target_spl, 100.0, 12000.0);
+            
             println!("  Frequency grids match - computing headphone loss relative to target curve");
-            headphone_loss_with_target(&freq, &spl, &target_spl)
+            // Compute deviation from normalized target
+            let deviation = &spl_norm - &target_norm;
+            headphone_loss(&freq, &deviation)
         } else {
             // Different grids - resample both to common grid
             println!("  Frequency grids differ - resampling to common 200-point log grid (20-20000 Hz)");
@@ -172,8 +226,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let spl_interp = interpolate_log_space(&freq, &spl, &standard_freq);
             let target_interp = interpolate_log_space(&target_freq, &target_spl, &standard_freq);
             
+            // Normalize after interpolation
+            let spl_norm = normalize_response(&standard_freq, &spl_interp, 100.0, 12000.0);
+            let target_norm = normalize_response(&standard_freq, &target_interp, 100.0, 12000.0);
+            
             println!("  Interpolation complete - computing headphone loss relative to target curve");
-            headphone_loss_with_target(&standard_freq, &spl_interp, &target_interp)
+            // Compute deviation from normalized target
+            let deviation = &spl_norm - &target_norm;
+            headphone_loss(&standard_freq, &deviation)
         }
     } else {
         // Compute absolute headphone loss
