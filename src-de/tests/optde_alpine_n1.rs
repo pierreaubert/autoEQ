@@ -1,6 +1,5 @@
-use autoeq_de::{auto_de, DEConfigBuilder, Strategy, run_recorded_differential_evolution};
+use autoeq_de::{run_recorded_differential_evolution, DEConfigBuilder, Strategy};
 use autoeq_testfunctions::{alpine_n1, create_bounds};
-
 
 #[test]
 fn test_de_alpine_n1_2d() {
@@ -15,12 +14,18 @@ fn test_de_alpine_n1_2d() {
         .build();
 
     let result = run_recorded_differential_evolution(
-        "alpine_n1_2d", alpine_n1, &bounds, config, "./data_generated/records"
-    );
+        "alpine_n1_2d",
+        alpine_n1,
+        &bounds,
+        config);
 
     assert!(result.is_ok());
     let (report, _csv_path) = result.unwrap();
-    assert!(report.fun < 1e-2, "Solution quality too low: {}", report.fun);
+    assert!(
+        report.fun < 1e-2,
+        "Solution quality too low: {}",
+        report.fun
+    );
 
     // Check solution is close to global minimum (0, 0)
     for &xi in report.x.iter() {
@@ -41,31 +46,22 @@ fn test_de_alpine_n1_5d() {
         .build();
 
     let result = run_recorded_differential_evolution(
-        "alpine_n1_5d", alpine_n1, &bounds, config, "./data_generated/records"
-    );
+        "alpine_n1_5d",
+        alpine_n1,
+        &bounds,
+        config);
 
     assert!(result.is_ok());
     let (report, _csv_path) = result.unwrap();
-    assert!(report.fun < 1e-2, "Solution quality too low: {}", report.fun);
+    assert!(
+        report.fun < 1e-2,
+        "Solution quality too low: {}",
+        report.fun
+    );
 
     // Check solution is close to global minimum (0, 0, 0, 0, 0)
     for &xi in report.x.iter() {
         assert!(xi.abs() < 0.1, "Solution coordinate too far from 0: {}", xi);
-    }
-}
-
-// Auto_de tests using the simplified interface
-#[test]
-fn test_auto_de_alpine_n1_function() {
-    let bounds = create_bounds(2, -10.0, 10.0);
-    let result = auto_de(alpine_n1, &bounds, None);
-
-    assert!(result.is_some(), "AutoDE should find a solution");
-    let (x_opt, f_opt, _) = result.unwrap();
-
-    assert!(f_opt < 1e-2, "Alpine N.1 function value too high: {}", f_opt);
-    for &xi in x_opt.iter() {
-        assert!(xi.abs() < 0.1, "Solution component too far from 0: {}", xi);
     }
 }
 

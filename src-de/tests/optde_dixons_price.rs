@@ -1,4 +1,4 @@
-use autoeq_de::{differential_evolution, DEConfigBuilder, Strategy};
+use autoeq_de::{run_recorded_differential_evolution, DEConfigBuilder, Strategy};
 use autoeq_testfunctions::dixons_price;
 
 #[test]
@@ -12,7 +12,14 @@ fn test_de_dixons_price_2d() {
         .strategy(Strategy::Rand1Exp)
         .recombination(0.9)
         .build();
-    assert!(differential_evolution(&dixons_price, &b2, c2).fun < 1e-3);
+    {
+        let result = run_recorded_differential_evolution(
+            "dixons_price_2d", dixons_price, &b2, c2
+        );
+        assert!(result.is_ok());
+        let (report, _csv_path) = result.unwrap();
+        assert!(report.fun < 1e-3)
+    };
 }
 
 #[test]
@@ -26,5 +33,12 @@ fn test_de_dixons_price_10d() {
         .strategy(Strategy::Best1Exp)
         .recombination(0.95)
         .build();
-    assert!(differential_evolution(&dixons_price, &b10, c10).fun < 5e-2); // Relaxed for 10D
+    {
+        let result = run_recorded_differential_evolution(
+            "dixons_price_10d", dixons_price, &b10, c10
+        );
+        assert!(result.is_ok());
+        let (report, _csv_path) = result.unwrap();
+        assert!(report.fun < 5e-2)
+    }; // Relaxed for 10D
 }

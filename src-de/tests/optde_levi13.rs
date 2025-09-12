@@ -1,21 +1,28 @@
-use autoeq_de::{differential_evolution, DEConfig, DEConfigBuilder, Strategy};
+use autoeq_de::{run_recorded_differential_evolution, DEConfig, DEConfigBuilder, Strategy};
 use autoeq_testfunctions::{levi13, levy_n13};
 
 #[test]
 fn test_de_levi13_basic() {
     // Test Lévy N.13 function using basic DE config
-    let b = [(-10.0, 10.0), (-10.0, 10.0)];
+    let b = vec![(-10.0, 10.0), (-10.0, 10.0)];
     let mut c = DEConfig::default();
     c.seed = Some(12);
     c.maxiter = 600;
     c.popsize = 25;
-    assert!(differential_evolution(&levi13, &b, c).fun < 1e-3);
+    {
+        let result = run_recorded_differential_evolution(
+            "levi13_basic", levi13, &b, c
+        );
+        assert!(result.is_ok());
+        let (report, _csv_path) = result.unwrap();
+        assert!(report.fun < 1e-3)
+    };
 }
 
 #[test]
 fn test_de_levi13_advanced() {
     // Test Lévy N.13 function with advanced parameters
-    let b = [(-10.0, 10.0), (-10.0, 10.0)];
+    let b = vec![(-10.0, 10.0), (-10.0, 10.0)];
     let c = DEConfigBuilder::new()
         .seed(83)
         .maxiter(800)
@@ -23,27 +30,31 @@ fn test_de_levi13_advanced() {
         .strategy(Strategy::Best1Exp)
         .recombination(0.9)
         .build();
-    let result = differential_evolution(&levy_n13, &b, c);
+    let result = run_recorded_differential_evolution(
+        "levi13_advanced", levy_n13, &b, c
+    );
+    assert!(result.is_ok());
+    let (report, _csv_path) = result.unwrap();
     // Global minimum f(x) = 0 at x = (1, 1)
-    assert!(result.fun < 1e-2, "Function value too high: {}", result.fun);
+    assert!(report.fun < 1e-2, "Function value too high: {}", report.fun);
     // Check solution is close to (1, 1)
     assert!(
-        (result.x[0] - 1.0).abs() < 0.1,
+        (report.x[0] - 1.0).abs() < 0.1,
         "x[0] should be close to 1: {}",
-        result.x[0]
+        report.x[0]
     );
     assert!(
-        (result.x[1] - 1.0).abs() < 0.1,
+        (report.x[1] - 1.0).abs() < 0.1,
         "x[1] should be close to 1: {}",
-        result.x[1]
+        report.x[1]
     );
 }
 
 #[test]
 fn test_de_levi13_multistart() {
     // Test with multiple random starts to verify robustness
-    let b = [(-10.0, 10.0), (-10.0, 10.0)];
-    let seeds = [42, 123, 456];
+    let b = vec![(-10.0, 10.0), (-10.0, 10.0)];
+    let seeds = vec![42, 123, 456];
 
     for (i, &seed) in seeds.iter().enumerate() {
         let c = DEConfigBuilder::new()
@@ -53,13 +64,17 @@ fn test_de_levi13_multistart() {
             .strategy(Strategy::RandToBest1Exp)
             .recombination(0.95)
             .build();
-        let result = differential_evolution(&levy_n13, &b, c);
+        let result = run_recorded_differential_evolution(
+        "levi13_multistart", levy_n13, &b, c
+    );
+    assert!(result.is_ok());
+    let (report, _csv_path) = result.unwrap();
         assert!(
-            result.fun < 5e-2,
+            report.fun < 5e-2,
             "Run {} (seed {}) failed: f = {}",
             i,
             seed,
-            result.fun
+            report.fun
         );
     }
 }

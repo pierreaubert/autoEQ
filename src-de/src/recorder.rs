@@ -1,8 +1,8 @@
-use std::sync::{Arc, Mutex};
-use std::fs::{create_dir_all, File};
-use std::io::{Write, BufWriter};
-use crate::{DEIntermediate, CallbackAction};
+use crate::{CallbackAction, DEIntermediate};
 use ndarray::Array1;
+use std::fs::{create_dir_all, File};
+use std::io::{BufWriter, Write};
+use std::sync::{Arc, Mutex};
 
 /// Records optimization progress for every function evaluation
 #[derive(Debug)]
@@ -57,6 +57,7 @@ pub struct OptimizationRecord {
 
 impl OptimizationRecorder {
     /// Create a new optimization recorder for the given function
+    /// Uses the default records directory under AUTOEQ_DIR/data_generated/records
     pub fn new(function_name: String) -> Self {
         Self::with_output_dir(function_name, "./data_generated/records".to_string())
     }
@@ -79,7 +80,6 @@ impl OptimizationRecorder {
         let mut eval_counter_guard = self.eval_counter.lock().unwrap();
         *eval_counter_guard += 1;
         let eval_id = *eval_counter_guard;
-
 
         drop(eval_counter_guard);
 
@@ -123,7 +123,10 @@ impl OptimizationRecorder {
             drop(block_counter);
 
             if let Err(e) = self.save_block_to_csv(&records_to_save, block_id) {
-                eprintln!("Warning: Failed to save evaluation block {}: {}", block_id, e);
+                eprintln!(
+                    "Warning: Failed to save evaluation block {}: {}",
+                    block_id, e
+                );
             }
         }
     }
@@ -144,11 +147,18 @@ impl OptimizationRecorder {
     }
 
     /// Save a block of evaluations to CSV file
-    fn save_block_to_csv(&self, records: &[EvaluationRecord], block_id: usize) -> Result<(), Box<dyn std::error::Error>> {
+    fn save_block_to_csv(
+        &self,
+        records: &[EvaluationRecord],
+        block_id: usize,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         // Create output directory if it doesn't exist
         create_dir_all(&self.output_dir)?;
 
-        let filename = format!("{}/{}_block_{:04}.csv", self.output_dir, self.function_name, block_id);
+        let filename = format!(
+            "{}/{}_block_{:04}.csv",
+            self.output_dir, self.function_name, block_id
+        );
         let mut file = BufWriter::new(File::create(&filename)?);
 
         if records.is_empty() {
@@ -196,7 +206,10 @@ impl OptimizationRecorder {
             let block_id = *block_counter;
             drop(block_counter);
 
-            let filename = format!("{}/{}_block_{:04}.csv", self.output_dir, self.function_name, block_id);
+            let filename = format!(
+                "{}/{}_block_{:04}.csv",
+                self.output_dir, self.function_name, block_id
+            );
             self.save_block_to_csv(&records_to_save, block_id)?;
             saved_files.push(filename);
         }
@@ -258,15 +271,18 @@ impl OptimizationRecorder {
     #[cfg(test)]
     pub fn get_test_records(&self) -> Vec<OptimizationRecord> {
         let records_guard = self.records.lock().unwrap();
-        records_guard.iter().map(|eval_record| {
-            OptimizationRecord {
-                iteration: eval_record.generation,
-                x: eval_record.x.clone(),
-                best_result: eval_record.best_so_far,
-                convergence: 0.0, // Not tracked in new system
-                is_improvement: eval_record.is_improvement,
-            }
-        }).collect()
+        records_guard
+            .iter()
+            .map(|eval_record| {
+                OptimizationRecord {
+                    iteration: eval_record.generation,
+                    x: eval_record.x.clone(),
+                    best_result: eval_record.best_so_far,
+                    convergence: 0.0, // Not tracked in new system
+                    is_improvement: eval_record.is_improvement,
+                }
+            })
+            .collect()
     }
 
     /// Get the number of evaluations recorded
@@ -298,12 +314,11 @@ impl OptimizationRecorder {
 
 #[cfg(test)]
 mod tests {
-    use ndarray::Array1;
     use crate::{
-        recorder::OptimizationRecorder,
-        run_recorded_differential_evolution, DEConfigBuilder,
+        recorder::OptimizationRecorder, run_recorded_differential_evolution, DEConfigBuilder,
     };
     use autoeq_testfunctions::quadratic;
+    use ndarray::Array1;
 
     #[test]
     fn test_optimization_recorder() {
@@ -348,7 +363,6 @@ mod tests {
             quadratic,
             &bounds,
             config,
-            "./data_generated/records",
         );
 
         assert!(result.is_ok());
@@ -373,6 +387,5 @@ mod tests {
             "Recording test passed - {} iterations recorded",
             lines.len() - 1
         );
-
     }
 }

@@ -38,7 +38,7 @@ where
     F: Fn(&Array1<f64>) -> f64 + Send + Sync,
 {
     let npop = population.nrows();
-    
+
     if !config.enabled || npop < 4 {
         // Sequential evaluation for small populations or when disabled
         let mut energies = Array1::zeros(npop);
@@ -48,7 +48,7 @@ where
         }
         return energies;
     }
-    
+
     // Always use global thread pool (configured once in solver)
     let results = (0..npop)
         .into_par_iter()
@@ -85,12 +85,9 @@ where
         // Sequential evaluation for small batches or when disabled
         return trials.iter().map(|trial| eval_fn(trial)).collect();
     }
-    
+
     // Always use global thread pool (configured once in solver)
-    trials
-        .par_iter()
-        .map(|trial| eval_fn(trial))
-        .collect()
+    trials.par_iter().map(|trial| eval_fn(trial)).collect()
 }
 
 /// Structure to batch evaluate individuals with their indices
@@ -110,7 +107,7 @@ where
     F: Fn(&Array1<f64>) -> f64 + Send + Sync,
 {
     let npop = population.nrows();
-    
+
     if !config.enabled || npop < 4 {
         // Sequential evaluation
         let mut results = Vec::with_capacity(npop);
@@ -125,7 +122,7 @@ where
         }
         return results;
     }
-    
+
     // Parallel evaluation (global thread pool)
     (0..npop)
         .into_par_iter()
@@ -144,14 +141,12 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_parallel_evaluation() {
         // Simple quadratic function
-        let eval_fn = Arc::new(|x: &Array1<f64>| -> f64 {
-            x.iter().map(|&xi| xi * xi).sum()
-        });
-        
+        let eval_fn = Arc::new(|x: &Array1<f64>| -> f64 { x.iter().map(|&xi| xi * xi).sum() });
+
         // Create a small population
         let mut population = Array2::zeros((10, 3));
         for i in 0..10 {
@@ -159,49 +154,47 @@ mod tests {
                 population[[i, j]] = (i as f64) * 0.1 + (j as f64) * 0.01;
             }
         }
-        
+
         // Test with parallel enabled
         let config = ParallelConfig {
             enabled: true,
             num_threads: Some(2),
         };
         let energies = evaluate_population_parallel(&population, eval_fn.clone(), &config);
-        
+
         // Verify results
         assert_eq!(energies.len(), 10);
         for i in 0..10 {
             let expected = population.row(i).iter().map(|&x| x * x).sum::<f64>();
             assert!((energies[i] - expected).abs() < 1e-10);
         }
-        
+
         // Test with parallel disabled
         let config_seq = ParallelConfig {
             enabled: false,
             num_threads: None,
         };
         let energies_seq = evaluate_population_parallel(&population, eval_fn, &config_seq);
-        
+
         // Results should be identical
         for i in 0..10 {
             assert_eq!(energies[i], energies_seq[i]);
         }
     }
-    
+
     #[test]
     fn test_indexed_evaluation() {
-        let eval_fn = Arc::new(|x: &Array1<f64>| -> f64 {
-            x.iter().sum()
-        });
-        
+        let eval_fn = Arc::new(|x: &Array1<f64>| -> f64 { x.iter().sum() });
+
         let mut population = Array2::zeros((5, 2));
         for i in 0..5 {
             population[[i, 0]] = i as f64;
             population[[i, 1]] = (i * 2) as f64;
         }
-        
+
         let config = ParallelConfig::default();
         let results = evaluate_population_indexed(&population, eval_fn, &config);
-        
+
         assert_eq!(results.len(), 5);
         for result in results {
             let expected = population.row(result.index).sum();

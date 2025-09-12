@@ -1,7 +1,7 @@
-use std::cmp::Ordering;
 use ndarray::{Array1, Array2};
-use rand::Rng;
 use rand::seq::SliceRandom;
+use rand::Rng;
+use std::cmp::Ordering;
 
 use crate::mutant_rand1::mutant_rand1;
 
@@ -16,17 +16,25 @@ pub(crate) fn mutant_adaptive<R: Rng + ?Sized>(
     rng: &mut R,
 ) -> Array1<f64> {
     // Calculate w% of population size for adaptive selection
-    let w_size = ((w * pop.nrows() as f64) as usize).max(1).min(pop.nrows() - 1);
+    let w_size = ((w * pop.nrows() as f64) as usize)
+        .max(1)
+        .min(pop.nrows() - 1);
 
     // Get sorted indices by fitness (best to worst)
     let mut sorted_indices: Vec<usize> = (0..pop.nrows()).collect();
-    sorted_indices.sort_by(|&a, &b| energies[a].partial_cmp(&energies[b]).unwrap_or(Ordering::Equal));
+    sorted_indices.sort_by(|&a, &b| {
+        energies[a]
+            .partial_cmp(&energies[b])
+            .unwrap_or(Ordering::Equal)
+    });
 
     // Select gr_better from top w% individuals randomly
     let top_indices = &sorted_indices[0..w_size];
     let gr_better_idx = top_indices[rng.random_range(0..w_size)];
     // Get two distinct random indices different from i and gr_better_idx
-    let mut available: Vec<usize> = (0..pop.nrows()).filter(|&idx| idx != i && idx != gr_better_idx).collect();
+    let mut available: Vec<usize> = (0..pop.nrows())
+        .filter(|&idx| idx != i && idx != gr_better_idx)
+        .collect();
     available.shuffle(rng);
 
     if available.len() < 2 {
@@ -49,9 +57,8 @@ pub(crate) fn mutant_adaptive<R: Rng + ?Sized>(
 
 #[cfg(test)]
 mod tests {
-    use crate::{differential_evolution, DEConfigBuilder, Strategy, Mutation, AdaptiveConfig};
+    use crate::{differential_evolution, AdaptiveConfig, DEConfigBuilder, Mutation, Strategy};
     use autoeq_testfunctions::quadratic;
-
 
     #[test]
     fn test_adaptive_basic() {
@@ -79,11 +86,19 @@ mod tests {
         let result = differential_evolution(&quadratic, &bounds, config);
 
         // Should converge to global minimum at (0, 0)
-        assert!(result.fun < 1e-3, "Adaptive DE should converge: f={}", result.fun);
+        assert!(
+            result.fun < 1e-3,
+            "Adaptive DE should converge: f={}",
+            result.fun
+        );
 
         // Check that solution is close to expected optimum
         for &xi in result.x.iter() {
-            assert!(xi.abs() < 0.5, "Solution component should be close to 0: {}", xi);
+            assert!(
+                xi.abs() < 0.5,
+                "Solution component should be close to 0: {}",
+                xi
+            );
         }
     }
 
@@ -111,10 +126,18 @@ mod tests {
         let result = differential_evolution(&quadratic, &bounds, config);
 
         // Should converge even better with WLS
-        assert!(result.fun < 1e-4, "Adaptive DE with WLS should converge well: f={}", result.fun);
+        assert!(
+            result.fun < 1e-4,
+            "Adaptive DE with WLS should converge well: f={}",
+            result.fun
+        );
 
         for &xi in result.x.iter() {
-            assert!(xi.abs() < 0.2, "Solution should be very close to 0 with WLS: {}", xi);
+            assert!(
+                xi.abs() < 0.2,
+                "Solution should be very close to 0 with WLS: {}",
+                xi
+            );
         }
     }
 }

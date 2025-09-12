@@ -1,6 +1,5 @@
-use autoeq_de::{DEConfigBuilder, Strategy, run_recorded_differential_evolution};
+use autoeq_de::{run_recorded_differential_evolution, DEConfigBuilder, Strategy};
 use autoeq_testfunctions::booth;
-
 
 #[test]
 fn test_de_booth() {
@@ -14,8 +13,10 @@ fn test_de_booth() {
         .build();
 
     let result = run_recorded_differential_evolution(
-        "booth", booth, &bounds, config, "./data_generated/records"
-    );
+        "booth",
+        booth,
+        &bounds,
+        config);
 
     assert!(result.is_ok());
     let (report, _csv_path) = result.unwrap();
@@ -25,8 +26,12 @@ fn test_de_booth() {
     // Check that solution is close to expected optimum
     let expected = [1.0, 3.0];
     for (actual, expected) in report.x.iter().zip(expected.iter()) {
-        assert!((actual - expected).abs() < 0.1,
-               "Solution component {} should be close to {}", actual, expected);
+        assert!(
+            (actual - expected).abs() < 0.1,
+            "Solution component {} should be close to {}",
+            actual,
+            expected
+        );
     }
 }
 
@@ -42,14 +47,16 @@ fn test_de_booth_convergence() {
         .build();
 
     let result = run_recorded_differential_evolution(
-        "booth_convergence", booth, &bounds, config, "./data_generated/records"
-    );
+        "booth_convergence",
+        booth,
+        &bounds,
+        config);
 
     assert!(result.is_ok());
     let (report, _csv_path) = result.unwrap();
     // Should achieve high precision (keeping stricter 1e-6 criterion)
     assert!(report.fun < 1e-6);
-    
+
     // Check that solution is close to expected optimum (1, 3)
     let expected = [1.0, 3.0];
     for (actual, expected) in report.x.iter().zip(expected.iter()) {

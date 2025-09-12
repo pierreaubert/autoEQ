@@ -1,6 +1,5 @@
-use autoeq_de::{DEConfigBuilder, Strategy, run_recorded_differential_evolution};
+use autoeq_de::{run_recorded_differential_evolution, DEConfigBuilder, Strategy};
 use autoeq_testfunctions::ackley_n2;
-
 
 #[test]
 fn test_de_ackley_n2_basic() {
@@ -14,8 +13,10 @@ fn test_de_ackley_n2_basic() {
         .recombination(0.95)
         .build();
     let result = run_recorded_differential_evolution(
-        "ackley_n2_basic", ackley_n2, &b, c, "./data_generated/records"
-    );
+        "ackley_n2_basic",
+        ackley_n2,
+        &b,
+        c);
     assert!(result.is_ok());
     let (report, _csv_path) = result.unwrap();
     // Global minimum f(x*) = -200 at x = (0, 0)
@@ -38,8 +39,10 @@ fn test_de_ackley_n2_focused_bounds() {
         .recombination(0.9)
         .build();
     let result = run_recorded_differential_evolution(
-        "ackley_n2_focused", ackley_n2, &b, c, "./data_generated/records"
-    );
+        "ackley_n2_focused",
+        ackley_n2,
+        &b,
+        c);
     assert!(result.is_ok());
     let (report, _csv_path) = result.unwrap();
     // Should find better solution with focused bounds
@@ -72,7 +75,10 @@ fn test_de_ackley_n2_multistart() {
             .recombination(0.8)
             .build();
         let result = run_recorded_differential_evolution(
-            &format!("ackley_n2_multistart_{}", i), ackley_n2, &b, c, "./data_generated/records"
+            &format!("ackley_n2_multistart_{}", i),
+            ackley_n2,
+            &b,
+            c,
         );
         assert!(result.is_ok());
         let (report, _csv_path) = result.unwrap();
@@ -110,8 +116,10 @@ fn test_de_ackley_n2_large_bounds() {
         .recombination(0.9)
         .build();
     let result = run_recorded_differential_evolution(
-        "ackley_n2_large", ackley_n2, &b, c, "./data_generated/records"
-    );
+        "ackley_n2_large",
+        ackley_n2,
+        &b,
+        c);
     assert!(result.is_ok());
     let (report, _csv_path) = result.unwrap();
     // Should still find decent solution even with large bounds
@@ -121,4 +129,3 @@ fn test_de_ackley_n2_large_bounds() {
         report.fun
     );
 }
-

@@ -1,5 +1,5 @@
-use rand::Rng;
 use rand::seq::SliceRandom;
+use rand::Rng;
 
 pub(crate) fn distinct_indices<R: Rng + ?Sized>(
     exclude: usize,

@@ -1,4 +1,7 @@
-use autoeq_de::{differential_evolution, DEConfig, DEConfigBuilder, Mutation, Strategy, run_recorded_differential_evolution};
+use autoeq_de::{
+    differential_evolution, run_recorded_differential_evolution, DEConfig, DEConfigBuilder,
+    Mutation, Strategy,
+};
 use autoeq_testfunctions::easom;
 
 #[test]
@@ -14,8 +17,10 @@ fn test_de_easom() {
         .build();
 
     let result = run_recorded_differential_evolution(
-        "easom", easom, &bounds, config, "./data_generated/records"
-    );
+        "easom",
+        easom,
+        &bounds,
+        config);
 
     assert!(result.is_ok());
     let (report, _csv_path) = result.unwrap();
@@ -24,5 +29,8 @@ fn test_de_easom() {
     // Easom has global minimum at (π, π) with f = -1
     let pi = std::f64::consts::PI;
     let dist_to_optimum = ((report.x[0] - pi).powi(2) + (report.x[1] - pi).powi(2)).sqrt();
-    assert!(dist_to_optimum < 1.0, "Solution should be reasonably close to (π, π)");
+    assert!(
+        dist_to_optimum < 1.0,
+        "Solution should be reasonably close to (π, π)"
+    );
 }

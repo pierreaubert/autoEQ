@@ -3,7 +3,6 @@ use autoeq_de::{
 };
 use ndarray::Array1;
 
-
 fn main() {
     // Ackley function (2D)
     let ackley = |x: &Array1<f64>| {

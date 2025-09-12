@@ -6,14 +6,15 @@ use plotly::{
     Layout, Plot, Scatter,
 };
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
-// Define constants locally since this is now an independent binary
-const DATA_GENERATED: &str = "data_generated";
+// Import environment utilities
+use autoeq_env::{get_data_generated_dir, get_records_dir};
 
 // Import the test functions and metadata - using universal import
 use autoeq_testfunctions::{
-    get_function_metadata, FunctionMetadata,
+    get_function_metadata,
+    FunctionMetadata,
     // Import all test functions dynamically (this will be replaced by a macro or reflection system)
     *,
 };
@@ -120,7 +121,11 @@ fn read_csv_trace(csv_path: &str) -> Result<OptimizationTrace, Box<dyn std::erro
 
     // Clean function name by removing _block_XXXX suffix if present
     let function_name = if raw_name.contains("_block_") {
-        raw_name.split("_block_").next().unwrap_or(raw_name).to_string()
+        raw_name
+            .split("_block_")
+            .next()
+            .unwrap_or(raw_name)
+            .to_string()
     } else {
         raw_name.to_string()
     };
@@ -137,7 +142,11 @@ fn read_csv_trace(csv_path: &str) -> Result<OptimizationTrace, Box<dyn std::erro
         let point = if is_new_format {
             // New format: eval_id,generation,x0,x1,f_value,best_so_far,is_improvement
             if parts.len() < 7 {
-                return Err(format!("Line {}: insufficient columns for new format (expected 7+)", line_idx + 2).into());
+                return Err(format!(
+                    "Line {}: insufficient columns for new format (expected 7+)",
+                    line_idx + 2
+                )
+                .into());
             }
 
             let eval_id: usize = parts[0]
@@ -153,13 +162,22 @@ fn read_csv_trace(csv_path: &str) -> Result<OptimizationTrace, Box<dyn std::erro
             let mut x = Vec::new();
             for i in 2..x_end {
                 let coord: f64 = parts[i].parse().map_err(|_| {
-                    format!("Line {}: invalid x coordinate at column {}", line_idx + 2, i)
+                    format!(
+                        "Line {}: invalid x coordinate at column {}",
+                        line_idx + 2,
+                        i
+                    )
                 })?;
                 x.push(coord);
             }
 
             if x.len() != 2 {
-                return Err(format!("Line {}: expected 2D coordinates, got {}D", line_idx + 2, x.len()).into());
+                return Err(format!(
+                    "Line {}: expected 2D coordinates, got {}D",
+                    line_idx + 2,
+                    x.len()
+                )
+                .into());
             }
 
             let f_value: f64 = parts[x_end]
@@ -193,13 +211,22 @@ fn read_csv_trace(csv_path: &str) -> Result<OptimizationTrace, Box<dyn std::erro
 
             for i in 1..x_columns_end {
                 let coord: f64 = parts[i].parse().map_err(|_| {
-                    format!("Line {}: invalid x coordinate at column {}", line_idx + 2, i)
+                    format!(
+                        "Line {}: invalid x coordinate at column {}",
+                        line_idx + 2,
+                        i
+                    )
                 })?;
                 x.push(coord);
             }
 
             if x.len() != 2 {
-                return Err(format!("Line {}: expected 2D coordinates, got {}D", line_idx + 2, x.len()).into());
+                return Err(format!(
+                    "Line {}: expected 2D coordinates, got {}D",
+                    line_idx + 2,
+                    x.len()
+                )
+                .into());
             }
 
             let best_result: f64 = parts[x_columns_end]
@@ -363,12 +390,7 @@ fn add_optimization_trace(
 }
 
 /// Create a convergence plot showing loss function over iterations/evaluations
-fn plot_convergence(
-    trace: &OptimizationTrace,
-    output_dir: &str,
-    width: usize,
-    height: usize,
-) {
+fn plot_convergence(trace: &OptimizationTrace, output_dir: &str, width: usize, height: usize) {
     if trace.points.is_empty() {
         eprintln!("  Warning: No data points for convergence plot");
         return;
@@ -405,7 +427,10 @@ fn plot_convergence(
         );
 
     let layout = Layout::new()
-        .title(Title::with_text(&format!("Convergence: {}", trace.function_name)))
+        .title(Title::with_text(&format!(
+            "Convergence: {}",
+            trace.function_name
+        )))
         .width(width)
         .height(height)
         .x_axis(
@@ -418,11 +443,7 @@ fn plot_convergence(
                 .title(Title::with_text("Function Value"))
                 .type_(plotly::layout::AxisType::Log), // Use log scale for better visualization
         )
-        .legend(
-            plotly::layout::Legend::new()
-                .x(0.7)
-                .y(0.9),
-        );
+        .legend(plotly::layout::Legend::new().x(0.7).y(0.9));
 
     let mut plot = Plot::new();
     plot.add_trace(eval_trace);
@@ -431,11 +452,19 @@ fn plot_convergence(
 
     // Use a clean function name for the convergence plot (remove _block_XXXX suffix if present)
     let clean_name = if trace.function_name.contains("_block_") {
-        trace.function_name.split("_block_").next().unwrap_or(&trace.function_name)
+        trace
+            .function_name
+            .split("_block_")
+            .next()
+            .unwrap_or(&trace.function_name)
     } else {
         &trace.function_name
     };
-    let filename = format!("{}/{}_convergence.html", output_dir, clean_name.replace(' ', "_"));
+    let filename = format!(
+        "{}/{}_convergence.html",
+        output_dir,
+        clean_name.replace(' ', "_")
+    );
     plot.write_html(&filename);
     println!("  Created convergence plot: {}", filename);
 }
@@ -443,17 +472,31 @@ fn plot_convergence(
 fn main() {
     let args = Args::parse();
 
-    // Set default directories if not provided
+    // Set default directories if not provided, using environment-based paths
     let output_dir = args.output_dir.unwrap_or_else(|| {
-        let mut path = PathBuf::from(DATA_GENERATED);
-        path.push("plot_functions");
-        path.to_string_lossy().to_string()
+        match get_data_generated_dir() {
+            Ok(data_dir) => {
+                let mut path = data_dir;
+                path.push("plot_functions");
+                path.to_string_lossy().to_string()
+            }
+            Err(e) => {
+                eprintln!("Error accessing data directory: {}", e);
+                eprintln!("Please set AUTOEQ_DIR environment variable to your AutoEQ project root.");
+                std::process::exit(1);
+            }
+        }
     });
 
     let csv_dir = args.csv_dir.unwrap_or_else(|| {
-        let mut path = PathBuf::from(DATA_GENERATED);
-        path.push("records");
-        path.to_string_lossy().to_string()
+        match get_records_dir() {
+            Ok(records_dir) => records_dir.to_string_lossy().to_string(),
+            Err(e) => {
+                eprintln!("Error accessing records directory: {}", e);
+                eprintln!("Please set AUTOEQ_DIR environment variable to your AutoEQ project root.");
+                std::process::exit(1);
+            }
+        }
     });
 
     // Parse bounds
@@ -492,7 +535,11 @@ fn main() {
         // Check if function requires more than 2D (skip if so)
         if let Some(meta) = metadata.get(&name) {
             if meta.bounds.len() > 2 {
-                println!("  Skipping '{}': requires {}D input, plotting only supports 2D", name, meta.bounds.len());
+                println!(
+                    "  Skipping '{}': requires {}D input, plotting only supports 2D",
+                    name,
+                    meta.bounds.len()
+                );
                 continue;
             }
         }
@@ -509,7 +556,10 @@ fn main() {
                     (x_bounds, y_bounds)
                 }
             } else {
-                eprintln!("  Warning: No metadata found for function '{}', using CLI bounds", name);
+                eprintln!(
+                    "  Warning: No metadata found for function '{}', using CLI bounds",
+                    name
+                );
                 (x_bounds, y_bounds)
             }
         } else {
@@ -517,8 +567,10 @@ fn main() {
             (x_bounds, y_bounds)
         };
 
-        println!("  Using bounds: x=({}, {}), y=({}, {})",
-                plot_x_bounds.0, plot_x_bounds.1, plot_y_bounds.0, plot_y_bounds.1);
+        println!(
+            "  Using bounds: x=({}, {}), y=({}, {})",
+            plot_x_bounds.0, plot_x_bounds.1, plot_y_bounds.0, plot_y_bounds.1
+        );
 
         // Load optimization trace if requested
         let trace = if args.show_traces || args.convergence_plots {
@@ -554,7 +606,11 @@ fn main() {
             args.width,
             args.height,
             &output_dir,
-            if args.show_traces { trace.as_ref() } else { None },
+            if args.show_traces {
+                trace.as_ref()
+            } else {
+                None
+            },
             metadata.get(&name),
         );
 
@@ -631,9 +687,9 @@ fn plot_function(
         .color_bar(
             plotly::common::ColorBar::new()
                 .len_mode(plotly::common::ThicknessMode::Pixels)
-                .len(60*height/100)  // 60% in fraction mode (may need to be scaled)
+                .len(60 * height / 100) // 60% in fraction mode (may need to be scaled)
                 .y_anchor(plotly::common::Anchor::Bottom)
-                .y(0.0)    // Position at bottom
+                .y(0.0), // Position at bottom
         );
 
     // Create layout
@@ -681,14 +737,20 @@ fn get_test_functions() -> Vec<(String, TestFunction)> {
         if let Some(func) = get_function_by_name(name) {
             functions.push((name.clone(), func));
         } else {
-            eprintln!("Warning: Function '{}' found in metadata but not available for plotting", name);
+            eprintln!(
+                "Warning: Function '{}' found in metadata but not available for plotting",
+                name
+            );
         }
     }
 
     // Sort functions alphabetically for consistent ordering
     functions.sort_by(|a, b| a.0.cmp(&b.0));
 
-    eprintln!("Discovered {} plottable functions from metadata", functions.len());
+    eprintln!(
+        "Discovered {} plottable functions from metadata",
+        functions.len()
+    );
     functions
 }
 
@@ -807,7 +869,10 @@ fn get_function_by_name(name: &str) -> Option<TestFunction> {
 
         // Unknown function
         _ => {
-            eprintln!("  Unknown function: '{}' - add it to get_function_by_name()", name);
+            eprintln!(
+                "  Unknown function: '{}' - add it to get_function_by_name()",
+                name
+            );
             None
         }
     }
@@ -820,12 +885,15 @@ fn add_global_minima(
     x_bounds: (f64, f64),
     y_bounds: (f64, f64),
 ) {
-    let valid_minima: Vec<&(Vec<f64>, f64)> = metadata.global_minima
+    let valid_minima: Vec<&(Vec<f64>, f64)> = metadata
+        .global_minima
         .iter()
         .filter(|(coords, _)| {
             coords.len() >= 2
-                && coords[0] >= x_bounds.0 && coords[0] <= x_bounds.1
-                && coords[1] >= y_bounds.0 && coords[1] <= y_bounds.1
+                && coords[0] >= x_bounds.0
+                && coords[0] <= x_bounds.1
+                && coords[1] >= y_bounds.0
+                && coords[1] <= y_bounds.1
         })
         .collect();
 
@@ -881,7 +949,7 @@ fn add_constraint_boundaries(
                 plotly::contour::Contours::new()
                     .start(0.0)
                     .end(0.0)
-                    .size(1.0) // Only show the boundary line
+                    .size(1.0), // Only show the boundary line
             )
             .line(
                 plotly::common::Line::new()

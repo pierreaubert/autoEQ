@@ -1,5 +1,5 @@
-use ndarray::Array1;
 use crate::{DEConfig, DEReport, DifferentialEvolution};
+use ndarray::Array1;
 
 /// Convenience function mirroring SciPy's API shape (simplified):
 /// - `func`: objective function mapping x -> f(x)

@@ -1,10 +1,10 @@
-use autoeq_de::{differential_evolution, DEConfigBuilder, Strategy};
+use autoeq_de::{run_recorded_differential_evolution, DEConfigBuilder, Strategy};
 use autoeq_testfunctions::cosine_mixture;
 
 #[test]
 fn test_de_cosine_mixture_2d() {
     // Test 2D Cosine Mixture function
-    let b = [(-1.0, 1.0), (-1.0, 1.0)];
+    let b = vec![(-1.0, 1.0), (-1.0, 1.0)];
     let c = DEConfigBuilder::new()
         .seed(82)
         .maxiter(600)
@@ -12,9 +12,13 @@ fn test_de_cosine_mixture_2d() {
         .strategy(Strategy::RandToBest1Exp)
         .recombination(0.9)
         .build();
-    let result = differential_evolution(&cosine_mixture, &b, c);
+    let result = run_recorded_differential_evolution(
+        "cosine_mixture_2d", cosine_mixture, &b, c
+    );
+    assert!(result.is_ok());
+    let (report, _csv_path) = result.unwrap();
     // Global minimum depends on dimension
-    assert!(result.fun < 0.1, "Function value too high: {}", result.fun);
+    assert!(report.fun < 0.1, "Function value too high: {}", report.fun);
 }
 
 #[test]
@@ -28,9 +32,13 @@ fn test_de_cosine_mixture_4d() {
         .strategy(Strategy::RandToBest1Exp)
         .recombination(0.9)
         .build();
-    let result = differential_evolution(&cosine_mixture, &b, c);
+    let result = run_recorded_differential_evolution(
+        "cosine_mixture_4d", cosine_mixture, &b, c
+    );
+    assert!(result.is_ok());
+    let (report, _csv_path) = result.unwrap();
     // Global minimum depends on dimension
-    assert!(result.fun < 0.1, "Function value too high: {}", result.fun);
+    assert!(report.fun < 0.1, "Function value too high: {}", report.fun);
 }
 
 #[test]
@@ -44,9 +52,13 @@ fn test_de_cosine_mixture_6d() {
         .strategy(Strategy::Best1Exp)
         .recombination(0.95)
         .build();
-    let result = differential_evolution(&cosine_mixture, &b, c);
+    let result = run_recorded_differential_evolution(
+        "cosine_mixture_6d", cosine_mixture, &b, c
+    );
+    assert!(result.is_ok());
+    let (report, _csv_path) = result.unwrap();
     // Global minimum for higher dimensions
-    assert!(result.fun < 0.2, "Function value too high: {}", result.fun);
+    assert!(report.fun < 0.2, "Function value too high: {}", report.fun);
 }
 
 #[test]

@@ -1,11 +1,12 @@
-use autoeq_de::{differential_evolution, DEConfigBuilder, Strategy, run_recorded_differential_evolution};
+use autoeq_de::{
+    run_recorded_differential_evolution, DEConfigBuilder, Strategy,
+};
 use autoeq_testfunctions::sum_of_different_powers;
-
 
 #[test]
 fn test_de_sum_of_different_powers_2d() {
     // Test 2D Sum of Different Powers function
-    let b = [(-1.0, 1.0), (-1.0, 1.0)];
+    let b = vec![(-1.0, 1.0), (-1.0, 1.0)];
     let c = DEConfigBuilder::new()
         .seed(78)
         .maxiter(500)
@@ -13,9 +14,13 @@ fn test_de_sum_of_different_powers_2d() {
         .strategy(Strategy::Rand1Exp)
         .recombination(0.9)
         .build();
-    let result = differential_evolution(&sum_of_different_powers, &b, c);
+    let result = run_recorded_differential_evolution(
+        "sum_of_different_powers_2d", sum_of_different_powers, &b, c
+    );
+    assert!(result.is_ok());
+    let (report, _csv_path) = result.unwrap();
     // Global minimum at origin
-    assert!(result.fun < 1e-6, "Function value too high: {}", result.fun);
+    assert!(report.fun < 1e-6, "Function value too high: {}", report.fun);
 }
 
 #[test]
@@ -29,9 +34,13 @@ fn test_de_sum_of_different_powers_5d() {
         .strategy(Strategy::Rand1Exp)
         .recombination(0.9)
         .build();
-    let result = differential_evolution(&sum_of_different_powers, &b, c);
+    let result = run_recorded_differential_evolution(
+        "sum_of_different_powers_5d", sum_of_different_powers, &b, c
+    );
+    assert!(result.is_ok());
+    let (report, _csv_path) = result.unwrap();
     // Global minimum at origin
-    assert!(result.fun < 1e-2, "Function value too high: {}", result.fun);
+    assert!(report.fun < 1e-2, "Function value too high: {}", report.fun);
 }
 
 #[test]
@@ -45,9 +54,13 @@ fn test_de_sum_of_different_powers_10d() {
         .strategy(Strategy::Best1Exp)
         .recombination(0.95)
         .build();
-    let result = differential_evolution(&sum_of_different_powers, &b, c);
+    let result = run_recorded_differential_evolution(
+        "sum_of_different_powers_10d", sum_of_different_powers, &b, c
+    );
+    assert!(result.is_ok());
+    let (report, _csv_path) = result.unwrap();
     // Global minimum at origin, but gets harder in higher dimensions
-    assert!(result.fun < 1e-1, "Function value too high: {}", result.fun);
+    assert!(report.fun < 1e-1, "Function value too high: {}", report.fun);
 }
 
 #[test]
@@ -89,27 +102,3 @@ fn test_sum_of_different_powers_function_properties() {
     assert!(f2 > f1, "Higher powers should dominate: {} vs {}", f2, f1);
 }
 
-#[test]
-fn test_de_sum_of_different_powers_recorded() {
-    // Test 2D Sum of Different Powers function with recording
-    let bounds = vec![(-1.0, 1.0), (-1.0, 1.0)];
-    let config = DEConfigBuilder::new()
-        .seed(78)
-        .maxiter(500)
-        .popsize(30)
-        .strategy(Strategy::Rand1Exp)
-        .recombination(0.9)
-        .build();
-
-    let result = run_recorded_differential_evolution(
-        "sum_of_different_powers", sum_of_different_powers, &bounds, config, "./data_generated/records"
-    );
-
-    assert!(result.is_ok());
-    let (report, _csv_path) = result.unwrap();
-    assert!(report.fun < 1e-5); // Should converge well to global minimum
-
-    // Global minimum at origin (0, 0)
-    assert!(report.x[0].abs() < 0.1, "x[0] should be close to 0.0: {}", report.x[0]);
-    assert!(report.x[1].abs() < 0.1, "x[1] should be close to 0.0: {}", report.x[1]);
-}

@@ -1,6 +1,4 @@
-use autoeq_de::{
-    differential_evolution, DEConfig, Mutation, Strategy, ParallelConfig,
-};
+use autoeq_de::{differential_evolution, DEConfig, Mutation, ParallelConfig, Strategy};
 use ndarray::Array1;
 use std::time::Instant;
 
@@ -15,11 +13,14 @@ fn main() {
                 sum += xi.sin().cos().exp().ln_1p();
             }
         }
-        
+
         // Actual Rastrigin function
         let a = 10.0;
         let n = x.len() as f64;
-        let result = a * n + x.iter().map(|&xi| xi * xi - a * (2.0 * std::f64::consts::PI * xi).cos()).sum::<f64>();
+        let result = a * n
+            + x.iter()
+                .map(|&xi| xi * xi - a * (2.0 * std::f64::consts::PI * xi).cos())
+                .sum::<f64>();
         result + sum * 1e-10 // Add tiny contribution from expensive computation
     };
 
@@ -76,9 +77,15 @@ fn main() {
 
     // Compare results
     println!("\n\nComparison:");
-    println!("  Speedup: {:.2}x", duration_seq.as_secs_f64() / duration_par.as_secs_f64());
-    println!("  Result difference: {:.6e}", (report_seq.fun - report_par.fun).abs());
-    
+    println!(
+        "  Speedup: {:.2}x",
+        duration_seq.as_secs_f64() / duration_par.as_secs_f64()
+    );
+    println!(
+        "  Result difference: {:.6e}",
+        (report_seq.fun - report_par.fun).abs()
+    );
+
     // Test with different thread counts
     println!("\n\nTesting with different thread counts:");
     for num_threads in [1, 2, 4, 8] {
@@ -98,7 +105,11 @@ fn main() {
         let start = Instant::now();
         let _ = differential_evolution(&rastrigin, &bounds, cfg_threads);
         let duration = start.elapsed();
-        
-        println!("  {} thread(s): {:.3} seconds", num_threads, duration.as_secs_f64());
+
+        println!(
+            "  {} thread(s): {:.3} seconds",
+            num_threads,
+            duration.as_secs_f64()
+        );
     }
 }

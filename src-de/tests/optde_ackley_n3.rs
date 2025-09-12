@@ -1,4 +1,6 @@
-use autoeq_de::{auto_de, differential_evolution, DEConfigBuilder, Strategy, run_recorded_differential_evolution};
+use autoeq_de::{
+    run_recorded_differential_evolution, DEConfigBuilder, Strategy,
+};
 use autoeq_testfunctions::{ackley_n3, create_bounds};
 
 #[test]
@@ -6,7 +8,11 @@ fn test_de_ackley_n3_different_strategies() {
     // Test multiple strategies to ensure robustness
     let bounds = vec![(-32.0, 32.0), (-32.0, 32.0)];
 
-    let strategies = [Strategy::RandToBest1Bin, Strategy::Best2Bin, Strategy::Rand1Exp];
+    let strategies = vec![
+        Strategy::RandToBest1Bin,
+        Strategy::Best2Bin,
+        Strategy::Rand1Exp,
+    ];
 
     for (i, strategy) in strategies.iter().enumerate() {
         let config = DEConfigBuilder::new()
@@ -17,8 +23,17 @@ fn test_de_ackley_n3_different_strategies() {
             .recombination(0.8)
             .build();
 
-        let result = differential_evolution(&ackley_n3, &bounds, config);
-        assert!(result.fun < -50.0, "Strategy {:?} failed: {}", strategy, result.fun);
+        let result = run_recorded_differential_evolution(
+        "ackley_n3_different_strategies", ackley_n3, &bounds, config
+    );
+    assert!(result.is_ok());
+    let (report, _csv_path) = result.unwrap();
+        assert!(
+            report.fun < -50.0,
+            "Strategy {:?} failed: {}",
+            strategy,
+            report.fun
+        );
     }
 }
 
@@ -34,15 +49,25 @@ fn test_de_ackley_n3_2d() {
         .build();
 
     let result = run_recorded_differential_evolution(
-        "ackley_n3", ackley_n3, &bounds, config, "./data_generated/records"
-    );
+        "ackley_n3",
+        ackley_n3,
+        &bounds,
+        config);
 
     assert!(result.is_ok());
     let (report, _csv_path) = result.unwrap();
-    assert!(report.fun < -100.0, "Recorded Ackley N.3 optimization failed: {}", report.fun);
+    assert!(
+        report.fun < -100.0,
+        "Recorded Ackley N.3 optimization failed: {}",
+        report.fun
+    );
 
     // Check that solution is within bounds
     for &actual in report.x.iter() {
-        assert!(actual >= -32.0 && actual <= 32.0, "Solution out of bounds: {}", actual);
+        assert!(
+            actual >= -32.0 && actual <= 32.0,
+            "Solution out of bounds: {}",
+            actual
+        );
     }
 }

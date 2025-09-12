@@ -1,10 +1,13 @@
-use autoeq_de::{differential_evolution, DEConfig, DEConfigBuilder, Strategy, run_recorded_differential_evolution};
+use autoeq_de::{
+    run_recorded_differential_evolution, DEConfig, DEConfigBuilder,
+    Strategy,
+};
 use autoeq_testfunctions::beale;
 
 #[test]
 fn test_de_beale_multistart() {
-    let bounds = [(-4.5, 4.5), (-4.5, 4.5)];
-    let seeds = [42, 123, 456, 789];
+    let bounds = vec![(-4.5, 4.5), (-4.5, 4.5)];
+    let seeds = vec![42, 123, 456, 789];
     let mut best_result = f64::INFINITY;
 
     for &seed in &seeds {
@@ -15,8 +18,12 @@ fn test_de_beale_multistart() {
         config.recombination = 0.8;
         config.strategy = Strategy::Rand1Bin;
 
-        let result = differential_evolution(&beale, &bounds, config);
-        best_result = best_result.min(result.fun);
+        let result = run_recorded_differential_evolution(
+        "beale_multistart", beale, &bounds, config
+    );
+    assert!(result.is_ok());
+    let (report, _csv_path) = result.unwrap();
+        best_result = best_result.min(report.fun);
     }
 
     // At least one run should find a good solution
@@ -35,15 +42,17 @@ fn test_de_beale() {
         .build();
 
     let result = run_recorded_differential_evolution(
-        "beale", beale, &bounds, config, "./data_generated/records"
-    );
+        "beale",
+        beale,
+        &bounds,
+        config);
 
     assert!(result.is_ok());
     let (report, _csv_path) = result.unwrap();
     assert!(report.fun < 1e-2); // Relaxed tolerance for Beale
 
     // Check that solution is close to expected optimum (3, 0.5)
-    let expected = [3.0, 0.5];
+    let expected = vec![3.0, 0.5];
     for (actual, expected) in report.x.iter().zip(expected.iter()) {
         assert!((actual - expected).abs() < 0.5);
     }

@@ -1,11 +1,12 @@
-use autoeq_de::{differential_evolution, DEConfigBuilder, Strategy, run_recorded_differential_evolution};
+use autoeq_de::{
+    run_recorded_differential_evolution, DEConfigBuilder, Strategy,
+};
 use autoeq_testfunctions::trid;
-
 
 #[test]
 fn test_de_trid_2d() {
     // Test 2D Trid function
-    let b = [(-4.0, 4.0), (-4.0, 4.0)]; // bounds: [-d^2, d^2]
+    let b = vec![(-4.0, 4.0), (-4.0, 4.0)]; // bounds: [-d^2, d^2]
     let c = DEConfigBuilder::new()
         .seed(76)
         .maxiter(600)
@@ -13,9 +14,13 @@ fn test_de_trid_2d() {
         .strategy(Strategy::Best1Exp)
         .recombination(0.9)
         .build();
-    let result = differential_evolution(&trid, &b, c);
+    let result = run_recorded_differential_evolution(
+        "trid_2d", trid, &b, c
+    );
+    assert!(result.is_ok());
+    let (report, _csv_path) = result.unwrap();
     // 2D Trid has global minimum f(x) = -2 at x = (2, 2)
-    assert!(result.fun < -1.8, "Function value too high: {}", result.fun);
+    assert!(report.fun < -1.8, "Function value too high: {}", report.fun);
 }
 
 #[test]
@@ -29,9 +34,13 @@ fn test_de_trid_3d() {
         .strategy(Strategy::Rand1Exp)
         .recombination(0.9)
         .build();
-    let result = differential_evolution(&trid, &b, c);
+    let result = run_recorded_differential_evolution(
+        "trid_3d", trid, &b, c
+    );
+    assert!(result.is_ok());
+    let (report, _csv_path) = result.unwrap();
     // 3D Trid has global minimum f(x) = -6 at x = (2, 3, 3)
-    assert!(result.fun < -5.5, "Function value too high: {}", result.fun);
+    assert!(report.fun < -5.5, "Function value too high: {}", report.fun);
 }
 
 #[test]
@@ -45,12 +54,16 @@ fn test_de_trid_4d() {
         .strategy(Strategy::Best1Bin)
         .recombination(0.95)
         .build();
-    let result = differential_evolution(&trid, &b, c);
+    let result = run_recorded_differential_evolution(
+        "trid_4d", trid, &b, c
+    );
+    assert!(result.is_ok());
+    let (report, _csv_path) = result.unwrap();
     // 4D Trid has global minimum f(x) = -12 at x = (2, 3, 4, 4)
     assert!(
-        result.fun < -11.0,
+        report.fun < -11.0,
         "Function value too high: {}",
-        result.fun
+        report.fun
     );
 }
 
@@ -81,27 +94,3 @@ fn test_trid_function_properties() {
     );
 }
 
-#[test]
-fn test_de_trid_recorded() {
-    // Test 2D Trid function with recording
-    let bounds = vec![(-4.0, 4.0), (-4.0, 4.0)];
-    let config = DEConfigBuilder::new()
-        .seed(76)
-        .maxiter(600)
-        .popsize(40)
-        .strategy(Strategy::Best1Exp)
-        .recombination(0.9)
-        .build();
-
-    let result = run_recorded_differential_evolution(
-        "trid", trid, &bounds, config, "./data_generated/records"
-    );
-
-    assert!(result.is_ok());
-    let (report, _csv_path) = result.unwrap();
-    assert!(report.fun < -1.5); // Relaxed threshold for trid
-
-    // Check bounds
-    assert!(report.x[0] >= -4.0 && report.x[0] <= 4.0);
-    assert!(report.x[1] >= -4.0 && report.x[1] <= 4.0);
-}

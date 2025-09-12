@@ -1,6 +1,7 @@
-use autoeq_de::{auto_de, differential_evolution, DEConfigBuilder, Strategy, run_recorded_differential_evolution};
-use autoeq_testfunctions::{xin_she_yang_n3, create_bounds};
-
+use autoeq_de::{
+    run_recorded_differential_evolution, DEConfigBuilder, Strategy,
+};
+use autoeq_testfunctions::{create_bounds, xin_she_yang_n3};
 
 #[test]
 fn test_de_xin_she_yang_n3_2d() {
@@ -14,16 +15,36 @@ fn test_de_xin_she_yang_n3_2d() {
         .recombination(0.9)
         .build();
 
-    let result = differential_evolution(&xin_she_yang_n3, &bounds, config);
+    let result = run_recorded_differential_evolution(
+        "xin_she_yang_n3_2d", xin_she_yang_n3, &bounds, config
+    );
+    assert!(result.is_ok());
+    let (report, _csv_path) = result.unwrap();
 
     // Global minimum is at (0, 0) with f = -1
-    assert!(result.fun > -1.01, "Solution too good (below theoretical minimum): {}", result.fun);
-    assert!(result.fun < -0.5, "Solution quality too low: {}", result.fun);
+    assert!(
+        report.fun > -1.01,
+        "Solution too good (below theoretical minimum): {}",
+        report.fun
+    );
+    assert!(
+        report.fun < -0.5,
+        "Solution quality too low: {}",
+        report.fun
+    );
 
     // Check solution is close to known optimum (0, 0)
-    for &xi in result.x.iter() {
-        assert!(xi >= -20.0 && xi <= 20.0, "Solution coordinate out of bounds: {}", xi);
-        assert!(xi.abs() < 2.0, "Solution not reasonably near global optimum (0, 0): {}", xi);
+    for &xi in report.x.iter() {
+        assert!(
+            xi >= -20.0 && xi <= 20.0,
+            "Solution coordinate out of bounds: {}",
+            xi
+        );
+        assert!(
+            xi.abs() < 2.0,
+            "Solution not reasonably near global optimum (0, 0): {}",
+            xi
+        );
     }
 }
 
@@ -39,31 +60,31 @@ fn test_de_xin_she_yang_n3_5d() {
         .recombination(0.8)
         .build();
 
-    let result = differential_evolution(&xin_she_yang_n3, &bounds, config);
+    let result = run_recorded_differential_evolution(
+        "xin_she_yang_n3_5d", xin_she_yang_n3, &bounds, config
+    );
+    assert!(result.is_ok());
+    let (report, _csv_path) = result.unwrap();
 
     // For 5D, accept a higher tolerance
-    assert!(result.fun > -1.01, "Solution too good (below theoretical minimum): {}", result.fun);
-    assert!(result.fun < -0.1, "Solution quality too low for 5D: {}", result.fun);
+    assert!(
+        report.fun > -1.01,
+        "Solution too good (below theoretical minimum): {}",
+        report.fun
+    );
+    assert!(
+        report.fun < -0.1,
+        "Solution quality too low for 5D: {}",
+        report.fun
+    );
 
     // Check solution is within bounds
-    for &xi in result.x.iter() {
-        assert!(xi >= -20.0 && xi <= 20.0, "Solution coordinate out of bounds: {}", xi);
-    }
-}
-
-// Auto_de tests using the simplified interface
-#[test]
-fn test_auto_de_xin_she_yang_n3_function() {
-    let bounds = create_bounds(2, -20.0, 20.0);
-    let result = auto_de(xin_she_yang_n3, &bounds, None);
-
-    assert!(result.is_some(), "AutoDE should find a solution");
-    let (x_opt, f_opt, _) = result.unwrap();
-
-    assert!(f_opt > -1.01, "Solution too good (below theoretical minimum): {}", f_opt);
-    assert!(f_opt < 0.0, "Xin-She Yang N.3 function value too high: {}", f_opt);
-    for &xi in x_opt.iter() {
-        assert!(xi >= -20.0 && xi <= 20.0, "Solution component out of bounds: {}", xi);
+    for &xi in report.x.iter() {
+        assert!(
+            xi >= -20.0 && xi <= 20.0,
+            "Solution coordinate out of bounds: {}",
+            xi
+        );
     }
 }
 

@@ -1,10 +1,10 @@
-use autoeq_de::{differential_evolution, DEConfigBuilder, Strategy};
+use autoeq_de::{run_recorded_differential_evolution, DEConfigBuilder, Strategy};
 use autoeq_testfunctions::quartic;
 
 #[test]
 fn test_de_quartic_2d() {
     // Test 2D Quartic function
-    let b = [(-1.28, 1.28), (-1.28, 1.28)];
+    let b = vec![(-1.28, 1.28), (-1.28, 1.28)];
     let c = DEConfigBuilder::new()
         .seed(80)
         .maxiter(600)
@@ -12,9 +12,13 @@ fn test_de_quartic_2d() {
         .strategy(Strategy::Best1Exp)
         .recombination(0.9)
         .build();
-    let result = differential_evolution(&quartic, &b, c);
+    let result = run_recorded_differential_evolution(
+        "quartic_2d", quartic, &b, c
+    );
+    assert!(result.is_ok());
+    let (report, _csv_path) = result.unwrap();
     // Global minimum at origin
-    assert!(result.fun < 1e-6, "Function value too high: {}", result.fun);
+    assert!(report.fun < 1e-6, "Function value too high: {}", report.fun);
 }
 
 #[test]
@@ -28,9 +32,13 @@ fn test_de_quartic_5d() {
         .strategy(Strategy::Best1Exp)
         .recombination(0.9)
         .build();
-    let result = differential_evolution(&quartic, &b, c);
+    let result = run_recorded_differential_evolution(
+        "quartic_5d", quartic, &b, c
+    );
+    assert!(result.is_ok());
+    let (report, _csv_path) = result.unwrap();
     // Global minimum at origin
-    assert!(result.fun < 1e-3, "Function value too high: {}", result.fun);
+    assert!(report.fun < 1e-3, "Function value too high: {}", report.fun);
 }
 
 #[test]
@@ -44,9 +52,13 @@ fn test_de_quartic_3d() {
         .strategy(Strategy::Rand1Exp)
         .recombination(0.95)
         .build();
-    let result = differential_evolution(&quartic, &b, c);
+    let result = run_recorded_differential_evolution(
+        "quartic_3d", quartic, &b, c
+    );
+    assert!(result.is_ok());
+    let (report, _csv_path) = result.unwrap();
     // Global minimum at origin
-    assert!(result.fun < 1e-4, "Function value too high: {}", result.fun);
+    assert!(report.fun < 1e-4, "Function value too high: {}", report.fun);
 }
 
 #[test]
@@ -60,9 +72,13 @@ fn test_de_quartic_10d() {
         .strategy(Strategy::RandToBest1Exp)
         .recombination(0.9)
         .build();
-    let result = differential_evolution(&quartic, &b, c);
+    let result = run_recorded_differential_evolution(
+        "quartic_10d", quartic, &b, c
+    );
+    assert!(result.is_ok());
+    let (report, _csv_path) = result.unwrap();
     // Global minimum at origin, harder in higher dimensions
-    assert!(result.fun < 1e-1, "Function value too high: {}", result.fun);
+    assert!(report.fun < 1e-1, "Function value too high: {}", report.fun);
 }
 
 #[test]

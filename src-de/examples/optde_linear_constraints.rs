@@ -4,7 +4,6 @@ use autoeq_de::{
 use ndarray::{Array1, Array2};
 use std::str::FromStr;
 
-
 fn main() {
     // Objective: sphere in 2D
     let sphere = |x: &Array1<f64>| x.iter().map(|v| v * v).sum::<f64>();

@@ -1,6 +1,5 @@
-use autoeq_de::{differential_evolution, DEConfigBuilder, Strategy};
+use autoeq_de::{run_recorded_differential_evolution, DEConfigBuilder, Strategy};
 use autoeq_testfunctions::zakharov;
-
 
 #[test]
 fn test_de_zakharov_2d() {
@@ -13,7 +12,14 @@ fn test_de_zakharov_2d() {
         .strategy(Strategy::Rand1Exp)
         .recombination(0.9)
         .build();
-    assert!(differential_evolution(&zakharov, &b2, c2).fun < 1e-4);
+    {
+        let result = run_recorded_differential_evolution(
+            "zakharov_2d", zakharov, &b2, c2
+        );
+        assert!(result.is_ok());
+        let (report, _csv_path) = result.unwrap();
+        assert!(report.fun < 1e-4)
+    };
 }
 
 #[test]
@@ -27,5 +33,12 @@ fn test_de_zakharov_10d() {
         .strategy(Strategy::Best1Exp)
         .recombination(0.95)
         .build();
-    assert!(differential_evolution(&zakharov, &b10, c10).fun < 1e-3);
+    {
+        let result = run_recorded_differential_evolution(
+            "zakharov_10d", zakharov, &b10, c10
+        );
+        assert!(result.is_ok());
+        let (report, _csv_path) = result.unwrap();
+        assert!(report.fun < 1e-3)
+    };
 }

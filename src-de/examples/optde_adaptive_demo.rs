@@ -1,7 +1,6 @@
-use autoeq_de::{differential_evolution, DEConfigBuilder, Strategy, Mutation, AdaptiveConfig};
-use autoeq_testfunctions::{quadratic, rosenbrock, ackley};
+use autoeq_de::{differential_evolution, AdaptiveConfig, DEConfigBuilder, Mutation, Strategy};
+use autoeq_testfunctions::{ackley, quadratic, rosenbrock};
 use ndarray::Array1;
-
 
 /// Adaptive Differential Evolution Demo
 ///
@@ -16,15 +15,25 @@ fn main() {
 
     // Test functions to evaluate
     let test_functions = [
-        ("Quadratic (f(x) = x₁² + x₂²)", quadratic as fn(&Array1<f64>) -> f64, [(-5.0, 5.0), (-5.0, 5.0)]),
-        ("Rosenbrock 2D", rosenbrock as fn(&Array1<f64>) -> f64, [(-5.0, 5.0), (-5.0, 5.0)]),
+        (
+            "Quadratic (f(x) = x₁² + x₂²)",
+            quadratic as fn(&Array1<f64>) -> f64,
+            [(-5.0, 5.0), (-5.0, 5.0)],
+        ),
+        (
+            "Rosenbrock 2D",
+            rosenbrock as fn(&Array1<f64>) -> f64,
+            [(-5.0, 5.0), (-5.0, 5.0)],
+        ),
         ("Ackley", ackley, [(-32.0, 32.0), (-32.0, 32.0)]),
     ];
 
     for (name, func, bounds) in test_functions.iter() {
         println!("🎯 Function: {}", name);
-        println!("   Bounds: [{:.1}, {:.1}] × [{:.1}, {:.1}]",
-                 bounds[0].0, bounds[0].1, bounds[1].0, bounds[1].1);
+        println!(
+            "   Bounds: [{:.1}, {:.1}] × [{:.1}, {:.1}]",
+            bounds[0].0, bounds[0].1, bounds[1].0, bounds[1].1
+        );
 
         // Traditional DE
         println!("   📊 Traditional DE:");
@@ -40,15 +49,24 @@ fn main() {
 
         // Compare results
         println!("   🏆 Comparison:");
-        println!("      Traditional: f = {:.6e}, {} iterations",
-                traditional_result.fun, traditional_result.nit);
-        println!("      SAM only:    f = {:.6e}, {} iterations",
-                sam_result.fun, sam_result.nit);
-        println!("      SAM + WLS:   f = {:.6e}, {} iterations",
-                sam_wls_result.fun, sam_wls_result.nit);
+        println!(
+            "      Traditional: f = {:.6e}, {} iterations",
+            traditional_result.fun, traditional_result.nit
+        );
+        println!(
+            "      SAM only:    f = {:.6e}, {} iterations",
+            sam_result.fun, sam_result.nit
+        );
+        println!(
+            "      SAM + WLS:   f = {:.6e}, {} iterations",
+            sam_wls_result.fun, sam_wls_result.nit
+        );
 
-        let improvement_sam = ((traditional_result.fun - sam_result.fun) / traditional_result.fun * 100.0).max(0.0);
-        let improvement_wls = ((traditional_result.fun - sam_wls_result.fun) / traditional_result.fun * 100.0).max(0.0);
+        let improvement_sam =
+            ((traditional_result.fun - sam_result.fun) / traditional_result.fun * 100.0).max(0.0);
+        let improvement_wls =
+            ((traditional_result.fun - sam_wls_result.fun) / traditional_result.fun * 100.0)
+                .max(0.0);
 
         println!("      📈 Improvement with SAM: {:.1}%", improvement_sam);
         println!("      📈 Improvement with WLS: {:.1}%", improvement_wls);
@@ -65,13 +83,13 @@ fn main() {
     let adaptive_config = AdaptiveConfig {
         adaptive_mutation: true,
         wls_enabled: true,
-        w_max: 0.9,   // Start with 90% of population for selection
-        w_min: 0.1,   // End with 10% of population
-        w_f: 0.9,     // F parameter adaptation rate
-        w_cr: 0.9,    // CR parameter adaptation rate
-        f_m: 0.5,     // Initial F location parameter
-        cr_m: 0.6,    // Initial CR location parameter
-        wls_prob: 0.2, // Apply WLS to 20% of population
+        w_max: 0.9,     // Start with 90% of population for selection
+        w_min: 0.1,     // End with 10% of population
+        w_f: 0.9,       // F parameter adaptation rate
+        w_cr: 0.9,      // CR parameter adaptation rate
+        f_m: 0.5,       // Initial F location parameter
+        cr_m: 0.6,      // Initial CR location parameter
+        wls_prob: 0.2,  // Apply WLS to 20% of population
         wls_scale: 0.1, // WLS perturbation scale
     };
 
@@ -88,10 +106,14 @@ fn main() {
     println!("Running adaptive DE on Rosenbrock function with progress display...");
     let result = differential_evolution(&rosenbrock, &bounds, config);
 
-    println!("Final result: f = {:.6e} at x = [{:.4}, {:.4}]",
-             result.fun, result.x[0], result.x[1]);
-    println!("Converged in {} iterations with {} function evaluations",
-             result.nit, result.nfev);
+    println!(
+        "Final result: f = {:.6e} at x = [{:.4}, {:.4}]",
+        result.fun, result.x[0], result.x[1]
+    );
+    println!(
+        "Converged in {} iterations with {} function evaluations",
+        result.nit, result.nfev
+    );
 
     if result.success {
         println!("✅ Optimization succeeded: {}", result.message);
@@ -113,7 +135,11 @@ fn run_traditional_de(func: fn(&Array1<f64>) -> f64, bounds: &[(f64, f64)]) -> a
     differential_evolution(&func, bounds, config)
 }
 
-fn run_adaptive_de(func: fn(&Array1<f64>) -> f64, bounds: &[(f64, f64)], enable_wls: bool) -> autoeq_de::DEReport {
+fn run_adaptive_de(
+    func: fn(&Array1<f64>) -> f64,
+    bounds: &[(f64, f64)],
+    enable_wls: bool,
+) -> autoeq_de::DEReport {
     let adaptive_config = AdaptiveConfig {
         adaptive_mutation: true,
         wls_enabled: enable_wls,

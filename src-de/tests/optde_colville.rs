@@ -1,4 +1,4 @@
-use autoeq_de::{DEConfigBuilder, Strategy, run_recorded_differential_evolution};
+use autoeq_de::{run_recorded_differential_evolution, DEConfigBuilder, Strategy};
 use autoeq_testfunctions::colville;
 
 #[test]
@@ -13,8 +13,10 @@ fn test_de_colville_4d() {
         .recombination(0.95)
         .build();
     let result = run_recorded_differential_evolution(
-        "colville_4d", colville, &b4, c4, "./data_generated/records"
-    );
+        "colville_4d",
+        colville,
+        &b4,
+        c4);
     assert!(result.is_ok());
     let (report, _csv_path) = result.unwrap();
     // Global minimum f(x) = 0 at x = (1, 1, 1, 1)
@@ -33,8 +35,10 @@ fn test_de_colville_focused_bounds() {
         .recombination(0.9)
         .build();
     let result = run_recorded_differential_evolution(
-        "colville_focused", colville, &b, c, "./data_generated/records"
-    );
+        "colville_focused",
+        colville,
+        &b,
+        c);
     assert!(result.is_ok());
     let (report, _csv_path) = result.unwrap();
     // Should find better solution with focused bounds
@@ -62,8 +66,10 @@ fn test_de_colville_2d() {
         .recombination(0.8)
         .build();
     let result = run_recorded_differential_evolution(
-        "colville_2d", colville, &b2, c2, "./data_generated/records"
-    );
+        "colville_2d",
+        colville,
+        &b2,
+        c2);
     assert!(result.is_ok());
     let (report, _csv_path) = result.unwrap();
     // Function should adapt to 2D and use default values for missing dimensions
@@ -90,7 +96,10 @@ fn test_de_colville_multistart() {
             .recombination(0.9)
             .build();
         let result = run_recorded_differential_evolution(
-            &format!("colville_multistart_{}", i), colville, &b, c, "./data_generated/records"
+            &format!("colville_multistart_{}", i),
+            colville,
+            &b,
+            c,
         );
         assert!(result.is_ok());
         let (report, _csv_path) = result.unwrap();

@@ -1,10 +1,10 @@
-use autoeq_de::{differential_evolution, DEConfigBuilder, Strategy};
+use autoeq_de::{run_recorded_differential_evolution, DEConfigBuilder, Strategy};
 use autoeq_testfunctions::rotated_hyper_ellipsoid;
 
 #[test]
 fn test_de_rotated_hyper_ellipsoid_2d() {
     // Test 2D Rotated Hyper-Ellipsoid function
-    let b = [(-65.536, 65.536), (-65.536, 65.536)];
+    let b = vec![(-65.536, 65.536), (-65.536, 65.536)];
     let c = DEConfigBuilder::new()
         .seed(86)
         .maxiter(600)
@@ -12,11 +12,15 @@ fn test_de_rotated_hyper_ellipsoid_2d() {
         .strategy(Strategy::Best1Exp)
         .recombination(0.9)
         .build();
-    let result = differential_evolution(&rotated_hyper_ellipsoid, &b, c);
+    let result = run_recorded_differential_evolution(
+        "rotated_hyper_ellipsoid_2d", rotated_hyper_ellipsoid, &b, c
+    );
+    assert!(result.is_ok());
+    let (report, _csv_path) = result.unwrap();
     // Global minimum f(x) = 0 at origin
-    assert!(result.fun < 1e-6, "Function value too high: {}", result.fun);
+    assert!(report.fun < 1e-6, "Function value too high: {}", report.fun);
     // Check solution is close to origin
-    for (i, &xi) in result.x.iter().enumerate() {
+    for (i, &xi) in report.x.iter().enumerate() {
         assert!(xi.abs() < 1e-3, "x[{}] should be close to 0: {}", i, xi);
     }
 }
@@ -32,9 +36,13 @@ fn test_de_rotated_hyper_ellipsoid_5d() {
         .strategy(Strategy::Best1Exp)
         .recombination(0.9)
         .build();
-    let result = differential_evolution(&rotated_hyper_ellipsoid, &b5, c5);
+    let result = run_recorded_differential_evolution(
+        "rotated_hyper_ellipsoid_5d", rotated_hyper_ellipsoid, &b5, c5
+    );
+    assert!(result.is_ok());
+    let (report, _csv_path) = result.unwrap();
     // Global minimum f(x) = 0 at origin
-    assert!(result.fun < 1e-3, "Function value too high: {}", result.fun);
+    assert!(report.fun < 1e-3, "Function value too high: {}", report.fun);
 }
 
 #[test]
@@ -48,9 +56,13 @@ fn test_de_rotated_hyper_ellipsoid_10d() {
         .strategy(Strategy::RandToBest1Exp)
         .recombination(0.95)
         .build();
-    let result = differential_evolution(&rotated_hyper_ellipsoid, &b10, c10);
+    let result = run_recorded_differential_evolution(
+        "rotated_hyper_ellipsoid_10d", rotated_hyper_ellipsoid, &b10, c10
+    );
+    assert!(result.is_ok());
+    let (report, _csv_path) = result.unwrap();
     // Global minimum at origin, gets harder in higher dimensions due to non-separability
-    assert!(result.fun < 1e-1, "Function value too high: {}", result.fun);
+    assert!(report.fun < 1e-1, "Function value too high: {}", report.fun);
 }
 
 #[test]
@@ -64,11 +76,15 @@ fn test_de_rotated_hyper_ellipsoid_large_bounds() {
         .strategy(Strategy::Rand1Exp)
         .recombination(0.8)
         .build();
-    let result = differential_evolution(&rotated_hyper_ellipsoid, &b, c);
+    let result = run_recorded_differential_evolution(
+        "rotated_hyper_ellipsoid_large_bounds", rotated_hyper_ellipsoid, &b, c
+    );
+    assert!(result.is_ok());
+    let (report, _csv_path) = result.unwrap();
     assert!(
-        result.fun < 5e-2,
+        report.fun < 5e-2,
         "Function value too high with large bounds: {}",
-        result.fun
+        report.fun
     );
 }
 

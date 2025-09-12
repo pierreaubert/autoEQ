@@ -1,10 +1,12 @@
-use autoeq_de::{differential_evolution, DEConfigBuilder, Strategy, run_recorded_differential_evolution};
+use autoeq_de::{
+    run_recorded_differential_evolution, DEConfigBuilder, Strategy,
+};
 use autoeq_testfunctions::salomon;
 
 #[test]
 fn test_de_salomon_2d() {
     // Test 2D Salomon function (multimodal)
-    let b = [(-100.0, 100.0), (-100.0, 100.0)];
+    let b = vec![(-100.0, 100.0), (-100.0, 100.0)];
     let c = DEConfigBuilder::new()
         .seed(81)
         .maxiter(800)
@@ -12,9 +14,13 @@ fn test_de_salomon_2d() {
         .strategy(Strategy::Rand1Exp)
         .recombination(0.95)
         .build();
-    let result = differential_evolution(&salomon, &b, c);
+    let result = run_recorded_differential_evolution(
+        "salomon_2d", salomon, &b, c
+    );
+    assert!(result.is_ok());
+    let (report, _csv_path) = result.unwrap();
     // Global minimum at origin with f(x) = 0
-    assert!(result.fun < 1e-2, "Function value too high: {}", result.fun); // Relaxed due to multimodal nature
+    assert!(report.fun < 1e-2, "Function value too high: {}", report.fun); // Relaxed due to multimodal nature
 }
 
 #[test]
@@ -28,9 +34,13 @@ fn test_de_salomon_3d() {
         .strategy(Strategy::Rand1Exp)
         .recombination(0.95)
         .build();
-    let result = differential_evolution(&salomon, &b, c);
+    let result = run_recorded_differential_evolution(
+        "salomon_3d", salomon, &b, c
+    );
+    assert!(result.is_ok());
+    let (report, _csv_path) = result.unwrap();
     // Global minimum at origin with f(x) = 0
-    assert!(result.fun < 1e-1, "Function value too high: {}", result.fun); // Relaxed due to multimodal nature
+    assert!(report.fun < 1e-1, "Function value too high: {}", report.fun); // Relaxed due to multimodal nature
 }
 
 #[test]
@@ -44,9 +54,13 @@ fn test_de_salomon_5d() {
         .strategy(Strategy::Best1Exp)
         .recombination(0.9)
         .build();
-    let result = differential_evolution(&salomon, &b, c);
+    let result = run_recorded_differential_evolution(
+        "salomon_5d", salomon, &b, c
+    );
+    assert!(result.is_ok());
+    let (report, _csv_path) = result.unwrap();
     // Global minimum at origin, but multimodal makes it challenging
-    assert!(result.fun < 5e-1, "Function value too high: {}", result.fun);
+    assert!(report.fun < 5e-1, "Function value too high: {}", report.fun);
 }
 
 #[test]
@@ -104,27 +118,3 @@ fn test_salomon_function_properties() {
     assert!(f_norm1 < f_norm2, "Closer local minima should be better");
 }
 
-#[test]
-fn test_de_salomon_recorded() {
-    // Test 2D Salomon function with recording
-    let bounds = vec![(-100.0, 100.0), (-100.0, 100.0)];
-    let config = DEConfigBuilder::new()
-        .seed(81)
-        .maxiter(600)
-        .popsize(40)
-        .strategy(Strategy::Rand1Exp)
-        .recombination(0.95)
-        .build();
-
-    let result = run_recorded_differential_evolution(
-        "salomon", salomon, &bounds, config, "./data_generated/records"
-    );
-
-    assert!(result.is_ok());
-    let (report, _csv_path) = result.unwrap();
-    assert!(report.fun < 0.5); // Relaxed threshold for multimodal salomon
-
-    // Global minimum at origin (0, 0)
-    assert!(report.x[0].abs() < 10.0, "x[0] should be reasonably close to 0.0: {}", report.x[0]);
-    assert!(report.x[1].abs() < 10.0, "x[1] should be reasonably close to 0.0: {}", report.x[1]);
-}

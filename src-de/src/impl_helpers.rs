@@ -1,5 +1,5 @@
+use crate::{DEReport, DifferentialEvolution};
 use ndarray::{Array1, Array2};
-use crate::{DifferentialEvolution, DEReport};
 
 // ------------------------------ Internal helpers ------------------------------
 

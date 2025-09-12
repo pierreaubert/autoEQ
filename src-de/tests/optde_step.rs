@@ -1,10 +1,12 @@
-use autoeq_de::{differential_evolution, DEConfigBuilder, Strategy, run_recorded_differential_evolution};
+use autoeq_de::{
+    run_recorded_differential_evolution, DEConfigBuilder, Strategy,
+};
 use autoeq_testfunctions::step;
 
 #[test]
 fn test_de_step_2d() {
     // Test 2D Step function (discontinuous)
-    let b = [(-100.0, 100.0), (-100.0, 100.0)];
+    let b = vec![(-100.0, 100.0), (-100.0, 100.0)];
     let c = DEConfigBuilder::new()
         .seed(79)
         .maxiter(800)
@@ -12,9 +14,13 @@ fn test_de_step_2d() {
         .strategy(Strategy::RandToBest1Exp)
         .recombination(0.8)
         .build();
-    let result = differential_evolution(&step, &b, c);
+    let result = run_recorded_differential_evolution(
+        "step_2d", step, &b, c
+    );
+    assert!(result.is_ok());
+    let (report, _csv_path) = result.unwrap();
     // Global minimum at x = (0.5, 0.5) with f(x) = 0
-    assert!(result.fun <= 2.0, "Function value too high: {}", result.fun); // Relaxed due to discontinuous nature
+    assert!(report.fun <= 2.0, "Function value too high: {}", report.fun); // Relaxed due to discontinuous nature
 }
 
 #[test]
@@ -28,9 +34,13 @@ fn test_de_step_5d() {
         .strategy(Strategy::RandToBest1Exp)
         .recombination(0.8)
         .build();
-    let result = differential_evolution(&step, &b, c);
+    let result = run_recorded_differential_evolution(
+        "step_5d", step, &b, c
+    );
+    assert!(result.is_ok());
+    let (report, _csv_path) = result.unwrap();
     // Global minimum at x = (0.5, 0.5, ..., 0.5) with f(x) = 0
-    assert!(result.fun <= 5.0, "Function value too high: {}", result.fun); // Relaxed due to discontinuous nature
+    assert!(report.fun <= 5.0, "Function value too high: {}", report.fun); // Relaxed due to discontinuous nature
 }
 
 #[test]
@@ -44,9 +54,13 @@ fn test_de_step_3d() {
         .strategy(Strategy::Best1Exp)
         .recombination(0.9)
         .build();
-    let result = differential_evolution(&step, &b, c);
+    let result = run_recorded_differential_evolution(
+        "step_3d", step, &b, c
+    );
+    assert!(result.is_ok());
+    let (report, _csv_path) = result.unwrap();
     // Should find the global minimum
-    assert!(result.fun <= 3.0, "Function value too high: {}", result.fun);
+    assert!(report.fun <= 3.0, "Function value too high: {}", report.fun);
 }
 
 #[test]
@@ -91,27 +105,3 @@ fn test_step_function_properties() {
     );
 }
 
-#[test]
-fn test_de_step_recorded() {
-    // Test 2D Step function with recording (discontinuous)
-    let bounds = vec![(-100.0, 100.0), (-100.0, 100.0)];
-    let config = DEConfigBuilder::new()
-        .seed(79)
-        .maxiter(600)
-        .popsize(30)
-        .strategy(Strategy::RandToBest1Exp)
-        .recombination(0.8)
-        .build();
-
-    let result = run_recorded_differential_evolution(
-        "step", step, &bounds, config, "./data_generated/records"
-    );
-
-    assert!(result.is_ok());
-    let (report, _csv_path) = result.unwrap();
-    assert!(report.fun <= 5.0); // Very relaxed threshold for discontinuous step function
-
-    // Check bounds
-    assert!(report.x[0] >= -100.0 && report.x[0] <= 100.0);
-    assert!(report.x[1] >= -100.0 && report.x[1] <= 100.0);
-}

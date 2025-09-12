@@ -1,6 +1,5 @@
-use autoeq_de::{auto_de, DEConfigBuilder, Strategy, run_recorded_differential_evolution};
+use autoeq_de::{run_recorded_differential_evolution, DEConfigBuilder, Strategy};
 use autoeq_testfunctions::{brown, get_function_bounds_vec};
-
 
 #[test]
 fn test_de_brown_2d() {
@@ -8,18 +7,24 @@ fn test_de_brown_2d() {
     let bounds = vec![(-1.0, 4.0), (-1.0, 4.0)];
     let config = DEConfigBuilder::new()
         .seed(110)
-        .maxiter(1500)  // More iterations needed due to ill-conditioning
-        .popsize(80)    // Larger population for difficult conditioning
+        .maxiter(1500) // More iterations needed due to ill-conditioning
+        .popsize(80) // Larger population for difficult conditioning
         .strategy(Strategy::Best1Bin)
         .recombination(0.9)
         .build();
 
     let result = run_recorded_differential_evolution(
-        "brown_2d", brown, &bounds, config, "./data_generated/records"
-    );
+        "brown_2d",
+        brown,
+        &bounds,
+        config);
     assert!(result.is_ok());
     let (report, _csv_path) = result.unwrap();
-    assert!(report.fun < 1e-5, "Solution quality too low: {}", report.fun);
+    assert!(
+        report.fun < 1e-5,
+        "Solution quality too low: {}",
+        report.fun
+    );
 
     // Check solution is close to global minimum (0, 0)
     for &xi in report.x.iter() {
@@ -40,11 +45,17 @@ fn test_de_brown_4d() {
         .build();
 
     let result = run_recorded_differential_evolution(
-        "brown_4d", brown, &bounds, config, "./data_generated/records"
-    );
+        "brown_4d",
+        brown,
+        &bounds,
+        config);
     assert!(result.is_ok());
     let (report, _csv_path) = result.unwrap();
-    assert!(report.fun < 1e-4, "Solution quality too low: {}", report.fun);
+    assert!(
+        report.fun < 1e-4,
+        "Solution quality too low: {}",
+        report.fun
+    );
 
     // Check solution is close to global minimum (0, 0, 0, 0)
     for &xi in report.x.iter() {
@@ -62,15 +73,21 @@ fn test_de_brown_high_precision() {
         .popsize(100)
         .strategy(Strategy::Best1Bin)
         .recombination(0.9)
-        .tol(1e-12)  // Very tight tolerance
+        .tol(1e-12) // Very tight tolerance
         .build();
 
     let result = run_recorded_differential_evolution(
-        "brown_high_precision", brown, &bounds, config, "./data_generated/records"
-    );
+        "brown_high_precision",
+        brown,
+        &bounds,
+        config);
     assert!(result.is_ok());
     let (report, _csv_path) = result.unwrap();
-    assert!(report.fun < 1e-8, "High precision solution not achieved: {}", report.fun);
+    assert!(
+        report.fun < 1e-8,
+        "High precision solution not achieved: {}",
+        report.fun
+    );
 }
 
 #[test]
@@ -95,30 +112,20 @@ fn test_de_brown_multiple_strategies() {
 
         let name = format!("brown_strategy_{:?}_{}", strategy, i);
         let result = run_recorded_differential_evolution(
-            &name, brown, &bounds, config, "./data_generated/records"
-        );
+            &name,
+            brown,
+            &bounds,
+            config);
         assert!(result.is_ok());
         let (report, _csv_path) = result.unwrap();
-        assert!(report.fun < 1e-3, "Strategy {:?} failed with value: {}", strategy, report.fun);
+        assert!(
+            report.fun < 1e-3,
+            "Strategy {:?} failed with value: {}",
+            strategy,
+            report.fun
+        );
     }
 }
-
-// Auto_de tests using the simplified interface
-#[test]
-fn test_auto_de_brown_function() {
-    use autoeq_testfunctions::create_bounds;
-    let bounds = create_bounds(2, -1.0, 4.0);
-    let result = auto_de(brown, &bounds, None);
-
-    assert!(result.is_some(), "AutoDE should find a solution");
-    let (x_opt, f_opt, _) = result.unwrap();
-
-    assert!(f_opt < 1e-3, "Brown function value too high: {}", f_opt);
-    for &xi in x_opt.iter() {
-        assert!(xi.abs() < 1e-1, "Solution component not near 0: {}", xi);
-    }
-}
-
 
 #[test]
 fn test_brown_known_minimum() {
@@ -128,7 +135,11 @@ fn test_brown_known_minimum() {
     let f_star = brown(&x_star);
 
     // Should be exactly 0.0
-    assert!(f_star < 1e-15, "Known minimum doesn't match expected value: {}", f_star);
+    assert!(
+        f_star < 1e-15,
+        "Known minimum doesn't match expected value: {}",
+        f_star
+    );
 }
 
 #[test]
@@ -142,14 +153,20 @@ fn test_brown_ill_conditioning() {
     let f1 = brown(&x1);
     let f2 = brown(&x2);
 
-    assert!(f1.is_finite() && f2.is_finite(), "Function values should be finite");
+    assert!(
+        f1.is_finite() && f2.is_finite(),
+        "Function values should be finite"
+    );
 
     // Test that function grows rapidly away from origin
     let x_far = Array1::from(vec![1.0, 1.0]);
     let f_far = brown(&x_far);
     let f_origin = brown(&Array1::from(vec![0.0, 0.0]));
 
-    assert!(f_far > f_origin, "Function should increase away from origin");
+    assert!(
+        f_far > f_origin,
+        "Function should increase away from origin"
+    );
 }
 
 #[test]
@@ -163,13 +180,26 @@ fn test_brown_different_dimensions() {
         // Test at global minimum (all zeros)
         let x_zero = Array1::from(vec![0.0; dim]);
         let f_zero = brown(&x_zero);
-        assert!(f_zero < 1e-15, "Function at zero not 0 for dim {}: {}", dim, f_zero);
+        assert!(
+            f_zero < 1e-15,
+            "Function at zero not 0 for dim {}: {}",
+            dim,
+            f_zero
+        );
 
         // Test at small perturbation
         let x_small = Array1::from(vec![0.01; dim]);
         let f_small = brown(&x_small);
-        assert!(f_small.is_finite(), "Function at small perturbation not finite for dim {}", dim);
-        assert!(f_small > 0.0, "Function should be positive away from minimum for dim {}", dim);
+        assert!(
+            f_small.is_finite(),
+            "Function at small perturbation not finite for dim {}",
+            dim
+        );
+        assert!(
+            f_small > 0.0,
+            "Function should be positive away from minimum for dim {}",
+            dim
+        );
     }
 }
 
@@ -181,37 +211,44 @@ fn test_brown_convergence_difficulty() {
     // Test with insufficient iterations
     let config_short = DEConfigBuilder::new()
         .seed(114)
-        .maxiter(200)  // Too few iterations
-        .popsize(30)   // Small population
+        .maxiter(200) // Too few iterations
+        .popsize(30) // Small population
         .strategy(Strategy::Rand1Bin)
         .recombination(0.7)
         .build();
 
-let result = run_recorded_differential_evolution(
-        "brown_short", brown, &bounds, config_short, "./data_generated/records"
-    );
+    let result = run_recorded_differential_evolution(
+        "brown_short",
+        brown,
+        &bounds,
+        config_short);
     assert!(result.is_ok());
     let (report_short, _csv_short) = result.unwrap();
 
     // Test with adequate iterations
     let config_long = DEConfigBuilder::new()
-        .seed(114)  // Same seed
-        .maxiter(1500)  // More iterations
-        .popsize(80)    // Larger population
+        .seed(114) // Same seed
+        .maxiter(1500) // More iterations
+        .popsize(80) // Larger population
         .strategy(Strategy::Best1Bin)
         .recombination(0.9)
         .build();
 
-let result = run_recorded_differential_evolution(
-        "brown_long", brown, &bounds, config_long, "./data_generated/records"
-    );
+    let result = run_recorded_differential_evolution(
+        "brown_long",
+        brown,
+        &bounds,
+        config_long);
     assert!(result.is_ok());
     let (report_long, _csv_long) = result.unwrap();
 
     // The longer run should achieve better results
-    assert!(report_long.fun <= report_short.fun,
-           "Longer optimization should be better or equal: {} vs {}",
-           report_long.fun, report_short.fun);
+    assert!(
+        report_long.fun <= report_short.fun,
+        "Longer optimization should be better or equal: {} vs {}",
+        report_long.fun,
+        report_short.fun
+    );
 }
 
 #[test]
@@ -231,7 +268,12 @@ fn test_brown_boundary_behavior() {
     for point in test_points {
         let x = Array1::from(point.clone());
         let f = brown(&x);
-        assert!(f.is_finite(), "Function value at {:?} should be finite: {}", point, f);
+        assert!(
+            f.is_finite(),
+            "Function value at {:?} should be finite: {}",
+            point,
+            f
+        );
         assert!(f >= 0.0, "Function should be non-negative: {}", f);
     }
 }

@@ -1,4 +1,4 @@
-use autoeq_de::{differential_evolution, DEConfigBuilder, Mutation, Strategy};
+use autoeq_de::{run_recorded_differential_evolution, DEConfigBuilder, Mutation, Strategy};
 use autoeq_testfunctions::{
     keanes_bump_constraint1, keanes_bump_constraint2, keanes_bump_objective,
 };
@@ -17,11 +17,15 @@ fn test_de_constrained_keanes_bump() {
         .add_penalty_ineq(Box::new(keanes_bump_constraint1), 1e6)
         .add_penalty_ineq(Box::new(keanes_bump_constraint2), 1e6)
         .build();
-    let result = differential_evolution(&keanes_bump_objective, &b, c);
+    let result = run_recorded_differential_evolution(
+        "constrained_keanes_bump", keanes_bump_objective, &b, c
+    );
+    assert!(result.is_ok());
+    let (report, _csv_path) = result.unwrap();
     // Check constraints: product > 0.75 and sum < 15.0 (for 2D)
-    let product = result.x.iter().product::<f64>();
-    let sum = result.x.iter().sum::<f64>();
+    let product = report.x.iter().product::<f64>();
+    let sum = report.x.iter().sum::<f64>();
     assert!(product > 0.749); // Should satisfy product constraint
     assert!(sum < 15.1); // Should satisfy sum constraint
-    assert!(result.fun < -0.1); // Should find feasible solution with negative objective
+    assert!(report.fun < -0.1); // Should find feasible solution with negative objective
 }

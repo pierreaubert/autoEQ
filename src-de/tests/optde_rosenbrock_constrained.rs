@@ -1,4 +1,4 @@
-use autoeq_de::{differential_evolution, DEConfigBuilder, NonlinearConstraintHelper, Strategy};
+use autoeq_de::{run_recorded_differential_evolution, DEConfigBuilder, NonlinearConstraintHelper, Strategy};
 use autoeq_testfunctions::{rosenbrock_disk_constraint, rosenbrock_objective};
 use ndarray::Array1;
 use std::sync::Arc;
@@ -14,11 +14,15 @@ fn test_de_constrained_rosenbrock_disk() {
         .recombination(0.9)
         .add_penalty_ineq(Box::new(rosenbrock_disk_constraint), 1e6)
         .build();
-    let result = differential_evolution(&rosenbrock_objective, &b, c);
+    let result = run_recorded_differential_evolution(
+        "constrained_rosenbrock_disk", rosenbrock_objective, &b, c
+    );
+    assert!(result.is_ok());
+    let (report, _csv_path) = result.unwrap();
     // Check that solution respects constraint x^2 + y^2 <= 2
-    let constraint_value = result.x[0].powi(2) + result.x[1].powi(2);
+    let constraint_value = report.x[0].powi(2) + report.x[1].powi(2);
     assert!(constraint_value <= 2.01); // Small tolerance for numerical errors
-    assert!(result.fun < 0.5); // Should find good solution within constraint
+    assert!(report.fun < 0.5); // Should find good solution within constraint
 }
 
 #[test]
@@ -47,12 +51,16 @@ fn test_de_nonlinear_constraint_helper() {
     // Apply nonlinear constraint
     constraint.apply_to(&mut c, 1e6, 1e6);
 
-    let result = differential_evolution(&objective, &b, c);
+    let result = run_recorded_differential_evolution(
+        "nonlinear_constraint_helper", objective, &b, c
+    );
+    assert!(result.is_ok());
+    let (report, _csv_path) = result.unwrap();
 
     // Check that solution respects constraint x^2 + y^2 <= 4
-    let constraint_value = result.x[0].powi(2) + result.x[1].powi(2);
+    let constraint_value = report.x[0].powi(2) + report.x[1].powi(2);
     assert!(constraint_value <= 4.01); // Should be inside circle
 
     // The unconstrained optimum is at (1, 2), but constraint forces it to circle boundary
-    assert!(result.fun < 2.0); // Should find good feasible solution
+    assert!(report.fun < 2.0); // Should find good feasible solution
 }

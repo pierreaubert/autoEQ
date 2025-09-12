@@ -1,10 +1,10 @@
-use autoeq_de::{differential_evolution, DEConfigBuilder, Strategy};
+use autoeq_de::{run_recorded_differential_evolution, DEConfigBuilder, Strategy};
 use autoeq_testfunctions::freudenstein_roth;
 
 #[test]
 fn test_de_freudenstein_roth_basic() {
     // Test Freudenstein and Roth function
-    let b = [(-10.0, 10.0), (-10.0, 10.0)];
+    let b = vec![(-10.0, 10.0), (-10.0, 10.0)];
     let c = DEConfigBuilder::new()
         .seed(84)
         .maxiter(800)
@@ -12,15 +12,19 @@ fn test_de_freudenstein_roth_basic() {
         .strategy(Strategy::RandToBest1Exp)
         .recombination(0.9)
         .build();
-    let result = differential_evolution(&freudenstein_roth, &b, c);
+    let result = run_recorded_differential_evolution(
+        "freudenstein_roth_basic", freudenstein_roth, &b, c
+    );
+    assert!(result.is_ok());
+    let (report, _csv_path) = result.unwrap();
     // Global minimum f(x) = 0 at x = (5, 4)
-    assert!(result.fun < 1e-1, "Function value too high: {}", result.fun); // Relaxed due to ill-conditioning
+    assert!(report.fun < 1e-1, "Function value too high: {}", report.fun); // Relaxed due to ill-conditioning
 }
 
 #[test]
 fn test_de_freudenstein_roth_focused() {
     // Test with bounds closer to the known optimum
-    let b = [(0.0, 8.0), (0.0, 8.0)]; // Focused around the optimum (5, 4)
+    let b = vec![(0.0, 8.0), (0.0, 8.0)]; // Focused around the optimum (5, 4)
     let c = DEConfigBuilder::new()
         .seed(85)
         .maxiter(1200)
@@ -28,27 +32,31 @@ fn test_de_freudenstein_roth_focused() {
         .strategy(Strategy::Best1Exp)
         .recombination(0.95)
         .build();
-    let result = differential_evolution(&freudenstein_roth, &b, c);
+    let result = run_recorded_differential_evolution(
+        "freudenstein_roth_focused", freudenstein_roth, &b, c
+    );
+    assert!(result.is_ok());
+    let (report, _csv_path) = result.unwrap();
     // Should find better solution with focused bounds
-    assert!(result.fun < 5e-2, "Function value too high: {}", result.fun);
+    assert!(report.fun < 5e-2, "Function value too high: {}", report.fun);
     // Check solution is reasonably close to (5, 4)
     assert!(
-        (result.x[0] - 5.0).abs() < 1.0,
+        (report.x[0] - 5.0).abs() < 1.0,
         "x[0] should be close to 5: {}",
-        result.x[0]
+        report.x[0]
     );
     assert!(
-        (result.x[1] - 4.0).abs() < 1.0,
+        (report.x[1] - 4.0).abs() < 1.0,
         "x[1] should be close to 4: {}",
-        result.x[1]
+        report.x[1]
     );
 }
 
 #[test]
 fn test_de_freudenstein_roth_multistart() {
     // Test with multiple random starts to handle multimodality
-    let b = [(-5.0, 10.0), (-2.0, 8.0)];
-    let seeds = [100, 200, 300];
+    let b = vec![(-5.0, 10.0), (-2.0, 8.0)];
+    let seeds = vec![100, 200, 300];
 
     let mut best_result = f64::INFINITY;
     for (i, &seed) in seeds.iter().enumerate() {
@@ -59,9 +67,13 @@ fn test_de_freudenstein_roth_multistart() {
             .strategy(Strategy::Rand1Exp)
             .recombination(0.8)
             .build();
-        let result = differential_evolution(&freudenstein_roth, &b, c);
-        best_result = best_result.min(result.fun);
-        println!("Run {} (seed {}): f = {}", i, seed, result.fun);
+        let result = run_recorded_differential_evolution(
+        "freudenstein_roth_multistart", freudenstein_roth, &b, c
+    );
+    assert!(result.is_ok());
+    let (report, _csv_path) = result.unwrap();
+        best_result = best_result.min(report.fun);
+        println!("Run {} (seed {}): f = {}", i, seed, report.fun);
     }
 
     // At least one run should find a decent solution

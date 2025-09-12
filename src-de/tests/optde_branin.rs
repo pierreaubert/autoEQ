@@ -1,6 +1,7 @@
-use autoeq_de::{differential_evolution, DEConfigBuilder, Strategy, run_recorded_differential_evolution};
+use autoeq_de::{
+    differential_evolution, run_recorded_differential_evolution, DEConfigBuilder, Strategy,
+};
 use autoeq_testfunctions::branin;
-
 
 #[test]
 fn test_de_branin() {
@@ -14,7 +15,7 @@ fn test_de_branin() {
         .build();
 
     let result =
-        run_recorded_differential_evolution("branin", branin, &b, c, "./data_generated/records");
+        run_recorded_differential_evolution("branin", branin, &b, c);
 
     assert!(result.is_ok());
     let (report, _csv_path) = result.unwrap();

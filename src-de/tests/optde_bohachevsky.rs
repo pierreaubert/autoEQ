@@ -1,4 +1,4 @@
-use autoeq_de::{DEConfigBuilder, Strategy, run_recorded_differential_evolution};
+use autoeq_de::{run_recorded_differential_evolution, DEConfigBuilder, Strategy};
 use autoeq_testfunctions::{bohachevsky1, bohachevsky2, bohachevsky3};
 
 #[test]
@@ -12,8 +12,10 @@ fn test_de_bohachevsky1() {
         .recombination(0.9)
         .build();
     let result = run_recorded_differential_evolution(
-        "bohachevsky1", bohachevsky1, &bounds, config, "./data_generated/records"
-    );
+        "bohachevsky1",
+        bohachevsky1,
+        &bounds,
+        config);
     assert!(result.is_ok());
     let (report, _csv_path) = result.unwrap();
     assert!(report.fun < 1e-4);
@@ -28,8 +30,10 @@ fn test_de_bohachevsky2() {
         .popsize(30)
         .build();
     let result = run_recorded_differential_evolution(
-        "bohachevsky2", bohachevsky2, &bounds, config, "./data_generated/records"
-    );
+        "bohachevsky2",
+        bohachevsky2,
+        &bounds,
+        config);
     assert!(result.is_ok());
     let (report, _csv_path) = result.unwrap();
     assert!(report.fun < 1e-4);
@@ -44,10 +48,11 @@ fn test_de_bohachevsky3() {
         .popsize(30)
         .build();
     let result = run_recorded_differential_evolution(
-        "bohachevsky3", bohachevsky3, &bounds, config, "./data_generated/records"
-    );
+        "bohachevsky3",
+        bohachevsky3,
+        &bounds,
+        config);
     assert!(result.is_ok());
     let (report, _csv_path) = result.unwrap();
     assert!(report.fun < 1e-4);
 }
-

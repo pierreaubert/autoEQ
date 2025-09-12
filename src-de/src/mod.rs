@@ -25,39 +25,34 @@ use std::time::Instant;
 
 pub mod stack_linear_penalty;
 
-pub mod apply_wls;
 pub mod apply_integrality;
+pub mod apply_wls;
 
-pub mod init_random;
-pub mod init_latin_hypercube;
 pub mod distinct_indices;
+pub mod init_latin_hypercube;
+pub mod init_random;
 
-pub mod mutant_rand_to_best1;
 pub mod mutant_adaptive;
 pub mod mutant_best1;
+pub mod mutant_best2;
+pub mod mutant_current_to_best1;
 pub mod mutant_rand1;
 pub mod mutant_rand2;
-pub mod mutant_current_to_best1;
-pub mod mutant_best2;
+pub mod mutant_rand_to_best1;
 
 pub mod crossover_binomial;
 pub mod crossover_exponential;
 
 pub mod differential_evolution;
 pub mod impl_helpers;
-pub mod auto_de;
-pub mod recorder;
-pub mod run_recorded;
 pub mod metadata;
 pub mod parallel_eval;
-
-pub use auto_de::AutoDEParams;
-pub use auto_de::auto_de;
+pub mod recorder;
+pub mod run_recorded;
 pub use differential_evolution::differential_evolution;
-pub use recorder::{OptimizationRecorder, OptimizationRecord};
-pub use run_recorded::run_recorded_differential_evolution;
 pub use parallel_eval::ParallelConfig;
-
+pub use recorder::{OptimizationRecord, OptimizationRecorder};
+pub use run_recorded::run_recorded_differential_evolution;
 
 pub(crate) fn argmin(v: &Array1<f64>) -> (usize, f64) {
     let mut best_i = 0usize;
@@ -121,9 +116,7 @@ impl FromStr for Strategy {
             "adaptivebin" | "adaptive-bin" | "adaptive_bin" | "adaptive" => {
                 Ok(Strategy::AdaptiveBin)
             }
-            "adaptiveexp" | "adaptive-exp" | "adaptive_exp" => {
-                Ok(Strategy::AdaptiveExp)
-            }
+            "adaptiveexp" | "adaptive-exp" | "adaptive_exp" => Ok(Strategy::AdaptiveExp),
             _ => Err(format!("unknown strategy: {}", s)),
         }
     }
@@ -547,29 +540,18 @@ impl DEConfigBuilder {
         self.cfg.disp = v;
         self
     }
-    pub fn callback(
-        mut self,
-        cb: Box<dyn FnMut(&DEIntermediate) -> CallbackAction>,
-    ) -> Self {
+    pub fn callback(mut self, cb: Box<dyn FnMut(&DEIntermediate) -> CallbackAction>) -> Self {
         self.cfg.callback = Some(cb);
         self
     }
-    pub fn add_penalty_ineq<FN>(
-        mut self,
-        f: FN,
-        w: f64,
-    ) -> Self 
+    pub fn add_penalty_ineq<FN>(mut self, f: FN, w: f64) -> Self
     where
         FN: Fn(&Array1<f64>) -> f64 + Send + Sync + 'static,
     {
         self.cfg.penalty_ineq.push((Arc::new(f), w));
         self
     }
-    pub fn add_penalty_eq<FN>(
-        mut self,
-        f: FN,
-        w: f64,
-    ) -> Self 
+    pub fn add_penalty_eq<FN>(mut self, f: FN, w: f64) -> Self
     where
         FN: Fn(&Array1<f64>) -> f64 + Send + Sync + 'static,
     {
@@ -700,6 +682,7 @@ where
     /// Run the optimization and return a report
     pub fn solve(&mut self) -> DEReport {
         use apply_integrality::apply_integrality;
+        use apply_wls::apply_wls;
         use crossover_binomial::binomial_crossover;
         use crossover_exponential::exponential_crossover;
         use init_latin_hypercube::init_latin_hypercube;
@@ -711,7 +694,6 @@ where
         use mutant_rand1::mutant_rand1;
         use mutant_rand2::mutant_rand2;
         use mutant_rand_to_best1::mutant_rand_to_best1;
-        use apply_wls::apply_wls;
         use parallel_eval::evaluate_trials_parallel;
         use std::sync::Arc;
 
@@ -763,12 +745,16 @@ where
         }
 
         // Timing toggle via env var
-        let timing_enabled = std::env::var("AUTOEQ_DE_TIMING").map(|v| v != "0").unwrap_or(false);
+        let timing_enabled = std::env::var("AUTOEQ_DE_TIMING")
+            .map(|v| v != "0")
+            .unwrap_or(false);
 
         // Configure global rayon thread pool once if requested
         if let Some(n) = self.config.parallel.num_threads {
             // Ignore error if global pool already set
-            let _ = rayon::ThreadPoolBuilder::new().num_threads(n).build_global();
+            let _ = rayon::ThreadPoolBuilder::new()
+                .num_threads(n)
+                .build_global();
         }
 
         // RNG
@@ -801,7 +787,7 @@ where
         if self.config.disp {
             eprintln!("  Evaluating initial population of {} individuals...", npop);
         }
-        
+
         // Prepare population for evaluation (apply integrality constraints)
         let mut eval_pop = pop.clone();
         let t_integrality0 = Instant::now();
@@ -814,13 +800,23 @@ where
             }
         }
         let t_integrality = t_integrality0.elapsed();
-        
+
         // Build thread-safe energy function that includes penalties
         let func_ref = self.func;
-        let penalty_ineq_vec: Vec<(Arc<dyn Fn(&Array1<f64>) -> f64 + Send + Sync>, f64)> = self.config.penalty_ineq.iter().map(|(f,w)| (f.clone(), *w)).collect();
-        let penalty_eq_vec: Vec<(Arc<dyn Fn(&Array1<f64>) -> f64 + Send + Sync>, f64)> = self.config.penalty_eq.iter().map(|(f,w)| (f.clone(), *w)).collect();
+        let penalty_ineq_vec: Vec<(Arc<dyn Fn(&Array1<f64>) -> f64 + Send + Sync>, f64)> = self
+            .config
+            .penalty_ineq
+            .iter()
+            .map(|(f, w)| (f.clone(), *w))
+            .collect();
+        let penalty_eq_vec: Vec<(Arc<dyn Fn(&Array1<f64>) -> f64 + Send + Sync>, f64)> = self
+            .config
+            .penalty_eq
+            .iter()
+            .map(|(f, w)| (f.clone(), *w))
+            .collect();
         let linear_penalty = self.config.linear_penalty.clone();
-        
+
         let energy_fn = Arc::new(move |x: &Array1<f64>| -> f64 {
             let base = (func_ref)(x);
             let mut p = 0.0;
@@ -851,15 +847,22 @@ where
             }
             base + p
         });
-        
+
         let t_eval0 = Instant::now();
-        let mut energies = parallel_eval::evaluate_population_parallel(&eval_pop, energy_fn, &self.config.parallel);
+        let mut energies = parallel_eval::evaluate_population_parallel(
+            &eval_pop,
+            energy_fn,
+            &self.config.parallel,
+        );
         let t_eval_init = t_eval0.elapsed();
         nfev += npop;
         if timing_enabled {
-            eprintln!("TIMING init: integrality={:.3} ms, eval={:.3} ms", t_integrality.as_secs_f64()*1e3, t_eval_init.as_secs_f64()*1e3);
+            eprintln!(
+                "TIMING init: integrality={:.3} ms, eval={:.3} ms",
+                t_integrality.as_secs_f64() * 1e3,
+                t_eval_init.as_secs_f64() * 1e3
+            );
         }
-
 
         // Report initial population statistics
         let pop_mean = energies.mean().unwrap_or(0.0);
@@ -913,8 +916,11 @@ where
         }
 
         // Initialize adaptive state if adaptive strategies are enabled
-        let mut adaptive_state = if matches!(self.config.strategy, Strategy::AdaptiveBin | Strategy::AdaptiveExp) ||
-                                    self.config.adaptive.adaptive_mutation {
+        let mut adaptive_state = if matches!(
+            self.config.strategy,
+            Strategy::AdaptiveBin | Strategy::AdaptiveExp
+        ) || self.config.adaptive.adaptive_mutation
+        {
             Some(AdaptiveState::new(&self.config.adaptive))
         } else {
             None
@@ -940,7 +946,7 @@ where
             let iter_start = Instant::now();
             // Generate all trials first, then evaluate in parallel
             let t_build0 = Instant::now();
-            
+
             // Parallelize trial generation using rayon
             use rayon::prelude::*;
             let trial_data: Vec<(Array1<f64>, f64, f64)> = (0..npop)
@@ -948,7 +954,11 @@ where
                 .map(|i| {
                     // Create thread-local RNG from base seed + iteration + individual index
                     let mut local_rng: StdRng = if let Some(base_seed) = self.config.seed {
-                        StdRng::seed_from_u64(base_seed.wrapping_add((iter as u64) << 32).wrapping_add(i as u64))
+                        StdRng::seed_from_u64(
+                            base_seed
+                                .wrapping_add((iter as u64) << 32)
+                                .wrapping_add(i as u64),
+                        )
                     } else {
                         // Use thread_rng for unseeded runs
                         let mut thread_rng = rand::rng();
@@ -963,7 +973,10 @@ where
                         (adaptive_f, adaptive_cr)
                     } else {
                         // Use fixed or dithered parameters
-                        (self.config.mutation.sample(&mut local_rng), self.config.recombination)
+                        (
+                            self.config.mutation.sample(&mut local_rng),
+                            self.config.recombination,
+                        )
                     };
 
                     // Generate mutant and apply crossover based on strategy
@@ -976,12 +989,18 @@ where
                             mutant_best1(i, &pop, best_idx, f, &mut local_rng),
                             Crossover::Exponential,
                         ),
-                        Strategy::Rand1Bin => (mutant_rand1(i, &pop, f, &mut local_rng), Crossover::Binomial),
+                        Strategy::Rand1Bin => (
+                            mutant_rand1(i, &pop, f, &mut local_rng),
+                            Crossover::Binomial,
+                        ),
                         Strategy::Rand1Exp => (
                             mutant_rand1(i, &pop, f, &mut local_rng),
                             Crossover::Exponential,
                         ),
-                        Strategy::Rand2Bin => (mutant_rand2(i, &pop, f, &mut local_rng), Crossover::Binomial),
+                        Strategy::Rand2Bin => (
+                            mutant_rand2(i, &pop, f, &mut local_rng),
+                            Crossover::Binomial,
+                        ),
                         Strategy::Rand2Exp => (
                             mutant_rand2(i, &pop, f, &mut local_rng),
                             Crossover::Exponential,
@@ -994,7 +1013,10 @@ where
                             mutant_current_to_best1(i, &pop, best_idx, f, &mut local_rng),
                             Crossover::Exponential,
                         ),
-                        Strategy::Best2Bin => (mutant_best2(i, &pop, best_idx, f, &mut local_rng), Crossover::Binomial),
+                        Strategy::Best2Bin => (
+                            mutant_best2(i, &pop, best_idx, f, &mut local_rng),
+                            Crossover::Binomial,
+                        ),
                         Strategy::Best2Exp => (
                             mutant_best2(i, &pop, best_idx, f, &mut local_rng),
                             Crossover::Exponential,
@@ -1010,25 +1032,45 @@ where
                         Strategy::AdaptiveBin => {
                             if let Some(ref adaptive) = adaptive_state {
                                 (
-                                    mutant_adaptive(i, &pop, &energies, adaptive.current_w, f, &mut local_rng),
+                                    mutant_adaptive(
+                                        i,
+                                        &pop,
+                                        &energies,
+                                        adaptive.current_w,
+                                        f,
+                                        &mut local_rng,
+                                    ),
                                     Crossover::Binomial,
                                 )
                             } else {
                                 // Fallback to rand1 if adaptive state not available
-                                (mutant_rand1(i, &pop, f, &mut local_rng), Crossover::Binomial)
+                                (
+                                    mutant_rand1(i, &pop, f, &mut local_rng),
+                                    Crossover::Binomial,
+                                )
                             }
-                        },
+                        }
                         Strategy::AdaptiveExp => {
                             if let Some(ref adaptive) = adaptive_state {
                                 (
-                                    mutant_adaptive(i, &pop, &energies, adaptive.current_w, f, &mut local_rng),
+                                    mutant_adaptive(
+                                        i,
+                                        &pop,
+                                        &energies,
+                                        adaptive.current_w,
+                                        f,
+                                        &mut local_rng,
+                                    ),
                                     Crossover::Exponential,
                                 )
                             } else {
                                 // Fallback to rand1 if adaptive state not available
-                                (mutant_rand1(i, &pop, f, &mut local_rng), Crossover::Exponential)
+                                (
+                                    mutant_rand1(i, &pop, f, &mut local_rng),
+                                    Crossover::Exponential,
+                                )
                             }
-                        },
+                        }
                     };
 
                     // If strategy didn't dictate crossover, fallback to config
@@ -1037,15 +1079,25 @@ where
                         Crossover::Binomial => {
                             binomial_crossover(&pop.row(i).to_owned(), &mutant, cr, &mut local_rng)
                         }
-                        Crossover::Exponential => {
-                            exponential_crossover(&pop.row(i).to_owned(), &mutant, cr, &mut local_rng)
-                        }
+                        Crossover::Exponential => exponential_crossover(
+                            &pop.row(i).to_owned(),
+                            &mutant,
+                            cr,
+                            &mut local_rng,
+                        ),
                     };
 
                     // Apply WLS if enabled
-                    let wls_trial = if self.config.adaptive.wls_enabled &&
-                                      local_rng.random::<f64>() < self.config.adaptive.wls_prob {
-                        apply_wls(&trial, &self.lower, &self.upper, self.config.adaptive.wls_scale, &mut local_rng)
+                    let wls_trial = if self.config.adaptive.wls_enabled
+                        && local_rng.random::<f64>() < self.config.adaptive.wls_prob
+                    {
+                        apply_wls(
+                            &trial,
+                            &self.lower,
+                            &self.upper,
+                            self.config.adaptive.wls_scale,
+                            &mut local_rng,
+                        )
                     } else {
                         trial.clone()
                     };
@@ -1075,10 +1127,20 @@ where
             }
             // Evaluate all trials including penalties, possibly in parallel
             let func_ref = self.func;
-            let penalty_ineq_vec: Vec<(Arc<dyn Fn(&Array1<f64>) -> f64 + Send + Sync>, f64)> = self.config.penalty_ineq.iter().map(|(f,w)| (f.clone(), *w)).collect();
-            let penalty_eq_vec: Vec<(Arc<dyn Fn(&Array1<f64>) -> f64 + Send + Sync>, f64)> = self.config.penalty_eq.iter().map(|(f,w)| (f.clone(), *w)).collect();
+            let penalty_ineq_vec: Vec<(Arc<dyn Fn(&Array1<f64>) -> f64 + Send + Sync>, f64)> = self
+                .config
+                .penalty_ineq
+                .iter()
+                .map(|(f, w)| (f.clone(), *w))
+                .collect();
+            let penalty_eq_vec: Vec<(Arc<dyn Fn(&Array1<f64>) -> f64 + Send + Sync>, f64)> = self
+                .config
+                .penalty_eq
+                .iter()
+                .map(|(f, w)| (f.clone(), *w))
+                .collect();
             let linear_penalty = self.config.linear_penalty.clone();
-            
+
             let energy_fn_loop = Arc::new(move |x: &Array1<f64>| -> f64 {
                 let base = (func_ref)(x);
                 let mut p = 0.0;
@@ -1109,16 +1171,19 @@ where
                 }
                 base + p
             });
-            
+
             let t_build = t_build0.elapsed();
             let t_eval0 = Instant::now();
-            let trial_energies = evaluate_trials_parallel(trials.clone(), energy_fn_loop, &self.config.parallel);
+            let trial_energies =
+                evaluate_trials_parallel(trials.clone(), energy_fn_loop, &self.config.parallel);
             let t_eval = t_eval0.elapsed();
             nfev += npop;
 
             let t_select0 = Instant::now();
             // Selection phase: update population based on trial results
-            for (i, (trial, trial_energy)) in trials.into_iter().zip(trial_energies.iter()).enumerate() {
+            for (i, (trial, trial_energy)) in
+                trials.into_iter().zip(trial_energies.iter()).enumerate()
+            {
                 let (f, cr) = trial_params[i];
 
                 // Selection: replace if better
@@ -1255,7 +1320,6 @@ where
 #[cfg(test)]
 mod strategy_tests {
     use super::*;
-
 
     #[test]
     fn test_parse_strategy_variants() {

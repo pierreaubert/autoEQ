@@ -2,9 +2,11 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::{differential_evolution, DEConfigBuilder, DEConfig, Strategy, run_recorded_differential_evolution};
-    use autoeq_testfunctions::{rosenbrock, get_function_bounds_vec, get_function_bounds_2d};
-
+    use crate::{
+        differential_evolution, run_recorded_differential_evolution, DEConfig, DEConfigBuilder,
+        Strategy,
+    };
+    use autoeq_testfunctions::{get_function_bounds_2d, get_function_bounds_vec, rosenbrock};
 
     /// Example test showing how to use metadata for bounds
     #[test]
@@ -25,11 +27,22 @@ mod tests {
         assert!(result.fun < 1e-3);
 
         // Check that solution is close to expected optimum
-        assert!((result.x[0] - 1.0).abs() < 0.1, "x[0] should be close to 1.0: {}", result.x[0]);
-        assert!((result.x[1] - 1.0).abs() < 0.1, "x[1] should be close to 1.0: {}", result.x[1]);
+        assert!(
+            (result.x[0] - 1.0).abs() < 0.1,
+            "x[0] should be close to 1.0: {}",
+            result.x[0]
+        );
+        assert!(
+            (result.x[1] - 1.0).abs() < 0.1,
+            "x[1] should be close to 1.0: {}",
+            result.x[1]
+        );
 
         println!("Used bounds: {:?}", bounds);
-        println!("Found solution: ({:.4}, {:.4}) with f = {:.6}", result.x[0], result.x[1], result.fun);
+        println!(
+            "Found solution: ({:.4}, {:.4}) with f = {:.6}",
+            result.x[0], result.x[1], result.fun
+        );
     }
 
     #[test]
@@ -45,7 +58,10 @@ mod tests {
             .build();
 
         let result = run_recorded_differential_evolution(
-            "rosenbrock_metadata", rosenbrock, &bounds, config, "./data_generated/records"
+            "rosenbrock_metadata",
+            rosenbrock,
+            &bounds,
+            config,
         );
 
         assert!(result.is_ok());
@@ -53,10 +69,21 @@ mod tests {
         assert!(report.fun < 1e-3);
 
         // Check that solution is close to expected optimum (1, 1)
-        assert!((report.x[0] - 1.0).abs() < 0.1, "x[0] should be close to 1.0: {}", report.x[0]);
-        assert!((report.x[1] - 1.0).abs() < 0.1, "x[1] should be close to 1.0: {}", report.x[1]);
+        assert!(
+            (report.x[0] - 1.0).abs() < 0.1,
+            "x[0] should be close to 1.0: {}",
+            report.x[0]
+        );
+        assert!(
+            (report.x[1] - 1.0).abs() < 0.1,
+            "x[1] should be close to 1.0: {}",
+            report.x[1]
+        );
 
         println!("Used bounds: {:?}", bounds);
-        println!("Found solution: ({:.4}, {:.4}) with f = {:.6}", report.x[0], report.x[1], report.fun);
+        println!(
+            "Found solution: ({:.4}, {:.4}) with f = {:.6}",
+            report.x[0], report.x[1], report.fun
+        );
     }
 }

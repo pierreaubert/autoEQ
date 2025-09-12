@@ -5,7 +5,6 @@ use ndarray::Array1;
 use std::str::FromStr;
 use std::sync::Arc;
 
-
 fn main() {
     // Himmelblau as objective, but with nonlinear constraints to demonstrate helper
     let himmelblau =

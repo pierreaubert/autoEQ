@@ -1,6 +1,11 @@
 use ndarray::Array1;
 
-pub(crate) fn apply_integrality(x: &mut Array1<f64>, mask: &[bool], lower: &Array1<f64>, upper: &Array1<f64>) {
+pub(crate) fn apply_integrality(
+    x: &mut Array1<f64>,
+    mask: &[bool],
+    lower: &Array1<f64>,
+    upper: &Array1<f64>,
+) {
     for i in 0..x.len() {
         if i < mask.len() && mask[i] {
             x[i] = x[i].round();

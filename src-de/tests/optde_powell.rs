@@ -1,4 +1,4 @@
-use autoeq_de::{differential_evolution, DEConfigBuilder, Strategy};
+use autoeq_de::{run_recorded_differential_evolution, DEConfigBuilder, Strategy};
 use autoeq_testfunctions::powell;
 
 #[test]
@@ -12,7 +12,14 @@ fn test_de_powell_4d() {
         .strategy(Strategy::RandToBest1Exp)
         .recombination(0.9)
         .build();
-    assert!(differential_evolution(&powell, &b4, c4).fun < 1e-3);
+    {
+        let result = run_recorded_differential_evolution(
+            "powell_4d", powell, &b4, c4
+        );
+        assert!(result.is_ok());
+        let (report, _csv_path) = result.unwrap();
+        assert!(report.fun < 1e-3)
+    };
 }
 
 #[test]
@@ -26,5 +33,12 @@ fn test_de_powell_8d() {
         .strategy(Strategy::Rand1Exp)
         .recombination(0.95)
         .build();
-    assert!(differential_evolution(&powell, &b8, c8).fun < 1e-2);
+    {
+        let result = run_recorded_differential_evolution(
+            "powell_8d", powell, &b8, c8
+        );
+        assert!(result.is_ok());
+        let (report, _csv_path) = result.unwrap();
+        assert!(report.fun < 1e-2)
+    };
 }
