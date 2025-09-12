@@ -3,7 +3,7 @@
 //! This module centralizes the common pipeline steps for loading input data,
 //! building target curves, preparing objective data, and running optimization.
 
-use crate::{loss::ScoreLossData, optim, optim::ObjectiveData, read, Curve};
+use crate::{loss::ScoreLossData, optim, optim::ObjectiveData, optim_de::optimize_filters_autoeq_with_callback, read, Curve};
 use ndarray::Array1;
 use std::{collections::HashMap, error::Error};
 
@@ -272,7 +272,7 @@ pub fn perform_optimization_with_callback(
     let mut x = initial_guess(args, &lower_bounds, &upper_bounds);
 
     // Only AutoEQ algorithms currently support callbacks
-    let result = optim::optimize_filters_autoeq_with_callback(
+    let result = optimize_filters_autoeq_with_callback(
         &mut x,
         &lower_bounds,
         &upper_bounds,

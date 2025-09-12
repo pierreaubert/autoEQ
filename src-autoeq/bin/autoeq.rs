@@ -370,6 +370,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
         autoeq::cli::display_strategy_list();
     }
 
+    // Validate CLI arguments
+    autoeq::cli::validate_args_or_exit(&args);
+
     // Set up signal handling for graceful shutdown
     let shutdown = Arc::new(AtomicBool::new(false));
     let shutdown_clone = Arc::clone(&shutdown);
@@ -406,8 +409,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     });
 
-    // Validate CLI arguments
-    autoeq::cli::validate_args_or_exit(&args);
     // Main execution wrapped in select! for signal handling
     let main_task = async {
         let (input_curve, spin_data) = load_input_curve(&args).await?;

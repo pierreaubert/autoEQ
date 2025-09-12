@@ -6,8 +6,8 @@
 //! 3) --loss score --measurement CEA2034 --algo nlopt:isres
 //! 4) --loss score --measurement CEA2034 --algo autoeq:de
 //!
-//! Input data is expected under data/{speaker}/{measurement}.json (Plotly JSON),
-//! optionally data/{speaker}/metadata.json for metadata preference score.
+//! Input data is expected under data_cached/{speaker}/{measurement}.json (Plotly JSON),
+//! optionally data_cached/{speaker}/metadata.json for metadata preference score.
 
 use autoeq::cea2034 as score;
 use autoeq::iir;
