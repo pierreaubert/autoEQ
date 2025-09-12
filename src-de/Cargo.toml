@@ -1,6 +1,6 @@
 [package]
 name = "autoeq-de"
-version = "0.2.40"
+version = "0.2.41"
 edition = "2021"
 authors = ["Pierre Aubert <pierre@spinorama.org>"]
 license = "GPL-3.0-or-later"
@@ -25,6 +25,10 @@ autoeq-env = { path = "../src-env" }
 [[bin]]
 name = "plot_functions"
 path = "bin/plot_functions.rs"
+
+[[bin]]
+name = "benchmark_convergence"
+path = "bin/benchmark_convergence.rs"
 
 [lib]
 name = "autoeq_de"
