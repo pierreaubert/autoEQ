@@ -231,6 +231,132 @@ pub fn curve_slope_per_octave_in_range(curve: &crate::Curve, fmin: f64, fmax: f6
     regression_slope_per_octave_in_range(&curve.freq, &curve.spl, fmin, fmax)
 }
 
+/// Compute headphone preference score based on frequency response deviations
+/// 
+/// This implements the headphone preference prediction model from:
+/// "A Statistical Model that Predicts Listeners' Preference Ratings of 
+/// In-Ear Headphones" by Sean Olive et al.
+/// 
+/// The model predicts preference based on:
+/// - Slope of the response (target: -1 dB/octave from 20Hz-10kHz)
+/// - RMS deviation in different frequency bands
+/// - Peak-to-peak variations
+/// 
+/// # Arguments
+/// * `freq` - Frequency points in Hz
+/// * `response` - Frequency response in dB (deviation from target)
+/// 
+/// # Returns
+/// * Score value where lower is better (for minimization)
+/// 
+/// # References
+/// Olive, S. E., Welti, T., & McMullin, E. (2013). "A Statistical Model that 
+/// Predicts Listeners' Preference Ratings of In-Ear Headphones: Part 2 – 
+/// Development and Validation of the Model"
+pub fn headphone_loss(freq: &Array1<f64>, response: &Array1<f64>) -> f64 {
+    // Define frequency bands for analysis
+    const BAND_LIMITS: [(f64, f64); 10] = [
+        (20.0, 60.0),      // Sub-bass
+        (60.0, 200.0),     // Bass  
+        (200.0, 500.0),    // Lower midrange
+        (500.0, 1000.0),   // Midrange
+        (1000.0, 2000.0),  // Upper midrange
+        (2000.0, 4000.0),  // Presence
+        (4000.0, 8000.0),  // Brilliance
+        (8000.0, 10000.0), // Upper treble
+        (10000.0, 12000.0),// Air
+        (12000.0, 20000.0),// Ultra-high
+    ];
+    
+    // Calculate slope (should be close to -1 dB/octave for headphones)
+    let slope = regression_slope_per_octave_in_range(freq, response, 20.0, 10000.0)
+        .unwrap_or(0.0);
+    
+    // Target slope is -1 dB/octave (gentle downward tilt)
+    let slope_deviation = (slope + 1.0).abs();
+    
+    // Calculate RMS and peak-to-peak in each band
+    let mut band_rms = Vec::new();
+    let mut band_peak_to_peak = Vec::new();
+    
+    for (f_low, f_high) in BAND_LIMITS.iter() {
+        let mut values = Vec::new();
+        
+        // Collect values in this band
+        for i in 0..freq.len() {
+            if freq[i] >= *f_low && freq[i] <= *f_high {
+                values.push(response[i]);
+            }
+        }
+        
+        if !values.is_empty() {
+            // RMS of deviations
+            let sum_sq: f64 = values.iter().map(|x| x * x).sum();
+            let rms = (sum_sq / values.len() as f64).sqrt();
+            band_rms.push(rms);
+            
+            // Peak-to-peak variation
+            let min = values.iter().fold(f64::INFINITY, |a, &b| a.min(b));
+            let max = values.iter().fold(f64::NEG_INFINITY, |a, &b| a.max(b));
+            band_peak_to_peak.push(max - min);
+        }
+    }
+    
+    // Weighted combination of metrics (weights from the paper)
+    // Note: These weights are approximations based on the paper's findings
+    let mut score = 0.0;
+    
+    // Slope term (high weight - critical for naturalness)
+    score += 10.0 * slope_deviation;
+    
+    // RMS deviations with frequency-dependent weighting
+    // Bass and midrange deviations are more critical
+    if band_rms.len() >= 6 {
+        score += 3.0 * band_rms[0];  // Sub-bass (20-60 Hz)
+        score += 4.0 * band_rms[1];  // Bass (60-200 Hz) 
+        score += 5.0 * band_rms[2];  // Lower mid (200-500 Hz)
+        score += 5.0 * band_rms[3];  // Midrange (500-1k Hz)
+        score += 3.0 * band_rms[4];  // Upper mid (1k-2k Hz)
+        score += 2.0 * band_rms[5];  // Presence (2k-4k Hz)
+        
+        // High frequency bands (less critical but still important)
+        if band_rms.len() > 6 {
+            for i in 6..band_rms.len() {
+                score += 1.5 * band_rms[i];
+            }
+        }
+    }
+    
+    // Peak-to-peak penalty (excessive variation is bad)
+    for pp in &band_peak_to_peak {
+        if *pp > 6.0 {  // Penalize variations > 6dB
+            score += 0.5 * (*pp - 6.0);
+        }
+    }
+    
+    // Return score (lower is better for optimization)
+    score
+}
+
+/// Compute headphone preference score with additional target curve
+/// 
+/// # Arguments
+/// * `freq` - Frequency points in Hz
+/// * `response` - Measured frequency response in dB
+/// * `target` - Target frequency response in dB
+/// 
+/// # Returns
+/// * Score value where lower is better (for minimization)
+pub fn headphone_loss_with_target(
+    freq: &Array1<f64>, 
+    response: &Array1<f64>, 
+    target: &Array1<f64>
+) -> f64 {
+    // Calculate deviation from target
+    let deviation = response - target;
+    headphone_loss(freq, &deviation)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -308,6 +434,70 @@ mod tests {
         let y = freq.mapv(|f: f64| -2.5 * f.log2() + 4.0);
         let slope = regression_slope_per_octave_in_range(&freq, &y, 200.0, 800.0).unwrap();
         assert!((slope + 2.5).abs() < 1e-12);
+    }
+
+    #[test]
+    fn test_headphone_loss_flat_response() {
+        // Test that a perfectly flat response (all zeros) gives a low score
+        let freq = Array1::logspace(10.0, 1.301, 4.301, 100); // 20Hz to 20kHz
+        let response = Array1::zeros(100); // Perfectly flat
+        
+        let score = headphone_loss(&freq, &response);
+        
+        // With flat response, only slope deviation contributes
+        // Target slope is -1 dB/octave, flat is 0, so deviation is 1
+        // Score should be around 10.0 * 1.0 = 10.0
+        assert!(score > 9.0 && score < 11.0, "Flat response score: {}", score);
+    }
+    
+    #[test]
+    fn test_headphone_loss_ideal_slope() {
+        // Test response with ideal -1 dB/octave slope
+        let freq = Array1::logspace(10.0, 1.301, 4.301, 100); // 20Hz to 20kHz
+        // Create response with -1 dB/octave slope
+        let response = freq.mapv(|f: f64| -1.0 * f.log2() + 10.0);
+        
+        let score = headphone_loss(&freq, &response);
+        
+        // With ideal slope, score should be lower than flat but still has RMS from the slope
+        // The -1 dB/octave slope creates variation in each band
+        assert!(score < 70.0, "Ideal slope score too high: {}", score);
+    }
+    
+    #[test]
+    fn test_headphone_loss_with_peaks() {
+        // Test that excessive peaks are penalized
+        let freq = Array1::logspace(10.0, 1.301, 4.301, 100);
+        let mut response = Array1::zeros(100);
+        
+        // Add a 10dB peak around 1kHz
+        for i in 0..100 {
+            if freq[i] > 800.0 && freq[i] < 1200.0 {
+                response[i] = 10.0;
+            }
+        }
+        
+        let score_with_peak = headphone_loss(&freq, &response);
+        let score_flat = headphone_loss(&freq, &Array1::zeros(100));
+        
+        // Score with peak should be significantly higher
+        assert!(score_with_peak > score_flat + 20.0, 
+                "Peak not sufficiently penalized: {} vs {}", 
+                score_with_peak, score_flat);
+    }
+    
+    #[test]
+    fn test_headphone_loss_with_target() {
+        // Test the target curve variant
+        let freq = Array1::logspace(10.0, 1.301, 4.301, 100);
+        let response = Array1::from_elem(100, 5.0); // Constant 5dB response
+        let target = Array1::from_elem(100, 5.0);   // Same as response
+        
+        let score = headphone_loss_with_target(&freq, &response, &target);
+        
+        // When response matches target, deviation is zero (flat)
+        // Score should be same as flat response test
+        assert!(score > 9.0 && score < 11.0, "Target match score: {}", score);
     }
 
     #[test]

@@ -1,5 +1,5 @@
 use autoeq_de::auto_de;
-use autoeq_de::{differential_evolution, DEConfigBuilder, Strategy, run_recorded_differential_evolution};
+use autoeq_de::{DEConfigBuilder, Strategy, run_recorded_differential_evolution};
 use autoeq_testfunctions::{ackley, create_bounds};
 
 #[test]
@@ -13,7 +13,12 @@ fn test_de_ackley_10d() {
         .strategy(Strategy::Rand1Exp)
         .recombination(0.95)
         .build();
-    assert!(differential_evolution(&ackley, &b10, c10).fun < 1e-2);
+    let result = run_recorded_differential_evolution(
+        "ackley_10d", ackley, &b10, c10, "./data_generated/records"
+    );
+    assert!(result.is_ok());
+    let (report, _csv_path) = result.unwrap();
+    assert!(report.fun < 1e-2);
 }
 
 #[test]

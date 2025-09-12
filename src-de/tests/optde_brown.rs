@@ -1,4 +1,4 @@
-use autoeq_de::{auto_de, differential_evolution, DEConfigBuilder, Strategy, run_recorded_differential_evolution};
+use autoeq_de::{auto_de, DEConfigBuilder, Strategy, run_recorded_differential_evolution};
 use autoeq_testfunctions::{brown, get_function_bounds_vec};
 
 
@@ -14,11 +14,15 @@ fn test_de_brown_2d() {
         .recombination(0.9)
         .build();
 
-    let result = differential_evolution(&brown, &bounds, config);
-    assert!(result.fun < 1e-5, "Solution quality too low: {}", result.fun);
+    let result = run_recorded_differential_evolution(
+        "brown_2d", brown, &bounds, config, "./data_generated/records"
+    );
+    assert!(result.is_ok());
+    let (report, _csv_path) = result.unwrap();
+    assert!(report.fun < 1e-5, "Solution quality too low: {}", report.fun);
 
     // Check solution is close to global minimum (0, 0)
-    for &xi in result.x.iter() {
+    for &xi in report.x.iter() {
         assert!(xi.abs() < 1e-3, "Solution coordinate not near 0: {}", xi);
     }
 }
@@ -35,11 +39,15 @@ fn test_de_brown_4d() {
         .recombination(0.95)
         .build();
 
-    let result = differential_evolution(&brown, &bounds, config);
-    assert!(result.fun < 1e-4, "Solution quality too low: {}", result.fun);
+    let result = run_recorded_differential_evolution(
+        "brown_4d", brown, &bounds, config, "./data_generated/records"
+    );
+    assert!(result.is_ok());
+    let (report, _csv_path) = result.unwrap();
+    assert!(report.fun < 1e-4, "Solution quality too low: {}", report.fun);
 
     // Check solution is close to global minimum (0, 0, 0, 0)
-    for &xi in result.x.iter() {
+    for &xi in report.x.iter() {
         assert!(xi.abs() < 1e-2, "Solution coordinate not near 0: {}", xi);
     }
 }
@@ -57,8 +65,12 @@ fn test_de_brown_high_precision() {
         .tol(1e-12)  // Very tight tolerance
         .build();
 
-    let result = differential_evolution(&brown, &bounds, config);
-    assert!(result.fun < 1e-8, "High precision solution not achieved: {}", result.fun);
+    let result = run_recorded_differential_evolution(
+        "brown_high_precision", brown, &bounds, config, "./data_generated/records"
+    );
+    assert!(result.is_ok());
+    let (report, _csv_path) = result.unwrap();
+    assert!(report.fun < 1e-8, "High precision solution not achieved: {}", report.fun);
 }
 
 #[test]
@@ -81,8 +93,13 @@ fn test_de_brown_multiple_strategies() {
             .recombination(0.9)
             .build();
 
-        let result = differential_evolution(&brown, &bounds, config);
-        assert!(result.fun < 1e-3, "Strategy {:?} failed with value: {}", strategy, result.fun);
+        let name = format!("brown_strategy_{:?}_{}", strategy, i);
+        let result = run_recorded_differential_evolution(
+            &name, brown, &bounds, config, "./data_generated/records"
+        );
+        assert!(result.is_ok());
+        let (report, _csv_path) = result.unwrap();
+        assert!(report.fun < 1e-3, "Strategy {:?} failed with value: {}", strategy, report.fun);
     }
 }
 
@@ -102,30 +119,6 @@ fn test_auto_de_brown_function() {
     }
 }
 
-#[test]
-fn test_de_brown_recorded() {
-    let bounds = vec![(-1.0, 4.0), (-1.0, 4.0)];
-    let config = DEConfigBuilder::new()
-        .seed(113)
-        .maxiter(1500)
-        .popsize(80)
-        .strategy(Strategy::Best1Bin)
-        .recombination(0.9)
-        .build();
-
-    let result = run_recorded_differential_evolution(
-        "brown", brown, &bounds, config, "./data_generated/records"
-    );
-
-    assert!(result.is_ok());
-    let (report, _csv_path) = result.unwrap();
-    assert!(report.fun < 1e-4);
-
-    // Check that solution is close to global optimum (0, 0)
-    for &actual in report.x.iter() {
-        assert!(actual.abs() < 1e-2, "Solution not near 0: {}", actual);
-    }
-}
 
 #[test]
 fn test_brown_known_minimum() {
@@ -194,7 +187,11 @@ fn test_brown_convergence_difficulty() {
         .recombination(0.7)
         .build();
 
-    let result_short = differential_evolution(&brown, &bounds, config_short);
+let result = run_recorded_differential_evolution(
+        "brown_short", brown, &bounds, config_short, "./data_generated/records"
+    );
+    assert!(result.is_ok());
+    let (report_short, _csv_short) = result.unwrap();
 
     // Test with adequate iterations
     let config_long = DEConfigBuilder::new()
@@ -205,12 +202,16 @@ fn test_brown_convergence_difficulty() {
         .recombination(0.9)
         .build();
 
-    let result_long = differential_evolution(&brown, &bounds, config_long);
+let result = run_recorded_differential_evolution(
+        "brown_long", brown, &bounds, config_long, "./data_generated/records"
+    );
+    assert!(result.is_ok());
+    let (report_long, _csv_long) = result.unwrap();
 
     // The longer run should achieve better results
-    assert!(result_long.fun <= result_short.fun,
+    assert!(report_long.fun <= report_short.fun,
            "Longer optimization should be better or equal: {} vs {}",
-           result_long.fun, result_short.fun);
+           report_long.fun, report_short.fun);
 }
 
 #[test]

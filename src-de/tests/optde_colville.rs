@@ -1,4 +1,4 @@
-use autoeq_de::{differential_evolution, DEConfigBuilder, Strategy};
+use autoeq_de::{DEConfigBuilder, Strategy, run_recorded_differential_evolution};
 use autoeq_testfunctions::colville;
 
 #[test]
@@ -12,15 +12,19 @@ fn test_de_colville_4d() {
         .strategy(Strategy::Rand1Exp)
         .recombination(0.95)
         .build();
-    let result = differential_evolution(&colville, &b4, c4);
+    let result = run_recorded_differential_evolution(
+        "colville_4d", colville, &b4, c4, "./data_generated/records"
+    );
+    assert!(result.is_ok());
+    let (report, _csv_path) = result.unwrap();
     // Global minimum f(x) = 0 at x = (1, 1, 1, 1)
-    assert!(result.fun < 1e-2, "Function value too high: {}", result.fun);
+    assert!(report.fun < 1e-2, "Function value too high: {}", report.fun);
 }
 
 #[test]
 fn test_de_colville_focused_bounds() {
     // Test with bounds closer to the known optimum
-    let b = [(0.0, 2.0), (0.0, 2.0), (0.0, 2.0), (0.0, 2.0)]; // Focused around (1,1,1,1)
+    let b = vec![(0.0, 2.0), (0.0, 2.0), (0.0, 2.0), (0.0, 2.0)]; // Focused around (1,1,1,1)
     let c = DEConfigBuilder::new()
         .seed(86)
         .maxiter(1200)
@@ -28,11 +32,15 @@ fn test_de_colville_focused_bounds() {
         .strategy(Strategy::Best1Exp)
         .recombination(0.9)
         .build();
-    let result = differential_evolution(&colville, &b, c);
+    let result = run_recorded_differential_evolution(
+        "colville_focused", colville, &b, c, "./data_generated/records"
+    );
+    assert!(result.is_ok());
+    let (report, _csv_path) = result.unwrap();
     // Should find better solution with focused bounds
-    assert!(result.fun < 1e-3, "Function value too high: {}", result.fun);
+    assert!(report.fun < 1e-3, "Function value too high: {}", report.fun);
     // Check solution is close to (1, 1, 1, 1)
-    for (i, &xi) in result.x.iter().enumerate() {
+    for (i, &xi) in report.x.iter().enumerate() {
         assert!(
             (xi - 1.0).abs() < 0.1,
             "x[{}] should be close to 1: {}",
@@ -53,12 +61,16 @@ fn test_de_colville_2d() {
         .strategy(Strategy::RandToBest1Exp)
         .recombination(0.8)
         .build();
-    let result = differential_evolution(&colville, &b2, c2);
+    let result = run_recorded_differential_evolution(
+        "colville_2d", colville, &b2, c2, "./data_generated/records"
+    );
+    assert!(result.is_ok());
+    let (report, _csv_path) = result.unwrap();
     // Function should adapt to 2D and use default values for missing dimensions
     assert!(
-        result.fun < 5e-2,
+        report.fun < 5e-2,
         "Function value too high for 2D: {}",
-        result.fun
+        report.fun
     );
 }
 
@@ -77,9 +89,13 @@ fn test_de_colville_multistart() {
             .strategy(Strategy::Best1Bin)
             .recombination(0.9)
             .build();
-        let result = differential_evolution(&colville, &b, c);
-        best_result = best_result.min(result.fun);
-        println!("Run {} (seed {}): f = {}", i, seed, result.fun);
+        let result = run_recorded_differential_evolution(
+            &format!("colville_multistart_{}", i), colville, &b, c, "./data_generated/records"
+        );
+        assert!(result.is_ok());
+        let (report, _csv_path) = result.unwrap();
+        best_result = best_result.min(report.fun);
+        println!("Run {} (seed {}): f = {}", i, seed, report.fun);
     }
 
     // At least one run should find a good solution
