@@ -432,14 +432,14 @@ dependencies = [
  "rand 0.9.2",
  "rayon",
  "serde",
- "thiserror 1.0.69",
+ "thiserror 2.0.16",
 ]
 
 [[package]]
 name = "autoeq-env"
 version = "0.2.1"
 dependencies = [
- "thiserror 1.0.69",
+ "thiserror 2.0.16",
 ]
 
 [[package]]

@@ -8,22 +8,22 @@ description = "Automatic equalization for speakers and headphones"
 repository = "https://github.com/pierreaubert/autoeq"
 
 [dependencies]
-ndarray = { workspace = true }
+build_html = { workspace = true }
 clap = { workspace = true }
-tokio = { workspace = true }
+csv = { workspace = true }
+ndarray = { workspace = true }
+nlopt = { workspace = true }
+num_cpus = { workspace = true }
+metaheuristics-nature = { workspace = true }
+plotly = { workspace = true }
+plotly_static = { workspace = true }
+rand = { workspace = true }
+reqwest = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-reqwest = { workspace = true }
-plotly = { workspace = true }
-csv = { workspace = true }
-nlopt = { workspace = true }
 signal-hook-tokio = { workspace = true }
-num_cpus = { workspace = true }
+tokio = { workspace = true }
 urlencoding = { workspace = true }
-rand = { workspace = true }
-metaheuristics-nature = { workspace = true }
-build_html = { workspace = true }
-plotly_static = { workspace = true }
 
 # AutoEQ crates
 autoeq-iir = { path = "../src-iir" }

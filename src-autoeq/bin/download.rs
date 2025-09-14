@@ -6,6 +6,7 @@ use reqwest::Client;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 use tokio::fs;
+use autoeq::read::directory;
 
 const BASE_URL: &str = "https://api.spinorama.org";
 
@@ -46,7 +47,7 @@ async fn process_speaker(client: &Client, speaker: &str) -> Result<(), Box<dyn E
 
     // 3. if CEA2034 present, download CEA2034 and Estimated In-Room Response and metadata
     if measurements.iter().any(|m| m == "CEA2034") {
-        let dir = read::data_dir_for(speaker);
+        let dir = directory::data_dir_for(speaker);
         fs::create_dir_all(&dir).await?;
 
         // metadata
@@ -90,16 +91,16 @@ async fn write_json(path: &PathBuf, value: &Value) -> Result<(), Box<dyn Error>>
 #[cfg(test)]
 mod tests {
     use autoeq_env::DATA_CACHED;
-    use autoeq::read;
+    use autoeq::read::directory;
 
     #[test]
     fn sanitize_replaces_forbidden() {
-        assert_eq!(read::sanitize_dir_name("A/B\\C|D?E*F: G"), "A_B_C_D_E_F_ G");
+        assert_eq!(directory::sanitize_dir_name("A/B\\C|D?E*F: G"), "A_B_C_D_E_F_ G");
     }
 
     #[test]
     fn data_dir_builds_expected_path() {
-        let p = read::data_dir_for("KEF LS50 Meta");
+        let p = directory::data_dir_for("KEF LS50 Meta");
         let expected = std::path::Path::new(DATA_CACHED).join("KEF LS50 Meta");
         assert!(p.ends_with(expected));
     }

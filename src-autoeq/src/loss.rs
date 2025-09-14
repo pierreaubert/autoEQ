@@ -26,11 +26,13 @@ use std::collections::HashMap;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum LossType {
     /// Flat loss function (minimize deviation from target curve)
-    Flat,
-    /// Score-based loss function (maximize preference score)
-    Score,
-    /// keep LW and PIR as flat as possible
-    Mixed,
+    SpeakerFlat,
+    /// Harmann/Olive Score-based loss function (maximize preference score)
+    SpeakerScore,
+    /// Flat loss function (minimize deviation from target curve)
+    HeadphoneFlat,
+    /// Harmann/Olive Score-based loss function (maximize preference score)
+    HeadphoneScore,
 }
 
 /// Data required for computing score-based loss
@@ -83,7 +85,7 @@ pub fn flat_loss(freqs: &Array1<f64>, error: &Array1<f64>) -> f64 {
 
 /// Compute the score-based loss. Returns -pref_score so that minimizing it maximizes the preference score.
 /// `peq_response` must be computed for the candidate parameters.
-pub fn score_loss(
+pub fn speaker_score_loss(
     score_data: &ScoreLossData,
     freq: &Array1<f64>,
     peq_response: &Array1<f64>,
@@ -410,7 +412,7 @@ mod tests {
         // Expected preference using score() with zero PEQ (i.e., base curves)
         let intervals = super::score::octave_intervals(2, &freq);
         let expected = super::score::score(&freq, &intervals, &on, &lw, &sp, &pir);
-        let got = score_loss(&sd, &freq, &zero);
+        let got = speaker_score_loss(&sd, &freq, &zero);
         if got.is_nan() && expected.pref_score.is_nan() {
             // ok
         } else {

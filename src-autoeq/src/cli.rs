@@ -127,7 +127,7 @@ pub struct Args {
     pub smooth_n: usize,
 
     /// Loss function to optimize (flat or score).
-    #[arg(long, value_enum, default_value_t = LossType::Flat)]
+    #[arg(long, value_enum, default_value_t = LossType::SpeakerFlat)]
     pub loss: LossType,
 
     /// If present/true: use a Highpass for the lowest-frequency IIR and do NOT clip the inverted curve.

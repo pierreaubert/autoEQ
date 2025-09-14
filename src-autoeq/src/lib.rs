@@ -42,6 +42,8 @@ pub mod read;
 pub mod signal;
 /// Shared workflow steps used by binaries
 pub mod workflow;
+/// Mapping
+pub mod x2peq;
 
 // Re-export commonly used items
 pub use cli::*;
@@ -50,3 +52,4 @@ pub use optim::*;
 pub use plot::*;
 pub use read::*;
 pub use workflow::*;
+pub use x2peq::x2peq;

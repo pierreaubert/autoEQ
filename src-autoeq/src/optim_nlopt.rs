@@ -1,91 +1,11 @@
 // NLOPT-specific optimization code
 
 use super::constraints::{
-    constraint_ceiling, constraint_min_gain, viol_ceiling_from_spl, viol_min_gain_from_xs,
-    viol_spacing_from_xs, x2peq, CeilingConstraintData, MinGainConstraintData,
+    constraint_ceiling, constraint_min_gain, CeilingConstraintData, MinGainConstraintData,
 };
-use super::optim::{compute_base_fitness, ObjectiveData};
+use super::optim::ObjectiveData;
+use super::optim::compute_fitness_penalties;
 use nlopt::{Algorithm, Nlopt, Target};
-
-/// Compute objective function value including penalty terms for constraints
-///
-/// This function adds penalty terms to the base fitness when using algorithms
-/// that don't support native constraint handling.
-///
-/// # Arguments
-/// * `x` - Parameter vector
-/// * `_gradient` - Gradient vector (unused, for NLOPT compatibility)
-/// * `data` - Objective data containing penalty weights and parameters
-///
-/// # Returns
-/// Base fitness value plus weighted penalty terms
-pub fn compute_fitness_penalties(
-    x: &[f64],
-    _gradient: Option<&mut [f64]>,
-    data: &mut ObjectiveData,
-) -> f64 {
-    let fit = compute_base_fitness(x, data);
-
-    // When penalties are enabled (weights > 0), add them to the base fit so that
-    // optimizers without nonlinear constraints can still respect our limits.
-    let mut penalized = fit;
-    let mut penalty_terms = Vec::new();
-
-    if data.penalty_w_ceiling > 0.0 {
-        let peq_spl = x2peq(&data.freqs, x, data.srate, data.iir_hp_pk);
-        let viol = viol_ceiling_from_spl(&peq_spl, data.max_db, data.iir_hp_pk);
-        let penalty = data.penalty_w_ceiling * viol * viol;
-        penalized += penalty;
-        if viol > 0.0 {
-            penalty_terms.push(format!(
-                "ceiling_viol={:.3e}*{:.1e}={:.3e}",
-                viol, data.penalty_w_ceiling, penalty
-            ));
-        }
-    }
-
-    if data.penalty_w_spacing > 0.0 {
-        let viol = viol_spacing_from_xs(x, data.min_spacing_oct);
-        let penalty = data.penalty_w_spacing * viol * viol;
-        penalized += penalty;
-        if viol > 0.0 {
-            penalty_terms.push(format!(
-                "spacing_viol={:.3e}*{:.1e}={:.3e}",
-                viol, data.penalty_w_spacing, penalty
-            ));
-        }
-    }
-
-    if data.penalty_w_mingain > 0.0 && data.min_db > 0.0 {
-        let viol = viol_min_gain_from_xs(x, data.iir_hp_pk, data.min_db);
-        let penalty = data.penalty_w_mingain * viol * viol;
-        penalized += penalty;
-        if viol > 0.0 {
-            penalty_terms.push(format!(
-                "mingain_viol={:.3e}*{:.1e}={:.3e}",
-                viol, data.penalty_w_mingain, penalty
-            ));
-        }
-    }
-
-    // // Log fitness details every 1000 evaluations (approximate)
-    // use std::sync::atomic::{AtomicUsize, Ordering};
-    // static EVAL_COUNTER: AtomicUsize = AtomicUsize::new(0);
-    // let count = EVAL_COUNTER.fetch_add(1, Ordering::Relaxed);
-    // if count % 1000 == 0 || (count % 100 == 0 && !penalty_terms.is_empty()) {
-    //     let param_summary: Vec<String> = (0..x.len()/3).map(|i| {
-    //         let freq = 10f64.powf(x[i*3]);
-    //         let q = x[i*3+1];
-    //         let gain = x[i*3+2];
-    //         format!("f{:.0}Hz/Q{:.2}/G{:.2}dB", freq, q, gain)
-    //     }).collect();
-
-    //     eprintln!("TRACE[{}]: fit={:.3e}, penalties=[{}], params=[{}]",
-    //               count, fit, penalty_terms.join(", "), param_summary.join(", "));
-    // }
-
-    penalized
-}
 
 /// Optimize filter parameters using NLOPT algorithms
 pub fn optimize_filters_nlopt(

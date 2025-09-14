@@ -27,7 +27,7 @@ fn create_test_objective_data() -> autoeq::optim::ObjectiveData {
         max_db: 3.0,
         min_db: 1.0,
         iir_hp_pk: false,
-        loss_type: LossType::Flat,
+        loss_type: LossType::SpeakerFlat,
         score_data: None,
         penalty_w_ceiling: 0.0,
         penalty_w_spacing: 0.0,

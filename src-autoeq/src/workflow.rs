@@ -219,47 +219,11 @@ pub fn perform_optimization(
     args: &crate::cli::Args,
     objective_data: &ObjectiveData,
 ) -> Result<Vec<f64>, Box<dyn Error>> {
-    let (lower_bounds, upper_bounds) = setup_bounds(args);
-    let mut x = initial_guess(args, &lower_bounds, &upper_bounds);
-
-    let result = optim::optimize_filters(
-        &mut x,
-        &lower_bounds,
-        &upper_bounds,
-        objective_data.clone(),
-        &args.algo,
-        args.population,
-        args.maxeval,
+    perform_optimization_with_callback(
         args,
-    );
-
-    match result {
-        Ok((_status, _val)) => {}
-        Err((e, _final_value)) => {
-            return Err(std::io::Error::new(std::io::ErrorKind::Other, e).into());
-        }
-    };
-
-    if args.refine {
-        let local_result = optim::optimize_filters(
-            &mut x,
-            &lower_bounds,
-            &upper_bounds,
-            objective_data.clone(),
-            &args.local_algo,
-            args.population,
-            args.maxeval,
-            args,
-        );
-        match local_result {
-            Ok((_local_status, _local_val)) => {}
-            Err((e, _final_value)) => {
-                return Err(std::io::Error::new(std::io::ErrorKind::Other, e).into());
-            }
-        }
-    }
-
-    Ok(x)
+        objective_data,
+        Box::new(|_intermediate| crate::de::CallbackAction::Continue),
+    )
 }
 
 /// Run optimization with a DE progress callback (only used for AutoEQ DE).

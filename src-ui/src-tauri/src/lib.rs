@@ -359,10 +359,13 @@ async fn run_optimization_internal(
         smooth: params.smooth,
         smooth_n: params.smooth_n,
         loss: match params.loss.as_str() {
-            "flat" => LossType::Flat,
-            "score" => LossType::Score,
-            "mixed" => LossType::Mixed,
-            _ => LossType::Flat,
+            "flat" => LossType::SpeakerFlat,
+            "score" => LossType::SpeakerScore,
+            "speaker-flat" => LossType::SpeakerFlat,
+            "speaker-score" => LossType::SpeakerScore,
+            "headphone-flat" => LossType::HeadphoneFlat,
+            "headphone-score" => LossType::HeadphoneScore,
+            _ => LossType::SpeakerFlat,
         },
         iir_hp_pk: params.iir_hp_pk,
         algo_list: false, // UI doesn't need to list algorithms

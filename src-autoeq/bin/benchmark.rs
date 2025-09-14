@@ -146,7 +146,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             a1.version = Some(version.clone());
             a1.measurement = Some("CEA2034".to_string());
             a1.curve_name = "Listening Window".to_string();
-            a1.loss = autoeq::LossType::Flat;
+            a1.loss = autoeq::LossType::SpeakerFlat;
             let s1 = if shutdown_clone.load(Ordering::Relaxed) {
                 None
             } else {
@@ -162,7 +162,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             a2.version = Some(version.clone());
             a2.measurement = Some("Estimated In-Room Response".to_string());
             a2.curve_name = "Estimated In-Room Response".to_string();
-            a2.loss = autoeq::LossType::Flat;
+            a2.loss = autoeq::LossType::SpeakerFlat;
             let s2 = if shutdown_clone.load(Ordering::Relaxed) {
                 None
             } else {
@@ -177,7 +177,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             a3.speaker = Some(speaker.clone());
             a3.version = Some(version.clone());
             a3.measurement = Some("CEA2034".to_string());
-            a3.loss = autoeq::LossType::Score;
+            a3.loss = autoeq::LossType::SpeakerScore;
             a3.algo = "nlopt:isres".to_string();
             let s3 = if shutdown_clone.load(Ordering::Relaxed) {
                 None
@@ -193,7 +193,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             a4.speaker = Some(speaker.clone());
             a4.version = Some(version.clone());
             a4.measurement = Some("CEA2034".to_string());
-            a4.loss = autoeq::LossType::Score;
+            a4.loss = autoeq::LossType::SpeakerScore;
             a4.algo = "autoeq:de".to_string();
             let s4 = if shutdown_clone.load(Ordering::Relaxed) {
                 None

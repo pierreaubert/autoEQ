@@ -1,16 +1,16 @@
 // AutoEQ DE-specific optimization code
 
-use super::constraints::{viol_ceiling_from_spl, x2peq};
-use super::initial_guess::create_smart_initial_guesses;
+use ndarray::Array1;
+
+use super::x2peq::x2peq;
+use super::constraints::viol_ceiling_from_spl;
+use super::initial_guess::{create_smart_initial_guesses, SmartInitConfig};
 use super::init_sobol::init_sobol;
-use super::initial_guess::SmartInitConfig;
-use super::optim::ObjectiveData;
-use super::optim_nlopt::compute_fitness_penalties;
+use super::optim::{compute_fitness_penalties, ObjectiveData};
 use crate::de::{
     differential_evolution, CallbackAction, DEConfigBuilder, DEIntermediate, DEReport, Init,
     Mutation, ParallelConfig, Strategy,
 };
-use ndarray::Array1;
 
 /// Common setup for DE-based optimization
 ///
@@ -156,8 +156,8 @@ pub fn create_de_callback(
 ///
 /// # Returns
 /// Closure that computes fitness from ndarray parameter vector
-pub fn create_de_objective(penalty_data: ObjectiveData) -> impl Fn(&ndarray::Array1<f64>) -> f64 {
-    move |x_arr: &ndarray::Array1<f64>| -> f64 {
+pub fn create_de_objective(penalty_data: ObjectiveData) -> impl Fn(&Array1<f64>) -> f64 {
+    move |x_arr: &Array1<f64>| -> f64 {
         let x_slice = x_arr.as_slice().unwrap();
         let mut data_copy = penalty_data.clone();
         compute_fitness_penalties(x_slice, None, &mut data_copy)
@@ -202,12 +202,41 @@ pub fn optimize_filters_autoeq(
     lower_bounds: &[f64],
     upper_bounds: &[f64],
     objective_data: ObjectiveData,
-    _autoeq_name: &str,
+    autoeq_name: &str,
     population: usize,
     maxeval: usize,
     cli_args: &crate::cli::Args,
 ) -> Result<(String, f64), (String, f64)> {
-    // Adaptive DE with advanced features and native constraints
+    // Create the callback with all the logging and user feedback
+    let callback = create_de_callback("autoeq::DE");
+    
+    // Delegate to the callback-based version
+    optimize_filters_autoeq_with_callback(
+        x,
+        lower_bounds,
+        upper_bounds,
+        objective_data,
+        autoeq_name,
+        population,
+        maxeval,
+        cli_args,
+        callback,
+    )
+}
+
+/// AutoEQ DE optimization with external progress callback
+pub fn optimize_filters_autoeq_with_callback(
+    x: &mut [f64],
+    lower_bounds: &[f64],
+    upper_bounds: &[f64],
+    objective_data: ObjectiveData,
+    _autoeq_name: &str,
+    population: usize,
+    maxeval: usize,
+    cli_args: &crate::cli::Args,
+    mut callback: Box<dyn FnMut(&DEIntermediate) -> CallbackAction + Send>,
+) -> Result<(String, f64), (String, f64)> {
+    // Reuse same setup as standard AutoEQ DE
     let setup = setup_de_common(
         lower_bounds,
         upper_bounds,
@@ -216,7 +245,6 @@ pub fn optimize_filters_autoeq(
         maxeval,
     );
     let base_objective_fn = create_de_objective(setup.penalty_data.clone());
-    let callback = create_de_callback("autoeq::DE");
 
     // Create smart initialization based on frequency response analysis
     let num_filters = x.len() / 3;
@@ -298,7 +326,7 @@ pub fn optimize_filters_autoeq(
         .init(Init::LatinHypercube) // Use Latin Hypercube sampling for population
         .x0(best_initial_guess)     // Use smart guess as initial best individual
         .disp(false)
-        .callback(callback);
+        .callback(Box::new(move |intermediate| callback(intermediate)));
 
     // Add adaptive configuration if present
     if let Some(adaptive_cfg) = adaptive_config {
@@ -330,7 +358,7 @@ pub fn optimize_filters_autoeq(
     // Add native constraint penalties for ceiling and spacing constraints
     let ceiling_penalty = {
         let penalty_data = setup.penalty_data.clone();
-        move |x: &ndarray::Array1<f64>| -> f64 {
+        move |x: &Array1<f64>| -> f64 {
             let x_slice = x.as_slice().unwrap();
             let peq_spl = x2peq(
                 &penalty_data.freqs,
@@ -345,104 +373,6 @@ pub fn optimize_filters_autoeq(
     };
     config_builder =
         config_builder.add_penalty_ineq(ceiling_penalty, setup.penalty_data.penalty_w_ceiling);
-
-    let config = config_builder.build();
-    let result = differential_evolution(&base_objective_fn, &setup.bounds, config);
-    process_de_results(x, result, "AutoDE")
-}
-
-/// AutoEQ DE optimization with external progress callback
-pub fn optimize_filters_autoeq_with_callback(
-    x: &mut [f64],
-    lower_bounds: &[f64],
-    upper_bounds: &[f64],
-    objective_data: ObjectiveData,
-    _autoeq_name: &str,
-    population: usize,
-    maxeval: usize,
-    cli_args: &crate::cli::Args,
-    mut callback: Box<dyn FnMut(&crate::de::DEIntermediate) -> crate::de::CallbackAction + Send>,
-) -> Result<(String, f64), (String, f64)> {
-    // Reuse same setup as standard AutoEQ DE
-    let setup = setup_de_common(
-        lower_bounds,
-        upper_bounds,
-        objective_data.clone(),
-        population,
-        maxeval,
-    );
-    let base_objective_fn = create_de_objective(setup.penalty_data.clone());
-
-    let num_filters = x.len() / 3;
-    let smart_config = SmartInitConfig::default();
-
-    let target_response = &setup.penalty_data.target_error;
-    let freq_grid = &setup.penalty_data.freqs;
-
-    let smart_guesses = create_smart_initial_guesses(
-        target_response,
-        freq_grid,
-        num_filters,
-        &setup.bounds,
-        &smart_config,
-    );
-
-    let sobol_samples = init_sobol(
-        x.len(),
-        setup.pop_size.saturating_sub(smart_guesses.len()),
-        &setup.bounds,
-    );
-
-    let best_initial_guess = if !smart_guesses.is_empty() {
-        Array1::from(smart_guesses[0].clone())
-    } else if !sobol_samples.is_empty() {
-        Array1::from(sobol_samples[0].clone())
-    } else {
-        Array1::from(x.to_vec())
-    };
-
-    use std::str::FromStr;
-    let strategy = Strategy::from_str(&cli_args.strategy).unwrap_or(Strategy::CurrentToBest1Bin);
-
-    let adaptive_config = if matches!(strategy, Strategy::AdaptiveBin | Strategy::AdaptiveExp) {
-        Some(crate::de::AdaptiveConfig {
-            adaptive_mutation: true,
-            wls_enabled: true,
-            w_f: cli_args.adaptive_weight_f,
-            w_cr: cli_args.adaptive_weight_cr,
-            ..crate::de::AdaptiveConfig::default()
-        })
-    } else {
-        None
-    };
-
-    let mut config_builder = DEConfigBuilder::new()
-        .maxiter(setup.max_iter)
-        .popsize(setup.pop_size)
-        .tol(cli_args.tolerance)
-        .atol(cli_args.atolerance)
-        .strategy(strategy)
-        .mutation(Mutation::Range { min: 0.4, max: 1.2 })
-        .recombination(cli_args.recombination)
-        .init(Init::LatinHypercube)
-        .x0(best_initial_guess)
-        .disp(false)
-        .callback(Box::new(move |intermediate| callback(intermediate)));
-
-    if let Some(adaptive_cfg) = adaptive_config {
-        config_builder = config_builder.adaptive(adaptive_cfg);
-    }
-
-    // Configure parallel evaluation
-    let parallel_config = ParallelConfig {
-        enabled: !cli_args.no_parallel,
-        num_threads: if cli_args.parallel_threads == 0 {
-            None // Use all available cores
-        } else {
-            Some(cli_args.parallel_threads)
-        },
-    };
-    config_builder = config_builder.parallel(parallel_config);
 
     let config = config_builder.build();
     let result = differential_evolution(&base_objective_fn, &setup.bounds, config);

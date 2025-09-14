@@ -1,7 +1,6 @@
 // Metaheuristics-specific optimization code
 
-use super::optim::ObjectiveData;
-use super::optim_nlopt::compute_fitness_penalties;
+use super::optim::{ObjectiveData, compute_fitness_penalties};
 
 #[allow(unused_imports)]
 use metaheuristics_nature as mh;
