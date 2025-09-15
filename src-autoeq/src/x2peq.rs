@@ -32,19 +32,19 @@ use ndarray::Array1;
 /// # Returns
 /// Frequency response in dB SPL at the specified frequency points
 pub fn x2peq(freqs: &Array1<f64>, x: &[f64], srate: f64, iir_hp_pk: bool) -> Array1<f64> {
-    let num_filters = x.len() / 3;
-    let mut peq_spl = Array1::<f64>::zeros(freqs.len());
-    for i in 0..num_filters {
-        let freq = 10f64.powf(x[i * 3]);
-        let q = x[i * 3 + 1];
-        let gain = x[i * 3 + 2];
-        let ftype = if iir_hp_pk && i == 0 {
-            BiquadFilterType::HighpassVariableQ
-        } else {
-            BiquadFilterType::Peak
-        };
-        let filter = Biquad::new(ftype, freq, srate, q, gain);
-        peq_spl += &filter.np_log_result(&freqs);
-    }
-    peq_spl
+	let num_filters = x.len() / 3;
+	let mut peq_spl = Array1::<f64>::zeros(freqs.len());
+	for i in 0..num_filters {
+		let freq = 10f64.powf(x[i * 3]);
+		let q = x[i * 3 + 1];
+		let gain = x[i * 3 + 2];
+		let ftype = if iir_hp_pk && i == 0 {
+			BiquadFilterType::HighpassVariableQ
+		} else {
+			BiquadFilterType::Peak
+		};
+		let filter = Biquad::new(ftype, freq, srate, q, gain);
+		peq_spl += &filter.np_log_result(&freqs);
+	}
+	peq_spl
 }

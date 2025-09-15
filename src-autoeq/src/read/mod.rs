@@ -15,25 +15,24 @@
 //! You should have received a copy of the GNU General Public License
 //! along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-pub mod directory;
-mod plot;
-mod read_csv;
-mod read_api;
 mod clamp;
-mod smooth;
+mod directory;
 mod interpolate;
 mod normalize;
+mod plot;
+mod read_api;
+mod read_csv;
+mod smooth;
 
 // Re-export commonly used functions
-pub use read_csv::read_curve_from_csv;
-pub use read_csv::load_frequency_response;
-pub use read_api::*;
-pub use directory::data_dir_for;
-pub use directory::sanitize_dir_name;
-pub use directory::measurement_filename;
 pub use clamp::clamp_positive_only;
-pub use smooth::smooth_one_over_n_octave;
-pub use smooth::smooth_gaussian;
+pub use directory::data_dir_for;
+pub use directory::measurement_filename;
+pub use directory::sanitize_dir_name;
 pub use interpolate::*;
 pub use normalize::*;
-
+pub use read_api::*;
+pub use read_csv::load_frequency_response;
+pub use read_csv::read_curve_from_csv;
+pub use smooth::smooth_gaussian;
+pub use smooth::smooth_one_over_n_octave;

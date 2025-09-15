@@ -20,20 +20,20 @@ pub use autoeq_cea2034::Curve;
 pub mod cli;
 /// Constraint functions for optimization
 pub mod constraints;
-/// Smart initial guess generation
-pub mod initial_guess;
 /// Sobol initialisation
 pub mod init_sobol;
+/// Smart initial guess generation
+pub mod initial_guess;
 /// Loss functions for optimization
 pub mod loss;
 /// Optimization algorithms and objective functions
 pub mod optim;
-/// NLOPT-specific optimization code
-pub mod optim_nlopt;
-/// Metaheuristics-specific optimization code
-pub mod optim_mh;
 /// AutoEQ DE-specific optimization code
 pub mod optim_de;
+/// Metaheuristics-specific optimization code
+pub mod optim_mh;
+/// NLOPT-specific optimization code
+pub mod optim_nlopt;
 /// Plotting and visualization functions
 pub mod plot;
 /// Data reading and parsing functions
