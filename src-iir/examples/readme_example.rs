@@ -45,7 +45,7 @@ fn main() {
 
     // Basic biquad filter example
     println!("\n1. Basic Biquad Filter:");
-    let mut filter = Biquad::new(
+    let filter = Biquad::new(
         BiquadFilterType::Peak,
         1000.0,  // frequency
         48000.0, // sample rate

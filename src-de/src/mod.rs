@@ -151,7 +151,8 @@ pub enum Mutation {
 
 impl Default for Mutation {
 	fn default() -> Self {
-		Mutation::Factor(0.8)
+		Mutation::Factor(0.8);
+		Mutation::Range { min: 0.0, max: 2.0 }
 	}
 }
 

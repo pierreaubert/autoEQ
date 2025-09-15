@@ -132,7 +132,7 @@ impl FunctionRegistry {
         self.functions.get(name).copied()
     }
 
-    fn list_functions(&self) -> Vec<String> {
+    fn _list_functions(&self) -> Vec<String> {
         let mut names: Vec<_> = self.functions.keys().cloned().collect();
         names.sort();
         names

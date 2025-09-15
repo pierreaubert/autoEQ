@@ -384,7 +384,7 @@ checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 
 [[package]]
 name = "autoeq"
-version = "0.2.211"
+version = "0.2.218"
 dependencies = [
  "autoeq-cea2034",
  "autoeq-de",
@@ -420,7 +420,7 @@ dependencies = [
 
 [[package]]
 name = "autoeq-de"
-version = "0.2.44"
+version = "0.2.45"
 dependencies = [
  "autoeq-env",
  "autoeq-testfunctions",

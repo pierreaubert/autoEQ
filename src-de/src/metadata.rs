@@ -4,7 +4,7 @@
 mod tests {
 	use crate::{
 		differential_evolution, run_recorded_differential_evolution, DEConfig, DEConfigBuilder,
-		Strategy,
+		Strategy, Mutation,
 	};
 	use autoeq_testfunctions::{get_function_bounds_2d, get_function_bounds_vec, rosenbrock};
 
@@ -43,9 +43,10 @@ mod tests {
 		let bounds = get_function_bounds_vec("rosenbrock", (-5.0, 5.0));
 		let config = DEConfigBuilder::new()
 			.seed(123)
-			.maxiter(400)
-			.popsize(30)
+			.maxiter(500)
+			.popsize(40)
 			.strategy(Strategy::RandToBest1Exp)
+			.mutation(Mutation::Factor(0.7))
 			.recombination(0.9)
 			.build();
 
