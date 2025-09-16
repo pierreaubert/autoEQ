@@ -7,11 +7,13 @@ data_generated
 autoeq_*.html
 autoeq_*.png
 *.csv
+*.html
 *~
 .*~
 *#
 src/unused.rs
 .idea
+.qwen
 TAGS
 ETAGS
 CTAGS

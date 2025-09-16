@@ -1,5 +1,4 @@
 //! AutoEQ - A library for audio equalization and filter optimization
-//! Common constants shared across all AutoEQ workspace members
 //!
 //! Copyright (C) 2025 Pierre Aubert pierre(at)spinorama(dot)org
 //!
@@ -16,8 +15,13 @@
 //! You should have received a copy of the GNU General Public License
 //! along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-/// Default directory name for cached measurement data
-pub const DATA_CACHED: &str = "data_cached";
+mod filter_color;
+mod plot_filters;
+mod plot_results;
+mod plot_spin;
+mod ref_lines;
 
-/// Default directory name for generated data
-pub const DATA_GENERATED: &str = "data_generated";
+pub use filter_color::filter_color;
+pub use plot_filters::plot_filters;
+pub use plot_results::plot_results;
+pub use plot_spin::{plot_spin, plot_spin_details};

@@ -17,112 +17,298 @@ impl FunctionRegistry {
 
         // Unimodal functions
         functions.insert("sphere".to_string(), sphere as fn(&Array1<f64>) -> f64);
-        functions.insert("rosenbrock".to_string(), rosenbrock as fn(&Array1<f64>) -> f64);
+        functions.insert(
+            "rosenbrock".to_string(),
+            rosenbrock as fn(&Array1<f64>) -> f64,
+        );
         functions.insert("booth".to_string(), booth as fn(&Array1<f64>) -> f64);
         functions.insert("matyas".to_string(), matyas as fn(&Array1<f64>) -> f64);
         functions.insert("beale".to_string(), beale as fn(&Array1<f64>) -> f64);
-        functions.insert("himmelblau".to_string(), himmelblau as fn(&Array1<f64>) -> f64);
-        functions.insert("sum_squares".to_string(), sum_squares as fn(&Array1<f64>) -> f64);
-        functions.insert("different_powers".to_string(), different_powers as fn(&Array1<f64>) -> f64);
+        functions.insert(
+            "himmelblau".to_string(),
+            himmelblau as fn(&Array1<f64>) -> f64,
+        );
+        functions.insert(
+            "sum_squares".to_string(),
+            sum_squares as fn(&Array1<f64>) -> f64,
+        );
+        functions.insert(
+            "different_powers".to_string(),
+            different_powers as fn(&Array1<f64>) -> f64,
+        );
         functions.insert("elliptic".to_string(), elliptic as fn(&Array1<f64>) -> f64);
         functions.insert("cigar".to_string(), cigar as fn(&Array1<f64>) -> f64);
         functions.insert("tablet".to_string(), tablet as fn(&Array1<f64>) -> f64);
         functions.insert("discus".to_string(), discus as fn(&Array1<f64>) -> f64);
         functions.insert("ridge".to_string(), ridge as fn(&Array1<f64>) -> f64);
-        functions.insert("sharp_ridge".to_string(), sharp_ridge as fn(&Array1<f64>) -> f64);
-        functions.insert("perm_0_d_beta".to_string(), perm_0_d_beta as fn(&Array1<f64>) -> f64);
-        functions.insert("perm_d_beta".to_string(), perm_d_beta as fn(&Array1<f64>) -> f64);
+        functions.insert(
+            "sharp_ridge".to_string(),
+            sharp_ridge as fn(&Array1<f64>) -> f64,
+        );
+        functions.insert(
+            "perm_0_d_beta".to_string(),
+            perm_0_d_beta as fn(&Array1<f64>) -> f64,
+        );
+        functions.insert(
+            "perm_d_beta".to_string(),
+            perm_d_beta as fn(&Array1<f64>) -> f64,
+        );
 
         // Multimodal functions
         functions.insert("ackley".to_string(), ackley as fn(&Array1<f64>) -> f64);
-        functions.insert("rastrigin".to_string(), rastrigin as fn(&Array1<f64>) -> f64);
+        functions.insert(
+            "rastrigin".to_string(),
+            rastrigin as fn(&Array1<f64>) -> f64,
+        );
         functions.insert("griewank".to_string(), griewank as fn(&Array1<f64>) -> f64);
         functions.insert("schwefel".to_string(), schwefel as fn(&Array1<f64>) -> f64);
         functions.insert("branin".to_string(), branin as fn(&Array1<f64>) -> f64);
-        functions.insert("goldstein_price".to_string(), goldstein_price as fn(&Array1<f64>) -> f64);
-        functions.insert("six_hump_camel".to_string(), six_hump_camel as fn(&Array1<f64>) -> f64);
-        functions.insert("hartman_4d".to_string(), hartman_4d as fn(&Array1<f64>) -> f64);
-        functions.insert("xin_she_yang_n1".to_string(), xin_she_yang_n1 as fn(&Array1<f64>) -> f64);
-        functions.insert("xin_she_yang_n2".to_string(), xin_she_yang_n2 as fn(&Array1<f64>) -> f64);
-        functions.insert("xin_she_yang_n3".to_string(), xin_she_yang_n3 as fn(&Array1<f64>) -> f64);
-        functions.insert("xin_she_yang_n4".to_string(), xin_she_yang_n4 as fn(&Array1<f64>) -> f64);
+        functions.insert(
+            "goldstein_price".to_string(),
+            goldstein_price as fn(&Array1<f64>) -> f64,
+        );
+        functions.insert(
+            "six_hump_camel".to_string(),
+            six_hump_camel as fn(&Array1<f64>) -> f64,
+        );
+        functions.insert(
+            "hartman_4d".to_string(),
+            hartman_4d as fn(&Array1<f64>) -> f64,
+        );
+        functions.insert(
+            "xin_she_yang_n1".to_string(),
+            xin_she_yang_n1 as fn(&Array1<f64>) -> f64,
+        );
+        functions.insert(
+            "xin_she_yang_n2".to_string(),
+            xin_she_yang_n2 as fn(&Array1<f64>) -> f64,
+        );
+        functions.insert(
+            "xin_she_yang_n3".to_string(),
+            xin_she_yang_n3 as fn(&Array1<f64>) -> f64,
+        );
+        functions.insert(
+            "xin_she_yang_n4".to_string(),
+            xin_she_yang_n4 as fn(&Array1<f64>) -> f64,
+        );
         functions.insert("katsuura".to_string(), katsuura as fn(&Array1<f64>) -> f64);
         functions.insert("happycat".to_string(), happycat as fn(&Array1<f64>) -> f64);
 
         // Alpine functions
-        functions.insert("alpine_n1".to_string(), alpine_n1 as fn(&Array1<f64>) -> f64);
-        functions.insert("alpine_n2".to_string(), alpine_n2 as fn(&Array1<f64>) -> f64);
+        functions.insert(
+            "alpine_n1".to_string(),
+            alpine_n1 as fn(&Array1<f64>) -> f64,
+        );
+        functions.insert(
+            "alpine_n2".to_string(),
+            alpine_n2 as fn(&Array1<f64>) -> f64,
+        );
 
         // Additional functions
-        functions.insert("gramacy_lee_2012".to_string(), gramacy_lee_2012 as fn(&Array1<f64>) -> f64);
-        functions.insert("forrester_2008".to_string(), forrester_2008 as fn(&Array1<f64>) -> f64);
-        functions.insert("power_sum".to_string(), power_sum as fn(&Array1<f64>) -> f64);
+        functions.insert(
+            "gramacy_lee_2012".to_string(),
+            gramacy_lee_2012 as fn(&Array1<f64>) -> f64,
+        );
+        functions.insert(
+            "forrester_2008".to_string(),
+            forrester_2008 as fn(&Array1<f64>) -> f64,
+        );
+        functions.insert(
+            "power_sum".to_string(),
+            power_sum as fn(&Array1<f64>) -> f64,
+        );
         functions.insert("shekel".to_string(), shekel as fn(&Array1<f64>) -> f64);
-        functions.insert("gramacy_lee_function".to_string(), gramacy_lee_function as fn(&Array1<f64>) -> f64);
-        functions.insert("expanded_griewank_rosenbrock".to_string(), expanded_griewank_rosenbrock as fn(&Array1<f64>) -> f64);
+        functions.insert(
+            "gramacy_lee_function".to_string(),
+            gramacy_lee_function as fn(&Array1<f64>) -> f64,
+        );
+        functions.insert(
+            "expanded_griewank_rosenbrock".to_string(),
+            expanded_griewank_rosenbrock as fn(&Array1<f64>) -> f64,
+        );
 
         // More classical functions
-        functions.insert("bohachevsky1".to_string(), bohachevsky1 as fn(&Array1<f64>) -> f64);
-        functions.insert("bohachevsky2".to_string(), bohachevsky2 as fn(&Array1<f64>) -> f64);
-        functions.insert("bohachevsky3".to_string(), bohachevsky3 as fn(&Array1<f64>) -> f64);
+        functions.insert(
+            "bohachevsky1".to_string(),
+            bohachevsky1 as fn(&Array1<f64>) -> f64,
+        );
+        functions.insert(
+            "bohachevsky2".to_string(),
+            bohachevsky2 as fn(&Array1<f64>) -> f64,
+        );
+        functions.insert(
+            "bohachevsky3".to_string(),
+            bohachevsky3 as fn(&Array1<f64>) -> f64,
+        );
         functions.insert("brown".to_string(), brown as fn(&Array1<f64>) -> f64);
         functions.insert("bukin_n6".to_string(), bukin_n6 as fn(&Array1<f64>) -> f64);
-        functions.insert("chung_reynolds".to_string(), chung_reynolds as fn(&Array1<f64>) -> f64);
+        functions.insert(
+            "chung_reynolds".to_string(),
+            chung_reynolds as fn(&Array1<f64>) -> f64,
+        );
         functions.insert("colville".to_string(), colville as fn(&Array1<f64>) -> f64);
-        functions.insert("cosine_mixture".to_string(), cosine_mixture as fn(&Array1<f64>) -> f64);
-        functions.insert("cross_in_tray".to_string(), cross_in_tray as fn(&Array1<f64>) -> f64);
-        functions.insert("dixons_price".to_string(), dixons_price as fn(&Array1<f64>) -> f64);
-        functions.insert("drop_wave".to_string(), drop_wave as fn(&Array1<f64>) -> f64);
+        functions.insert(
+            "cosine_mixture".to_string(),
+            cosine_mixture as fn(&Array1<f64>) -> f64,
+        );
+        functions.insert(
+            "cross_in_tray".to_string(),
+            cross_in_tray as fn(&Array1<f64>) -> f64,
+        );
+        functions.insert(
+            "dixons_price".to_string(),
+            dixons_price as fn(&Array1<f64>) -> f64,
+        );
+        functions.insert(
+            "drop_wave".to_string(),
+            drop_wave as fn(&Array1<f64>) -> f64,
+        );
         functions.insert("easom".to_string(), easom as fn(&Array1<f64>) -> f64);
-        functions.insert("eggholder".to_string(), eggholder as fn(&Array1<f64>) -> f64);
-        functions.insert("exponential".to_string(), exponential as fn(&Array1<f64>) -> f64);
-        functions.insert("freudenstein_roth".to_string(), freudenstein_roth as fn(&Array1<f64>) -> f64);
-        functions.insert("griewank2".to_string(), griewank2 as fn(&Array1<f64>) -> f64);
-        functions.insert("holder_table".to_string(), holder_table as fn(&Array1<f64>) -> f64);
-        functions.insert("langermann".to_string(), langermann as fn(&Array1<f64>) -> f64);
+        functions.insert(
+            "eggholder".to_string(),
+            eggholder as fn(&Array1<f64>) -> f64,
+        );
+        functions.insert(
+            "exponential".to_string(),
+            exponential as fn(&Array1<f64>) -> f64,
+        );
+        functions.insert(
+            "freudenstein_roth".to_string(),
+            freudenstein_roth as fn(&Array1<f64>) -> f64,
+        );
+        functions.insert(
+            "griewank2".to_string(),
+            griewank2 as fn(&Array1<f64>) -> f64,
+        );
+        functions.insert(
+            "holder_table".to_string(),
+            holder_table as fn(&Array1<f64>) -> f64,
+        );
+        functions.insert(
+            "langermann".to_string(),
+            langermann as fn(&Array1<f64>) -> f64,
+        );
         functions.insert("levi13".to_string(), levi13 as fn(&Array1<f64>) -> f64);
-        functions.insert("mccormick".to_string(), mccormick as fn(&Array1<f64>) -> f64);
-        functions.insert("michalewicz".to_string(), michalewicz as fn(&Array1<f64>) -> f64);
+        functions.insert(
+            "mccormick".to_string(),
+            mccormick as fn(&Array1<f64>) -> f64,
+        );
+        functions.insert(
+            "michalewicz".to_string(),
+            michalewicz as fn(&Array1<f64>) -> f64,
+        );
         functions.insert("periodic".to_string(), periodic as fn(&Array1<f64>) -> f64);
         functions.insert("pinter".to_string(), pinter as fn(&Array1<f64>) -> f64);
         functions.insert("powell".to_string(), powell as fn(&Array1<f64>) -> f64);
         functions.insert("qing".to_string(), qing as fn(&Array1<f64>) -> f64);
-        functions.insert("quadratic".to_string(), quadratic as fn(&Array1<f64>) -> f64);
+        functions.insert(
+            "quadratic".to_string(),
+            quadratic as fn(&Array1<f64>) -> f64,
+        );
         functions.insert("quartic".to_string(), quartic as fn(&Array1<f64>) -> f64);
-        functions.insert("schwefel2".to_string(), schwefel2 as fn(&Array1<f64>) -> f64);
+        functions.insert(
+            "schwefel2".to_string(),
+            schwefel2 as fn(&Array1<f64>) -> f64,
+        );
         functions.insert("step".to_string(), step as fn(&Array1<f64>) -> f64);
-        functions.insert("styblinski_tang2".to_string(), styblinski_tang2 as fn(&Array1<f64>) -> f64);
-        functions.insert("three_hump_camel".to_string(), three_hump_camel as fn(&Array1<f64>) -> f64);
+        functions.insert(
+            "styblinski_tang2".to_string(),
+            styblinski_tang2 as fn(&Array1<f64>) -> f64,
+        );
+        functions.insert(
+            "three_hump_camel".to_string(),
+            three_hump_camel as fn(&Array1<f64>) -> f64,
+        );
         functions.insert("trid".to_string(), trid as fn(&Array1<f64>) -> f64);
         functions.insert("vincent".to_string(), vincent as fn(&Array1<f64>) -> f64);
         functions.insert("whitley".to_string(), whitley as fn(&Array1<f64>) -> f64);
-        functions.insert("zakharov2".to_string(), zakharov2 as fn(&Array1<f64>) -> f64);
-        
+        functions.insert(
+            "zakharov2".to_string(),
+            zakharov2 as fn(&Array1<f64>) -> f64,
+        );
+
         // Additional functions from test files
-        functions.insert("ackley_n2".to_string(), ackley_n2 as fn(&Array1<f64>) -> f64);
-        functions.insert("ackley_n3".to_string(), ackley_n3 as fn(&Array1<f64>) -> f64);
+        functions.insert(
+            "ackley_n2".to_string(),
+            ackley_n2 as fn(&Array1<f64>) -> f64,
+        );
+        functions.insert(
+            "ackley_n3".to_string(),
+            ackley_n3 as fn(&Array1<f64>) -> f64,
+        );
         functions.insert("bird".to_string(), bird as fn(&Array1<f64>) -> f64);
-        functions.insert("bent_cigar".to_string(), bent_cigar as fn(&Array1<f64>) -> f64);
-        functions.insert("cross_in_tray".to_string(), cross_in_tray as fn(&Array1<f64>) -> f64);
-        functions.insert("de_jong_step2".to_string(), de_jong_step2 as fn(&Array1<f64>) -> f64);
-        functions.insert("dejong_f5_foxholes".to_string(), dejong_f5_foxholes as fn(&Array1<f64>) -> f64);
-        functions.insert("drop_wave".to_string(), drop_wave as fn(&Array1<f64>) -> f64);
-        functions.insert("eggholder".to_string(), eggholder as fn(&Array1<f64>) -> f64);
-        functions.insert("epistatic_michalewicz".to_string(), epistatic_michalewicz as fn(&Array1<f64>) -> f64);
-        functions.insert("freudenstein_roth".to_string(), freudenstein_roth as fn(&Array1<f64>) -> f64);
-        functions.insert("happy_cat".to_string(), happy_cat as fn(&Array1<f64>) -> f64);
-        functions.insert("hartman_3d".to_string(), hartman_3d as fn(&Array1<f64>) -> f64);
-        functions.insert("holder_table".to_string(), holder_table as fn(&Array1<f64>) -> f64);
-        functions.insert("lampinen_simplified".to_string(), lampinen_simplified as fn(&Array1<f64>) -> f64);
+        functions.insert(
+            "bent_cigar".to_string(),
+            bent_cigar as fn(&Array1<f64>) -> f64,
+        );
+        functions.insert(
+            "cross_in_tray".to_string(),
+            cross_in_tray as fn(&Array1<f64>) -> f64,
+        );
+        functions.insert(
+            "de_jong_step2".to_string(),
+            de_jong_step2 as fn(&Array1<f64>) -> f64,
+        );
+        functions.insert(
+            "dejong_f5_foxholes".to_string(),
+            dejong_f5_foxholes as fn(&Array1<f64>) -> f64,
+        );
+        functions.insert(
+            "drop_wave".to_string(),
+            drop_wave as fn(&Array1<f64>) -> f64,
+        );
+        functions.insert(
+            "eggholder".to_string(),
+            eggholder as fn(&Array1<f64>) -> f64,
+        );
+        functions.insert(
+            "epistatic_michalewicz".to_string(),
+            epistatic_michalewicz as fn(&Array1<f64>) -> f64,
+        );
+        functions.insert(
+            "freudenstein_roth".to_string(),
+            freudenstein_roth as fn(&Array1<f64>) -> f64,
+        );
+        functions.insert(
+            "happy_cat".to_string(),
+            happy_cat as fn(&Array1<f64>) -> f64,
+        );
+        functions.insert(
+            "hartman_3d".to_string(),
+            hartman_3d as fn(&Array1<f64>) -> f64,
+        );
+        functions.insert(
+            "holder_table".to_string(),
+            holder_table as fn(&Array1<f64>) -> f64,
+        );
+        functions.insert(
+            "lampinen_simplified".to_string(),
+            lampinen_simplified as fn(&Array1<f64>) -> f64,
+        );
         functions.insert("levy".to_string(), levy as fn(&Array1<f64>) -> f64);
         functions.insert("levy_n13".to_string(), levy_n13 as fn(&Array1<f64>) -> f64);
-        functions.insert("rotated_hyper_ellipsoid".to_string(), rotated_hyper_ellipsoid as fn(&Array1<f64>) -> f64);
+        functions.insert(
+            "rotated_hyper_ellipsoid".to_string(),
+            rotated_hyper_ellipsoid as fn(&Array1<f64>) -> f64,
+        );
         functions.insert("salomon".to_string(), salomon as fn(&Array1<f64>) -> f64);
-        functions.insert("schaffer_n2".to_string(), schaffer_n2 as fn(&Array1<f64>) -> f64);
-        functions.insert("schaffer_n4".to_string(), schaffer_n4 as fn(&Array1<f64>) -> f64);
+        functions.insert(
+            "schaffer_n2".to_string(),
+            schaffer_n2 as fn(&Array1<f64>) -> f64,
+        );
+        functions.insert(
+            "schaffer_n4".to_string(),
+            schaffer_n4 as fn(&Array1<f64>) -> f64,
+        );
         functions.insert("shubert".to_string(), shubert as fn(&Array1<f64>) -> f64);
-        functions.insert("sum_of_different_powers".to_string(), sum_of_different_powers as fn(&Array1<f64>) -> f64);
-        functions.insert("three_hump_camel".to_string(), three_hump_camel as fn(&Array1<f64>) -> f64);
+        functions.insert(
+            "sum_of_different_powers".to_string(),
+            sum_of_different_powers as fn(&Array1<f64>) -> f64,
+        );
+        functions.insert(
+            "three_hump_camel".to_string(),
+            three_hump_camel as fn(&Array1<f64>) -> f64,
+        );
         functions.insert("zakharov".to_string(), zakharov as fn(&Array1<f64>) -> f64);
 
         Self { functions }
@@ -139,7 +325,8 @@ impl FunctionRegistry {
     }
 }
 
-static FUNCTION_REGISTRY: std::sync::LazyLock<FunctionRegistry> = std::sync::LazyLock::new(|| FunctionRegistry::new());
+static FUNCTION_REGISTRY: std::sync::LazyLock<FunctionRegistry> =
+    std::sync::LazyLock::new(|| FunctionRegistry::new());
 
 /// Configuration for a benchmark
 #[derive(Clone, Debug)]
@@ -229,7 +416,7 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         function_name: "alpine_n2".to_string(),
         bounds: vec![(0.0, 10.0), (0.0, 10.0)],
         expected_optimum: vec![2.808, 2.808],
-        fun_tolerance: -7.0, // Maximization: negative values are better
+        fun_tolerance: -7.0,     // Maximization: negative values are better
         position_tolerance: 6.0, // Relaxed for multimodal function
         maxiter: 20000,
         popsize: 500,
@@ -831,7 +1018,7 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         function_name: "ackley_n3".to_string(),
         bounds: vec![(-32.0, 32.0), (-32.0, 32.0)],
         expected_optimum: vec![0.682, -0.367],
-        fun_tolerance: -198.0, // Approximate global minimum
+        fun_tolerance: -198.0,   // Approximate global minimum
         position_tolerance: 5.0, // Relaxed for extremely difficult function
         maxiter: 1500,
         popsize: 80,
@@ -878,7 +1065,7 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
             (-2.0 * std::f64::consts::PI, 2.0 * std::f64::consts::PI),
         ],
         expected_optimum: vec![4.701, 3.152], // Approximate optimum
-        fun_tolerance: 0.0, // Just find negative value
+        fun_tolerance: 0.0,                   // Just find negative value
         position_tolerance: 2.0,
         maxiter: 1500,
         popsize: 80,
@@ -937,7 +1124,7 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         function_name: "cross_in_tray".to_string(),
         bounds: vec![(-10.0, 10.0), (-10.0, 10.0)],
         expected_optimum: vec![1.349, 1.349], // One of the optima
-        fun_tolerance: -2.0, // Global minimum is -2.06261
+        fun_tolerance: -2.0,                  // Global minimum is -2.06261
         position_tolerance: 0.2,
         maxiter: 2000,
         popsize: 100,
@@ -981,8 +1168,8 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         function_name: "eggholder".to_string(),
         bounds: vec![(-512.0, 512.0), (-512.0, 512.0)],
         expected_optimum: vec![512.0, 404.2319], // Approximate optimum
-        fun_tolerance: -700.0, // Global minimum is -959.6407
-        position_tolerance: 50.0, // Very relaxed due to extreme difficulty
+        fun_tolerance: -700.0,                   // Global minimum is -959.6407
+        position_tolerance: 50.0,                // Very relaxed due to extreme difficulty
         maxiter: 1200,
         popsize: 40,
         strategy: Strategy::Rand1Exp,
@@ -996,7 +1183,7 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         function_name: "epistatic_michalewicz".to_string(),
         bounds: vec![(0.0, std::f64::consts::PI); 2],
         expected_optimum: vec![2.693, 0.0], // Approximate
-        fun_tolerance: -0.8, // Approximate minimum
+        fun_tolerance: -0.8,                // Approximate minimum
         position_tolerance: 0.5,
         maxiter: 1200,
         popsize: 60,
@@ -1071,7 +1258,7 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         function_name: "hartman_3d".to_string(),
         bounds: vec![(0.0, 1.0); 3],
         expected_optimum: vec![0.114, 0.556, 0.852], // Approximate optimum
-        fun_tolerance: -3.8, // Global minimum is -3.86
+        fun_tolerance: -3.8,                         // Global minimum is -3.86
         position_tolerance: 0.1,
         maxiter: 1000,
         popsize: 60,
@@ -1086,7 +1273,7 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         function_name: "holder_table".to_string(),
         bounds: vec![(-10.0, 10.0), (-10.0, 10.0)],
         expected_optimum: vec![8.055, 9.665], // One of the optima
-        fun_tolerance: -19.0, // Global minimum is -19.2085
+        fun_tolerance: -19.0,                 // Global minimum is -19.2085
         position_tolerance: 0.5,
         maxiter: 1200,
         popsize: 60,
@@ -1094,14 +1281,14 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         recombination: 0.9,
         seed: 280,
     });
-    
+
     // LANGERMANN function
     configs.push(BenchmarkConfig {
         name: "langermann_2d".to_string(),
         function_name: "langermann".to_string(),
         bounds: vec![(0.0, 10.0), (0.0, 10.0)],
         expected_optimum: vec![2.808, 8.883], // Approximate
-        fun_tolerance: -5.0, // Global minimum around -5.16
+        fun_tolerance: -5.0,                  // Global minimum around -5.16
         position_tolerance: 1.0,
         maxiter: 1500,
         popsize: 80,
@@ -1109,7 +1296,7 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         recombination: 0.9,
         seed: 290,
     });
-    
+
     // LEVI13 function (also known as Levy N.13)
     configs.push(BenchmarkConfig {
         name: "levi13_2d".to_string(),
@@ -1124,7 +1311,7 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         recombination: 0.9,
         seed: 300,
     });
-    
+
     // MCCORMICK function
     configs.push(BenchmarkConfig {
         name: "mccormick_2d".to_string(),
@@ -1139,14 +1326,14 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         recombination: 0.9,
         seed: 310,
     });
-    
+
     // MICHALEWICZ function
     configs.push(BenchmarkConfig {
         name: "michalewicz_2d".to_string(),
         function_name: "michalewicz".to_string(),
         bounds: vec![(0.0, std::f64::consts::PI); 2],
         expected_optimum: vec![2.20, 1.57], // Approximate
-        fun_tolerance: -1.8, // Global minimum around -1.8013
+        fun_tolerance: -1.8,                // Global minimum around -1.8013
         position_tolerance: 0.1,
         maxiter: 1000,
         popsize: 60,
@@ -1154,13 +1341,13 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         recombination: 0.9,
         seed: 320,
     });
-    
+
     configs.push(BenchmarkConfig {
         name: "michalewicz_5d".to_string(),
         function_name: "michalewicz".to_string(),
         bounds: vec![(0.0, std::f64::consts::PI); 5],
         expected_optimum: vec![2.20, 1.57, 1.28, 1.92, 1.72], // Approximate
-        fun_tolerance: -4.5, // Global minimum around -4.687
+        fun_tolerance: -4.5,                                  // Global minimum around -4.687
         position_tolerance: 0.2,
         maxiter: 1500,
         popsize: 100,
@@ -1168,7 +1355,7 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         recombination: 0.95,
         seed: 321,
     });
-    
+
     // PERIODIC function
     configs.push(BenchmarkConfig {
         name: "periodic_2d".to_string(),
@@ -1183,7 +1370,7 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         recombination: 0.9,
         seed: 330,
     });
-    
+
     // PINTER function
     configs.push(BenchmarkConfig {
         name: "pinter_2d".to_string(),
@@ -1198,7 +1385,7 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         recombination: 0.9,
         seed: 340,
     });
-    
+
     // POWELL function
     configs.push(BenchmarkConfig {
         name: "powell_4d".to_string(),
@@ -1213,7 +1400,7 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         recombination: 0.9,
         seed: 350,
     });
-    
+
     configs.push(BenchmarkConfig {
         name: "powell_8d".to_string(),
         function_name: "powell".to_string(),
@@ -1227,7 +1414,7 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         recombination: 0.95,
         seed: 351,
     });
-    
+
     // QING function
     configs.push(BenchmarkConfig {
         name: "qing_2d".to_string(),
@@ -1242,7 +1429,7 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         recombination: 0.9,
         seed: 360,
     });
-    
+
     // QUADRATIC function
     configs.push(BenchmarkConfig {
         name: "quadratic_2d".to_string(),
@@ -1257,7 +1444,7 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         recombination: 0.9,
         seed: 370,
     });
-    
+
     // QUARTIC function
     configs.push(BenchmarkConfig {
         name: "quartic_2d".to_string(),
@@ -1272,7 +1459,7 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         recombination: 0.8,
         seed: 380,
     });
-    
+
     configs.push(BenchmarkConfig {
         name: "quartic_10d".to_string(),
         function_name: "quartic".to_string(),
@@ -1286,7 +1473,7 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         recombination: 0.9,
         seed: 381,
     });
-    
+
     // ROTATED HYPER ELLIPSOID function
     configs.push(BenchmarkConfig {
         name: "rotated_hyper_ellipsoid_2d".to_string(),
@@ -1301,7 +1488,7 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         recombination: 0.8,
         seed: 390,
     });
-    
+
     configs.push(BenchmarkConfig {
         name: "rotated_hyper_ellipsoid_5d".to_string(),
         function_name: "rotated_hyper_ellipsoid".to_string(),
@@ -1315,7 +1502,7 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         recombination: 0.9,
         seed: 391,
     });
-    
+
     // SALOMON function
     configs.push(BenchmarkConfig {
         name: "salomon_2d".to_string(),
@@ -1330,7 +1517,7 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         recombination: 0.9,
         seed: 400,
     });
-    
+
     // SCHAFFER N2 function
     configs.push(BenchmarkConfig {
         name: "schaffer_n2_2d".to_string(),
@@ -1345,7 +1532,7 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         recombination: 0.9,
         seed: 410,
     });
-    
+
     // SCHAFFER N4 function
     configs.push(BenchmarkConfig {
         name: "schaffer_n4_2d".to_string(),
@@ -1360,7 +1547,7 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         recombination: 0.9,
         seed: 420,
     });
-    
+
     // SCHWEFEL2 function
     configs.push(BenchmarkConfig {
         name: "schwefel2_2d".to_string(),
@@ -1375,7 +1562,7 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         recombination: 0.8,
         seed: 430,
     });
-    
+
     // STEP function
     configs.push(BenchmarkConfig {
         name: "step_5d".to_string(),
@@ -1390,7 +1577,7 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         recombination: 0.9,
         seed: 440,
     });
-    
+
     // STYBLINSKI TANG function
     configs.push(BenchmarkConfig {
         name: "styblinski_tang_2d".to_string(),
@@ -1405,7 +1592,7 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         recombination: 0.9,
         seed: 450,
     });
-    
+
     // SUM OF DIFFERENT POWERS function
     configs.push(BenchmarkConfig {
         name: "sum_of_different_powers_2d".to_string(),
@@ -1420,7 +1607,7 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         recombination: 0.8,
         seed: 460,
     });
-    
+
     // THREE HUMP CAMEL function
     configs.push(BenchmarkConfig {
         name: "three_hump_camel_2d".to_string(),
@@ -1435,14 +1622,14 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         recombination: 0.8,
         seed: 470,
     });
-    
+
     // TRID function
     configs.push(BenchmarkConfig {
         name: "trid_6d".to_string(),
         function_name: "trid".to_string(),
         bounds: vec![(-36.0, 36.0); 6],
         expected_optimum: vec![6.0, 10.0, 12.0, 12.0, 10.0, 6.0], // i(d+1-i)
-        fun_tolerance: -50.0, // Global minimum is -50 for d=6
+        fun_tolerance: -50.0,                                     // Global minimum is -50 for d=6
         position_tolerance: 0.1,
         maxiter: 1200,
         popsize: 80,
@@ -1450,22 +1637,22 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         recombination: 0.9,
         seed: 480,
     });
-    
+
     // VINCENT function
     configs.push(BenchmarkConfig {
         name: "vincent_2d".to_string(),
         function_name: "vincent".to_string(),
         bounds: vec![(0.25, 10.0), (0.25, 10.0)],
         expected_optimum: vec![7.706, 7.706], // Approximate
-        fun_tolerance: -2.0, // Global minimum around -2 for 2D
-        position_tolerance: 2.0, // Many local minima
+        fun_tolerance: -2.0,                  // Global minimum around -2 for 2D
+        position_tolerance: 2.0,              // Many local minima
         maxiter: 1500,
         popsize: 80,
         strategy: Strategy::Rand1Exp,
         recombination: 0.9,
         seed: 490,
     });
-    
+
     // WHITLEY function
     configs.push(BenchmarkConfig {
         name: "whitley_2d".to_string(),
@@ -1480,7 +1667,7 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         recombination: 0.9,
         seed: 500,
     });
-    
+
     // XIN SHE YANG N3 function
     configs.push(BenchmarkConfig {
         name: "xin_she_yang_n3_2d".to_string(),
@@ -1495,7 +1682,7 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         recombination: 0.9,
         seed: 510,
     });
-    
+
     // XIN SHE YANG N4 function
     configs.push(BenchmarkConfig {
         name: "xin_she_yang_n4_2d".to_string(),
@@ -1510,7 +1697,7 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         recombination: 0.9,
         seed: 520,
     });
-    
+
     // ZAKHAROV function variants
     configs.push(BenchmarkConfig {
         name: "zakharov_2d".to_string(),
@@ -1525,7 +1712,7 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         recombination: 0.8,
         seed: 530,
     });
-    
+
     configs.push(BenchmarkConfig {
         name: "zakharov2_2d".to_string(),
         function_name: "zakharov2".to_string(),
@@ -1571,7 +1758,10 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
                         position_errors: vec![f64::INFINITY],
                         position_tolerance: config_clone.position_tolerance,
                         duration: Duration::from_secs(0),
-                        error_message: Some(format!("Function {} not found in registry", config_clone.function_name)),
+                        error_message: Some(format!(
+                            "Function {} not found in registry",
+                            config_clone.function_name
+                        )),
                     }
                 }
             }),
@@ -1596,10 +1786,17 @@ struct BenchmarkResult {
 impl fmt::Display for BenchmarkResult {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let status = if self.success { "✅ PASS" } else { "❌ FAIL" };
-        write!(f, "{} {} (fun: {:.6e} < {:.2e}, pos_errs: max {:.6} < {:.2}, time: {:.2}s)",
-            status, self.name, self.fun_value, self.fun_tolerance,
+        write!(
+            f,
+            "{} {} (fun: {:.6e} < {:.2e}, pos_errs: max {:.6} < {:.2}, time: {:.2}s)",
+            status,
+            self.name,
+            self.fun_value,
+            self.fun_tolerance,
             self.position_errors.iter().fold(0.0f64, |a, &b| a.max(b)),
-            self.position_tolerance, self.duration.as_secs_f64())?;
+            self.position_tolerance,
+            self.duration.as_secs_f64()
+        )?;
         if let Some(ref err) = self.error_message {
             write!(f, " - {}", err)?;
         }
@@ -1626,7 +1823,9 @@ fn run_benchmark(
         Ok((report, _csv_path)) => {
             let fun_ok = report.fun < fun_tolerance;
 
-            let position_errors: Vec<f64> = report.x.iter()
+            let position_errors: Vec<f64> = report
+                .x
+                .iter()
                 .zip(expected_optimum.iter())
                 .map(|(actual, expected)| (actual - expected).abs())
                 .collect();
@@ -1637,11 +1836,17 @@ fn run_benchmark(
             let error_message = if !success {
                 let mut msgs = Vec::new();
                 if !fun_ok {
-                    msgs.push(format!("fun value {:.6e} >= {:.2e}", report.fun, fun_tolerance));
+                    msgs.push(format!(
+                        "fun value {:.6e} >= {:.2e}",
+                        report.fun, fun_tolerance
+                    ));
                 }
                 if !position_ok {
                     let max_err = position_errors.iter().fold(0.0f64, |a, &b| a.max(b));
-                    msgs.push(format!("max position error {:.6} >= {:.2}", max_err, position_tolerance));
+                    msgs.push(format!(
+                        "max position error {:.6} >= {:.2}",
+                        max_err, position_tolerance
+                    ));
                 }
                 Some(msgs.join(", "))
             } else {
@@ -1668,7 +1873,7 @@ fn run_benchmark(
             position_tolerance,
             duration,
             error_message: Some(format!("Optimization failed: {}", e)),
-        }
+        },
     }
 }
 
@@ -1682,21 +1887,21 @@ fn main() {
                 .long("filter")
                 .value_name("PATTERN")
                 .help("Only run benchmarks matching this pattern")
-                .num_args(1)
+                .num_args(1),
         )
         .arg(
             Arg::new("list")
                 .short('l')
                 .long("list")
                 .help("List available benchmarks")
-                .action(clap::ArgAction::SetTrue)
+                .action(clap::ArgAction::SetTrue),
         )
         .arg(
             Arg::new("verbose")
                 .short('v')
                 .long("verbose")
                 .help("Show detailed results for each benchmark")
-                .action(clap::ArgAction::SetTrue)
+                .action(clap::ArgAction::SetTrue),
         )
         .get_matches();
 
@@ -1717,7 +1922,8 @@ fn main() {
     let verbose = matches.get_flag("verbose");
 
     // Filter benchmarks if a pattern is provided
-    let mut selected_benchmarks: Vec<_> = benchmarks.keys()
+    let mut selected_benchmarks: Vec<_> = benchmarks
+        .keys()
         .filter(|name| {
             if let Some(pattern) = filter {
                 name.contains(pattern)
@@ -1748,7 +1954,13 @@ fn main() {
         } else if result.success {
             println!("  ✅ PASS");
         } else {
-            println!("  ❌ FAIL - {}", result.error_message.as_ref().unwrap_or(&"Unknown error".to_string()));
+            println!(
+                "  ❌ FAIL - {}",
+                result
+                    .error_message
+                    .as_ref()
+                    .unwrap_or(&"Unknown error".to_string())
+            );
         }
 
         results.push(result);
