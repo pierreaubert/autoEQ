@@ -4,7 +4,10 @@
 //!   cargo run --example headphone_loss_demo -- --spl <file> [--target <file>]
 
 use autoeq::loss::headphone_loss;
-use autoeq::read::{load_frequency_response, normalize_both_curves, smooth_one_over_n_octave};
+use autoeq::read::{
+    create_log_frequency_grid, normalize_and_interpolate_response, read_curve_from_csv,
+    smooth_one_over_n_octave,
+};
 use autoeq::Curve;
 
 use clap::Parser;
@@ -44,54 +47,59 @@ struct Args {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
+    // freqs on which we normalize every curve: 12 points per octave between 20 and 20kHz
+    let freqs = create_log_frequency_grid(10 * 12, 20.0, 20000.0);
+
     // Load SPL data
     println!("Loading SPL data from: {:?}", args.spl);
-    let (freq, spl) = load_frequency_response(&args.spl)?;
+    let input_curve_raw = read_curve_from_csv(&args.spl)?;
     println!(
-        "  Loaded {} frequency points from {:.1} Hz to {:.1} Hz",
-        freq.len(),
-        freq[0],
-        freq[freq.len() - 1]
+        "  Loaded headphone response #{} data points from {:.1} Hz to {:.1} Hz SPL from {:.1} to {:.1} dB",
+        input_curve_raw.freq.len(),
+        input_curve_raw.freq[0],
+        input_curve_raw.freq[input_curve_raw.freq.len() - 1],
+        input_curve_raw.spl.fold(f64::INFINITY, |a, &b| a.min(b)),
+        input_curve_raw.spl.fold(f64::NEG_INFINITY, |a, &b| a.max(b)),
     );
 
-    let input_curve = Curve {
-        freq: freq.clone(),
-        spl: spl.clone(),
-    };
-
-    // Load target data
-    println!("Loading target data from: {:?}", args.target);
-    let (target_freq, target_spl) = load_frequency_response(&args.target)?;
+    let input_curve = normalize_and_interpolate_response(&freqs, &input_curve_raw);
     println!(
-        "  Loaded {} frequency points from {:.1} Hz to {:.1} Hz",
-        target_freq.len(),
-        target_freq[0],
-        target_freq[target_freq.len() - 1]
+        " Normalized headphone response #{} data points from {:.1} Hz to {:.1} Hz SPL from {:.1} to {:.1} dB",
+        input_curve.freq.len(),
+        input_curve.freq[0],
+        input_curve.freq[input_curve.freq.len() - 1],
+        input_curve.spl.fold(f64::INFINITY, |a, &b| a.min(b)),
+        input_curve.spl.fold(f64::NEG_INFINITY, |a, &b| a.max(b)),
     );
 
-    let target_curve = Curve {
-        freq: target_freq.clone(),
-        spl: target_spl.clone(),
-    };
+    let target_curve_raw = read_curve_from_csv(&args.target)?;
+    println!(
+        "  Loaded {} targets from {:.1} Hz to {:.1} Hz SPL from {:.1} to {:.1} dB",
+        target_curve_raw.freq.len(),
+        target_curve_raw.freq[0],
+        target_curve_raw.freq[target_curve_raw.freq.len() - 1],
+        target_curve_raw.spl.fold(f64::INFINITY, |a, &b| a.min(b)),
+        target_curve_raw
+            .spl
+            .fold(f64::NEG_INFINITY, |a, &b| a.max(b)),
+    );
 
-    // normalized and potentially smooth
-    let (loss_freq, deviation_spl) =
-        normalize_both_curves(&freq, &spl, Some((&target_freq, &target_spl)));
+    let target_curve = normalize_and_interpolate_response(&freqs, &target_curve_raw);
+
+    // compute deviation and potentially smooth it
+    let deviation_spl = &target_curve.spl - &input_curve.spl;
     let deviation = Curve {
-        freq: loss_freq.clone(),
-        spl: deviation_spl.clone(),
+        freq: freqs.clone(),
+        spl: deviation_spl,
     };
     let smooth_deviation = if args.smooth {
-        Curve {
-            freq: loss_freq.clone(),
-            spl: smooth_one_over_n_octave(&loss_freq, &deviation_spl, args.smooth_n),
-        }
+        smooth_one_over_n_octave(&deviation, args.smooth_n)
     } else {
         deviation.clone()
     };
 
     // Compute headphone loss and create plots
-    let score = headphone_loss(&loss_freq, &smooth_deviation.spl);
+    let score = headphone_loss(&smooth_deviation);
 
     // Print results
     println!("\n{}", "=".repeat(50));
@@ -123,12 +131,9 @@ fn generate_plots(
     let mut plot1 = Plot::new();
 
     // Add input curve
-    let input_trace = Scatter::new(
-        input_curve.freq.to_vec(),
-        (&input_curve.spl - 99.0).to_vec(),
-    )
-    .mode(Mode::Lines)
-    .name("Input Curve");
+    let input_trace = Scatter::new(input_curve.freq.to_vec(), input_curve.spl.to_vec())
+        .mode(Mode::Lines)
+        .name("Input Curve");
     plot1.add_trace(input_trace);
 
     let target_trace = Scatter::new(target_curve.freq.to_vec(), target_curve.spl.to_vec())

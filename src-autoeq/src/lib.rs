@@ -47,7 +47,7 @@ pub mod x2peq;
 
 // Re-export commonly used items
 pub use cli::*;
-pub use loss::{LossType, ScoreLossData};
+pub use loss::{HeadphoneLossData, LossType, SpeakerLossData};
 pub use optim::*;
 pub use plot::*;
 pub use read::*;

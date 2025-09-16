@@ -5,13 +5,9 @@ use std::io::Write;
 use std::path::PathBuf;
 
 use build_html::*;
-use ndarray::Array1;
-use plotly::common::Mode;
-use plotly::layout::{AxisType, GridPattern, LayoutGrid, RowOrder};
-use plotly::{Layout, Plot, Scatter};
+use plotly::Plot;
 use plotly_static::{ImageFormat, StaticExporterBuilder};
 
-use crate::iir::Biquad;
 use crate::plot::plot_filters::plot_filters;
 use crate::plot::plot_spin::{plot_spin, plot_spin_details};
 
@@ -34,35 +30,21 @@ pub async fn plot_results(
     optimized_params: &[f64],
     objective_data: &crate::optim::ObjectiveData,
     input_curve: &crate::Curve,
+    target_curve: &crate::Curve,
+    deviation_curve: &crate::Curve,
     cea2034_curves: &Option<HashMap<String, crate::Curve>>,
-    target_curve: &Array1<f64>,
-    smoothed_curve: &Option<Array1<f64>>,
     output_path: &PathBuf,
 ) -> Result<(), Box<dyn Error>> {
     let speaker = args.speaker.as_deref();
 
-    // Create a dense frequency vector for smooth plotting
-    let mut vfreqs = Vec::new();
-    let mut freq = 20.0;
-    while freq <= 20000.0 {
-        vfreqs.push(freq);
-        freq *= 1.0355; // Logarithmic spacing with ~200 points
-    }
-    let freqs = Array1::from(vfreqs);
+    let freqs = input_curve.freq.clone();
 
     // gather all subplots
     let plot_filters = plot_filters(
         args,
         input_curve,
-        smoothed_curve
-            .as_ref()
-            .map(|s| crate::Curve {
-                freq: input_curve.freq.clone(),
-                spl: s.clone(),
-            })
-            .as_ref(),
         target_curve,
-        &freqs,
+        deviation_curve,
         optimized_params,
     );
     let plot_spin_details = if cea2034_curves.is_some() {
@@ -129,7 +111,7 @@ pub async fn plot_results(
         .unwrap_or("output");
 
     let mut plots: Vec<(Plot, &str, usize, usize)> =
-        vec![(plot_filters, "filters", 1280usize, 400usize)];
+        vec![(plot_filters, "filters", 1280usize, 800usize)];
     if let Some(plot_spin) = plot_spin_details {
         plots.push((plot_spin, "details", 1280, 650));
     }

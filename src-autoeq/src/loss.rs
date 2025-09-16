@@ -17,6 +17,7 @@
 //! along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 use crate::cea2034 as score;
+use crate::read;
 use crate::Curve;
 use clap::ValueEnum;
 use ndarray::Array1;
@@ -35,9 +36,9 @@ pub enum LossType {
     HeadphoneScore,
 }
 
-/// Data required for computing score-based loss
+/// Data required for computing speaker score-based loss
 #[derive(Debug, Clone)]
-pub struct ScoreLossData {
+pub struct SpeakerLossData {
     /// On-axis SPL measurements
     pub on: Array1<f64>,
     /// Listening window SPL measurements
@@ -48,8 +49,8 @@ pub struct ScoreLossData {
     pub pir: Array1<f64>,
 }
 
-impl ScoreLossData {
-    /// Create a new ScoreLossData instance
+impl SpeakerLossData {
+    /// Create a new SpeakerLossData instance
     ///
     /// # Arguments
     /// * `spin` - Map of CEA2034 curves by name ("On Axis", "Listening Window", "Sound Power", "Estimated In-Room Response")
@@ -78,6 +79,26 @@ impl ScoreLossData {
     }
 }
 
+/// Data required for computing headphone loss
+#[derive(Debug, Clone)]
+pub struct HeadphoneLossData {
+    /// Enable smoothing (regularization) of the inverted target curve
+    pub smooth: bool,
+    /// Smoothing level as 1/N octave (N in [1..24])
+    pub smooth_n: usize,
+}
+
+impl HeadphoneLossData {
+    /// Create a new HeadphoneLossData instance
+    ///
+    /// # Arguments
+    /// * `smooth` - Enable smoothing
+    /// * `smooth_n` - Smoothing level as 1/N octave
+    pub fn new(smooth: bool, smooth_n: usize) -> Self {
+        Self { smooth, smooth_n }
+    }
+}
+
 /// Compute the flat (current) loss
 pub fn flat_loss(freqs: &Array1<f64>, error: &Array1<f64>) -> f64 {
     weighted_mse(freqs, error)
@@ -86,7 +107,7 @@ pub fn flat_loss(freqs: &Array1<f64>, error: &Array1<f64>) -> f64 {
 /// Compute the score-based loss. Returns -pref_score so that minimizing it maximizes the preference score.
 /// `peq_response` must be computed for the candidate parameters.
 pub fn speaker_score_loss(
-    score_data: &ScoreLossData,
+    score_data: &SpeakerLossData,
     freq: &Array1<f64>,
     peq_response: &Array1<f64>,
 ) -> f64 {
@@ -119,7 +140,7 @@ pub fn speaker_score_loss(
 
 /// Compute a mixed loss based on flatness on lw and pir
 pub fn mixed_loss(
-    score_data: &ScoreLossData,
+    score_data: &SpeakerLossData,
     freq: &Array1<f64>,
     peq_response: &Array1<f64>,
 ) -> f64 {
@@ -255,7 +276,10 @@ pub fn curve_slope_per_octave_in_range(curve: &crate::Curve, fmin: f64, fmax: f6
 /// Olive, S. E., Welti, T., & McMullin, E. (2013). "A Statistical Model that
 /// Predicts Listeners' Preference Ratings of In-Ear Headphones: Part 2 –
 /// Development and Validation of the Model"
-pub fn headphone_loss(freq: &Array1<f64>, response: &Array1<f64>) -> f64 {
+pub fn headphone_loss(curve: &Curve) -> f64 {
+    let freq = curve.freq.clone();
+    let response = curve.spl.clone();
+
     // Define frequency bands for analysis
     const BAND_LIMITS: [(f64, f64); 10] = [
         (20.0, 60.0),       // Sub-bass
@@ -271,7 +295,8 @@ pub fn headphone_loss(freq: &Array1<f64>, response: &Array1<f64>) -> f64 {
     ];
 
     // Calculate slope (should be close to -1 dB/octave for headphones)
-    let slope = regression_slope_per_octave_in_range(freq, response, 20.0, 10000.0).unwrap_or(0.0);
+    let slope =
+        regression_slope_per_octave_in_range(&freq, &response, 20.0, 10000.0).unwrap_or(0.0);
 
     // Target slope is -1 dB/octave (gentle downward tilt)
     let slope_deviation = (slope + 1.0).abs();
@@ -343,20 +368,35 @@ pub fn headphone_loss(freq: &Array1<f64>, response: &Array1<f64>) -> f64 {
 /// Compute headphone preference score with additional target curve
 ///
 /// # Arguments
-/// * `freq` - Frequency points in Hz
+/// * `data` - Headphone loss data containing smoothing parameters
 /// * `response` - Measured frequency response in dB
 /// * `target` - Target frequency response in dB
 ///
 /// # Returns
 /// * Score value where lower is better (for minimization)
 pub fn headphone_loss_with_target(
-    freq: &Array1<f64>,
-    response: &Array1<f64>,
-    target: &Array1<f64>,
+    data: &HeadphoneLossData,
+    response: &Curve,
+    target: &Curve,
 ) -> f64 {
-    // Calculate deviation from target
-    let deviation = response - target;
-    headphone_loss(freq, &deviation)
+    // freqs on which we normalize every curve: 12 points per octave between 20 and 20kHz
+    let freqs = read::create_log_frequency_grid(10 * 12, 20.0, 20000.0);
+
+    let input_curve = read::normalize_and_interpolate_response(&freqs, &response);
+    let target_curve = read::normalize_and_interpolate_response(&freqs, &target);
+
+    // normalized and potentially smooth
+    let deviation = Curve {
+        freq: freqs.clone(),
+        spl: &target_curve.spl - &input_curve.spl,
+    };
+    let smooth_deviation = if data.smooth {
+        read::smooth_one_over_n_octave(&deviation, data.smooth_n)
+    } else {
+        deviation.clone()
+    };
+
+    headphone_loss(&smooth_deviation)
 }
 
 #[cfg(test)]
@@ -406,7 +446,7 @@ mod tests {
             },
         );
 
-        let sd = ScoreLossData::new(&spin);
+        let sd = SpeakerLossData::new(&spin);
         let zero = Array1::zeros(freq.len());
 
         // Expected preference using score() with zero PEQ (i.e., base curves)
@@ -443,8 +483,11 @@ mod tests {
         // Test that a perfectly flat response (all zeros) gives a low score
         let freq = Array1::logspace(10.0, 1.301, 4.301, 100); // 20Hz to 20kHz
         let response = Array1::zeros(100); // Perfectly flat
-
-        let score = headphone_loss(&freq, &response);
+        let curve = Curve {
+            freq: freq.clone(),
+            spl: response,
+        };
+        let score = headphone_loss(&curve);
 
         // With flat response, only slope deviation contributes
         // Target slope is -1 dB/octave, flat is 0, so deviation is 1
@@ -463,7 +506,11 @@ mod tests {
                                                               // Create response with -1 dB/octave slope
         let response = freq.mapv(|f: f64| -1.0 * f.log2() + 10.0);
 
-        let score = headphone_loss(&freq, &response);
+        let curve = Curve {
+            freq: freq.clone(),
+            spl: response,
+        };
+        let score = headphone_loss(&curve);
 
         // With ideal slope, score should be lower than flat but still has RMS from the slope
         // The -1 dB/octave slope creates variation in each band
@@ -472,19 +519,27 @@ mod tests {
 
     #[test]
     fn test_headphone_loss_with_peaks() {
-        // Test that excessive peaks are penalized
+        // Test with a response that has a peak
         let freq = Array1::logspace(10.0, 1.301, 4.301, 100);
         let mut response = Array1::zeros(100);
 
-        // Add a 10dB peak around 1kHz
+        // Add a 5dB peak around 1kHz
         for i in 0..100 {
             if freq[i] > 800.0 && freq[i] < 1200.0 {
-                response[i] = 10.0;
+                response[i] = 5.0;
             }
         }
 
-        let score_with_peak = headphone_loss(&freq, &response);
-        let score_flat = headphone_loss(&freq, &Array1::zeros(100));
+        let curve = Curve {
+            freq: freq.clone(),
+            spl: response,
+        };
+        let score_with_peak = headphone_loss(&curve);
+        let curve = Curve {
+            freq: freq.clone(),
+            spl: Array1::zeros(100),
+        };
+        let score_flat = headphone_loss(&curve);
 
         // Score with peak should be significantly higher
         assert!(
@@ -502,7 +557,16 @@ mod tests {
         let response = Array1::from_elem(100, 5.0); // Constant 5dB response
         let target = Array1::from_elem(100, 5.0); // Same as response
 
-        let score = headphone_loss_with_target(&freq, &response, &target);
+        let response_curve = Curve {
+            freq: freq.clone(),
+            spl: response,
+        };
+        let target_curve = Curve {
+            freq: freq.clone(),
+            spl: target,
+        };
+        let data = HeadphoneLossData::new(false, 2);
+        let score = headphone_loss_with_target(&data, &response_curve, &target_curve);
 
         // When response matches target, deviation is zero (flat)
         // Score should be same as flat response test
@@ -552,7 +616,7 @@ mod tests {
             },
         );
 
-        let sd = ScoreLossData::new(&spin);
+        let sd = SpeakerLossData::new(&spin);
         let peq = Array1::zeros(freq.len());
         let v = mixed_loss(&sd, &freq, &peq);
         assert!(v.is_finite(), "mixed_loss should be finite, got {}", v);

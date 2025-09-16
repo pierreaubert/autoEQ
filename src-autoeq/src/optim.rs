@@ -17,12 +17,14 @@
 
 use super::constraints::{viol_ceiling_from_spl, viol_min_gain_from_xs, viol_spacing_from_xs};
 use super::loss::{
-    flat_loss, headphone_loss_with_target, speaker_score_loss, LossType, ScoreLossData,
+    flat_loss, headphone_loss_with_target, speaker_score_loss, HeadphoneLossData, LossType,
+    SpeakerLossData,
 };
 use super::optim_de::optimize_filters_autoeq;
 use super::optim_mh::optimize_filters_mh;
 use super::optim_nlopt::optimize_filters_nlopt;
 use super::x2peq::x2peq;
+use crate::Curve;
 use ndarray::Array1;
 use nlopt::Algorithm;
 use std::process;
@@ -258,8 +260,10 @@ pub struct ObjectiveData {
     pub iir_hp_pk: bool,
     /// Type of loss function to use
     pub loss_type: LossType,
-    /// Optional score data for Score loss type
-    pub score_data: Option<ScoreLossData>,
+    /// Optional score data for SpeakerScore loss type
+    pub speaker_score_data: Option<SpeakerLossData>,
+    /// Optional score data for HeadphoneScore loss type
+    pub headphone_score_data: Option<HeadphoneLossData>,
     /// Penalty weights used when the optimizer does not support nonlinear constraints
     /// If zero, penalties are disabled and true constraints (if any) are used.
     /// Penalty for ceiling constraint
@@ -333,7 +337,7 @@ pub fn compute_base_fitness(x: &[f64], data: &ObjectiveData) -> f64 {
             flat_loss(&data.freqs, &error)
         }
         LossType::SpeakerScore => {
-            if let Some(ref sd) = data.score_data {
+            if let Some(ref sd) = data.speaker_score_data {
                 let error = &peq_spl - &data.target_error;
                 let s = speaker_score_loss(sd, &data.freqs, &peq_spl);
                 let p = flat_loss(&data.freqs, &error) / 3.0;
@@ -345,7 +349,21 @@ pub fn compute_base_fitness(x: &[f64], data: &ObjectiveData) -> f64 {
         }
         LossType::HeadphoneScore => {
             let error = &peq_spl - &data.target_error;
-            let s = headphone_loss_with_target(&data.freqs, &error, &data.target_error);
+            let response_curve = Curve {
+                freq: data.freqs.clone(),
+                spl: error.clone(),
+            };
+            let target_curve = Curve {
+                freq: data.freqs.clone(),
+                spl: data.target_error.clone(),
+            };
+            // Create HeadphoneLossData for headphone loss calculation
+            let headphone_data = if let Some(ref sd) = data.headphone_score_data {
+                sd
+            } else {
+                &crate::loss::HeadphoneLossData::new(true, 1)
+            };
+            let s = headphone_loss_with_target(&headphone_data, &response_curve, &target_curve);
             let p = flat_loss(&data.freqs, &error) / 3.0;
             s + p
         }

@@ -377,12 +377,12 @@ pub fn extract_cea2034_curves(
         match extract_curve_by_name(plot_data, measurement, name) {
             Ok(curve) => {
                 // Interpolate to the target frequency grid
-                let interpolated = interpolate(freq, &curve.freq, &curve.spl);
+                let interpolated = interpolate(freq, &curve);
                 curves.insert(
                     name.to_string(),
                     Curve {
                         freq: freq.clone(),
-                        spl: interpolated,
+                        spl: interpolated.spl,
                     },
                 );
             }

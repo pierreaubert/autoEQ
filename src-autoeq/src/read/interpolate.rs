@@ -1,3 +1,4 @@
+use crate::Curve;
 use ndarray::Array1;
 
 /// Interpolate frequency response to a standard grid using linear interpolation in log space
@@ -9,11 +10,9 @@ use ndarray::Array1;
 ///
 /// # Returns
 /// * Interpolated SPL values on the target grid
-pub fn interpolate_log_space(
-    freq_in: &Array1<f64>,
-    spl_in: &Array1<f64>,
-    freq_out: &Array1<f64>,
-) -> Array1<f64> {
+pub fn interpolate_log_space(freq_out: &Array1<f64>, curve: &Curve) -> Curve {
+    let freq_in = &curve.freq;
+    let spl_in = &curve.spl;
     let n_out = freq_out.len();
     let n_in = freq_in.len();
     let mut spl_out = Array1::zeros(n_out);
@@ -56,7 +55,10 @@ pub fn interpolate_log_space(
         }
     }
 
-    spl_out
+    Curve {
+        freq: freq_out.clone(),
+        spl: spl_out,
+    }
 }
 
 /// Create a standard logarithmic frequency grid
@@ -73,29 +75,25 @@ pub fn create_log_frequency_grid(n_points: usize, f_min: f64, f_max: f64) -> Arr
 ///
 /// # Returns
 /// * Interpolated SPL values at target frequencies
-pub fn interpolate(
-    target_freqs: &Array1<f64>,
-    source_freqs: &Array1<f64>,
-    source_spls: &Array1<f64>,
-) -> Array1<f64> {
-    let mut result = Array1::zeros(target_freqs.len());
+pub fn interpolate(freqs: &Array1<f64>, curve: &Curve) -> Curve {
+    let mut result = Array1::zeros(freqs.len());
 
-    for (i, &target_freq) in target_freqs.iter().enumerate() {
+    for (i, &target_freq) in freqs.iter().enumerate() {
         // Find the two nearest points in the source data
         let mut left_idx = 0;
-        let mut right_idx = source_freqs.len() - 1;
+        let mut right_idx = curve.freq.len() - 1;
 
         // Binary search for the closest points
-        if target_freq <= source_freqs[0] {
+        if target_freq <= curve.freq[0] {
             // Target frequency is below the range, use the first point
-            result[i] = source_spls[0];
-        } else if target_freq >= source_freqs[source_freqs.len() - 1] {
+            result[i] = curve.spl[0];
+        } else if target_freq >= curve.freq[curve.freq.len() - 1] {
             // Target frequency is above the range, use the last point
-            result[i] = source_spls[source_freqs.len() - 1];
+            result[i] = curve.spl[curve.freq.len() - 1];
         } else {
             // Find the two points that bracket the target frequency
-            for j in 1..source_freqs.len() {
-                if source_freqs[j] >= target_freq {
+            for j in 1..curve.freq.len() {
+                if curve.freq[j] >= target_freq {
                     left_idx = j - 1;
                     right_idx = j;
                     break;
@@ -103,15 +101,18 @@ pub fn interpolate(
             }
 
             // Linear interpolation
-            let freq_left = source_freqs[left_idx];
-            let freq_right = source_freqs[right_idx];
-            let spl_left = source_spls[left_idx];
-            let spl_right = source_spls[right_idx];
+            let freq_left = curve.freq[left_idx];
+            let freq_right = curve.freq[right_idx];
+            let spl_left = curve.spl[left_idx];
+            let spl_right = curve.spl[right_idx];
 
             let t = (target_freq - freq_left) / (freq_right - freq_left);
             result[i] = spl_left + t * (spl_right - spl_left);
         }
     }
 
-    result
+    Curve {
+        freq: freqs.clone(),
+        spl: result,
+    }
 }

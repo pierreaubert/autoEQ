@@ -2,10 +2,8 @@ use ndarray::Array1;
 use plotly::common::{AxisSide, Mode};
 use plotly::layout::{AxisType, GridPattern, LayoutGrid, RowOrder};
 use plotly::{Layout, Plot, Scatter};
-use plotly_static::ImageFormat;
 use std::collections::HashMap;
 
-use crate::iir::{Biquad, BiquadFilterType};
 use crate::plot::filter_color::filter_color;
 use crate::plot::ref_lines::make_ref_lines;
 
@@ -243,18 +241,17 @@ pub fn plot_spin_details(
         x_axis3_title = "unused".to_string();
         x_axis4_title = "unused".to_string();
         // Interpolate input to plotting freqs to align
-        let input_on_plot =
-            crate::read::interpolate(&plot_freqs, &input_curve.freq, &input_curve.spl);
+        let input_on_plot = crate::read::interpolate(&plot_freqs, &input_curve);
 
         // Left subplot (x3/y3): Input Curve
-        let input_second_row = Scatter::new(plot_freqs.to_vec(), input_on_plot.to_vec())
+        let input_second_row = Scatter::new(plot_freqs.to_vec(), input_on_plot.spl.to_vec())
             .mode(Mode::Lines)
             .name(shorten_curve_name(&args.curve_name.clone()))
             .line(plotly::common::Line::new().color("#1f77b4"));
         plot.add_trace(input_second_row);
 
         // Right subplot (x4/y4): Input Curve + PEQ response
-        let input_plus_peq_trace = Scatter::new(plot_freqs.to_vec(), input_on_plot.to_vec())
+        let input_plus_peq_trace = Scatter::new(plot_freqs.to_vec(), input_on_plot.spl.to_vec())
             .mode(Mode::Lines)
             .name(format!("{} + EQ", shorten_curve_name(&args.curve_name)))
             .x_axis("x2")

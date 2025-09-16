@@ -4,7 +4,7 @@
 //! building target curves, preparing objective data, and running optimization.
 
 use crate::{
-    loss::ScoreLossData, optim, optim::ObjectiveData,
+    loss::HeadphoneLossData, loss::SpeakerLossData, optim, optim::ObjectiveData,
     optim_de::optimize_filters_autoeq_with_callback, read, Curve,
 };
 use ndarray::Array1;
@@ -54,19 +54,20 @@ pub async fn load_input_curve(
 /// Returns (inverted_curve, smoothed_curve_opt).
 pub fn build_target_curve(
     args: &crate::cli::Args,
+    freqs: &Array1<f64>,
     input_curve: &Curve,
-) -> (Array1<f64>, Option<Array1<f64>>) {
+) -> Curve {
     let base_target = if let Some(ref target_path) = args.target {
         let target_curve = read::read_curve_from_csv(target_path).unwrap();
-        read::interpolate(&input_curve.freq, &target_curve.freq, &target_curve.spl)
+        read::normalize_and_interpolate_response(&freqs, &target_curve)
     } else {
         match args.curve_name.as_str() {
             "Listening Window" => {
                 let log_f_min = 1000.0_f64.log10();
                 let log_f_max = 20000.0_f64.log10();
                 let denom = log_f_max - log_f_min;
-                Array1::from_shape_fn(input_curve.freq.len(), |i| {
-                    let f_hz = input_curve.freq[i].max(1e-12);
+                let spl = Array1::from_shape_fn(freqs.len(), |i| {
+                    let f_hz = freqs[i].max(1e-12);
                     let fl = f_hz.log10();
                     if fl < log_f_min {
                         0.0
@@ -76,7 +77,11 @@ pub fn build_target_curve(
                         let t = (fl - log_f_min) / denom;
                         -0.5 * t
                     }
-                })
+                });
+                Curve {
+                    freq: freqs.clone(),
+                    spl: spl,
+                }
             }
             "Sound Power" | "Early Reflections" | "Estimated In-Room Response" => {
                 let slope =
@@ -86,8 +91,8 @@ pub fn build_target_curve(
                 let lo = 100.0_f64;
                 let hi = 20000.0_f64;
                 let hi_val = slope * (hi / lo).log2();
-                Array1::from_shape_fn(input_curve.freq.len(), |i| {
-                    let f = input_curve.freq[i].max(1e-12);
+                let spl = Array1::from_shape_fn(freqs.len(), |i| {
+                    let f = freqs[i].max(1e-12);
                     if f < lo {
                         0.0
                     } else if f >= hi {
@@ -95,36 +100,30 @@ pub fn build_target_curve(
                     } else {
                         slope * (f / lo).log2()
                     }
-                })
+                });
+                Curve {
+                    freq: freqs.clone(),
+                    spl: spl,
+                }
             }
-            _ => Array1::zeros(input_curve.spl.len()),
+            _ => {
+                let spl = Array1::zeros(freqs.len());
+                Curve {
+                    freq: freqs.clone(),
+                    spl: spl,
+                }
+            }
         }
     };
 
-    let (_freq_data, target_curve) = read::normalize_both_curves(
-        &input_curve.freq,
-        &input_curve.spl,
-        Some((&input_curve.freq, &base_target)),
-    );
-    let inverted_curve = read::clamp_positive_only(&target_curve, args.max_db);
-
-    let mut smoothed_curve: Option<Array1<f64>> = None;
-    if args.smooth {
-        smoothed_curve = Some(read::smooth_one_over_n_octave(
-            &input_curve.freq,
-            &inverted_curve,
-            args.smooth_n,
-        ));
-    }
-
-    (inverted_curve, smoothed_curve)
+    base_target
 }
 
 /// Prepare the ObjectiveData and whether CEA2034-based scoring is active.
 pub fn setup_objective_data(
     args: &crate::cli::Args,
     input_curve: &Curve,
-    target_curve: &Array1<f64>,
+    target_curve: &Curve,
     spin_data: &Option<HashMap<String, Curve>>,
 ) -> (ObjectiveData, bool) {
     let use_cea = (matches!(args.measurement.as_deref(), Some(m) if m.eq_ignore_ascii_case("CEA2034"))
@@ -133,15 +132,21 @@ pub fn setup_objective_data(
         && args.version.is_some()
         && spin_data.is_some();
 
-    let score_data_opt = if use_cea {
-        Some(ScoreLossData::new(spin_data.as_ref().unwrap()))
+    let speaker_score_data_opt = if use_cea {
+        Some(SpeakerLossData::new(spin_data.as_ref().unwrap()))
+    } else {
+        None
+    };
+
+    let headphone_score_data_opt = if !use_cea {
+        Some(HeadphoneLossData::new(args.smooth, args.smooth_n))
     } else {
         None
     };
 
     let objective_data = ObjectiveData {
         freqs: input_curve.freq.clone(),
-        target_error: target_curve.clone(),
+        target_error: target_curve.spl.clone(),
         srate: args.sample_rate,
         min_spacing_oct: args.min_spacing_oct,
         spacing_weight: args.spacing_weight,
@@ -149,7 +154,8 @@ pub fn setup_objective_data(
         min_db: args.min_db,
         iir_hp_pk: args.iir_hp_pk,
         loss_type: args.loss,
-        score_data: score_data_opt,
+        speaker_score_data: speaker_score_data_opt,
+        headphone_score_data: headphone_score_data_opt,
         // Penalties default to zero; configured per algorithm in optimize_filters
         penalty_w_ceiling: 0.0,
         penalty_w_spacing: 0.0,
@@ -307,15 +313,20 @@ mod tests {
 
         // No smoothing
         args.smooth = false;
-        let (_inv_no_smooth, smoothed_none) = super::build_target_curve(&args, &curve);
+        let freqs = Array1::from(vec![100.0, 1000.0, 10000.0]);
+        let _target_curve = super::build_target_curve(&args, &freqs, &curve);
+        let smoothed_none: Option<Curve> = None;
         assert!(smoothed_none.is_none());
 
         // With smoothing
         args.smooth = true;
-        let (inv_smooth, smoothed_some) = super::build_target_curve(&args, &curve);
+        let freqs = Array1::from(vec![100.0, 1000.0, 10000.0]);
+        let target_curve = super::build_target_curve(&args, &freqs, &curve);
+        let inv_smooth = target_curve.clone();
+        let smoothed_some = Some(target_curve);
         assert!(smoothed_some.is_some());
         let s = smoothed_some.unwrap();
-        assert_eq!(s.len(), inv_smooth.len());
+        assert_eq!(s.spl.len(), inv_smooth.spl.len());
     }
 
     #[test]

@@ -25,14 +25,8 @@ use autoeq::read;
 use autoeq::Curve;
 use autoeq_env::DATA_GENERATED;
 use clap::Parser;
-use ndarray::Array1;
-use std::collections::HashMap;
 use std::error::Error;
 use std::path::PathBuf;
-
-// build_target_curve wrapper removed; call autoeq::workflow::build_target_curve directly
-
-// No local setup_bounds wrapper; tests refer to autoeq::workflow::setup_bounds directly.
 
 /// Print frequency spacing diagnostics and PEQ listing
 fn print_freq_spacing(x: &Vec<f64>, args: &autoeq::cli::Args, label: &str) {
@@ -149,57 +143,40 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Load input data
     let (input_curve_raw, spin_data_raw) = autoeq::workflow::load_input_curve(&args).await?;
 
-    // Build target
-    let (inverted_curve_raw, smoothed_curve_raw) =
-        autoeq::workflow::build_target_curve(&args, &input_curve_raw);
-    let target_curve_raw = smoothed_curve_raw.as_ref().unwrap_or(&inverted_curve_raw);
-
     // resample everything
     let standard_freq = read::create_log_frequency_grid(200, 20.0, 20000.0);
-    let input_curve = Curve {
-        freq: standard_freq.clone(),
-        spl: read::interpolate_log_space(
-            &input_curve_raw.freq,
-            &input_curve_raw.spl,
-            &standard_freq,
-        ),
-    };
+
+    // Build/Get target
     let target_curve =
-        read::interpolate_log_space(&input_curve_raw.freq, target_curve_raw, &standard_freq);
+        autoeq::workflow::build_target_curve(&args, &standard_freq, &input_curve_raw);
+
+    // normalize
+    let input_curve = read::normalize_and_interpolate_response(&standard_freq, &input_curve_raw);
+    let deviation_curve = Curve {
+        freq: target_curve.freq.clone(),
+        spl: target_curve.spl.clone() - &input_curve.spl,
+    };
+
     let spin_data = spin_data_raw.map(|spin_data| {
         spin_data
             .into_iter()
             .map(|(name, curve)| {
-                (
-                    name,
-                    Curve {
-                        freq: standard_freq.clone(),
-                        spl: read::interpolate_log_space(&curve.freq, &curve.spl, &standard_freq),
-                    },
-                )
+                let interpolated = read::interpolate_log_space(&standard_freq, &curve);
+                (name, interpolated)
             })
             .collect()
     });
 
     // Objective data
     let (objective_data, use_cea) =
-        autoeq::workflow::setup_objective_data(&args, &input_curve, &target_curve, &spin_data);
+        autoeq::workflow::setup_objective_data(&args, &input_curve, &deviation_curve, &spin_data);
 
     // Metrics before optimisation
     let mut cea2034_metrics_before: Option<score::ScoreMetrics> = None;
     let mut headphone_metrics_before: Option<f64> = None;
     match objective_data.loss_type {
         autoeq::LossType::HeadphoneFlat | autoeq::LossType::HeadphoneScore => {
-            // Calculate normalized deviation like in headphone_loss_demo
-            let (normalized_freq, normalized_deviation) = autoeq::read::normalize_both_curves(
-                &input_curve.freq,
-                &input_curve.spl,
-                Some((&input_curve.freq, &target_curve)),
-            );
-            headphone_metrics_before = Some(loss::headphone_loss(
-                &normalized_freq,
-                &normalized_deviation,
-            ));
+            headphone_metrics_before = Some(loss::headphone_loss(&input_curve));
         }
         autoeq::LossType::SpeakerFlat | autoeq::LossType::SpeakerScore => {
             if use_cea {
@@ -223,18 +200,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
             if let Some(before) = headphone_metrics_before {
                 println!("✅  Pre-Optimization Headphone Score: {:.3}", before);
             }
-            let freq = &input_curve.freq;
-            let peq_after = iir::compute_peq_response(freq, &x, args.sample_rate, args.iir_hp_pk);
-            // Calculate normalized deviation for post-optimization like in headphone_loss_demo
-            let corrected_spl = &input_curve.spl + &peq_after;
-            let (normalized_freq_after, normalized_deviation_after) =
-                autoeq::read::normalize_both_curves(
-                    &input_curve.freq,
-                    &corrected_spl,
-                    Some((&input_curve.freq, &target_curve)),
-                );
-            let headphone_metrics_after =
-                loss::headphone_loss(&normalized_freq_after, &normalized_deviation_after);
+            let peq_after =
+                iir::compute_peq_response(&standard_freq, &x, args.sample_rate, args.iir_hp_pk);
+            let input_autoeq = Curve {
+                freq: standard_freq.clone(),
+                spl: &input_curve.spl + peq_after,
+            };
+            let headphone_metrics_after = loss::headphone_loss(&input_autoeq);
             println!(
                 "✅ Post-Optimization Headphone Score: {:.3}",
                 headphone_metrics_after
@@ -293,9 +265,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
         &x,
         &objective_data,
         &input_curve,
-        &spin_data,
         &target_curve,
-        &smoothed_curve_raw,
+        &deviation_curve,
+        &spin_data,
         &output_path,
     )
     .await
@@ -357,12 +329,15 @@ mod tests {
 
         let freqs = Array1::from_vec(vec![500.0_f64, 1000.0_f64, 20000.0_f64]);
         let spl = Array1::<f64>::zeros(freqs.len());
-        let curve = autoeq::Curve { freq: freqs, spl };
+        let curve = autoeq::Curve {
+            freq: freqs.clone(),
+            spl,
+        };
 
-        let (inverted_curve, _smoothed) = autoeq::workflow::build_target_curve(&args, &curve);
-        // Since SPL is zero, inverted_curve == base_target
-        assert!((inverted_curve[0] - 0.0).abs() < 1e-12);
-        assert!((inverted_curve[1] - 0.0).abs() < 1e-12);
-        assert!((inverted_curve[2] - (-0.5)).abs() < 1e-12);
+        let target_curve = autoeq::workflow::build_target_curve(&args, &freqs, &curve);
+        // Since SPL is zero, target_curve.spl == base_target
+        assert!((target_curve.spl[0] - 0.0).abs() < 1e-12);
+        assert!((target_curve.spl[1] - 0.0).abs() < 1e-12);
+        assert!((target_curve.spl[2] - (-0.5)).abs() < 1e-12);
     }
 }

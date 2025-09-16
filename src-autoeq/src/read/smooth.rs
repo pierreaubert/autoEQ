@@ -1,3 +1,4 @@
+use autoeq_cea2034::Curve;
 use ndarray::Array1;
 
 /// Simple 1/N-octave smoothing: for each frequency f_i, average values whose
@@ -10,11 +11,9 @@ use ndarray::Array1;
 ///
 /// # Returns
 /// * Smoothed SPL values
-pub fn smooth_one_over_n_octave(
-    freqs: &Array1<f64>,
-    values: &Array1<f64>,
-    n: usize,
-) -> Array1<f64> {
+pub fn smooth_one_over_n_octave(curve: &Curve, n: usize) -> Curve {
+    let freqs = &curve.freq;
+    let values = &curve.spl;
     let n = n.max(1);
     let half_win = (2.0_f64).powf(1.0 / (2.0 * n as f64));
     let mut out = Array1::zeros(values.len());
@@ -33,7 +32,10 @@ pub fn smooth_one_over_n_octave(
         }
         out[i] = if cnt > 0 { sum / cnt as f64 } else { values[i] };
     }
-    out
+    Curve {
+        freq: curve.freq.clone(),
+        spl: out,
+    }
 }
 
 /// Apply Gaussian smoothing to a signal
@@ -110,12 +112,17 @@ mod tests {
 
     #[test]
     fn smooth_one_over_n_octave_basic_monotonic() {
+        use autoeq_cea2034::Curve;
         // Simple check: with N large, window small -> output close to input
         let freqs = Array1::from(vec![100.0, 200.0, 400.0, 800.0]);
         let vals = Array1::from(vec![0.0, 1.0, 0.0, -1.0]);
-        let out = smooth_one_over_n_octave(&freqs, &vals, 24);
+        let curve = Curve {
+            freq: freqs,
+            spl: vals.clone(),
+        };
+        let out = smooth_one_over_n_octave(&curve, 24);
         // Expect no drastic change
-        for (o, v) in out.iter().zip(vals.iter()) {
+        for (o, v) in out.spl.iter().zip(vals.iter()) {
             assert!((o - v).abs() <= 0.5);
         }
     }
