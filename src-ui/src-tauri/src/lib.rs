@@ -308,20 +308,35 @@ fn validate_params(
 
 #[tauri::command]
 async fn run_optimization(params: OptimizationParams, app_handle: AppHandle) -> OptimizationResult {
+    println!(
+        "[RUST DEBUG] run_optimization called with algo: {}",
+        params.algo
+    );
+    println!(
+        "[RUST DEBUG] Parameters: num_filters={}, population={}, maxeval={}",
+        params.num_filters, params.population, params.maxeval
+    );
+
     let result = run_optimization_internal(params, app_handle).await;
     match result {
-        Ok(res) => res,
-        Err(e) => OptimizationResult {
-            success: false,
-            error_message: Some(e.to_string()),
-            filter_params: None,
-            objective_value: None,
-            preference_score_before: None,
-            preference_score_after: None,
-            filter_response: None,
-            spin_details: None,
-            filter_plots: None,
-        },
+        Ok(res) => {
+            println!("[RUST DEBUG] Optimization completed successfully");
+            res
+        }
+        Err(e) => {
+            println!("[RUST DEBUG] Optimization failed with error: {}", e);
+            OptimizationResult {
+                success: false,
+                error_message: Some(e.to_string()),
+                filter_params: None,
+                objective_value: None,
+                preference_score_before: None,
+                preference_score_after: None,
+                filter_response: None,
+                spin_details: None,
+                filter_plots: None,
+            }
+        }
     }
 }
 
@@ -329,8 +344,12 @@ async fn run_optimization_internal(
     params: OptimizationParams,
     app_handle: AppHandle,
 ) -> Result<OptimizationResult, Box<dyn std::error::Error + Send + Sync>> {
+    println!("[RUST DEBUG] run_optimization_internal started");
+
     // Validate parameters first
+    println!("[RUST DEBUG] Validating parameters...");
     validate_params(&params)?;
+    println!("[RUST DEBUG] Parameters validated successfully");
 
     // Convert parameters to AutoEQ Args structure
     let args = AutoEQArgs {
@@ -382,36 +401,70 @@ async fn run_optimization_internal(
         parallel_threads: 0,
     };
 
-    // Load input curve
-    let (input_curve, spin_data) = autoeq::workflow::load_input_curve(&args).await.map_err(
-        |e| -> Box<dyn std::error::Error + Send + Sync> {
+    // Load input data (following autoeq.rs pattern)
+    println!("[RUST DEBUG] Loading input curve...");
+    let (input_curve_raw, spin_data_raw) = autoeq::workflow::load_input_curve(&args)
+        .await
+        .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
+            println!("[RUST DEBUG] Failed to load input curve: {}", e);
             Box::new(std::io::Error::other(e.to_string()))
-        },
-    )?;
+        })?;
+    println!(
+        "[RUST DEBUG] Input curve loaded successfully, {} frequency points",
+        input_curve_raw.freq.len()
+    );
 
-    // Build target curve
+    // Resample everything to standard frequency grid
+    println!("[RUST DEBUG] Creating standard frequency grid...");
     let standard_freq = autoeq::read::create_log_frequency_grid(200, 20.0, 20000.0);
-    let input_curve_normalized =
-        autoeq::read::normalize_and_interpolate_response(&standard_freq, &input_curve);
-    let target_curve = autoeq::workflow::build_target_curve(&args, &standard_freq, &input_curve);
+
+    // Build/Get target using RAW input curve (before normalization)
+    println!("[RUST DEBUG] Building target curve using raw input...");
+    let target_curve =
+        autoeq::workflow::build_target_curve(&args, &standard_freq, &input_curve_raw);
+
+    // Normalize input curve AFTER building target
+    println!("[RUST DEBUG] Normalizing and interpolating input curve...");
+    let input_curve =
+        autoeq::read::normalize_and_interpolate_response(&standard_freq, &input_curve_raw);
+
+    // Create deviation curve
     let deviation_curve = autoeq::Curve {
         freq: target_curve.freq.clone(),
-        spl: &target_curve.spl - &input_curve_normalized.spl,
+        spl: target_curve.spl.clone() - &input_curve.spl,
     };
 
+    // Process spin data if available (following autoeq.rs pattern)
+    let spin_data = spin_data_raw.map(|spin_data| {
+        println!(
+            "[RUST DEBUG] Processing spin data with {} curves",
+            spin_data.len()
+        );
+        spin_data
+            .into_iter()
+            .map(|(name, curve)| {
+                let interpolated = autoeq::read::interpolate_log_space(&standard_freq, &curve);
+                (name, interpolated)
+            })
+            .collect()
+    });
+
+    println!("[RUST DEBUG] Target curve and data processing completed");
+
     // Setup objective data
-    let (objective_data, use_cea) = autoeq::workflow::setup_objective_data(
-        &args,
-        &input_curve_normalized,
-        &deviation_curve,
-        &spin_data,
+    println!("[RUST DEBUG] Setting up objective data...");
+    let (objective_data, use_cea) =
+        autoeq::workflow::setup_objective_data(&args, &input_curve, &deviation_curve, &spin_data);
+    println!(
+        "[RUST DEBUG] Objective data setup complete, use_cea: {}",
+        use_cea
     );
 
     // Get preference score before optimization if applicable
     let mut pref_score_before: Option<f64> = None;
     if use_cea
         && let Ok(metrics) = autoeq::cea2034::compute_cea2034_metrics(
-            &input_curve_normalized.freq,
+            &input_curve.freq,
             spin_data.as_ref().unwrap(),
             None,
         )
@@ -421,12 +474,23 @@ async fn run_optimization_internal(
     }
 
     // Run optimization with progress reporting for autoeq:de
+    println!(
+        "[RUST DEBUG] Starting optimization with algorithm: {}",
+        args.algo
+    );
     let filter_params = if args.algo == "autoeq:de" {
+        println!("[RUST DEBUG] Using DE algorithm with progress reporting");
+        let mut progress_count = 0;
         autoeq::workflow::perform_optimization_with_callback(
             &args,
             &objective_data,
             Box::new(move |intermediate| {
-                let _ = app_handle.emit(
+                progress_count += 1;
+                if progress_count % 10 == 0 || progress_count <= 5 {
+                    println!("[RUST DEBUG] Progress update #{}: iter={}, fitness={:.6}, convergence={:.4}",
+                             progress_count, intermediate.iter, intermediate.fun, intermediate.convergence);
+                }
+                let emit_result = app_handle.emit(
                     "progress_update",
                     ProgressUpdate {
                         iteration: intermediate.iter,
@@ -435,31 +499,43 @@ async fn run_optimization_internal(
                         convergence: intermediate.convergence,
                     },
                 );
+                if let Err(e) = emit_result {
+                    println!("[RUST DEBUG] Failed to emit progress update: {}", e);
+                } else if progress_count % 50 == 0 {
+                    println!("[RUST DEBUG] Progress event emitted successfully (count: {})", progress_count);
+                }
                 autoeq::de::CallbackAction::Continue
             }),
         )
         .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
+            println!("[RUST DEBUG] DE optimization failed: {}", e);
             Box::new(std::io::Error::other(e.to_string()))
         })?
     } else {
+        println!("[RUST DEBUG] Using non-DE algorithm: {}", args.algo);
         autoeq::workflow::perform_optimization(&args, &objective_data).map_err(
             |e| -> Box<dyn std::error::Error + Send + Sync> {
+                println!("[RUST DEBUG] Non-DE optimization failed: {}", e);
                 Box::new(std::io::Error::other(e.to_string()))
             },
         )?
     };
+    println!(
+        "[RUST DEBUG] Optimization completed, got {} filter parameters",
+        filter_params.len()
+    );
 
     // Calculate preference score after optimization
     let mut pref_score_after: Option<f64> = None;
     if use_cea {
         let peq_response = autoeq::iir::compute_peq_response(
-            &input_curve_normalized.freq,
+            &input_curve.freq,
             &filter_params,
             args.sample_rate,
             args.iir_hp_pk,
         );
         if let Ok(metrics) = autoeq::cea2034::compute_cea2034_metrics(
-            &input_curve_normalized.freq,
+            &input_curve.freq,
             spin_data.as_ref().unwrap(),
             Some(&peq_response),
         )

@@ -460,7 +460,7 @@ dependencies = [
 
 [[package]]
 name = "autoeq-ui-tauri"
-version = "0.3.33"
+version = "0.3.34"
 dependencies = [
  "autoeq",
  "blas-src",

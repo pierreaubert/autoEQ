@@ -603,16 +603,23 @@ class AutoEQUI {
   }
 
   private showOptimizationModal(): void {
+    console.log('[TS DEBUG] showOptimizationModal called');
     this.optimizationModal.style.display = 'flex';
+    console.log('[TS DEBUG] Modal display set to flex');
     this.resetModalState();
+    console.log('[TS DEBUG] Modal state reset completed');
   }
 
   private closeOptimizationModal(): void {
+    console.log('[TS DEBUG] closeOptimizationModal called');
     this.optimizationModal.style.display = 'none';
     this.isOptimizationRunning = false;
+    console.log('[TS DEBUG] Modal closed and optimization state reset');
   }
 
   private resetModalState(): void {
+    console.log('[TS DEBUG] resetModalState called');
+    this.progressStatus.innerHTML = ''; // Clear any HTML content from previous errors
     this.progressStatus.textContent = 'Initializing...';
     this.progressFill.style.width = '0%';
     this.progressPercentage.textContent = '0%';
@@ -625,13 +632,16 @@ class AutoEQUI {
     this.progressGraphData = [];
     this.lastGraphUpdate = 0;
     this.clearProgressGraph();
+    console.log('[TS DEBUG] Modal state reset: progress cleared, buttons configured');
   }
 
   private updateProgress(stage: string, status: 'pending' | 'running' | 'completed' | 'error', details?: string, progress?: number): void {
+    console.log(`[TS DEBUG] updateProgress called: stage='${stage}', status='${status}', details='${details}', progress=${progress}`);
     const now = Date.now();
 
     if (!this.optimizationStages[stage]) {
       this.optimizationStages[stage] = { status: 'pending' };
+      console.log(`[TS DEBUG] Created new stage: ${stage}`);
     }
 
     const stageData = this.optimizationStages[stage];
@@ -642,19 +652,24 @@ class AutoEQUI {
 
     if (status === 'running' && oldStatus !== 'running') {
       stageData.startTime = now;
+      console.log(`[TS DEBUG] Stage '${stage}' started running`);
     } else if ((status === 'completed' || status === 'error') && stageData.startTime) {
       stageData.endTime = now;
+      const duration = (now - stageData.startTime) / 1000;
+      console.log(`[TS DEBUG] Stage '${stage}' completed in ${duration.toFixed(1)}s`);
     }
 
     this.updateProgressTable();
 
     if (progress !== undefined) {
+      console.log(`[TS DEBUG] Updating progress bar to ${progress}%`);
       this.updateProgressBar(progress);
     }
 
     // Update status text
     if (status === 'running') {
       this.progressStatus.textContent = `${stage}...`;
+      console.log(`[TS DEBUG] Updated status text to: ${stage}...`);
     }
   }
 
@@ -702,13 +717,29 @@ class AutoEQUI {
   }
 
   private optimizationCompleted(success: boolean, message?: string): void {
+    console.log(`[TS DEBUG] optimizationCompleted called: success=${success}, message='${message}'`);
     this.isOptimizationRunning = false;
     this.updateProgress('Optimization', success ? 'completed' : 'error', message || (success ? 'Completed successfully' : 'Failed'), 100);
-    this.progressStatus.textContent = success ? 'Optimization completed!' : 'Optimization failed';
+
+    if (success) {
+      console.log('[TS DEBUG] Optimization succeeded, updating status');
+      this.progressStatus.innerHTML = ''; // Clear any HTML content
+      this.progressStatus.textContent = 'Optimization completed!';
+    } else {
+      console.log('[TS DEBUG] Optimization failed, displaying error');
+      // Display the error message prominently in the modal
+      this.progressStatus.innerHTML = `
+        <div style="color: var(--error-color, #dc3545); font-weight: bold;">Optimization failed</div>
+        <div style="margin-top: 8px; font-size: 14px; color: var(--text-secondary, #666);">${message || 'Unknown error occurred'}</div>
+      `;
+    }
+
+    console.log('[TS DEBUG] Switching modal buttons: hiding cancel, showing done');
     this.cancelOptimizationBtn.style.display = 'none';
     this.doneOptimizationBtn.style.display = 'inline-flex';
     // Final graph update
     if (this.progressGraphData.length > 0) {
+      console.log(`[TS DEBUG] Final progress graph update with ${this.progressGraphData.length} data points`);
       this.updateProgressGraph();
     }
   }
@@ -846,8 +877,8 @@ class AutoEQUI {
     (document.getElementById('min-freq') as HTMLInputElement).value = '60';
     (document.getElementById('max-freq') as HTMLInputElement).value = '16000';
     (document.getElementById('algo') as HTMLSelectElement).value = 'autoeq:de';
-    (document.getElementById('loss') as HTMLSelectElement).value = 'flat';
-    (document.getElementById('population') as HTMLInputElement).value = '300';
+    (document.getElementById('loss') as HTMLSelectElement).value = 'speaker-flat';
+    (document.getElementById('population') as HTMLInputElement).value = '80';
     (document.getElementById('maxeval') as HTMLInputElement).value = '20000';
     (document.getElementById('refine') as HTMLInputElement).checked = false;
     (document.getElementById('local-algo') as HTMLSelectElement).value = 'cobyla';
@@ -1011,19 +1042,275 @@ class AutoEQUI {
           try {
             Plotly.purge(element);
           } catch (e) {
-            // Plot may not exist, ignore error
+            // Element may not have been plotted yet
           }
-          // Clear content and remove has-plot class
           element.innerHTML = '';
           element.classList.remove('has-plot');
+          element.style.display = 'none';
         }
       });
-    } catch (e) {
-      console.log('No existing plots to purge');
+    } catch (error) {
+      console.error('Error clearing plots:', error);
+    }
+  }
+
+  private configureAccordionVisibility(hasSpinData: boolean): void {
+    console.log('[TS DEBUG] Configuring accordion visibility, hasSpinData:', hasSpinData);
+
+    // Always show filter details
+    this.showAccordionSection('filter-details-plot');
+
+    if (hasSpinData) {
+      // Speaker-based: show spinorama sections, hide response curve
+      console.log('[TS DEBUG] Showing spinorama sections for speaker-based optimization');
+      this.showAccordionSection('filter-plot');
+      this.showPlotContainer('on-axis-plot');
+      this.showPlotContainer('listening-window-plot');
+      this.showPlotContainer('early-reflections-plot');
+      this.showPlotContainer('sound-power-plot');
+      this.showPlotContainer('spin-plot');
+      this.hidePlotContainer('response-curve-plot');
+    } else {
+      // Curve+target: hide spinorama sections, show response curve
+      console.log('[TS DEBUG] Hiding spinorama sections for curve+target optimization');
+      this.showAccordionSection('filter-plot'); // Keep filter plot for response curve
+      this.hidePlotContainer('on-axis-plot');
+      this.hidePlotContainer('listening-window-plot');
+      this.hidePlotContainer('early-reflections-plot');
+      this.hidePlotContainer('sound-power-plot');
+      this.hidePlotContainer('spin-plot');
+    }
+  }
+
+  private showPlotContainer(plotId: string): void {
+    const element = document.getElementById(plotId) as HTMLElement;
+    if (element) {
+      // Show the plot element itself
+      element.style.display = 'block';
+
+      // Find and show the parent accordion/container
+      const container = element.closest('.plot-section, .accordion-item, .plot-container') as HTMLElement;
+      if (container) {
+        container.style.display = 'block';
+      }
+
+      // Find and show the header if it exists
+      const header = document.querySelector(`[data-target="${plotId}"], .plot-header[onclick*="${plotId}"]`) as HTMLElement;
+      if (header) {
+        header.style.display = 'block';
+        const headerContainer = header.closest('.plot-section, .accordion-item') as HTMLElement;
+        if (headerContainer) {
+          headerContainer.style.display = 'block';
+        }
+      }
+
+      console.log(`[TS DEBUG] Showed plot container: ${plotId}`);
+    } else {
+      console.warn(`[TS DEBUG] Plot element not found: ${plotId}`);
+    }
+  }
+
+  private hidePlotContainer(plotId: string): void {
+    const element = document.getElementById(plotId) as HTMLElement;
+    if (element) {
+      // Hide the plot element itself
+      element.style.display = 'none';
+
+      // Find and hide the parent accordion/container
+      const container = element.closest('.plot-section, .accordion-item, .plot-container') as HTMLElement;
+      if (container) {
+        container.style.display = 'none';
+      }
+
+      // Find and hide the header if it exists
+      const header = document.querySelector(`[data-target="${plotId}"], .plot-header[onclick*="${plotId}"]`) as HTMLElement;
+      if (header) {
+        header.style.display = 'none';
+        const headerContainer = header.closest('.plot-section, .accordion-item') as HTMLElement;
+        if (headerContainer) {
+          headerContainer.style.display = 'none';
+        }
+      }
+
+      console.log(`[TS DEBUG] Hid plot container: ${plotId}`);
+    } else {
+      console.warn(`[TS DEBUG] Plot element not found: ${plotId}`);
+    }
+  }
+
+  private showAccordionSection(sectionId: string): void {
+    // Try multiple ways to find the section
+    let section = document.querySelector(`[data-section="${sectionId}"]`) as HTMLElement;
+    if (!section) {
+      // Fallback: look for element by ID or parent container
+      section = document.getElementById(sectionId) as HTMLElement;
+    }
+    if (!section) {
+      // Fallback: look for parent container with class
+      const plotElement = document.getElementById(sectionId.replace('-plot', ''));
+      if (plotElement) {
+        section = plotElement.closest('.plot-section') as HTMLElement;
+      }
     }
 
-    // Collapse all accordion sections
-    this.collapseAllAccordion();
+    if (section) {
+      section.style.display = 'block';
+      // Also show parent containers if they exist
+      const parent = section.closest('.accordion-item, .plot-container') as HTMLElement;
+      if (parent) {
+        parent.style.display = 'block';
+      }
+      console.log(`[TS DEBUG] Showed accordion section: ${sectionId}`);
+    } else {
+      console.warn(`[TS DEBUG] Accordion section not found: ${sectionId}`);
+    }
+  }
+
+  private hideAccordionSection(sectionId: string): void {
+    // Try multiple ways to find the section
+    let section = document.querySelector(`[data-section="${sectionId}"]`) as HTMLElement;
+    if (!section) {
+      // Fallback: look for element by ID or parent container
+      section = document.getElementById(sectionId) as HTMLElement;
+    }
+    if (!section) {
+      // Fallback: look for parent container with class
+      const plotElement = document.getElementById(sectionId.replace('-plot', ''));
+      if (plotElement) {
+        section = plotElement.closest('.plot-section') as HTMLElement;
+      }
+    }
+
+    if (section) {
+      section.style.display = 'none';
+      // Also hide parent containers if they exist
+      const parent = section.closest('.accordion-item, .plot-container') as HTMLElement;
+      if (parent) {
+        parent.style.display = 'none';
+      }
+      console.log(`[TS DEBUG] Hid accordion section: ${sectionId}`);
+    } else {
+      console.warn(`[TS DEBUG] Accordion section not found: ${sectionId}`);
+    }
+  }
+
+  private updateResponseCurvePlot(data: PlotData): void {
+    console.log('[TS DEBUG] updateResponseCurvePlot called with:', data);
+
+    // Find or create the response curve plot element
+    let responseCurvePlotElement = document.getElementById('response-curve-plot') as HTMLElement;
+    if (!responseCurvePlotElement) {
+      console.warn('[TS DEBUG] Response curve plot element not found, using filter plot element as fallback');
+      responseCurvePlotElement = this.filterPlotElement;
+    }
+
+    if (!responseCurvePlotElement) {
+      console.error('No suitable element found for response curve plot!');
+      return;
+    }
+
+    // Clear any existing content and prepare for plot
+    responseCurvePlotElement.innerHTML = '';
+    responseCurvePlotElement.classList.add('has-plot');
+    responseCurvePlotElement.style.display = 'block';
+    responseCurvePlotElement.style.padding = '0';
+
+    // Create traces for input curve and corrected curve
+    const traces: any[] = [];
+
+    // Add all curves from the data (should include Target, EQ Response, etc.)
+    Object.entries(data.curves).forEach(([name, values]) => {
+      let lineColor = '#007bff';
+      let lineWidth = 2;
+      let lineDash: string | undefined = undefined;
+
+      // Style different curves appropriately
+      if (name === 'Target') {
+        lineColor = '#28a745'; // Green for target
+        lineWidth = 2;
+        lineDash = 'dash';
+      } else if (name === 'EQ Response' || name.includes('Response')) {
+        lineColor = '#dc3545'; // Red for EQ response
+        lineWidth = 3;
+      }
+
+      traces.push({
+        x: data.frequencies,
+        y: values,
+        type: 'scatter' as const,
+        mode: 'lines' as const,
+        name: name,
+        line: {
+          color: lineColor,
+          width: lineWidth,
+          dash: lineDash
+        }
+      });
+    });
+
+    // Get form parameters for axis setup
+    const maxDbInput = document.getElementById('max-db') as HTMLInputElement;
+    const maxDb = maxDbInput ? parseFloat(maxDbInput.value) : 5;
+    const yRange = Math.max(maxDb + 2, 10); // Ensure reasonable range
+
+    const layout = {
+      title: {
+        text: 'Response Curve (Input vs Corrected)',
+        font: { size: 16 }
+      },
+      xaxis: {
+        title: { text: 'Frequency (Hz)' },
+        type: 'log' as const,
+        range: [Math.log10(20), Math.log10(20000)],
+        showgrid: true,
+        gridcolor: 'rgba(128, 128, 128, 0.2)',
+        dtick: 1
+      },
+      yaxis: {
+        title: { text: 'Magnitude (dB)' },
+        range: [-yRange, yRange],
+        showgrid: true,
+        gridcolor: 'rgba(128, 128, 128, 0.2)',
+        dtick: Math.ceil(yRange / 10),
+        zeroline: true,
+        zerolinecolor: 'rgba(128, 128, 128, 0.5)',
+        zerolinewidth: 2
+      },
+      paper_bgcolor: 'rgba(0,0,0,0)',
+      plot_bgcolor: 'rgba(0,0,0,0)',
+      font: {
+        color: getComputedStyle(document.documentElement).getPropertyValue('--text-primary').trim(),
+        size: 12
+      },
+      margin: { l: 60, r: 20, t: 50, b: 60 },
+      showlegend: true,
+      legend: {
+        x: 0.02,
+        y: 0.98,
+        bgcolor: 'rgba(255,255,255,0.8)',
+        bordercolor: 'rgba(0,0,0,0.2)',
+        borderwidth: 1
+      },
+      hovermode: 'x unified' as const
+    };
+
+    const config = {
+      responsive: true,
+      displayModeBar: false
+    };
+
+    // Expand the accordion section for this plot
+    this.expandPlotSection('response-curve-plot');
+
+    console.log('[TS DEBUG] Creating Response Curve Plotly plot');
+
+    Plotly.newPlot(responseCurvePlotElement, traces, layout, config).then(() => {
+      console.log('[TS DEBUG] Response Curve Plotly plot created successfully');
+      // Force immediate resize
+      Plotly.Plots.resize(responseCurvePlotElement);
+    }).catch((error: any) => {
+      console.error('[TS DEBUG] Error creating Response Curve Plotly plot:', error);
+    });
   }
 
   private setupAccordionBehavior(): void {
@@ -1251,19 +1538,30 @@ class AutoEQUI {
 
 
   private async runOptimization(): Promise<void> {
+    console.log('[TS DEBUG] runOptimization called');
     if (!this.validateForm()) {
+      console.log('[TS DEBUG] Form validation failed, aborting');
       return;
     }
 
     const params = this.getFormData();
+    console.log('[TS DEBUG] Form data collected:', {
+      algo: params.algo,
+      num_filters: params.num_filters,
+      population: params.population,
+      maxeval: params.maxeval
+    });
 
     // Conditionally show modal only for algorithms that report progress (autoeq:de)
     const isAutoEQDE = params.algo === 'autoeq:de';
+    console.log('[TS DEBUG] Algorithm is autoeq:de:', isAutoEQDE);
     if (isAutoEQDE) {
+      console.log('[TS DEBUG] Showing optimization modal');
       this.showOptimizationModal();
     }
     this.isOptimizationRunning = true;
     this.setOptimizationRunning(true);
+    console.log('[TS DEBUG] Optimization state set to running');
 
     // Clear any previous errors
     this.errorElement.style.display = 'none';
@@ -1271,11 +1569,17 @@ class AutoEQUI {
     try {
       // Setup progress listener for DE
       if (isAutoEQDE) {
+        console.log('[TS DEBUG] Setting up progress listener for DE algorithm');
         try {
           this.progressUnlisten = await listen('progress_update', (event: any) => {
-            if (!this.isOptimizationRunning) return;
+            console.log('[TS DEBUG] Progress update received:', event.payload);
+            if (!this.isOptimizationRunning) {
+              console.log('[TS DEBUG] Optimization not running, ignoring progress update');
+              return;
+            }
             const p = event.payload as { iteration: number; fitness: number; params: number[]; convergence: number };
             const details = `iter=${p.iteration}, f=${p.fitness.toFixed(8)}, conv=${p.convergence.toFixed(4)}`;
+            console.log('[TS DEBUG] Updating progress:', details);
             this.updateProgress('Optimization', 'running', details);
 
             // Add data to progress graph
@@ -1284,15 +1588,18 @@ class AutoEQUI {
               fitness: p.fitness,
               convergence: p.convergence
             });
+            console.log('[TS DEBUG] Progress graph data length:', this.progressGraphData.length);
 
             // Update graph every 5 iterations
             if (p.iteration - this.lastGraphUpdate >= 5 || p.iteration <= 5) {
+              console.log('[TS DEBUG] Updating progress graph at iteration', p.iteration);
               this.updateProgressGraph();
               this.lastGraphUpdate = p.iteration;
             }
           });
+          console.log('[TS DEBUG] Progress listener attached successfully');
         } catch (e) {
-          console.warn('Failed to attach progress listener:', e);
+          console.error('[TS DEBUG] Failed to attach progress listener:', e);
         }
       }
 
@@ -1317,7 +1624,9 @@ class AutoEQUI {
         this.updateProgress('Optimization', 'running', 'Running optimization algorithm', 30);
       }
 
+      console.log('[TS DEBUG] Invoking run_optimization with params');
       const result: OptimizationResult = await invoke('run_optimization', { params });
+      console.log('[TS DEBUG] run_optimization returned:', { success: result.success, error: result.error_message });
 
       if (!this.isOptimizationRunning) return; // Check for cancellation
 
@@ -1327,37 +1636,55 @@ class AutoEQUI {
       }
 
       if (result.success) {
+        console.log('[TS DEBUG] Optimization succeeded');
         if (!isAutoEQDE) {
           this.updateProgress('Results Processing', 'completed', 'Results processed successfully', 100);
           this.optimizationCompleted(true, 'Optimization completed successfully');
         } else {
           // For DE, mark as completed directly via modal if it was shown
+          console.log('[TS DEBUG] DE optimization completed, updating modal');
           this.optimizationCompleted(true, 'Optimization completed successfully');
         }
 
         // Update UI with results
+        console.log('[TS DEBUG] Handling optimization success');
         this.handleOptimizationSuccess(result);
       } else {
+        console.log('[TS DEBUG] Optimization failed:', result.error_message);
+        // Show modal for error display if not already shown
+        if (!isAutoEQDE) {
+          this.showOptimizationModal();
+        }
         this.updateProgress('Results Processing', 'error', result.error_message || 'Unknown error', 100);
         this.optimizationCompleted(false, result.error_message || 'Unknown error occurred');
         this.handleOptimizationError(result.error_message || 'Unknown error occurred');
       }
     } catch (error) {
+      console.error('[TS DEBUG] Exception during optimization:', error);
       if (this.isOptimizationRunning) {
+        // Show modal for error display if not already shown
+        if (!isAutoEQDE) {
+          console.log('[TS DEBUG] Showing modal for error display');
+          this.showOptimizationModal();
+        }
         this.updateProgress('Optimization', 'error', `Error: ${error}`, 100);
         this.optimizationCompleted(false, `Error: ${error}`);
         this.handleOptimizationError(error as string);
       }
     } finally {
+      console.log('[TS DEBUG] Optimization cleanup started');
       this.setOptimizationRunning(false);
       this.showProgress(false);
       if (this.progressUnlisten) {
+        console.log('[TS DEBUG] Cleaning up progress listener');
         try { this.progressUnlisten(); } catch {}
         this.progressUnlisten = undefined;
       }
       if (!isAutoEQDE) {
+        console.log('[TS DEBUG] Closing modal for non-DE algorithm');
         this.closeOptimizationModal();
       }
+      console.log('[TS DEBUG] Optimization cleanup completed');
     }
   }
 
@@ -1387,67 +1714,98 @@ class AutoEQUI {
   }
 
   private handleOptimizationSuccess(result: OptimizationResult): void {
-    console.log('Optimization success, result:', result);
+    console.log('[TS DEBUG] Optimization success, result:', result);
     this.updateStatus('Optimization completed successfully!');
 
-    // Update scores if available
-    if (result.preference_score_before !== undefined && result.preference_score_after !== undefined) {
-      console.log('Updating scores:', result.preference_score_before, '->', result.preference_score_after);
-      this.updateScores(result.preference_score_before, result.preference_score_after);
-    }
+    try {
+      // Check if we have spinorama data (speaker-based optimization)
+      const hasSpinData = result.spin_details !== null && result.spin_details !== undefined;
+      console.log('[TS DEBUG] Has spin data:', hasSpinData);
 
-    // Update filter details if available
-    if (result.filter_params) {
-      console.log('Updating filter details with parameters:', result.filter_params);
-      this.updateFilterDetailsPlot(result.filter_params);
+      // Configure accordion visibility based on data availability
+      this.configureAccordionVisibility(hasSpinData);
 
-      // Convert log frequencies to linear for audio filters
-      const linearFilterParams = [];
-      for (let i = 0; i < result.filter_params.length; i += 3) {
-        if (i + 2 < result.filter_params.length) {
-          linearFilterParams.push(Math.pow(10, result.filter_params[i])); // Convert log freq to linear
-          linearFilterParams.push(result.filter_params[i + 1]); // Q factor
-          linearFilterParams.push(result.filter_params[i + 2]); // Gain
+      // Update scores if available
+      if (result.preference_score_before !== undefined && result.preference_score_after !== undefined &&
+          result.preference_score_before !== null && result.preference_score_after !== null) {
+        console.log('[TS DEBUG] Updating scores:', result.preference_score_before, '->', result.preference_score_after);
+        this.updateScores(result.preference_score_before, result.preference_score_after);
+      } else {
+        console.log('[TS DEBUG] Skipping score update - scores are null or undefined');
+      }
+
+      // Update filter details if available
+      if (result.filter_params) {
+        console.log('[TS DEBUG] Updating filter details with parameters:', result.filter_params);
+        this.updateFilterDetailsPlot(result.filter_params);
+
+        // Always expand filter details when we have results
+        this.expandPlotSection('filter-details-plot');
+
+        // Convert log frequencies to linear for audio filters
+        const linearFilterParams = [];
+        for (let i = 0; i < result.filter_params.length; i += 3) {
+          if (i + 2 < result.filter_params.length) {
+            linearFilterParams.push(Math.pow(10, result.filter_params[i])); // Convert log freq to linear
+            linearFilterParams.push(result.filter_params[i + 1]); // Q factor
+            linearFilterParams.push(result.filter_params[i + 2]); // Gain
+          }
+        }
+
+        // Update audio filter parameters
+        this.updateFilterParams(linearFilterParams);
+
+        // Display filter plots graph if available
+        if (result.filter_plots) {
+          console.log('[TS DEBUG] Updating filter plots graph with data:', result.filter_plots);
+          this.filterPlotsData = result.filter_plots;  // Store for later updates
+          this.updateFilterPlotsGraph(result.filter_plots);
+          this.tryUpdateSpinWithEQ();
+          // Also set up the recalculation for manual changes
+          setTimeout(() => {
+            this.recalculateFilterGraph();
+          }, 100);
+        }
+      } else {
+        console.log('[TS DEBUG] No filter_params data in result');
+      }
+
+      // Update plots based on data availability
+      if (hasSpinData) {
+        // Speaker-based optimization: show spinorama plots
+        console.log('[TS DEBUG] Processing speaker-based optimization plots');
+        if (result.filter_response) {
+          console.log('[TS DEBUG] Updating filter plot with data for speaker optimization:', result.filter_response);
+          this.updateFilterPlot(result.filter_response);
+          this.expandPlotSection('filter-plot');
+        }
+
+        if (result.spin_details) {
+          console.log('[TS DEBUG] Updating individual spinorama plots with data:', result.spin_details);
+          this.lastSpinDetails = result.spin_details;
+          this.updateOnAxisPlot(result.spin_details, result.filter_response);
+          this.updateListeningWindowPlot(result.spin_details, result.filter_response);
+          this.updateEarlyReflectionsPlot(result.spin_details, result.filter_response);
+          this.updateSoundPowerPlot(result.spin_details, result.filter_response);
+          this.updateSpinPlot(result.spin_details);
+          this.tryUpdateSpinWithEQ();
+        }
+      } else {
+        // Curve+target optimization: show response curve with/without EQ
+        console.log('[TS DEBUG] Processing curve+target optimization plots');
+        if (result.filter_response) {
+          // Use the filter plot element to show the response curve
+          console.log('[TS DEBUG] Updating filter plot with response curve data for curve+target:', result.filter_response);
+          this.updateFilterPlot(result.filter_response);
+          this.expandPlotSection('filter-plot');
+        } else {
+          console.warn('[TS DEBUG] No filter_response data available for curve+target optimization');
         }
       }
-
-      // Update audio filter parameters
-      this.updateFilterParams(linearFilterParams);
-
-      // Display filter plots graph if available
-      if (result.filter_plots) {
-        console.log('Updating filter plots graph with data:', result.filter_plots);
-        this.filterPlotsData = result.filter_plots;  // Store for later updates
-        this.updateFilterPlotsGraph(result.filter_plots);
-        this.tryUpdateSpinWithEQ();
-        // Also set up the recalculation for manual changes
-        setTimeout(() => {
-          this.recalculateFilterGraph();
-        }, 100);
-      }
-    } else {
-      console.log('No filter_params data in result');
-    }
-
-    // Update plots if available
-    if (result.filter_response) {
-      console.log('Updating filter plot with data:', result.filter_response);
-      this.updateFilterPlot(result.filter_response);
-    } else {
-      console.log('No filter_response data in result');
-    }
-
-    if (result.spin_details) {
-      console.log('Updating individual plots with data:', result.spin_details);
-      this.lastSpinDetails = result.spin_details;
-      this.updateOnAxisPlot(result.spin_details, result.filter_response);
-      this.updateListeningWindowPlot(result.spin_details, result.filter_response);
-      this.updateEarlyReflectionsPlot(result.spin_details, result.filter_response);
-      this.updateSoundPowerPlot(result.spin_details, result.filter_response);
-      this.updateSpinPlot(result.spin_details);
-      this.tryUpdateSpinWithEQ();
-    } else {
-      console.log('No spin_details data in result');
+    } catch (error) {
+      console.error('[TS DEBUG] Error in handleOptimizationSuccess:', error);
+      // Continue with basic status update even if other parts fail
+      this.updateStatus('Optimization completed with some display issues');
     }
   }
 
@@ -1965,11 +2323,13 @@ class AutoEQUI {
   }
 
   private updateFilterPlot(data: PlotData): void {
-    console.log('updateFilterPlot called with:', data);
-    console.log('Filter plot element:', this.filterPlotElement);
+    console.log('[TS DEBUG] updateFilterPlot called with:', data);
+    console.log('[TS DEBUG] Filter plot element:', this.filterPlotElement);
+    console.log('[TS DEBUG] Data curves:', Object.keys(data.curves));
+    console.log('[TS DEBUG] Data frequencies length:', data.frequencies.length);
 
     if (!this.filterPlotElement) {
-      console.error('Filter plot element not found!');
+      console.error('[TS DEBUG] Filter plot element not found!');
       return;
     }
 
@@ -2067,22 +2427,26 @@ class AutoEQUI {
     };
 
     // Ensure container is visible
-    console.log('Container dimensions:', this.filterPlotElement.offsetWidth, 'x', this.filterPlotElement.offsetHeight);
+    console.log('[TS DEBUG] Container dimensions:', this.filterPlotElement.offsetWidth, 'x', this.filterPlotElement.offsetHeight);
+    console.log('[TS DEBUG] Container display style:', this.filterPlotElement.style.display);
+    console.log('[TS DEBUG] Container visibility:', this.filterPlotElement.style.visibility);
 
     // Expand the accordion section for this plot
     this.expandPlotSection('filter-plot');
 
-    console.log('Creating Plotly plot immediately');
+    console.log('[TS DEBUG] Creating Plotly plot with traces:', traces.length);
+    console.log('[TS DEBUG] Layout:', layout);
 
     Plotly.newPlot(this.filterPlotElement, traces, layout, {
       responsive: true,
       displayModeBar: false
     }).then(() => {
-      console.log('Filter Plotly plot created successfully');
+      console.log('[TS DEBUG] Filter Plotly plot created successfully');
       // Force immediate resize
       Plotly.Plots.resize(this.filterPlotElement);
+      console.log('[TS DEBUG] Plot resized');
     }).catch((error: any) => {
-      console.error('Error creating Filter Plotly plot:', error);
+      console.error('[TS DEBUG] Error creating Filter Plotly plot:', error);
     });
   }
 
