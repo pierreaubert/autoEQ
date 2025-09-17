@@ -13,7 +13,7 @@ pub fn katsuura(x: &Array1<f64>) -> f64 {
         let mut sum = 0.0;
         // Limit j to prevent overflow, 20 is sufficient for precision
         for j in 1..=20 {
-            let power2j = (2.0_f64).powi(j as i32);
+            let power2j = (2.0_f64).powi(j);
             let term = (power2j * xi).abs() - (power2j * xi).round().abs();
             sum += term / power2j;
         }

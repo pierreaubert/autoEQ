@@ -124,18 +124,13 @@ impl FromStr for Strategy {
 }
 
 /// Crossover type
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub enum Crossover {
     /// Binomial (uniform) crossover
+    #[default]
     Binomial,
     /// Exponential crossover
     Exponential,
-}
-
-impl Default for Crossover {
-    fn default() -> Self {
-        Crossover::Binomial
-    }
 }
 
 /// Mutation setting: either a fixed factor, a uniform range (dithering), or adaptive
@@ -175,26 +170,18 @@ impl Mutation {
 }
 
 /// Initialization scheme for the population
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub enum Init {
+    #[default]
     LatinHypercube,
     Random,
 }
-impl Default for Init {
-    fn default() -> Self {
-        Init::LatinHypercube
-    }
-}
 
 /// Whether best updates during a generation (we use Deferred only)
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub enum Updating {
+    #[default]
     Deferred,
-}
-impl Default for Updating {
-    fn default() -> Self {
-        Updating::Deferred
-    }
 }
 
 /// Linear penalty specification: lb <= A x <= ub (component-wise)
@@ -484,6 +471,12 @@ impl Default for DEConfig {
 pub struct DEConfigBuilder {
     cfg: DEConfig,
 }
+impl Default for DEConfigBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DEConfigBuilder {
     pub fn new() -> Self {
         Self {

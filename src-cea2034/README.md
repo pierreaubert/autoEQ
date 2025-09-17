@@ -45,7 +45,7 @@ println!("PIR Score: {:.2}", metrics.pir_score);
 - Deviation from target curve
 - Frequency-weighted penalties
 
-### Predicted In-Room (PIR) Score  
+### Predicted In-Room (PIR) Score
 - Computed from listening window, early reflections, and sound power
 - Represents typical in-room response
 - Critical for overall preference rating
@@ -73,7 +73,7 @@ let response = Array1::from(vec![-2.1, -1.8, -1.2, /* ... */ -10.5]);
 let preference_score = score(
     &frequencies,
     &response,
-    100.0,    // reference frequency  
+    100.0,    // reference frequency
     10000.0,  // upper frequency limit
     Some(&target_curve)
 )?;
@@ -86,14 +86,14 @@ let pir = compute_pir_from_lw_er_sp(&lw_curve, &er_curve, &sp_curve);
 
 This crate is part of the AutoEQ ecosystem:
 - Used by `autoeq` for optimization target scoring
-- Provides objective functions for `autoeq-de` optimization  
+- Provides objective functions for `autoeq-de` optimization
 - Integrates with measurement data from Spinorama.org API
 
 ## Research Background
 
 Based on published research:
 - Olive, S. E., & Toole, F. E. (1989). "The detection of reflections in typical rooms"
-- Olive, S. E. (2004). "A method for training listeners and selecting program material"  
+- Olive, S. E. (2004). "A method for training listeners and selecting program material"
 - Harman International patent applications on preference scoring algorithms
 
 ## License

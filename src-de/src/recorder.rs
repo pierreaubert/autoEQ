@@ -309,12 +309,7 @@ impl OptimizationRecorder {
     pub fn get_best_solution(&self) -> Option<(Vec<f64>, f64)> {
         // Since we don't keep all records in memory, we can't return the exact solution
         // This would need to be reconstructed from the CSV files if needed
-        if let Some(best_val) = *self.best_value.lock().unwrap() {
-            // Return placeholder - actual best x would need to be read from CSV files
-            Some((Vec::new(), best_val))
-        } else {
-            None
-        }
+        (*self.best_value.lock().unwrap()).map(|best_val| (Vec::new(), best_val))
     }
 }
 

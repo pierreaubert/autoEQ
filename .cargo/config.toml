@@ -25,7 +25,7 @@ rustflags = [
 ]
 
 # macOS Intel - using Accelerate framework
-[target.x86_64-apple-darwin] 
+[target.x86_64-apple-darwin]
 rustflags = [
     "-C", "link-arg=-mmacosx-version-min=15.0",
     "-C", "link-arg=-framework", "-C", "link-arg=Accelerate"
@@ -38,7 +38,7 @@ rustflags = [
 #     "-C", "link-arg=-L/opt/homebrew/opt/openblas/lib",
 #     "-C", "link-arg=-lopenblas"
 # ]
-# [target.x86_64-apple-darwin] 
+# [target.x86_64-apple-darwin]
 # rustflags = [
 #     "-C", "link-arg=-mmacosx-version-min=15.0",
 #     "-C", "link-arg=-L/opt/homebrew/opt/openblas/lib",
@@ -55,7 +55,7 @@ rustflags = [
     # "-C", "link-arg=-llapack"
 ]
 
-# Linux ARM64 configuration 
+# Linux ARM64 configuration
 [target.aarch64-unknown-linux-gnu]
 rustflags = [
     "-C", "link-arg=-lopenblas"

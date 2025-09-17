@@ -4,7 +4,7 @@ This directory contains demo audio files for testing the EQ in the AutoEQ UI.
 
 ## Files:
 - `classical.wav` - Classical music sample
-- `rock.wav` - Rock music sample  
+- `rock.wav` - Rock music sample
 - `female_vocal.wav` - Female vocal sample
 
 ## Format Requirements:

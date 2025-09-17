@@ -44,7 +44,7 @@ pub fn x2peq(freqs: &Array1<f64>, x: &[f64], srate: f64, iir_hp_pk: bool) -> Arr
             BiquadFilterType::Peak
         };
         let filter = Biquad::new(ftype, freq, srate, q, gain);
-        peq_spl += &filter.np_log_result(&freqs);
+        peq_spl += &filter.np_log_result(freqs);
     }
     peq_spl
 }

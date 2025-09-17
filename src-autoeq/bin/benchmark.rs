@@ -11,8 +11,8 @@
 
 use autoeq::cea2034 as score;
 use autoeq::iir;
-use autoeq::read;
 use autoeq::optim::ObjectiveData;
+use autoeq::read;
 use clap::Parser;
 use ndarray::Array1;
 use serde_json::Value;
@@ -416,7 +416,8 @@ async fn run_one(
     }
 
     let standard_freq = autoeq::read::create_log_frequency_grid(200, 20.0, 20000.0);
-    let input_curve_normalized = autoeq::read::normalize_and_interpolate_response(&standard_freq, &input_curve);
+    let input_curve_normalized =
+        autoeq::read::normalize_and_interpolate_response(&standard_freq, &input_curve);
     let target_curve = build_target_curve(args, &standard_freq, &input_curve);
     let deviation_curve = autoeq::Curve {
         freq: target_curve.freq.clone(),

@@ -135,64 +135,64 @@ pub fn plot_filters(
         .height(800)
         .x_axis(
             plotly::layout::Axis::new()
-                .title(format!("Frequency (Hz)"))
+                .title("Frequency (Hz)".to_string())
                 .type_(AxisType::Log)
                 .range(vec![1.301, 4.301])
                 .domain(&[0., 0.45]),
         ) // log10(20) to log10(20000)
         .y_axis(
             plotly::layout::Axis::new()
-                .title(format!("SPL (dB)"))
+                .title("SPL (dB)".to_string())
                 .dtick(1.0)
                 .range(vec![-10.0, 10.0]),
         )
         .x_axis2(
             plotly::layout::Axis::new()
-                .title(format!("Frequency (Hz)"))
+                .title("Frequency (Hz)".to_string())
                 .type_(AxisType::Log)
                 .range(vec![1.301, 4.301])
                 .domain(&[0.55, 1.0]),
         ) // log10(20) to log10(20000)
         .y_axis2(
             plotly::layout::Axis::new()
-                .title(format!("SPL (dB)"))
+                .title("SPL (dB)".to_string())
                 .dtick(1.0)
                 .range(vec![-10.0, 10.0]),
         )
         .x_axis3(
             plotly::layout::Axis::new()
-                .title(format!("Frequency (Hz)"))
+                .title("Frequency (Hz)".to_string())
                 .type_(AxisType::Log)
                 .range(vec![1.301, 4.301])
                 .domain(&[0., 0.45]),
         )
         .y_axis3(
             plotly::layout::Axis::new()
-                .title(format!("SPL (dB)"))
+                .title("SPL (dB)".to_string())
                 .dtick(1.0)
                 .range(vec![-10.0, 10.0]),
         )
         .x_axis4(
             plotly::layout::Axis::new()
-                .title(format!("Frequency (Hz)"))
+                .title("Frequency (Hz)".to_string())
                 .type_(AxisType::Log)
                 .range(vec![1.301, 4.301])
                 .domain(&[0.55, 1.0]),
         )
         .y_axis4(
             plotly::layout::Axis::new()
-                .title(format!("SPL (dB)"))
+                .title("SPL (dB)".to_string())
                 .dtick(1.0)
                 .range(vec![-10.0, 10.0]),
         );
 
     layout.add_annotation(
         Annotation::new()
-            .y_ref(format!("y domain"))
+            .y_ref("y domain")
             .y_anchor(Anchor::Bottom)
             .y(1)
-            .text(format!("IIR Filters and Sum"))
-            .x_ref(format!("x domain"))
+            .text("IIR Filters and Sum")
+            .x_ref("x domain")
             .x_anchor(Anchor::Center)
             .x(0.5)
             .show_arrow(false),
@@ -200,11 +200,11 @@ pub fn plot_filters(
 
     layout.add_annotation(
         Annotation::new()
-            .y_ref(format!("y2 domain"))
+            .y_ref("y2 domain")
             .y_anchor(Anchor::Bottom)
             .y(1)
-            .text(format!("Autoeq v.s. Target"))
-            .x_ref(format!("x2 domain"))
+            .text("Autoeq v.s. Target")
+            .x_ref("x2 domain")
             .x_anchor(Anchor::Center)
             .x(0.5)
             .show_arrow(false),
@@ -212,11 +212,11 @@ pub fn plot_filters(
 
     layout.add_annotation(
         Annotation::new()
-            .y_ref(format!("y3 domain"))
+            .y_ref("y3 domain")
             .y_anchor(Anchor::Bottom)
             .y(1)
-            .text(format!("Response v.s. Target"))
-            .x_ref(format!("x3 domain"))
+            .text("Response v.s. Target")
+            .x_ref("x3 domain")
             .x_anchor(Anchor::Center)
             .x(0.5)
             .show_arrow(false),
@@ -224,11 +224,11 @@ pub fn plot_filters(
 
     layout.add_annotation(
         Annotation::new()
-            .y_ref(format!("y4 domain"))
+            .y_ref("y4 domain")
             .y_anchor(Anchor::Bottom)
             .y(1)
-            .text(format!("Response + autoEQ v.s. Target"))
-            .x_ref(format!("x4 domain"))
+            .text("Response + autoEQ v.s. Target")
+            .x_ref("x4 domain")
             .x_anchor(Anchor::Center)
             .x(0.5)
             .show_arrow(false),

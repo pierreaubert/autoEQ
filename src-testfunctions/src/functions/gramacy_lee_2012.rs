@@ -2,7 +2,7 @@
 
 use ndarray::Array1;
 
-/// Gramacy & Lee (2012) Function - 1D test function with challenging properties  
+/// Gramacy & Lee (2012) Function - 1D test function with challenging properties
 /// f(x) = sin(10*pi*x) / (2*x) + (x-1)^4
 /// Global minimum: f(x) ≈ -0.869011134989500 at x ≈ 0.548563444114526
 /// Bounds: x in [0.5, 2.5]

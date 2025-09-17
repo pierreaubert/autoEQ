@@ -500,7 +500,7 @@ pub fn validate_args(args: &Args) -> Result<(), String> {
         }
     }
     // Check if algorithm is valid
-    if let Some(_) = crate::optim::find_algorithm_info(&args.algo) {
+    if crate::optim::find_algorithm_info(&args.algo).is_some() {
         // Algorithm is valid
     } else {
         return Err(format!(
@@ -511,7 +511,7 @@ pub fn validate_args(args: &Args) -> Result<(), String> {
 
     // Check if local algorithm is valid (when refine is enabled)
     if args.refine {
-        if let Some(_) = crate::optim::find_algorithm_info(&args.local_algo) {
+        if crate::optim::find_algorithm_info(&args.local_algo).is_some() {
             // Local algorithm is valid
         } else {
             return Err(format!(
@@ -905,7 +905,7 @@ fn parse_nonnegative_f64(s: &str) -> Result<f64, String> {
 // Custom value parser to enforce recombination probability (0.0 to 1.0)
 fn parse_recombination_probability(s: &str) -> Result<f64, String> {
     let v: f64 = s.parse().map_err(|_| format!("invalid float: {s}"))?;
-    if v >= 0.0 && v <= 1.0 {
+    if (0.0..=1.0).contains(&v) {
         Ok(v)
     } else {
         Err("recombination probability must be between 0.0 and 1.0".to_string())

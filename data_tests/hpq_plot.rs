@@ -70,7 +70,7 @@ fn plot_highpass_variable_q_responses() {
     let mut out_dir = PathBuf::from(DATA_GENERATED);
     out_dir.push("plot_tests");
     std::fs::create_dir_all(&out_dir).expect("Failed to create plot_tests directory");
-    
+
     let out = out_dir.join("plot_hpq.html");
     plot.write_html(&out);
 

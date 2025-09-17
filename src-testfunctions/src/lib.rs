@@ -603,7 +603,7 @@ pub fn get_function_bounds_2d(function_name: &str, default_bounds: (f64, f64)) -
 }
 
 /// Helper function to get bounds as a Vec for optimization (compatible with recorded tests)
-/// Returns default bounds if function is not found  
+/// Returns default bounds if function is not found
 pub fn get_function_bounds_vec(function_name: &str, default_bounds: (f64, f64)) -> Vec<(f64, f64)> {
     if let Some(bounds) = get_function_bounds(function_name) {
         if bounds.len() >= 2 {

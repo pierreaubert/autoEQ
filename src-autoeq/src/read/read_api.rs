@@ -399,23 +399,14 @@ pub fn extract_cea2034_curves(
 
     // Ensure required curves exist for PIR computation
     let lw_curve = curves.get("Listening Window").ok_or_else(|| {
-        std::io::Error::new(
-            std::io::ErrorKind::Other,
-            "Missing 'Listening Window' curve after extraction",
-        )
+        std::io::Error::other("Missing 'Listening Window' curve after extraction")
     })?;
     let er_curve = curves.get("Early Reflections").ok_or_else(|| {
-        std::io::Error::new(
-            std::io::ErrorKind::Other,
-            "Missing 'Early Reflections' curve after extraction",
-        )
+        std::io::Error::other("Missing 'Early Reflections' curve after extraction")
     })?;
-    let sp_curve = curves.get("Sound Power").ok_or_else(|| {
-        std::io::Error::new(
-            std::io::ErrorKind::Other,
-            "Missing 'Sound Power' curve after extraction",
-        )
-    })?;
+    let sp_curve = curves
+        .get("Sound Power")
+        .ok_or_else(|| std::io::Error::other("Missing 'Sound Power' curve after extraction"))?;
 
     let lw = &lw_curve.spl;
     let er = &er_curve.spl;

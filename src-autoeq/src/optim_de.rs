@@ -347,11 +347,11 @@ pub fn optimize_filters_autoeq_with_callback(
     if !cli_args.no_parallel {
         eprintln!(
             "🚄 Parallel evaluation enabled with {} threads",
-            cli_args
-                .parallel_threads
-                .eq(&0)
-                .then(|| "all available".to_string())
-                .unwrap_or_else(|| cli_args.parallel_threads.to_string())
+            if cli_args.parallel_threads.eq(&0) {
+                "all available".to_string()
+            } else {
+                cli_args.parallel_threads.to_string()
+            }
         );
     }
 
@@ -366,8 +366,8 @@ pub fn optimize_filters_autoeq_with_callback(
                 penalty_data.srate,
                 penalty_data.iir_hp_pk,
             );
-            let viol = viol_ceiling_from_spl(&peq_spl, penalty_data.max_db, penalty_data.iir_hp_pk);
-            viol
+
+            viol_ceiling_from_spl(&peq_spl, penalty_data.max_db, penalty_data.iir_hp_pk)
         }
     };
     config_builder =

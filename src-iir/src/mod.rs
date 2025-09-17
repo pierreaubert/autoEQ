@@ -515,7 +515,7 @@ pub fn peq_equal(left: &Peq, right: &Peq) -> bool {
     left.iter().zip(right.iter()).all(|((w1, b1), (w2, b2))| {
         // Compare weights
         (w1 - w2).abs() < f64::EPSILON &&
-        // Compare biquad parameters 
+        // Compare biquad parameters
         b1.filter_type == b2.filter_type &&
         (b1.freq - b2.freq).abs() < f64::EPSILON &&
         (b1.srate - b2.srate).abs() < f64::EPSILON &&

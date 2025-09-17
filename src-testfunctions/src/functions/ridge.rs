@@ -6,7 +6,7 @@ use ndarray::Array1;
 /// Global minimum: f(x) = 0 at x = (0, 0, ..., 0)
 /// Bounds: x_i in [-5, 5]
 pub fn ridge(x: &Array1<f64>) -> f64 {
-    if x.len() == 0 {
+    if x.is_empty() {
         return 0.0;
     }
     let x1 = x[0];

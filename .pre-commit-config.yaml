@@ -1,0 +1,29 @@
+fail_fast: true
+
+exclude: |
+  (?x)^(
+    .*/(snapshots)/.*|
+  )$
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+
+  - repo: local
+    hooks:
+      - id: cargo-fmt
+        name: cargo fmt
+        entry: cargo fmt --
+        language: system
+        types: [rust]
+        pass_filenames: false # This makes it a lot faster
+
+      - id: cargo-check
+        name: cargo check
+        language: system
+        types: [rust]
+        pass_filenames: false
+        entry: cargo check

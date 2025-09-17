@@ -363,7 +363,7 @@ pub fn compute_base_fitness(x: &[f64], data: &ObjectiveData) -> f64 {
             } else {
                 &crate::loss::HeadphoneLossData::new(true, 1)
             };
-            let s = headphone_loss_with_target(&headphone_data, &response_curve, &target_curve);
+            let s = headphone_loss_with_target(headphone_data, &response_curve, &target_curve);
             let p = flat_loss(&data.freqs, &error) / 3.0;
             s + p
         }

@@ -6,7 +6,7 @@ The main AutoEQ crate providing automatic equalization for speakers and headphon
 
 - **Automatic Filter Optimization**: Find optimal IIR filter parameters to match target curves
 - **Multiple Loss Functions**: Flat response, preference score, or mixed optimization
-- **Advanced Constraints**: Filter spacing, frequency bounds, and gain limits  
+- **Advanced Constraints**: Filter spacing, frequency bounds, and gain limits
 - **Data Integration**: Fetch measurements directly from Spinorama.org API
 - **Visualization**: Generate interactive plots of frequency responses and filters
 - **Benchmarking**: Comprehensive performance testing across speaker database
@@ -35,7 +35,7 @@ benchmark --algo nlopt:isres
 benchmark --smoke-test --jobs 4
 ```
 
-### Download Tool  
+### Download Tool
 Bulk data fetching from Spinorama.org:
 ```bash
 # Download CEA2034 measurements for all speakers
@@ -54,7 +54,7 @@ download
 
 ### Loss Functions
 - **Flat Loss**: Minimize RMS error against target curve
-- **Score Loss**: Maximize CEA2034-based preference score  
+- **Score Loss**: Maximize CEA2034-based preference score
 - **Mixed Loss**: Combine listening window and PIR optimization
 
 ### Optimization Algorithms
@@ -72,7 +72,7 @@ use autoeq::{cli::Args, LossType};
 let args = Args {
     num_filters: 5,           // Number of biquad sections
     max_db: 6.0,             // Maximum gain/cut in dB
-    min_db: -12.0,           // Minimum gain/cut in dB  
+    min_db: -12.0,           // Minimum gain/cut in dB
     max_q: 10.0,             // Maximum Q factor
     min_q: 0.1,              // Minimum Q factor
     min_freq: 20.0,          // Lowest filter frequency
@@ -97,8 +97,8 @@ use autoeq::{read::fetch_measurement_plot_data, workflow};
 
 // Fetch speaker data
 let (curves, metadata) = fetch_measurement_plot_data(
-    "KEF R3", 
-    "asr", 
+    "KEF R3",
+    "asr",
     "CEA2034"
 ).await?;
 
@@ -148,7 +148,7 @@ This crate integrates several AutoEQ ecosystem components:
 ## Contributing
 
 When adding features:
-1. **Add tests** for new functionality  
+1. **Add tests** for new functionality
 2. **Update documentation** and examples
 3. **Validate against known results** where possible
 4. **Consider backwards compatibility** for CLI arguments

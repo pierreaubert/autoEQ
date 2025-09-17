@@ -95,7 +95,7 @@ pub async fn plot_results(
     let html_output_path = output_path.with_extension("html");
     if let Some(parent) = html_output_path.parent() {
         std::fs::create_dir_all(parent)
-            .expect(&format!("Failed to create output directory: {:?}", parent));
+            .unwrap_or_else(|_| panic!("Failed to create output directory: {:?}", parent));
     }
 
     let mut file = File::create(&html_output_path).unwrap();
@@ -132,10 +132,9 @@ pub async fn plot_results(
 
                 // Ensure parent directory exists for PNG files
                 if let Some(parent) = img_path.parent() {
-                    std::fs::create_dir_all(parent).expect(&format!(
-                        "Failed to create PNG output directory: {:?}",
-                        parent
-                    ));
+                    std::fs::create_dir_all(parent).unwrap_or_else(|_| {
+                        panic!("Failed to create PNG output directory: {:?}", parent)
+                    });
                 }
 
                 if let Err(e) = exporter

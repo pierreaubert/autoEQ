@@ -12,7 +12,7 @@ src/
 └── functions/
     ├── mod.rs               # Module exports and organization
     ├── unimodal.rs         # Single global optimum functions
-    ├── multimodal.rs       # Multiple local minima functions  
+    ├── multimodal.rs       # Multiple local minima functions
     ├── constrained.rs      # Functions with constraints
     ├── composite.rs        # Hybrid and composite functions
     └── modern.rs           # Recent CEC and research functions
@@ -85,7 +85,7 @@ let bounds_2d = get_function_bounds_2d("sphere", (-5.0, 5.0));
 let result1 = elliptic(&x);    // Ill-conditioned
 let result2 = rosenbrock(&x);  // Valley-shaped
 
-// Multimodal functions (good for global search testing)  
+// Multimodal functions (good for global search testing)
 let result3 = ackley(&x);      // Highly multimodal
 let result4 = rastrigin(&x);   // Many local minima
 
@@ -98,7 +98,7 @@ let result6 = katsuura(&x);    // Fractal-like landscape
 
 ### **Difficulty Levels**
 - **Easy**: `sphere`, `booth`, `matyas` - Good for initial testing
-- **Medium**: `rosenbrock`, `ackley`, `griewank` - Standard benchmarks  
+- **Medium**: `rosenbrock`, `ackley`, `griewank` - Standard benchmarks
 - **Hard**: `schwefel`, `eggholder`, `katsuura` - Challenging landscapes
 - **Extreme**: `holder_table`, `cross_in_tray` - Very difficult optimization
 
@@ -119,14 +119,14 @@ let result6 = katsuura(&x);    // Fractal-like landscape
 
 ### **Algorithm Testing Workflow**
 1. **Start Simple**: Test on `sphere` and `rosenbrock`
-2. **Add Multimodality**: Try `ackley` and `rastrigin` 
+2. **Add Multimodality**: Try `ackley` and `rastrigin`
 3. **Test Scalability**: Use N-dimensional functions
 4. **Challenge Mode**: `schwefel`, `eggholder`, `katsuura`
 5. **Constraints**: `keanes_bump_*` for constrained algorithms
 
 ### **Performance Metrics**
 - **Convergence Speed**: Unimodal functions
-- **Global Search**: Multimodal functions  
+- **Global Search**: Multimodal functions
 - **Precision**: Functions with known exact minima
 - **Robustness**: Ill-conditioned and noisy functions
 - **Scalability**: High-dimensional variants
@@ -135,7 +135,7 @@ let result6 = katsuura(&x);    // Fractal-like landscape
 
 ### **SFU Virtual Library**: ~100% Coverage
 - ✅ **Many Local Minima**: Complete (16/16)
-- ✅ **Bowl-Shaped**: Complete (7/7) 
+- ✅ **Bowl-Shaped**: Complete (7/7)
 - ✅ **Plate-Shaped**: Complete (5/5)
 - ✅ **Valley-Shaped**: Complete (4/4)
 - ✅ **Steep Ridges/Drops**: Complete (3/3)
@@ -168,8 +168,8 @@ cargo fmt
 
 ---
 
-**Total Functions**: 56+  
-**Categories**: 5 organized modules  
-**Quality**: Production-ready with verified implementations  
-**Coverage**: Complete SFU + modern benchmarks  
+**Total Functions**: 56+
+**Categories**: 5 organized modules
+**Quality**: Production-ready with verified implementations
+**Coverage**: Complete SFU + modern benchmarks
 **Performance**: Optimized for speed and numerical stability

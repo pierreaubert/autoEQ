@@ -9,7 +9,7 @@ pub fn schwefel2(x: &Array1<f64>) -> f64 {
         .iter()
         .enumerate()
         .map(|(i, &xi)| {
-            let inner_sum: f64 = x.iter().take(i + 1).map(|&xj| xj).sum();
+            let inner_sum: f64 = x.iter().take(i + 1).copied().sum();
             inner_sum.powi(2)
         })
         .sum();

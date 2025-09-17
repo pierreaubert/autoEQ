@@ -6,7 +6,7 @@ use ndarray::Array1;
 /// Global minimum: f(x) = 0 at x = (0, 0, ..., 0)
 /// Bounds: x_i in [-100, 100]
 pub fn cigar(x: &Array1<f64>) -> f64 {
-    if x.len() == 0 {
+    if x.is_empty() {
         return 0.0;
     }
     let first = x[0].powi(2);

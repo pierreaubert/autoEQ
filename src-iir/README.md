@@ -6,7 +6,7 @@ This crate provides IIR (Infinite Impulse Response) filter implementations for a
 
 - **Biquad Filters**: Implementation of common biquad filter types
   - Low-pass filters
-  - High-pass filters  
+  - High-pass filters
   - Peak/notch filters
   - Low/high shelf filters
   - Band-pass filters
@@ -101,7 +101,7 @@ use autoeq_iir::{peq_butterworth_lowpass, peq_linkwitzriley_highpass};
 let lp_filter = peq_butterworth_lowpass(4, 2000.0, 48000.0);
 print!("Butterworth LP has {} sections", lp_filter.len());
 
-// Create a 4th-order Linkwitz-Riley highpass at 2kHz  
+// Create a 4th-order Linkwitz-Riley highpass at 2kHz
 let hp_filter = peq_linkwitzriley_highpass(4, 2000.0, 48000.0);
 print!("LR HP has {} sections", hp_filter.len());
 
@@ -137,33 +137,33 @@ use ndarray::Array1;
 
 fn create_studio_eq() -> Peq {
     let mut peq = Vec::new();
-    
+
     // High-pass filter to remove subsonic content
     let hp = peq_butterworth_highpass(2, 20.0, 48000.0);
     peq.extend(hp);
-    
+
     // Presence boost
     let presence = Biquad::new(BiquadFilterType::Peak, 3000.0, 48000.0, 1.2, 2.5);
     peq.push((1.0, presence));
-    
+
     // Air band enhancement
     let air = Biquad::new(BiquadFilterType::Highshelf, 10000.0, 48000.0, 0.9, 1.5);
     peq.push((1.0, air));
-    
+
     peq
 }
 
 fn analyze_eq(peq: &Peq) {
     // Generate frequency sweep
     let freqs = Array1::logspace(10.0, 20.0_f64.log10(), 20000.0_f64.log10(), 200);
-    
+
     // Calculate response
     let response = peq_spl(&freqs, peq);
-    
+
     // Find peak response
     let max_gain = response.iter().fold(f64::NEG_INFINITY, |a, &b| a.max(b));
     let min_gain = response.iter().fold(f64::INFINITY, |a, &b| a.min(b));
-    
+
     println!("EQ Analysis:");
     println!("  Peak gain: {:.2} dB", max_gain);
     println!("  Min gain: {:.2} dB", min_gain);
@@ -174,7 +174,7 @@ fn analyze_eq(peq: &Peq) {
 fn main() {
     let studio_eq = create_studio_eq();
     analyze_eq(&studio_eq);
-    
+
     // Export for use in EqualizerAPO
     let config = peq_format_apo("Studio EQ v1.0", &studio_eq);
     println!("\nEqualizerAPO Configuration:");
@@ -206,7 +206,7 @@ The `Peq` type is defined as `Vec<(f64, Biquad)>` where:
 
 This crate is part of the AutoEQ ecosystem and is designed to work with:
 - `autoeq-de`: Differential Evolution optimizer
-- `autoeq-cea2034`: CEA2034 scoring algorithms  
+- `autoeq-cea2034`: CEA2034 scoring algorithms
 - `autoeq`: Main AutoEQ application
 
 The PEQ functions are particularly useful for:

@@ -1590,16 +1590,16 @@ input[type="checkbox"] {
     flex: 1 1 100%;
     margin: var(--spacing-xs) 0;
   }
-  
+
   .audio-playback-container {
     flex-direction: column;
     gap: var(--spacing-xs);
   }
-  
+
   .audio-center-controls .audio-status {
     width: 100%;
   }
-  
+
   .frequency-analyzer {
     width: 100%;
   }

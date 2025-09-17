@@ -33,15 +33,13 @@ pub fn normalize_and_interpolate_response(
     curve: &Curve,
 ) -> Curve {
     // Normalize after interpolation
-    let spl_norm = normalize_response(&curve, NORMALIZE_LOW_FREQ, NORMALIZE_HIGH_FREQ);
+    let spl_norm = normalize_response(curve, NORMALIZE_LOW_FREQ, NORMALIZE_HIGH_FREQ);
 
-    let spl_interp = interpolate_log_space(
-        &standard_freq,
+    interpolate_log_space(
+        standard_freq,
         &Curve {
             freq: curve.freq.clone(),
             spl: spl_norm,
         },
-    );
-
-    spl_interp
+    )
 }

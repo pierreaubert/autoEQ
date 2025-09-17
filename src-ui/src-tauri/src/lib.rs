@@ -168,17 +168,17 @@ fn validate_params(
     }
 
     // Validate tolerance (lower bound 1e-12, no upper bound)
-    if let Some(tol) = params.tolerance {
-        if tol < 1e-12 {
-            return Err(format!("Tolerance must be >= 1e-12 (got: {})", tol).into());
-        }
+    if let Some(tol) = params.tolerance
+        && tol < 1e-12
+    {
+        return Err(format!("Tolerance must be >= 1e-12 (got: {})", tol).into());
     }
 
     // Validate absolute tolerance (lower bound 0, no upper bound)
-    if let Some(atol) = params.atolerance {
-        if atol < 1e-15 {
-            return Err(format!("Absolute tolerance must be >= 1e-15 (got: {})", atol).into());
-        }
+    if let Some(atol) = params.atolerance
+        && atol < 1e-15
+    {
+        return Err(format!("Absolute tolerance must be >= 1e-15 (got: {})", atol).into());
     }
 
     // Validate frequency range
@@ -270,37 +270,37 @@ fn validate_params(
     }
 
     // Validate DE parameters if present
-    if let Some(de_f) = params.de_f {
-        if de_f < 0.0 || de_f > 2.0 {
-            return Err(format!(
-                "Mutation factor (F) must be between 0 and 2 (got: {})",
-                de_f
-            )
-            .into());
-        }
+    if let Some(de_f) = params.de_f
+        && (!(0.0..=2.0).contains(&de_f))
+    {
+        return Err(format!(
+            "Mutation factor (F) must be between 0 and 2 (got: {})",
+            de_f
+        )
+        .into());
     }
 
-    if let Some(de_cr) = params.de_cr {
-        if de_cr < 0.0 || de_cr > 1.0 {
-            return Err(format!(
-                "Recombination probability (CR) must be between 0 and 1 (got: {})",
-                de_cr
-            )
-            .into());
-        }
+    if let Some(de_cr) = params.de_cr
+        && (!(0.0..=1.0).contains(&de_cr))
+    {
+        return Err(format!(
+            "Recombination probability (CR) must be between 0 and 1 (got: {})",
+            de_cr
+        )
+        .into());
     }
 
     // Validate adaptive weights
-    if let Some(w) = params.adaptive_weight_f {
-        if w < 0.0 || w > 1.0 {
-            return Err(format!("Adaptive weight F must be between 0 and 1 (got: {})", w).into());
-        }
+    if let Some(w) = params.adaptive_weight_f
+        && (!(0.0..=1.0).contains(&w))
+    {
+        return Err(format!("Adaptive weight F must be between 0 and 1 (got: {})", w).into());
     }
 
-    if let Some(w) = params.adaptive_weight_cr {
-        if w < 0.0 || w > 1.0 {
-            return Err(format!("Adaptive weight CR must be between 0 and 1 (got: {})", w).into());
-        }
+    if let Some(w) = params.adaptive_weight_cr
+        && (!(0.0..=1.0).contains(&w))
+    {
+        return Err(format!("Adaptive weight CR must be between 0 and 1 (got: {})", w).into());
     }
 
     Ok(())
@@ -385,16 +385,14 @@ async fn run_optimization_internal(
     // Load input curve
     let (input_curve, spin_data) = autoeq::workflow::load_input_curve(&args).await.map_err(
         |e| -> Box<dyn std::error::Error + Send + Sync> {
-            Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                e.to_string(),
-            ))
+            Box::new(std::io::Error::other(e.to_string()))
         },
     )?;
 
     // Build target curve
     let standard_freq = autoeq::read::create_log_frequency_grid(200, 20.0, 20000.0);
-    let input_curve_normalized = autoeq::read::normalize_and_interpolate_response(&standard_freq, &input_curve);
+    let input_curve_normalized =
+        autoeq::read::normalize_and_interpolate_response(&standard_freq, &input_curve);
     let target_curve = autoeq::workflow::build_target_curve(&args, &standard_freq, &input_curve);
     let deviation_curve = autoeq::Curve {
         freq: target_curve.freq.clone(),
@@ -402,21 +400,24 @@ async fn run_optimization_internal(
     };
 
     // Setup objective data
-    let (objective_data, use_cea) =
-        autoeq::workflow::setup_objective_data(&args, &input_curve_normalized, &deviation_curve, &spin_data);
+    let (objective_data, use_cea) = autoeq::workflow::setup_objective_data(
+        &args,
+        &input_curve_normalized,
+        &deviation_curve,
+        &spin_data,
+    );
 
     // Get preference score before optimization if applicable
     let mut pref_score_before: Option<f64> = None;
-    if use_cea {
-        if let Ok(metrics) = autoeq::cea2034::compute_cea2034_metrics(
+    if use_cea
+        && let Ok(metrics) = autoeq::cea2034::compute_cea2034_metrics(
             &input_curve_normalized.freq,
             spin_data.as_ref().unwrap(),
             None,
         )
         .await
-        {
-            pref_score_before = Some(metrics.pref_score);
-        }
+    {
+        pref_score_before = Some(metrics.pref_score);
     }
 
     // Run optimization with progress reporting for autoeq:de
@@ -438,18 +439,12 @@ async fn run_optimization_internal(
             }),
         )
         .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
-            Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                e.to_string(),
-            ))
+            Box::new(std::io::Error::other(e.to_string()))
         })?
     } else {
         autoeq::workflow::perform_optimization(&args, &objective_data).map_err(
             |e| -> Box<dyn std::error::Error + Send + Sync> {
-                Box::new(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    e.to_string(),
-                ))
+                Box::new(std::io::Error::other(e.to_string()))
             },
         )?
     };
@@ -521,7 +516,7 @@ async fn run_optimization_internal(
     filters.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
 
     // Generate response for each filter
-    for (_display_idx, (orig_i, f0, q, gain)) in filters.into_iter().enumerate() {
+    for (orig_i, f0, q, gain) in filters.into_iter() {
         use autoeq::iir::{Biquad, BiquadFilterType};
 
         let ftype = if args.iir_hp_pk && orig_i == 0 {

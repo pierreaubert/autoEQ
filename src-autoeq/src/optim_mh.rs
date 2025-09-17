@@ -69,14 +69,14 @@ pub fn optimize_filters_mh(
         "de" => MhSolver::build_boxed(MhDe::default(), mh_obj),
         "pso" => MhSolver::build_boxed(MhPso::default(), mh_obj),
         "rga" => MhSolver::build_boxed(MhRga::default(), mh_obj),
-        "tlbo" => MhSolver::build_boxed(MhTlbo::default(), mh_obj),
+        "tlbo" => MhSolver::build_boxed(MhTlbo, mh_obj),
         "fa" | "firefly" => MhSolver::build_boxed(MhFa::default(), mh_obj),
         _ => MhSolver::build_boxed(MhDe::default(), mh_obj),
     };
 
     // Estimate generations from maxeval and population
     let pop = population.max(1);
-    let gens = ((maxeval.max(pop)) + pop - 1) / pop; // ceil(maxeval/pop)
+    let gens = (maxeval.max(pop)).div_ceil(pop); // ceil(maxeval/pop)
 
     // Avoid accessing ctx.gen directly (reserved identifier in Rust 2024).
     // Instead, count down generations via the task FnMut closure.

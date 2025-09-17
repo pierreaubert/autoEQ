@@ -75,13 +75,18 @@ impl SpeakerLossData {
             .expect("Missing 'Estimated In-Room Response' in CEA2034 spin data")
             .spl
             .clone();
-            
+
         // Verify all arrays have the same length
         if on.len() != lw.len() || on.len() != sp.len() || on.len() != pir.len() {
-            panic!("All CEA2034 curves must have the same length. on: {}, lw: {}, sp: {}, pir: {}", 
-                   on.len(), lw.len(), sp.len(), pir.len());
+            panic!(
+                "All CEA2034 curves must have the same length. on: {}, lw: {}, sp: {}, pir: {}",
+                on.len(),
+                lw.len(),
+                sp.len(),
+                pir.len()
+            );
         }
-        
+
         Self { on, lw, sp, pir }
     }
 }
@@ -389,8 +394,8 @@ pub fn headphone_loss_with_target(
     // freqs on which we normalize every curve: 12 points per octave between 20 and 20kHz
     let freqs = read::create_log_frequency_grid(10 * 12, 20.0, 20000.0);
 
-    let input_curve = read::normalize_and_interpolate_response(&freqs, &response);
-    let target_curve = read::normalize_and_interpolate_response(&freqs, &target);
+    let input_curve = read::normalize_and_interpolate_response(&freqs, response);
+    let target_curve = read::normalize_and_interpolate_response(&freqs, target);
 
     // normalized and potentially smooth
     let deviation = Curve {

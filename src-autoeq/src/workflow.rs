@@ -59,7 +59,7 @@ pub fn build_target_curve(
 ) -> Curve {
     let base_target = if let Some(ref target_path) = args.target {
         let target_curve = read::read_curve_from_csv(target_path).unwrap();
-        read::normalize_and_interpolate_response(&freqs, &target_curve)
+        read::normalize_and_interpolate_response(freqs, &target_curve)
     } else {
         match args.curve_name.as_str() {
             "Listening Window" => {
@@ -80,7 +80,7 @@ pub fn build_target_curve(
                 });
                 Curve {
                     freq: freqs.clone(),
-                    spl: spl,
+                    spl,
                 }
             }
             "Sound Power" | "Early Reflections" | "Estimated In-Room Response" => {
@@ -103,14 +103,14 @@ pub fn build_target_curve(
                 });
                 Curve {
                     freq: freqs.clone(),
-                    spl: spl,
+                    spl,
                 }
             }
             _ => {
                 let spl = Array1::zeros(freqs.len());
                 Curve {
                     freq: freqs.clone(),
-                    spl: spl,
+                    spl,
                 }
             }
         }
@@ -264,7 +264,7 @@ pub fn perform_optimization_with_callback(
     match result {
         Ok((_status, _val)) => {}
         Err((e, _final_value)) => {
-            return Err(std::io::Error::new(std::io::ErrorKind::Other, e).into());
+            return Err(std::io::Error::other(e).into());
         }
     };
 
@@ -282,7 +282,7 @@ pub fn perform_optimization_with_callback(
         match local_result {
             Ok((_local_status, _local_val)) => {}
             Err((e, _final_value)) => {
-                return Err(std::io::Error::new(std::io::ErrorKind::Other, e).into());
+                return Err(std::io::Error::other(e).into());
             }
         }
     }

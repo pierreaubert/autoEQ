@@ -233,7 +233,7 @@ pub fn plot_spin_details(
         x_axis3_title = "unused".to_string();
         x_axis4_title = "unused".to_string();
         // Interpolate input to plotting freqs to align
-        let input_on_plot = crate::read::interpolate(&plot_freqs, &input_curve);
+        let input_on_plot = crate::read::interpolate(plot_freqs, input_curve);
 
         // Left subplot (x3/y3): Input Curve
         let input_second_row = Scatter::new(plot_freqs.to_vec(), input_on_plot.spl.to_vec())

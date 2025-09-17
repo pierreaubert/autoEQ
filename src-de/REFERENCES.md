@@ -12,7 +12,7 @@
             Mayorov, Nikolay and Nelson, Andrew R. J. and Jones, Eric and
             Kern, Robert and Larson, Eric and Carey, C J and
             Polat, {\.I}lhan and Feng, Yu and Moore, Eric W. and
-            {VanderPlas}, Jake and Laxalde, Denis and Perktold, Josef and
+            {VanderPlays}, Jake and Laxalde, Denis and Perktold, Josef and
             Cimrman, Robert and Henriksen, Ian and Quintero, E. A. and
             Harris, Charles R. and Archibald, Anne M. and
             Ribeiro, Ant{\^o}nio H. and Pedregosa, Fabian and
@@ -60,4 +60,3 @@
   keywords={Genetic mutations;Programmable control;Adaptive control;Convergence;Automatic control;Evolutionary computation;Feedback;Robustness;Particle swarm optimization;Performance analysis;Adaptive parameter control;differential evolution;evolutionary optimization;external archive},
   doi={10.1109/TEVC.2009.2014613}}
 ```
-

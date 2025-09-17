@@ -57,15 +57,15 @@ build_target() {
     local target=$1
     local description=$(get_description "$target")
     local success=true
-    
+
     echo -e "${YELLOW}Building for $target ($description)...${NC}"
-    
+
     # Create target directory
     mkdir -p "$OUTPUT_DIR/$target"
-    
+
     for binary in "${BINARIES[@]}"; do
         echo -n "  - Building $binary... "
-        
+
         # Choose build method based on target
         if [[ "$target" == *"apple-darwin" ]]; then
             # Use regular cargo for macOS targets
@@ -101,7 +101,7 @@ build_target() {
             fi
         fi
     done
-    
+
     if [ "$success" = true ]; then
         echo -e "  ${GREEN}All binaries built successfully for $target${NC}"
         # Create a simple info file

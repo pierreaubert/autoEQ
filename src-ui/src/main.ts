@@ -120,7 +120,7 @@ class AutoEQUI {
   private audioDuration: HTMLElement;
   private audioPosition: HTMLElement;
   private audioProgressFill: HTMLElement;
-  
+
   // Filter plots data
   private filterPlotsData: PlotData | null = null;
   private lastSpinDetails: PlotData | null = null;
@@ -136,7 +136,7 @@ class AutoEQUI {
   private audioAnimationFrame: number | null = null;
   private currentFilterParams: number[] = [];
   private originalFilterParams: number[] = [];
-  
+
   // Frequency analyzer
   private analyserNode: AnalyserNode | null = null;
   private spectrumCanvas: HTMLCanvasElement | null = null;
@@ -282,7 +282,7 @@ class AutoEQUI {
   private setupUIInteractions(): void {
     // Initialize capture UI state
     this.updateCaptureUI('Ready', false, 0);
-    
+
     // Check if capture is supported
     if (!this.isCaptureSupported()) {
       // Show warning but allow simulated capture
@@ -1503,7 +1503,7 @@ class AutoEQUI {
     this.expandPlotSection('filter-details-plot');
 
     console.log(`Interactive filter details updated with ${numFilters} filters`);
-    
+
     // Initialize the graph with current parameters if we have filter plots data
     if (this.filterPlotsData) {
       setTimeout(() => {
@@ -1699,31 +1699,31 @@ class AutoEQUI {
     // Collect all current filter parameters
     const newFilterParams: number[] = [];
     const filterRows = this.filterDetailsPlotElement.querySelectorAll('tbody tr');
-    
+
     filterRows.forEach((row, index) => {
       const freqInput = document.getElementById(`filter-freq-${index}`) as HTMLInputElement;
       const qInput = document.getElementById(`filter-q-${index}`) as HTMLInputElement;
       const gainInput = document.getElementById(`filter-gain-${index}`) as HTMLInputElement;
-      
+
       if (freqInput && qInput && gainInput) {
         newFilterParams.push(parseFloat(freqInput.value));
         newFilterParams.push(parseFloat(qInput.value));
         newFilterParams.push(parseFloat(gainInput.value));
       }
     });
-    
+
     // Update current filter parameters
     this.updateFilterParams(newFilterParams);
-    
+
     // If audio is playing, update EQ in real-time without restarting
     if (this.isAudioPlaying) {
       this.setupEQFilters(); // Recreate filters with new parameters
       this.reconnectAudioChain(); // Reconnect the audio chain
     }
-    
+
     // Recalculate and redraw the filter response graph
     this.recalculateFilterGraph();
-    
+
     console.log('Filter parameters updated in real-time:', newFilterParams);
   }
 
@@ -1749,11 +1749,11 @@ class AutoEQUI {
       console.log('No filter parameters available for graph calculation');
       return;
     }
-    
+
     // Get sample rate from form
     const sampleRateInput = document.getElementById('sample-rate') as HTMLInputElement;
     const sampleRate = sampleRateInput ? parseFloat(sampleRateInput.value) : 48000;
-    
+
     // Create frequency array (logarithmic from 20 to 20000 Hz)
     const frequencies: number[] = [];
     let freq = 20;
@@ -1761,37 +1761,37 @@ class AutoEQUI {
       frequencies.push(freq);
       freq *= 1.0355;  // Same logarithmic spacing as backend
     }
-    
+
     // Collect filter parameters from the table
     const filterRows = document.querySelectorAll('#filter-details-table tbody tr');
     const newCurves: { [name: string]: number[] } = {};
     let combinedResponse = new Array(frequencies.length).fill(0);
     let activeFilterCount = 0;
-    
+
     console.log('Recalculating filter graph with', filterRows.length, 'filters');
-    
+
     filterRows.forEach((row, index) => {
       const activeCheckbox = document.getElementById(`filter-active-${index}`) as HTMLInputElement;
       const freqInput = document.getElementById(`filter-freq-${index}`) as HTMLInputElement;
       const qInput = document.getElementById(`filter-q-${index}`) as HTMLInputElement;
       const gainInput = document.getElementById(`filter-gain-${index}`) as HTMLInputElement;
-      
+
       if (activeCheckbox && freqInput && qInput && gainInput) {
         const isActive = activeCheckbox.checked;
         const freq = parseFloat(freqInput.value);
         const q = parseFloat(qInput.value);
         const gain = parseFloat(gainInput.value);
-        
+
         console.log(`Filter ${index}: active=${isActive}, freq=${freq}, q=${q}, gain=${gain}`);
-        
+
         // Skip inactive filters or filters with zero gain
         if (!isActive || Math.abs(gain) < 0.1) {
           console.log(`  Skipping filter ${index} (inactive or zero gain)`);
           return;
         }
-        
+
         activeFilterCount++;
-        
+
         // Calculate filter response for each frequency
         const filterResponse: number[] = [];
         frequencies.forEach(f => {
@@ -1801,7 +1801,7 @@ class AutoEQUI {
           const cos = Math.cos(omega);
           const A = Math.pow(10, gain / 40);
           const alpha = sin / (2 * q);
-          
+
           // Peak filter coefficients
           const b0 = 1 + alpha * A;
           const b1 = -2 * cos;
@@ -1809,63 +1809,63 @@ class AutoEQUI {
           const a0 = 1 + alpha / A;
           const a1 = -2 * cos;
           const a2 = 1 - alpha / A;
-          
+
           // Normalize coefficients
           const nb0 = b0 / a0;
           const nb1 = b1 / a0;
           const nb2 = b2 / a0;
           const na1 = a1 / a0;
           const na2 = a2 / a0;
-          
+
           // Calculate frequency response at evaluation frequency f
           const w = 2 * Math.PI * f / sampleRate;
           const cosw = Math.cos(w);
           const cos2w = Math.cos(2 * w);
           const sinw = Math.sin(w);
           const sin2w = Math.sin(2 * w);
-          
+
           // H(z) = (b0 + b1*z^-1 + b2*z^-2) / (1 + a1*z^-1 + a2*z^-2)
           // where z = e^(jw)
           const realNum = nb0 + nb1 * cosw + nb2 * cos2w;
           const imagNum = -nb1 * sinw - nb2 * sin2w;
           const realDen = 1 + na1 * cosw + na2 * cos2w;
           const imagDen = -na1 * sinw - na2 * sin2w;
-          
+
           // Calculate magnitude
           const magNum = Math.sqrt(realNum * realNum + imagNum * imagNum);
           const magDen = Math.sqrt(realDen * realDen + imagDen * imagDen);
           const mag = magNum / magDen;
-          
+
           const db = 20 * Math.log10(mag);
           filterResponse.push(db);
         });
-        
+
         // Add to combined response
         filterResponse.forEach((db, i) => {
           combinedResponse[i] += db;
         });
-        
+
         // Store individual filter response
         const label = `PK ${index + 1} at ${freq.toFixed(0)}Hz`;
         newCurves[label] = filterResponse;
         console.log(`  Added filter curve: ${label}`);
       }
     });
-    
+
     console.log(`Total active filters: ${activeFilterCount}`);
-    
+
     // Only add sum if we have active filters
     if (activeFilterCount > 0) {
       newCurves['Sum'] = combinedResponse;
     }
-    
+
     // Update the plot with new data
     const updatedData: PlotData = {
       frequencies: frequencies,
       curves: newCurves,
       metadata: {}
     };
-    
+
     console.log('Updating graph with', Object.keys(newCurves).length, 'curves');
     this.updateFilterPlotsGraph(updatedData);
     // Update stored filter plots and refresh Spinorama with EQ
@@ -2937,80 +2937,80 @@ class AutoEQUI {
     this.spectrumCanvas = document.getElementById('spectrum-canvas') as HTMLCanvasElement;
     if (this.spectrumCanvas) {
       this.spectrumCtx = this.spectrumCanvas.getContext('2d');
-      
+
       // Set up resize observer to adjust canvas size
       this.resizeSpectrumCanvas();
-      
+
       // Calculate frequency bin ranges
       // Logarithmic distribution from 20Hz to 20kHz
       const minFreq = 20;
       const maxFreq = 20000;
       const logMin = Math.log10(minFreq);
       const logMax = Math.log10(maxFreq);
-      
+
       this.frequencyBinRanges = [];
       // We'll calculate the actual number of bars based on available width
     }
   }
-  
+
   private resizeSpectrumCanvas(): void {
     if (!this.spectrumCanvas) return;
-    
+
     const container = this.spectrumCanvas.parentElement;
     if (!container) return;
-    
+
     // Get available width
     const availableWidth = container.clientWidth - 8; // Account for padding
-    
+
     // Calculate number of bars that fit (2px per bar + 1px spacing)
     const barWidth = 2;
     const barSpacing = 1;
     const numBars = Math.floor(availableWidth / (barWidth + barSpacing));
-    
+
     // Set canvas size
     this.spectrumCanvas.width = numBars * (barWidth + barSpacing);
     this.spectrumCanvas.height = 28;
-    
+
     // Recalculate frequency bin ranges
     this.frequencyBinRanges = [];
     const minFreq = 20;
     const maxFreq = 20000;
     const logMin = Math.log10(minFreq);
     const logMax = Math.log10(maxFreq);
-    
+
     for (let i = 0; i < numBars; i++) {
       const logStart = logMin + (logMax - logMin) * (i / numBars);
       const logEnd = logMin + (logMax - logMin) * ((i + 1) / numBars);
       const freqStart = Math.pow(10, logStart);
       const freqEnd = Math.pow(10, logEnd);
-      
+
       this.frequencyBinRanges.push({
         start: freqStart,
         end: freqEnd
       });
     }
-    
+
     console.log(`Spectrum analyzer: ${numBars} bars, canvas width: ${this.spectrumCanvas.width}px`);
   }
 
   private startSpectrumAnalyzer(): void {
     if (!this.analyserNode || !this.spectrumCtx || !this.spectrumCanvas) return;
-    
+
     const bufferLength = this.analyserNode.frequencyBinCount;
     const dataArray = new Uint8Array(bufferLength);
     const nyquist = this.audioContext!.sampleRate / 2;
-    
+
     const draw = () => {
       this.spectrumAnimationFrame = requestAnimationFrame(draw);
-      
+
       // Get frequency data
       this.analyserNode!.getByteFrequencyData(dataArray);
-      
+
       // Clear canvas
       this.spectrumCtx!.fillStyle = getComputedStyle(document.documentElement)
         .getPropertyValue('--bg-primary').trim();
       this.spectrumCtx!.fillRect(0, 0, this.spectrumCanvas!.width, this.spectrumCanvas!.height);
-      
+
       // Draw bars and track band intensities
       const barWidth = 2;
       const barSpacing = 1;
@@ -3033,11 +3033,11 @@ class AutoEQUI {
         'presence': 0,
         'brilliance': 0
       };
-      
+
       for (let i = 0; i < this.frequencyBinRanges.length; i++) {
         const range = this.frequencyBinRanges[i];
         const centerFreq = Math.sqrt(range.start * range.end);
-        
+
         // Determine which band this frequency belongs to
         let band = 'brilliance';
         if (centerFreq < 60) band = 'sub-bass';
@@ -3046,11 +3046,11 @@ class AutoEQUI {
         else if (centerFreq < 2000) band = 'mid';
         else if (centerFreq < 4000) band = 'high-mid';
         else if (centerFreq < 6000) band = 'presence';
-        
+
         // Convert frequency range to FFT bin indices
         const startBin = Math.floor((range.start / nyquist) * bufferLength);
         const endBin = Math.ceil((range.end / nyquist) * bufferLength);
-        
+
         // Calculate average magnitude for this frequency range
         let sum = 0;
         let count = 0;
@@ -3058,44 +3058,44 @@ class AutoEQUI {
           sum += dataArray[j];
           count++;
         }
-        
+
         const average = count > 0 ? sum / count : 0;
         const normalizedHeight = average / 255; // Normalize to 0-1
         const barHeight = normalizedHeight * canvasHeight * 0.95; // Use 95% of canvas height
-        
+
         // Track band intensity
         bandIntensities[band] += normalizedHeight;
         bandCounts[band]++;
-        
+
         // Color based on intensity with improved gradient
         const hue = 120 - (normalizedHeight * 100); // Green to yellow to red
         const saturation = 60 + (normalizedHeight * 40);
         const lightness = 45 + (normalizedHeight * 10);
         this.spectrumCtx!.fillStyle = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
-        
+
         // Draw bar
         const x = i * (barWidth + barSpacing);
         const y = canvasHeight - barHeight;
         this.spectrumCtx!.fillRect(x, y, barWidth, barHeight);
       }
-      
+
       // Update frequency label highlights based on intensity
       this.updateFrequencyLabelHighlights(bandIntensities, bandCounts);
     };
-    
+
     draw();
   }
-  
+
   private updateFrequencyLabelHighlights(intensities: { [key: string]: number }, counts: { [key: string]: number }): void {
     const labels = document.querySelectorAll('.freq-label');
-    
+
     labels.forEach(label => {
       const range = label.getAttribute('data-range');
       if (range && counts[range] > 0) {
         const avgIntensity = intensities[range] / counts[range];
         const opacity = 0.4 + (avgIntensity * 0.6); // Scale opacity from 0.4 to 1.0
         const scale = 1.0 + (avgIntensity * 0.1); // Subtle scale effect
-        
+
         (label as HTMLElement).style.opacity = opacity.toString();
         (label as HTMLElement).style.transform = `scale(${scale})`;
         (label as HTMLElement).style.transition = 'opacity 0.1s, transform 0.1s';
@@ -3108,7 +3108,7 @@ class AutoEQUI {
       cancelAnimationFrame(this.spectrumAnimationFrame);
       this.spectrumAnimationFrame = null;
     }
-    
+
     // Clear canvas
     if (this.spectrumCtx && this.spectrumCanvas) {
       this.spectrumCtx.fillStyle = getComputedStyle(document.documentElement)
@@ -3391,7 +3391,7 @@ class AutoEQUI {
       }
 
       const filter = this.audioContext.createBiquadFilter();
-      
+
       // First filter is highpass if iir_hp_pk is enabled
       if (filterIndex === 0 && useHighpass) {
         filter.type = 'highpass';
@@ -3581,78 +3581,78 @@ class AutoEQUI {
         await this.simulatedCapture();
         return;
       }
-      
+
       // Request microphone permission
-      const stream = await navigator.mediaDevices.getUserMedia({ 
+      const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: false,
           noiseSuppression: false,
           autoGainControl: false
         }
       });
-      
+
       this.isCapturing = true;
       this.captureController = new AbortController();
-      
+
       if (this.captureBtn) {
         this.captureBtn.textContent = '⏹️ Stop Capture';
         this.captureBtn.classList.add('recording');
       }
-      
+
       // Initialize audio context for capture
       if (!this.audioContext) {
         this.audioContext = new AudioContext({ sampleRate: 48000 });
       }
-      
+
       // Create microphone source
       const micSource = this.audioContext.createMediaStreamSource(stream);
-      
+
       // Create recording processor
       const recorder = this.audioContext.createScriptProcessor(4096, 1, 1);
       const recordedChunks: Float32Array[] = [];
-      
+
       // Generate and play sine sweep
       const sweep = this.generateSineSweep(20, 20000, 10, this.audioContext.sampleRate);
       const sweepBuffer = this.audioContext.createBuffer(1, sweep.length, this.audioContext.sampleRate);
       sweepBuffer.copyToChannel(sweep, 0);
-      
+
       const sweepSource = this.audioContext.createBufferSource();
       sweepSource.buffer = sweepBuffer;
       sweepSource.connect(this.audioContext.destination);
-      
+
       // Start recording
       const startTime = this.audioContext.currentTime;
       recorder.onaudioprocess = (e) => {
         if (!this.isCapturing) return;
-        
+
         const inputData = e.inputBuffer.getChannelData(0);
         recordedChunks.push(new Float32Array(inputData));
-        
+
         // Update progress
         const elapsed = this.audioContext!.currentTime - startTime;
         const progress = Math.min(100, (elapsed / 10) * 100);
         this.updateCaptureUI(`Recording... ${elapsed.toFixed(1)}s`, true, progress);
-        
+
         // Visualize waveform
         this.visualizeCaptureWaveform(inputData);
-        
+
         // Stop after 10 seconds
         if (elapsed >= 10) {
           this.stopCapture();
         }
       };
-      
+
       micSource.connect(recorder);
       recorder.connect(this.audioContext.destination);
       sweepSource.start();
-      
+
       // Store references for cleanup
       this.captureController.signal.addEventListener('abort', () => {
         sweepSource.stop();
         recorder.disconnect();
         micSource.disconnect();
         stream.getTracks().forEach(track => track.stop());
-        
+
         if (recordedChunks.length > 0) {
           // Process recorded data
           const totalLength = recordedChunks.reduce((acc, chunk) => acc + chunk.length, 0);
@@ -3662,33 +3662,33 @@ class AutoEQUI {
             recorded.set(chunk, offset);
             offset += chunk.length;
           }
-          
+
           // Analyze frequency response
           this.analyzeFrequencyResponse(sweep, recorded);
         }
       });
-      
+
     } catch (error) {
       console.error('Failed to start capture:', error);
       this.updateCaptureUI('Error: ' + error, false, 0);
       this.isCapturing = false;
     }
   }
-  
+
   private stopCapture(): void {
     if (!this.isCapturing) return;
-    
+
     this.isCapturing = false;
     this.captureController?.abort();
-    
+
     if (this.captureBtn) {
       this.captureBtn.textContent = '🎤 Start Capture';
       this.captureBtn.classList.remove('recording');
     }
-    
+
     this.updateCaptureUI('Processing...', false, 100);
   }
-  
+
   private clearCapture(): void {
     this.capturedCurve = null;
     if (this.captureResult) {
@@ -3698,20 +3698,20 @@ class AutoEQUI {
       Plotly.purge(this.capturePlot);
     }
     this.updateCaptureUI('Ready', false, 0);
-    
+
     // Revalidate form since captured data is cleared
     this.validateForm();
   }
-  
+
   private updateCaptureUI(status: string, showProgress: boolean, progress: number): void {
     if (this.captureStatusText) {
       this.captureStatusText.textContent = status;
     }
-    
+
     if (this.captureStatus) {
       this.captureStatus.style.display = 'block';
     }
-    
+
     const progressBar = this.captureStatus?.querySelector('.capture-progress-bar') as HTMLElement;
     if (progressBar) {
       progressBar.style.display = showProgress ? 'block' : 'none';
@@ -3719,59 +3719,59 @@ class AutoEQUI {
         this.captureProgressFill.style.width = `${progress}%`;
       }
     }
-    
+
     if (this.captureWaveform) {
       this.captureWaveform.style.display = showProgress ? 'block' : 'none';
     }
   }
-  
+
   private visualizeCaptureWaveform(data: Float32Array): void {
     if (!this.captureWaveformCtx || !this.captureWaveform) return;
-    
+
     const width = this.captureWaveform.width;
     const height = this.captureWaveform.height;
     const ctx = this.captureWaveformCtx;
-    
+
     ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--bg-primary').trim();
     ctx.fillRect(0, 0, width, height);
-    
+
     ctx.lineWidth = 1;
     ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--primary-color').trim();
     ctx.beginPath();
-    
+
     const sliceWidth = width / data.length;
     let x = 0;
-    
+
     for (let i = 0; i < data.length; i++) {
       const v = (data[i] + 1) / 2;
       const y = v * height;
-      
+
       if (i === 0) {
         ctx.moveTo(x, y);
       } else {
         ctx.lineTo(x, y);
       }
-      
+
       x += sliceWidth;
     }
-    
+
     ctx.stroke();
   }
-  
+
   private generateSineSweep(startFreq: number, endFreq: number, duration: number, sampleRate: number): Float32Array {
     const numSamples = Math.floor(duration * sampleRate);
     const sweep = new Float32Array(numSamples);
-    
+
     // Logarithmic sweep
     const k = Math.log(endFreq / startFreq) / duration;
-    
+
     for (let i = 0; i < numSamples; i++) {
       const t = i / sampleRate;
       const instantFreq = startFreq * Math.exp(k * t);
       const phase = 2 * Math.PI * startFreq * (Math.exp(k * t) - 1) / k;
       sweep[i] = Math.sin(phase) * 0.8; // 80% amplitude to avoid clipping
     }
-    
+
     // Apply fade in/out to avoid clicks
     const fadeLength = Math.floor(0.05 * sampleRate); // 50ms fade
     for (let i = 0; i < fadeLength; i++) {
@@ -3779,34 +3779,34 @@ class AutoEQUI {
       sweep[i] *= fade;
       sweep[numSamples - 1 - i] *= fade;
     }
-    
+
     return sweep;
   }
-  
+
   private analyzeFrequencyResponse(sweep: Float32Array, recorded: Float32Array): void {
     // Generate 200 logarithmically spaced frequencies
     const frequencies: number[] = [];
     const minFreq = 20;
     const maxFreq = 20000;
     const numPoints = 200;
-    
+
     for (let i = 0; i < numPoints; i++) {
       const logFreq = Math.log10(minFreq) + (i / (numPoints - 1)) * (Math.log10(maxFreq) - Math.log10(minFreq));
       frequencies.push(Math.pow(10, logFreq));
     }
-    
+
     // Compute frequency response using FFT correlation
     const sampleRate = this.audioContext!.sampleRate;
     const response = this.computeFrequencyResponse(sweep, recorded, frequencies, sampleRate);
-    
+
     // Convert to dB
     const magnitudes = response.magnitudes.map(m => 20 * Math.log10(Math.max(1e-10, m)));
-    
+
     // Normalize to 0dB at 1kHz
     const refIndex = frequencies.findIndex(f => f >= 1000);
     const refLevel = magnitudes[refIndex];
     const normalizedMagnitudes = magnitudes.map(m => m - refLevel);
-    
+
     // Create plot data
     this.capturedCurve = {
       frequencies: frequencies,
@@ -3817,15 +3817,15 @@ class AutoEQUI {
         phases: response.phases
       }
     };
-    
+
     // Display result
     this.displayCaptureResult(this.capturedCurve);
     this.updateCaptureUI('Capture complete', false, 0);
-    
+
     // Enable optimize button since we now have captured data
     this.validateForm();
   }
-  
+
   private computeFrequencyResponse(
     sweep: Float32Array,
     recorded: Float32Array,
@@ -3834,7 +3834,7 @@ class AutoEQUI {
   ): { magnitudes: number[], phases: number[] } {
     const magnitudes: number[] = [];
     const phases: number[] = [];
-    
+
     // Simple frequency-by-frequency analysis
     for (const freq of frequencies) {
       // Find the time when this frequency occurs in the sweep
@@ -3842,19 +3842,19 @@ class AutoEQUI {
       const k = Math.log(20000 / 20) / sweepDuration;
       const time = Math.log(freq / 20) / k;
       const sampleIndex = Math.floor(time * sampleRate);
-      
+
       // Extract a window around this point
       const windowSize = Math.floor(sampleRate / freq * 10); // 10 periods
       const halfWindow = Math.floor(windowSize / 2);
       const startIdx = Math.max(0, sampleIndex - halfWindow);
       const endIdx = Math.min(recorded.length, sampleIndex + halfWindow);
-      
+
       if (endIdx <= startIdx) {
         magnitudes.push(0);
         phases.push(0);
         continue;
       }
-      
+
       // Apply window function
       const windowLength = endIdx - startIdx;
       const windowed = new Float32Array(windowLength);
@@ -3862,7 +3862,7 @@ class AutoEQUI {
         const window = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / (windowLength - 1)); // Hann window
         windowed[i] = recorded[startIdx + i] * window;
       }
-      
+
       // Compute DFT at target frequency
       let real = 0;
       let imag = 0;
@@ -3872,66 +3872,66 @@ class AutoEQUI {
         real += windowed[i] * Math.cos(angle);
         imag -= windowed[i] * Math.sin(angle);
       }
-      
+
       const magnitude = Math.sqrt(real * real + imag * imag) * 2 / windowLength;
       const phase = Math.atan2(imag, real) * 180 / Math.PI;
-      
+
       magnitudes.push(magnitude);
       phases.push(phase);
     }
-    
+
     return { magnitudes, phases };
   }
-  
+
   private isCaptureSupported(): boolean {
     // Check if we're in a secure context (HTTPS or localhost)
     if (!window.isSecureContext) {
       console.warn('Not in a secure context - audio capture may not work');
     }
-    
+
     // Check if getUserMedia is available
     return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
   }
-  
+
   private async simulatedCapture(): Promise<void> {
     this.isCapturing = true;
-    
+
     if (this.captureBtn) {
       this.captureBtn.textContent = '⏹️ Stop Capture';
       this.captureBtn.classList.add('recording');
     }
-    
+
     // Simulate 10 second capture with progress updates
     const duration = 10000; // 10 seconds
     const updateInterval = 100; // Update every 100ms
     let elapsed = 0;
-    
+
     // Store the timer ID for cleanup
     const captureAbortController = new AbortController();
     this.captureController = captureAbortController;
-    
+
     const progressTimer = setInterval(() => {
       elapsed += updateInterval;
       const progress = Math.min(100, (elapsed / duration) * 100);
       this.updateCaptureUI(`Simulating capture... ${(elapsed / 1000).toFixed(1)}s`, true, progress);
-      
+
       // Generate fake waveform data
       const fakeWaveform = new Float32Array(128);
       for (let i = 0; i < fakeWaveform.length; i++) {
         fakeWaveform[i] = (Math.random() - 0.5) * 0.5;
       }
       this.visualizeCaptureWaveform(fakeWaveform);
-      
+
       if (elapsed >= duration || !this.isCapturing || captureAbortController.signal.aborted) {
         clearInterval(progressTimer);
-        
+
         if (this.isCapturing && !captureAbortController.signal.aborted) {
           // Generate simulated frequency response
           this.generateSimulatedResponse();
         } else {
           this.updateCaptureUI('Capture stopped', false, 0);
         }
-        
+
         this.isCapturing = false;
         if (this.captureBtn) {
           this.captureBtn.textContent = '🎤 Start Capture';
@@ -3940,7 +3940,7 @@ class AutoEQUI {
       }
     }, updateInterval);
   }
-  
+
   private generateSimulatedResponse(): void {
     // Generate 200 logarithmically spaced frequencies
     const frequencies: number[] = [];
@@ -3949,12 +3949,12 @@ class AutoEQUI {
     const minFreq = 20;
     const maxFreq = 20000;
     const numPoints = 200;
-    
+
     for (let i = 0; i < numPoints; i++) {
       const logFreq = Math.log10(minFreq) + (i / (numPoints - 1)) * (Math.log10(maxFreq) - Math.log10(minFreq));
       const freq = Math.pow(10, logFreq);
       frequencies.push(freq);
-      
+
       // Generate a realistic-looking frequency response
       // Bass boost below 100Hz
       let magnitude = 0;
@@ -3969,11 +3969,11 @@ class AutoEQUI {
       }
       // Add some random variation
       magnitude += (Math.random() - 0.5) * 0.5;
-      
+
       magnitudes.push(magnitude);
       phases.push((Math.random() - 0.5) * 180);
     }
-    
+
     // Create plot data
     this.capturedCurve = {
       frequencies: frequencies,
@@ -3985,21 +3985,21 @@ class AutoEQUI {
         simulated: true
       }
     };
-    
+
     // Display result
     this.displayCaptureResult(this.capturedCurve);
     this.updateCaptureUI('Simulated capture complete', false, 0);
-    
+
     // Enable optimize button
     this.validateForm();
   }
-  
+
   private displayCaptureResult(data: PlotData): void {
     if (!this.captureResult || !this.capturePlot) return;
-    
+
     // Show result container
     this.captureResult.style.display = 'block';
-    
+
     // Create plot
     const trace = {
       x: data.frequencies,
@@ -4009,7 +4009,7 @@ class AutoEQUI {
       name: 'Magnitude',
       line: { color: getComputedStyle(document.documentElement).getPropertyValue('--primary-color').trim() }
     };
-    
+
     const layout = {
       title: { text: 'Captured Frequency Response', font: { size: 12 } },
       xaxis: {
@@ -4031,7 +4031,7 @@ class AutoEQUI {
       showlegend: false,
       hovermode: 'x unified' as const
     };
-    
+
     Plotly.newPlot(this.capturePlot, [trace], layout, {
       responsive: true,
       displayModeBar: false
