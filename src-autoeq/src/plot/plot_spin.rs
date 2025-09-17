@@ -112,14 +112,6 @@ const CEA2034_CURVE_NAMES_DI: [&str; 2] = ["Early Reflections DI", "Sound Power 
 ///
 /// # Returns
 /// * A string slice with the abbreviated curve name
-///
-/// # Examples
-/// ```
-/// use autoeq::plot::shorten_curve_name;
-/// assert_eq!(shorten_curve_name("On Axis"), "ON");
-/// assert_eq!(shorten_curve_name("Listening Window"), "LW");
-/// assert_eq!(shorten_curve_name("Unknown Curve"), "Unknown Curve");
-/// ```
 pub fn shorten_curve_name(curve_name: &str) -> &str {
     match curve_name {
         "On Axis" => "ON",

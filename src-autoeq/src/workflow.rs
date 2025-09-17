@@ -338,7 +338,10 @@ mod tests {
 
         // Minimal input/target curves
         let input_curve = zero_curve(vec![100.0, 1000.0]);
-        let target = Array1::zeros(input_curve.freq.len());
+        let target = Curve {
+            freq: input_curve.freq.clone(),
+            spl: Array1::zeros(input_curve.freq.len()),
+        };
 
         // Build minimal spin data with required keys
         let mut spin: HashMap<String, Curve> = HashMap::new();
@@ -354,7 +357,7 @@ mod tests {
 
         let (obj, use_cea) = super::setup_objective_data(&args, &input_curve, &target, &spin_opt);
         assert!(use_cea);
-        assert!(obj.score_data.is_some());
+        assert!(obj.speaker_score_data.is_some());
 
         // If measurement not CEA2034/EIR -> use_cea must be false
         let mut args2 = args.clone();
@@ -362,11 +365,11 @@ mod tests {
         let (obj2, use_cea2) =
             super::setup_objective_data(&args2, &input_curve, &target, &spin_opt);
         assert!(!use_cea2);
-        assert!(obj2.score_data.is_none());
+        assert!(obj2.speaker_score_data.is_none());
 
         // If spin data missing -> use_cea must be false
         let (obj3, use_cea3) = super::setup_objective_data(&args, &input_curve, &target, &None);
         assert!(!use_cea3);
-        assert!(obj3.score_data.is_none());
+        assert!(obj3.speaker_score_data.is_none());
     }
 }
