@@ -1,16 +1,17 @@
 //! AutoEQ Benchmark CLI: runs optimization scenarios across cached speakers and writes CSV results
 //!
 //! Scenarios per speaker:
-//! 1) --loss flat --measurement CEA2034 --curve-name "Listening Window"
-//! 2) --loss flat --measurement "Estimated In-Room Response" --curve-name "Estimated In-Room Response"
-//! 3) --loss score --measurement CEA2034 --algo nlopt:isres
-//! 4) --loss score --measurement CEA2034 --algo autoeq:de
+//! 1) --loss speaker-flat --measurement CEA2034 --curve-name "Listening Window"
+//! 2) --loss speaker-flat --measurement "Estimated In-Room Response" --curve-name "Estimated In-Room Response"
+//! 3) --loss speaker-score --measurement CEA2034 --algo nlopt:isres
+//! 4) --loss speaker-score --measurement CEA2034 --algo autoeq:de
 //!
 //! Input data is expected under data_cached/{speaker}/{measurement}.json (Plotly JSON),
 //! optionally data_cached/{speaker}/metadata.json for metadata preference score.
 
 use autoeq::cea2034 as score;
 use autoeq::iir;
+use autoeq::read;
 use autoeq::optim::ObjectiveData;
 use clap::Parser;
 use ndarray::Array1;
@@ -407,17 +408,31 @@ async fn run_one(
         return Err("Task cancelled due to shutdown".into());
     }
 
-    let (input_curve, spin_data) = load_input_curve(args).await.map_err(|e| e.to_string())?;
+    let (input_curve, spin_data_raw) = load_input_curve(args).await.map_err(|e| e.to_string())?;
 
     // Check for shutdown after data loading
     if shutdown.load(Ordering::Relaxed) {
         return Err("Task cancelled during data loading".into());
     }
 
-    let (inverted_curve, smoothed_curve) = build_target_curve(args, &input_curve);
-    let target_curve = smoothed_curve.as_ref().unwrap_or(&inverted_curve);
+    let standard_freq = autoeq::read::create_log_frequency_grid(200, 20.0, 20000.0);
+    let input_curve_normalized = autoeq::read::normalize_and_interpolate_response(&standard_freq, &input_curve);
+    let target_curve = build_target_curve(args, &standard_freq, &input_curve);
+    let deviation_curve = autoeq::Curve {
+        freq: target_curve.freq.clone(),
+        spl: &target_curve.spl - &input_curve_normalized.spl,
+    };
+    let spin_data = spin_data_raw.map(|spin_data| {
+        spin_data
+            .into_iter()
+            .map(|(name, curve)| {
+                let interpolated = read::interpolate_log_space(&standard_freq, &curve);
+                (name, interpolated)
+            })
+            .collect()
+    });
     let (objective_data, use_cea) =
-        setup_objective_data(args, &input_curve, target_curve, &spin_data);
+        setup_objective_data(args, &input_curve_normalized, &deviation_curve, &spin_data);
 
     // Check for shutdown before optimization
     if shutdown.load(Ordering::Relaxed) {
@@ -429,7 +444,7 @@ async fn run_one(
         .map_err(|e| e.to_string())?;
 
     if use_cea {
-        let freq = &input_curve.freq;
+        let freq = &standard_freq;
         let peq_after = iir::compute_peq_response(freq, &x, args.sample_rate, args.iir_hp_pk);
         let metrics =
             score::compute_cea2034_metrics(freq, spin_data.as_ref().unwrap(), Some(&peq_after))
@@ -451,15 +466,16 @@ async fn load_input_curve(
 
 fn build_target_curve(
     args: &autoeq::cli::Args,
+    standard_freq: &Array1<f64>,
     input_curve: &autoeq::Curve,
-) -> (Array1<f64>, Option<Array1<f64>>) {
-    autoeq::workflow::build_target_curve(args, input_curve)
+) -> autoeq::Curve {
+    autoeq::workflow::build_target_curve(args, standard_freq, input_curve)
 }
 
 fn setup_objective_data(
     args: &autoeq::cli::Args,
     input_curve: &autoeq::Curve,
-    target_curve: &Array1<f64>,
+    target_curve: &autoeq::Curve,
     spin_data: &Option<HashMap<String, autoeq::Curve>>,
 ) -> (ObjectiveData, bool) {
     autoeq::workflow::setup_objective_data(args, input_curve, target_curve, spin_data)

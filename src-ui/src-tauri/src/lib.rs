@@ -393,19 +393,23 @@ async fn run_optimization_internal(
     )?;
 
     // Build target curve
-    let (inverted_curve, smoothed_curve) =
-        autoeq::workflow::build_target_curve(&args, &input_curve);
-    let target_curve = smoothed_curve.as_ref().unwrap_or(&inverted_curve);
+    let standard_freq = autoeq::read::create_log_frequency_grid(200, 20.0, 20000.0);
+    let input_curve_normalized = autoeq::read::normalize_and_interpolate_response(&standard_freq, &input_curve);
+    let target_curve = autoeq::workflow::build_target_curve(&args, &standard_freq, &input_curve);
+    let deviation_curve = autoeq::Curve {
+        freq: target_curve.freq.clone(),
+        spl: &target_curve.spl - &input_curve_normalized.spl,
+    };
 
     // Setup objective data
     let (objective_data, use_cea) =
-        autoeq::workflow::setup_objective_data(&args, &input_curve, target_curve, &spin_data);
+        autoeq::workflow::setup_objective_data(&args, &input_curve_normalized, &deviation_curve, &spin_data);
 
     // Get preference score before optimization if applicable
     let mut pref_score_before: Option<f64> = None;
     if use_cea {
         if let Ok(metrics) = autoeq::cea2034::compute_cea2034_metrics(
-            &input_curve.freq,
+            &input_curve_normalized.freq,
             spin_data.as_ref().unwrap(),
             None,
         )
@@ -454,13 +458,13 @@ async fn run_optimization_internal(
     let mut pref_score_after: Option<f64> = None;
     if use_cea {
         let peq_response = autoeq::iir::compute_peq_response(
-            &input_curve.freq,
+            &input_curve_normalized.freq,
             &filter_params,
             args.sample_rate,
             args.iir_hp_pk,
         );
         if let Ok(metrics) = autoeq::cea2034::compute_cea2034_metrics(
-            &input_curve.freq,
+            &input_curve_normalized.freq,
             spin_data.as_ref().unwrap(),
             Some(&peq_response),
         )
@@ -486,10 +490,12 @@ async fn run_optimization_internal(
 
     let mut filter_curves = HashMap::new();
     filter_curves.insert("EQ Response".to_string(), eq_response.to_vec());
-    filter_curves.insert(
-        "Target".to_string(),
-        autoeq::read::interpolate(&plot_freqs_array, &input_curve.freq, target_curve).to_vec(),
-    );
+    let target_curve_for_plot = autoeq::Curve {
+        freq: target_curve.freq.clone(),
+        spl: target_curve.spl.clone(),
+    };
+    let target_interpolated = autoeq::read::interpolate(&plot_freqs_array, &target_curve_for_plot);
+    filter_curves.insert("Target".to_string(), target_interpolated.spl.to_vec());
 
     let filter_response = PlotData {
         frequencies: plot_freqs.clone(),
@@ -515,7 +521,7 @@ async fn run_optimization_internal(
     filters.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
 
     // Generate response for each filter
-    for (display_idx, (orig_i, f0, q, gain)) in filters.into_iter().enumerate() {
+    for (_display_idx, (orig_i, f0, q, gain)) in filters.into_iter().enumerate() {
         use autoeq::iir::{Biquad, BiquadFilterType};
 
         let ftype = if args.iir_hp_pk && orig_i == 0 {
@@ -551,10 +557,8 @@ async fn run_optimization_internal(
     if let Some(ref spin) = spin_data {
         let mut spin_curves = HashMap::new();
         for (name, curve) in spin {
-            spin_curves.insert(
-                name.clone(),
-                autoeq::read::interpolate(&plot_freqs_array, &curve.freq, &curve.spl).to_vec(),
-            );
+            let interpolated = autoeq::read::interpolate(&plot_freqs_array, curve);
+            spin_curves.insert(name.clone(), interpolated.spl.to_vec());
         }
         spin_details = Some(PlotData {
             frequencies: plot_freqs,

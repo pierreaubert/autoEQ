@@ -75,6 +75,13 @@ impl SpeakerLossData {
             .expect("Missing 'Estimated In-Room Response' in CEA2034 spin data")
             .spl
             .clone();
+            
+        // Verify all arrays have the same length
+        if on.len() != lw.len() || on.len() != sp.len() || on.len() != pir.len() {
+            panic!("All CEA2034 curves must have the same length. on: {}, lw: {}, sp: {}, pir: {}", 
+                   on.len(), lw.len(), sp.len(), pir.len());
+        }
+        
         Self { on, lw, sp, pir }
     }
 }
