@@ -424,8 +424,8 @@ pub fn plot_spin(
 mod tests {
     use super::{
         create_cea2034_combined_traces, create_cea2034_traces,
-        create_cea2034_with_eq_combined_traces, create_cea2034_with_eq_traces, filter_color,
-        make_ref_lines, shorten_curve_name,
+        create_cea2034_with_eq_combined_traces, create_cea2034_with_eq_traces, make_ref_lines,
+        shorten_curve_name,
     };
     use ndarray::Array1;
     use serde_json::json;

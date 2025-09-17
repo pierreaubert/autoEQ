@@ -22,7 +22,7 @@ pub fn init_sobol(dimensions: usize, num_samples: usize, bounds: &[(f64, f64)]) 
     for i in 0..num_samples {
         let mut sample = Vec::with_capacity(dimensions);
 
-        for dim in 0..dimensions {
+        for (dim, &(lower, upper)) in bounds.iter().enumerate().take(dimensions) {
             // Van der Corput sequence in base 2 for dimension 0, base 3 for dim 1, etc.
             let base = match dim {
                 0 => 2,
@@ -36,7 +36,6 @@ pub fn init_sobol(dimensions: usize, num_samples: usize, bounds: &[(f64, f64)]) 
             let quasi_random = van_der_corput(i + 1, base);
 
             // Scale to bounds
-            let (lower, upper) = bounds[dim];
             let scaled = lower + quasi_random * (upper - lower);
             sample.push(scaled);
         }

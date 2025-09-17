@@ -226,7 +226,7 @@ pub fn regression_slope_per_octave_in_range(
     fmax: f64,
 ) -> Option<f64> {
     assert_eq!(freq.len(), y.len(), "freq and y must have same length");
-    if !(fmax > fmin) {
+    if fmax <= fmin {
         return None;
     }
 
@@ -359,8 +359,8 @@ pub fn headphone_loss(curve: &Curve) -> f64 {
 
         // High frequency bands (less critical but still important)
         if band_rms.len() > 6 {
-            for i in 6..band_rms.len() {
-                score += 1.5 * band_rms[i];
+            for &rms in band_rms.iter().skip(6) {
+                score += 1.5 * rms;
             }
         }
     }

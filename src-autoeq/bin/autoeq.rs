@@ -29,7 +29,7 @@ use std::error::Error;
 use std::path::PathBuf;
 
 /// Print frequency spacing diagnostics and PEQ listing
-fn print_freq_spacing(x: &Vec<f64>, args: &autoeq::cli::Args, label: &str) {
+fn print_freq_spacing(x: &[f64], args: &autoeq::cli::Args, label: &str) {
     let (sorted_freqs, adj_spacings) = optim::compute_sorted_freqs_and_adjacent_octave_spacings(x);
     let min_adj = adj_spacings.iter().cloned().fold(f64::INFINITY, f64::min);
     let freqs_fmt: Vec<String> = sorted_freqs.iter().map(|f| format!("{:.0}", f)).collect();
@@ -71,7 +71,7 @@ fn perform_optimization(
         &args.algo,
         args.population,
         args.maxeval,
-        &args,
+        args,
     );
 
     match result {
@@ -86,7 +86,7 @@ fn perform_optimization(
         Err((e, final_value)) => {
             eprintln!("\n❌ Optimization failed: {:?}", e);
             eprintln!("   - Final Mean Squared Error: {:.6}", final_value);
-            return Err(std::io::Error::new(std::io::ErrorKind::Other, e).into());
+            return Err(std::io::Error::other(e).into());
         }
     };
 
@@ -99,7 +99,7 @@ fn perform_optimization(
             &args.local_algo,
             args.population,
             args.maxeval,
-            &args,
+            args,
         );
         match result {
             Ok((local_status, local_val)) => {
@@ -114,7 +114,7 @@ fn perform_optimization(
             Err((e, final_value)) => {
                 eprintln!("⚠️  Local refinement failed: {:?}", e);
                 eprintln!("   - Final Mean Squared Error: {:.6}", final_value);
-                return Err(std::io::Error::new(std::io::ErrorKind::Other, e).into());
+                return Err(std::io::Error::other(e).into());
             }
         }
     };

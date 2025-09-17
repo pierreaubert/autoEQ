@@ -146,7 +146,7 @@ pub enum Mutation {
 
 impl Default for Mutation {
     fn default() -> Self {
-        Mutation::Factor(0.8);
+        let _ = Mutation::Factor(0.8);
         Mutation::Range { min: 0.0, max: 2.0 }
     }
 }
@@ -165,7 +165,7 @@ impl Mutation {
     fn sample_cauchy<R: Rng + ?Sized>(&self, f_m: f64, _scale: f64, rng: &mut R) -> f64 {
         // Simplified version using normal random for now
         let perturbation = (rng.random::<f64>() - 0.5) * 0.2; // Small perturbation
-        (f_m + perturbation).max(0.0).min(2.0) // Clamp to valid range
+        (f_m + perturbation).clamp(0.0, 2.0) // Clamp to valid range
     }
 }
 
@@ -344,13 +344,13 @@ impl AdaptiveState {
     /// Sample adaptive F parameter using simple perturbation
     fn sample_f<R: Rng + ?Sized>(&self, rng: &mut R) -> f64 {
         let perturbation = (rng.random::<f64>() - 0.5) * 0.2;
-        (self.f_m + perturbation).max(0.0).min(2.0) // Clamp to valid range
+        (self.f_m + perturbation).clamp(0.0, 2.0) // Clamp to valid range
     }
 
     /// Sample adaptive CR parameter using simple perturbation
     fn sample_cr<R: Rng + ?Sized>(&self, rng: &mut R) -> f64 {
         let perturbation = (rng.random::<f64>() - 0.5) * 0.2;
-        (self.cr_m + perturbation).max(0.0).min(1.0) // Clamp to valid range
+        (self.cr_m + perturbation).clamp(0.0, 1.0) // Clamp to valid range
     }
 }
 

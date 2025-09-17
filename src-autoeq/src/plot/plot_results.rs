@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fs::File;
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::Path;
 
 use build_html::*;
 use plotly::Plot;
@@ -33,7 +33,7 @@ pub async fn plot_results(
     target_curve: &crate::Curve,
     deviation_curve: &crate::Curve,
     cea2034_curves: &Option<HashMap<String, crate::Curve>>,
-    output_path: &PathBuf,
+    output_path: &Path,
 ) -> Result<(), Box<dyn Error>> {
     let speaker = args.speaker.as_deref();
 
@@ -142,8 +142,8 @@ pub async fn plot_results(
                         img_path.as_path(),
                         &serde_json::to_value(&plot).expect("Failed to serialize plot to JSON"),
                         ImageFormat::PNG,
-                        width.try_into().unwrap(),
-                        height.try_into().unwrap(),
+                        width,
+                        height,
                         1.0,
                     )
                     .await

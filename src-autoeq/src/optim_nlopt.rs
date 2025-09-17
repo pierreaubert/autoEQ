@@ -20,18 +20,18 @@ pub fn optimize_filters_nlopt(
     let num_params = x.len();
 
     // Decide whether to use penalties (for algorithms lacking inequality constraints)
-    let use_penalties = match algo {
+    let use_penalties = matches!(
+        algo,
         Algorithm::Crs2Lm
-        | Algorithm::Direct
-        | Algorithm::DirectL
-        | Algorithm::GMlsl
-        | Algorithm::GMlslLds
-        | Algorithm::Sbplx
-        | Algorithm::StoGo
-        | Algorithm::StoGoRand
-        | Algorithm::Neldermead => true,
-        _ => false,
-    };
+            | Algorithm::Direct
+            | Algorithm::DirectL
+            | Algorithm::GMlsl
+            | Algorithm::GMlslLds
+            | Algorithm::Sbplx
+            | Algorithm::StoGo
+            | Algorithm::StoGoRand
+            | Algorithm::Neldermead
+    );
 
     // Prepare constraint data BEFORE moving objective_data into NLopt
     let ceiling_data = CeilingConstraintData {

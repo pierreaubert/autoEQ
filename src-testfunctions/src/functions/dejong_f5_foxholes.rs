@@ -22,9 +22,9 @@ pub fn dejong_f5_foxholes(x: &Array1<f64>) -> f64 {
     let mut sum = 0.0;
     for j in 0..25 {
         let mut inner_sum = 0.0;
-        for i in 0..2 {
+        for (i, &a_val) in a.iter().enumerate() {
             let xi = if i == 0 { x1 } else { x2 };
-            inner_sum += (xi - a[i][j] as f64).powi(6);
+            inner_sum += (xi - a_val[j] as f64).powi(6);
         }
         sum += 1.0 / (j as f64 + 1.0 + inner_sum);
     }

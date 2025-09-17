@@ -71,10 +71,7 @@ async fn process_speaker(client: &Client, speaker: &str) -> Result<(), Box<dyn E
 async fn fetch_json<T: DeserializeOwned>(client: &Client, url: &str) -> Result<T, Box<dyn Error>> {
     let resp = client.get(url).send().await?;
     if !resp.status().is_success() {
-        let err = io::Error::new(
-            io::ErrorKind::Other,
-            format!("HTTP {} for {}", resp.status(), url),
-        );
+        let err = io::Error::other(format!("HTTP {} for {}", resp.status(), url));
         return Err(Box::new(err));
     }
     let val = resp.json::<T>().await?;

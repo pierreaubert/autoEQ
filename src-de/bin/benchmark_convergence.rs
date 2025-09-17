@@ -326,7 +326,7 @@ impl FunctionRegistry {
 }
 
 static FUNCTION_REGISTRY: std::sync::LazyLock<FunctionRegistry> =
-    std::sync::LazyLock::new(|| FunctionRegistry::new());
+    std::sync::LazyLock::new(FunctionRegistry::new);
 
 /// Configuration for a benchmark
 #[derive(Clone, Debug)]

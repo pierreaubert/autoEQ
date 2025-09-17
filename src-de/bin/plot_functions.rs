@@ -412,8 +412,8 @@ fn plot_convergence(trace: &OptimizationTrace, output_dir: &str, width: usize, h
         );
 
     let layout = Layout::new()
-        .title(Title::with_text(&format!(
-            "Convergence: {}",
+        .title(Title::with_text(format!(
+            "Convergence: {},",
             trace.function_name
         )))
         .width(width)
@@ -695,7 +695,7 @@ fn plot_function(
 
     // Create layout
     let layout = Layout::new()
-        .title(Title::with_text(&format!("Function: {}", name)))
+        .title(Title::with_text(format!("Function: {}", name)))
         .width(width)
         .height(height)
         .x_axis(plotly::layout::Axis::new().title(Title::with_text("X")))
@@ -831,7 +831,7 @@ fn add_constraint_boundaries(
             )
             .line(
                 plotly::common::Line::new()
-                    .color(format!("rgba(255, 0, 0, 0.8)")) // Red constraint boundary
+                    .color("rgba(255, 0, 0, 0.8)".to_string()) // Red constraint boundary
                     .width(3.0)
                     .dash(plotly::common::DashType::Dash),
             )

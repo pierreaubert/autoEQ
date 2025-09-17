@@ -394,8 +394,8 @@ pub fn read_combined_csv_traces(
             // Parse x coordinates (between generation and f_value/best_so_far/is_improvement)
             let x_end = parts.len() - 3;
             let mut x = Vec::new();
-            for i in 2..x_end {
-                if let Ok(coord) = parts[i].parse::<f64>() {
+            for part in parts.iter().take(x_end).skip(2) {
+                if let Ok(coord) = part.parse::<f64>() {
                     x.push(coord);
                 }
             }

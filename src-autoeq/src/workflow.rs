@@ -213,8 +213,8 @@ pub fn setup_bounds(args: &crate::cli::Args) -> (Vec<f64>, Vec<f64>) {
 /// Build an initial guess vector [f, Q, g] for each filter.
 pub fn initial_guess(
     args: &crate::cli::Args,
-    lower_bounds: &Vec<f64>,
-    upper_bounds: &Vec<f64>,
+    lower_bounds: &[f64],
+    upper_bounds: &[f64],
 ) -> Vec<f64> {
     let mut x = vec![];
     for i in 0..args.num_filters {

@@ -104,8 +104,8 @@ fn cea2034_array(spl: &Array2<f64>, idx: &[Vec<usize>], weights: &Array1<f64>) -
 
     let mut cea = Array2::<f64>::zeros((idx.len() + 1, len_spl));
 
-    for i in 0..idx_sp {
-        let curve = apply_rms(&p2, &idx[i]);
+    for (i, idx_val) in idx.iter().enumerate().take(idx_sp) {
+        let curve = apply_rms(&p2, idx_val);
         cea.row_mut(i).assign(&curve);
     }
 

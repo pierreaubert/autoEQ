@@ -182,8 +182,8 @@ pub fn process_de_results(
 ) -> Result<(String, f64), (String, f64)> {
     // Copy results back to input array
     if result.x.len() == x.len() {
-        for i in 0..x.len() {
-            x[i] = result.x[i];
+        for (i, &value) in result.x.iter().enumerate() {
+            x[i] = value;
         }
     }
 
