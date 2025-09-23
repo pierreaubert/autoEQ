@@ -58,6 +58,11 @@ mod tests {
             .recombination(0.9)
             .build();
 
+        // Set up temporary directory for testing
+        let temp_dir = tempfile::tempdir().expect("Failed to create temporary directory");
+        let temp_path = temp_dir.path();
+        std::env::set_var("AUTOEQ_DIR", temp_path.to_str().unwrap());
+
         let result =
             run_recorded_differential_evolution("rosenbrock_metadata", rosenbrock, &bounds, config);
 
@@ -67,15 +72,18 @@ mod tests {
 
         // Check that solution is close to expected optimum (1, 1)
         assert!(
-            (report.x[0] - 1.0).abs() < 0.1,
-            "x[0] should be close to 1.0: {}",
+            report.x[0] > 0.9 && report.x[0] < 1.1,
+            "x[0] not close to 1: {}",
             report.x[0]
         );
         assert!(
-            (report.x[1] - 1.0).abs() < 0.1,
-            "x[1] should be close to 1.0: {}",
+            report.x[1] > 0.9 && report.x[1] < 1.1,
+            "x[1] not close to 1: {}",
             report.x[1]
         );
+
+        // Clean up
+        std::env::remove_var("AUTOEQ_DIR");
 
         println!("Used bounds: {:?}", bounds);
         println!(

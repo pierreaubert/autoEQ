@@ -16,6 +16,7 @@ nlopt = { workspace = true }
 num_cpus = { workspace = true }
 metaheuristics-nature = { workspace = true }
 plotly = { workspace = true }
+plotly_static = { workspace = true }
 rand = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true }
@@ -29,14 +30,6 @@ autoeq-iir = { path = "../src-iir" }
 autoeq-de = { path = "../src-de" }
 autoeq-cea2034 = { path = "../src-cea2034" }
 autoeq-env = { path = "../src-env" }
-
-# Platform-specific plotly static dependencies
-[target.'cfg(any(target_os = "macos", target_os = "linux"))'.dependencies]
-plotly_static = { version = "0.1.0", features = ["chromedriver", "webdriver_download"] }
-
-[target.'cfg(target_os = "windows")'.dependencies]
-plotly_static = { version = "0.1.0", features = ["chromedriver"] }
-
 
 # External BLAS - platform-specific
 [target.'cfg(target_os = "macos")'.dependencies]

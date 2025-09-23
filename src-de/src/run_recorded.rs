@@ -60,6 +60,11 @@ mod tests {
 
     #[test]
     fn test_run_recorded_basic() {
+        // Set up temporary directory for testing
+        let temp_dir = tempfile::tempdir().expect("Failed to create temporary directory");
+        let temp_path = temp_dir.path();
+        std::env::set_var("AUTOEQ_DIR", temp_path.to_str().unwrap());
+
         // Simple quadratic function for testing
         let quadratic = |x: &Array1<f64>| -> f64 { x.iter().map(|&xi| xi * xi).sum() };
 
@@ -85,5 +90,8 @@ mod tests {
 
         // CSV file should be created
         println!("CSV saved to: {}", csv_path);
+
+        // Clean up
+        std::env::remove_var("AUTOEQ_DIR");
     }
 }

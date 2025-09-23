@@ -351,6 +351,11 @@ mod tests {
 
     #[test]
     fn test_recorded_optimization() {
+        // Set up temporary directory for testing
+        let temp_dir = tempfile::tempdir().expect("Failed to create temporary directory");
+        let temp_path = temp_dir.path();
+        std::env::set_var("AUTOEQ_DIR", temp_path.to_str().unwrap());
+
         // Test recording with simple quadratic function
         let bounds = vec![(-5.0, 5.0), (-5.0, 5.0)];
         let config = DEConfigBuilder::new()
@@ -383,5 +388,8 @@ mod tests {
             "Recording test passed - {} iterations recorded",
             lines.len() - 1
         );
+
+        // Clean up
+        std::env::remove_var("AUTOEQ_DIR");
     }
 }

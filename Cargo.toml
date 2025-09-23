@@ -42,7 +42,7 @@ rayon = "1.10"
 
 # Plotting and visualization
 plotly = { version = "0.13", features = ["static_export_default"] }
-plotly_static = { version = "0.1", features = ["webdriver_download"] }
+plotly_static = { version = "0.1", features = ["chromedriver", "webdriver_download"] }
 build_html = "2.7.0"
 
 # Tauri (UI framework)
@@ -50,3 +50,15 @@ tauri = { version = "2.8", features = [] }
 tauri-build = { version = "2.4", features = [] }
 tauri-plugin-dialog = "2.4"
 tauri-plugin-opener = "2.5"
+
+[workspace.metadata.cross.target.aarch64-unknown-linux-gnu]
+# Install libssl-dev:arm64, see <https://github.com/cross-rs/cross/blob/main/docs/custom_images.md#adding-dependencies-to-existing-images>
+pre-build = [
+    "apt update && apt -y upgrade && apt install --assume-yes pkg-config libssl-dev cmake libgdk3.0-cil-dev"
+]
+
+[workspace.metadata.cross.target.x86_64-unknown-linux-gnu]
+# Install libssl-dev:arm64, see <https://github.com/cross-rs/cross/blob/main/docs/custom_images.md#adding-dependencies-to-existing-images>
+pre-build = [
+    "apt update && apt -y upgrade && apt install --assume-yes pkg-config libssl-dev ninja-build cmake libgdk3.0-cil-dev"
+]
