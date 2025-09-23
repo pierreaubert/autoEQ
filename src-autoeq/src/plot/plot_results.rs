@@ -8,8 +8,51 @@ use build_html::*;
 use plotly::Plot;
 use plotly_static::{ImageFormat, StaticExporterBuilder};
 
+use crate::iir::compute_peq_response;
 use crate::plot::plot_filters::plot_filters;
 use crate::plot::plot_spin::{plot_spin, plot_spin_details};
+
+pub async fn plot_compute(
+    args: &crate::cli::Args,
+    optimized_params: &[f64],
+    objective_data: &crate::optim::ObjectiveData,
+    input_curve: &crate::Curve,
+    target_curve: &crate::Curve,
+    deviation_curve: &crate::Curve,
+    cea2034_curves: &Option<HashMap<String, crate::Curve>>,
+) -> (Plot, Option<Plot>, Option<Plot>) {
+    let freqs = input_curve.freq.clone();
+
+    // gather all subplots
+    let plot_filters = plot_filters(
+        args,
+        input_curve,
+        target_curve,
+        deviation_curve,
+        optimized_params,
+    );
+
+    let eq_response =
+        compute_peq_response(&freqs, optimized_params, args.sample_rate, args.iir_hp_pk);
+    let plot_spin_details = if cea2034_curves.is_some() {
+        Some(plot_spin_details(
+            args,
+            input_curve,
+            &freqs,
+            cea2034_curves.as_ref(),
+            Some(&eq_response),
+        ))
+    } else {
+        None
+    };
+    let plot_spin_opt = if cea2034_curves.is_some() {
+        Some(plot_spin(cea2034_curves.as_ref(), Some(&eq_response)))
+    } else {
+        None
+    };
+
+    (plot_filters, plot_spin_details, plot_spin_opt)
+}
 
 /// Generate and save an HTML plot comparing the input curve with the optimized EQ response.
 ///
@@ -36,36 +79,16 @@ pub async fn plot_results(
     output_path: &Path,
 ) -> Result<(), Box<dyn Error>> {
     let speaker = args.speaker.as_deref();
-
-    let freqs = input_curve.freq.clone();
-
-    // gather all subplots
-    let plot_filters = plot_filters(
+    let (plot_filters, plot_spin_details, plot_spin_opt) = plot_compute(
         args,
+        optimized_params,
+        objective_data,
         input_curve,
         target_curve,
         deviation_curve,
-        optimized_params,
-    );
-    let plot_spin_details = if cea2034_curves.is_some() {
-        Some(plot_spin_details(
-            args,
-            input_curve,
-            &freqs,
-            cea2034_curves.as_ref(),
-            Some(&objective_data.target_error),
-        ))
-    } else {
-        None
-    };
-    let plot_spin_opt = if cea2034_curves.is_some() {
-        Some(plot_spin(
-            cea2034_curves.as_ref(),
-            Some(&objective_data.target_error),
-        ))
-    } else {
-        None
-    };
+        cea2034_curves,
+    )
+    .await;
 
     // Title with optional speaker name
     let title_text = match speaker {
