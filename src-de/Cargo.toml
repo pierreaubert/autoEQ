@@ -10,17 +10,30 @@ repository = "https://github.com/pierreaubert/autoeq"
 [dependencies]
 # Core numerical computing
 ndarray = { workspace = true }
-blas-src = { workspace = true }
-# openblas-src = { workspace = true }  # Using Accelerate instead on macOS
 rand = { workspace = true }
 rayon = { workspace = true }
 csv = { workspace = true }
 clap = { workspace = true }
 plotly = { workspace = true }
-serde = { workspace = true }
-thiserror = { workspace = true }
 autoeq-testfunctions = { path = "../src-testfunctions" }
 autoeq-env = { path = "../src-env" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+# Platform-specific BLAS dependencies
+[target.'cfg(target_os = "macos")'.dependencies]
+blas-src = { version = "0.12.1", features = ["accelerate"] }
+
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+blas-src = { version = "0.12.1", features = ["openblas"] }
+openblas-src = { version = "0.10", features = ["cblas", "system"] }
+
+[target.'cfg(any(target_os = "macos", target_os = "linux"))'.dependencies]
+plotly_static = { version = "0.1", features = ["chromedriver", "webdriver_download"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+plotly_static = { version = "0.1", features = ["chromedriver"] }
 
 [[bin]]
 name = "plot_functions"

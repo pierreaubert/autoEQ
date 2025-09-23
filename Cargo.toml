@@ -13,12 +13,8 @@ resolver = "2"
 [workspace.dependencies]
 # Core numerical computing
 ndarray = { version = "0.16.0", features = ["blas", "serde"] }
-# BLAS backend - choose one based on platform:
-# Option 1: Apple Accelerate (recommended for macOS)
-blas-src = { version = "0.12.1", features = ["accelerate"] }
-# Option 2: OpenBLAS (cross-platform, fallback for macOS)
-# blas-src = { version = "0.12.1", features = ["openblas"] }
-# openblas-src = { version = "0.10", features = ["cblas", "system"] }
+blas-src = { version = "0.12.1" }
+openblas-src = { version = "0.10", features = ["cblas", "system"] }
 
 # Serialization and data
 serde = { version = "1.0", features = ["derive"] }
@@ -46,7 +42,7 @@ rayon = "1.10"
 
 # Plotting and visualization
 plotly = { version = "0.13", features = ["static_export_default"] }
-plotly_static = { version = "0.1", features = ["chromedriver", "webdriver_download"] }
+plotly_static = { version = "0.1", features = ["webdriver_download"] }
 build_html = "2.7.0"
 
 # Tauri (UI framework)

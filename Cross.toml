@@ -6,3 +6,6 @@ image = "ghcr.io/cross-rs/aarch64-unknown-linux-gnu:main"
 
 [target.x86_64-pc-windows-gnu]
 image = "ghcr.io/cross-rs/x86_64-pc-windows-gnu:main"
+
+[target.aarch64-pc-windows-msvc]
+image = "ghcr.io/cross-rs/aarch64-pc-windows-msvc:main"
