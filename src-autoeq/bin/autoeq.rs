@@ -263,7 +263,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     if let Err(e) = plot::plot_results(
         &args,
         &x,
-        &objective_data,
         &input_curve,
         &target_curve,
         &deviation_curve,

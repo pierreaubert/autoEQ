@@ -15,7 +15,6 @@ use crate::plot::plot_spin::{plot_spin, plot_spin_details};
 pub async fn plot_compute(
     args: &crate::cli::Args,
     optimized_params: &[f64],
-    objective_data: &crate::optim::ObjectiveData,
     input_curve: &crate::Curve,
     target_curve: &crate::Curve,
     deviation_curve: &crate::Curve,
@@ -71,7 +70,6 @@ pub async fn plot_compute(
 pub async fn plot_results(
     args: &crate::cli::Args,
     optimized_params: &[f64],
-    objective_data: &crate::optim::ObjectiveData,
     input_curve: &crate::Curve,
     target_curve: &crate::Curve,
     deviation_curve: &crate::Curve,
@@ -82,7 +80,6 @@ pub async fn plot_results(
     let (plot_filters, plot_spin_details, plot_spin_opt) = plot_compute(
         args,
         optimized_params,
-        objective_data,
         input_curve,
         target_curve,
         deviation_curve,
