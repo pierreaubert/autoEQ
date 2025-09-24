@@ -1,15 +1,18 @@
 // AutoEQ DE-specific optimization code
 
 use ndarray::Array1;
+use std::sync::Arc;
 
-use super::constraints::viol_ceiling_from_spl;
+use super::constraints::{
+    constraint_ceiling, constraint_min_gain, constraint_spacing, CeilingConstraintData,
+    MinGainConstraintData, SpacingConstraintData,
+};
 use super::init_sobol::init_sobol;
 use super::initial_guess::{create_smart_initial_guesses, SmartInitConfig};
 use super::optim::{compute_fitness_penalties, ObjectiveData};
-use super::x2peq::x2peq;
 use crate::de::{
     differential_evolution, CallbackAction, DEConfigBuilder, DEIntermediate, DEReport, Init,
-    Mutation, ParallelConfig, Strategy,
+    Mutation, NonlinearConstraintHelper, ParallelConfig, Strategy,
 };
 
 /// Common setup for DE-based optimization
@@ -53,15 +56,15 @@ pub fn setup_de_common(
         .map(|(&lo, &hi)| (lo, hi))
         .collect();
 
-    // Set up penalty-based objective data for DE
+    // Estimate parameters
+    let pop_size = population.max(15); // minimum reasonable population
+    let max_iter = maxeval.min(pop_size * 10);
+
+    // Set up objective data for DE with zero penalties since we use true constraints
     let mut penalty_data = objective_data.clone();
     penalty_data.penalty_w_ceiling = 0.0;
     penalty_data.penalty_w_spacing = 0.0;
     penalty_data.penalty_w_mingain = 0.0;
-
-    // Estimate parameters
-    let pop_size = population.max(15); // minimum reasonable population
-    let max_iter = maxeval.min(pop_size * 10);
 
     // Log setup configuration
     eprintln!(
@@ -355,25 +358,85 @@ pub fn optimize_filters_autoeq_with_callback(
         );
     }
 
-    // Add native constraint penalties for ceiling and spacing constraints
-    let ceiling_penalty = {
-        let penalty_data = setup.penalty_data.clone();
-        move |x: &Array1<f64>| -> f64 {
-            let x_slice = x.as_slice().unwrap();
-            let peq_spl = x2peq(
-                &penalty_data.freqs,
-                x_slice,
-                penalty_data.srate,
-                penalty_data.iir_hp_pk,
-            );
+    // Add native nonlinear constraints (only in HP+PK mode)
+    let config = if setup.penalty_data.iir_hp_pk {
+        let mut config = config_builder.build();
 
-            viol_ceiling_from_spl(&peq_spl, penalty_data.max_db, penalty_data.iir_hp_pk)
+        // Ceiling constraint
+        if setup.penalty_data.max_db > 0.0 {
+            let ceiling_data = CeilingConstraintData {
+                freqs: setup.penalty_data.freqs.clone(),
+                srate: setup.penalty_data.srate,
+                max_db: setup.penalty_data.max_db,
+                iir_hp_pk: setup.penalty_data.iir_hp_pk,
+            };
+
+            // Create nonlinear constraint helper for ceiling constraint
+            let ceiling_constraint = NonlinearConstraintHelper {
+                fun: Arc::new(move |x: &Array1<f64>| {
+                    let mut result = Array1::zeros(1);
+                    let mut data = ceiling_data.clone();
+                    result[0] = constraint_ceiling(x.as_slice().unwrap(), None, &mut data);
+                    result
+                }),
+                lb: Array1::from(vec![-f64::INFINITY]),
+                ub: Array1::from(vec![0.0]),
+            };
+
+            // Apply constraint with appropriate penalty weights
+            ceiling_constraint.apply_to(&mut config, 1e3, 1e3);
         }
-    };
-    config_builder =
-        config_builder.add_penalty_ineq(ceiling_penalty, setup.penalty_data.penalty_w_ceiling);
 
-    let config = config_builder.build();
+        // Minimum gain constraint
+        if setup.penalty_data.min_db > 0.0 {
+            let min_gain_data = MinGainConstraintData {
+                min_db: setup.penalty_data.min_db,
+                iir_hp_pk: setup.penalty_data.iir_hp_pk,
+            };
+
+            // Create nonlinear constraint helper for minimum gain constraint
+            let min_gain_constraint = NonlinearConstraintHelper {
+                fun: Arc::new(move |x: &Array1<f64>| {
+                    let mut result = Array1::zeros(1);
+                    let mut data = min_gain_data.clone();
+                    result[0] = constraint_min_gain(x.as_slice().unwrap(), None, &mut data);
+                    result
+                }),
+                lb: Array1::from(vec![-f64::INFINITY]),
+                ub: Array1::from(vec![0.0]),
+            };
+
+            // Apply constraint with appropriate penalty weights
+            min_gain_constraint.apply_to(&mut config, 1e3, 1e3);
+        }
+
+        // Minimum spacing constraint
+        if setup.penalty_data.min_spacing_oct > 0.0 {
+            let spacing_data = SpacingConstraintData {
+                min_spacing_oct: setup.penalty_data.min_spacing_oct,
+            };
+
+            // Create nonlinear constraint helper for minimum spacing constraint
+            let spacing_constraint = NonlinearConstraintHelper {
+                fun: Arc::new(move |x: &Array1<f64>| {
+                    let mut result = Array1::zeros(1);
+                    let mut data = spacing_data.clone();
+                    result[0] = constraint_spacing(x.as_slice().unwrap(), None, &mut data);
+                    result
+                }),
+                lb: Array1::from(vec![-f64::INFINITY]),
+                ub: Array1::from(vec![0.0]),
+            };
+
+            // Apply constraint with appropriate penalty weights
+            spacing_constraint.apply_to(&mut config, 1e3, 1e3);
+        }
+
+        config
+    } else {
+        config_builder.build()
+    };
+
     let result = differential_evolution(&base_objective_fn, &setup.bounds, config);
     process_de_results(x, result, "AutoDE")
 }

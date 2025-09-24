@@ -7,8 +7,8 @@ pub struct MinGainConstraintData {
     pub iir_hp_pk: bool,
 }
 
-/// Inequality constraint: for Peak filters, require |gain| >= min_db (skip HP in HP+PK mode).
-/// Returns fc(x) = max_i (min_db - |g_i|) over applicable filters. Feasible when <= 0.
+/// Inequality constraint: for Peak filters, require |gain| >= min_db OR |gain| = 0 (filter removal) (skip HP in HP+PK mode).
+/// Returns fc(x) = max_i (min_db - |g_i|) over applicable filters, but allow |g_i| = 0. Feasible when <= 0.
 pub fn constraint_min_gain(
     x: &[f64],
     _grad: Option<&mut [f64]>,
@@ -27,7 +27,13 @@ pub fn constraint_min_gain(
             continue;
         }
         let g_abs = x[i * 3 + 2].abs();
-        let short = data.min_db - g_abs; // can be negative when satisfied
+        // Allow filter removal (gain = 0) or enforce minimum gain
+        let short = if g_abs < 1e-12 {
+            // Effectively zero
+            0.0 // No violation for removed filter
+        } else {
+            data.min_db - g_abs // Enforce minimum gain for active filters
+        };
         if short > worst {
             worst = short;
         }
@@ -43,6 +49,7 @@ pub fn constraint_min_gain(
 ///
 /// Calculates the worst violation of minimum absolute gain requirement.
 /// Only applies to peak filters (skips highpass filter in HP+PK mode).
+/// Allows filter removal (gain = 0) as a valid option.
 ///
 /// # Arguments
 /// * `xs` - Parameter vector with [log10(freq), Q, gain] triplets
@@ -65,7 +72,13 @@ pub fn viol_min_gain_from_xs(xs: &[f64], iir_hp_pk: bool, min_db: f64) -> f64 {
             continue;
         }
         let g_abs = xs[i * 3 + 2].abs();
-        let short = (min_db - g_abs).max(0.0);
+        // Allow filter removal (gain = 0) or enforce minimum gain
+        let short = if g_abs < 1e-12 {
+            // Effectively zero
+            0.0 // No violation for removed filter
+        } else {
+            (min_db - g_abs).max(0.0) // Enforce minimum gain for active filters
+        };
         if short > worst_short {
             worst_short = short;
         }
