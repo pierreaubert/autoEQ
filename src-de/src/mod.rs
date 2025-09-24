@@ -302,16 +302,24 @@ impl AdaptiveState {
         let iter_ratio = iter as f64 / max_iter as f64;
         self.current_w = config.w_max - (config.w_max - config.w_min) * iter_ratio;
 
-        // Update F_m using power mean of successful F values (Equations 8-10)
-        if !self.successful_f.is_empty() {
-            let power_mean_f = self.compute_power_mean(&self.successful_f);
-            self.f_m = (1.0 - config.w_f) * self.f_m + config.w_f * power_mean_f;
+        // Update F_m using arithmetic mean of successful F values for stability
+        if !self.successful_f.is_empty() && self.successful_f.len() >= 3 {
+            let mean_f = self.successful_f.iter().sum::<f64>() / self.successful_f.len() as f64;
+            // Use very conservative update rate for stability - only update if we have enough samples
+            let conservative_w_f = config.w_f * 0.1; // Much more conservative
+            self.f_m = (1.0 - conservative_w_f) * self.f_m + conservative_w_f * mean_f;
+            // Clamp to reasonable bounds
+            self.f_m = self.f_m.clamp(0.2, 1.2);
         }
 
-        // Update CR_m using power mean of successful CR values (Equations 12-14)
-        if !self.successful_cr.is_empty() {
-            let power_mean_cr = self.compute_power_mean(&self.successful_cr);
-            self.cr_m = (1.0 - config.w_cr) * self.cr_m + config.w_cr * power_mean_cr;
+        // Update CR_m using arithmetic mean of successful CR values for stability
+        if !self.successful_cr.is_empty() && self.successful_cr.len() >= 3 {
+            let mean_cr = self.successful_cr.iter().sum::<f64>() / self.successful_cr.len() as f64;
+            // Use very conservative update rate for stability - only update if we have enough samples
+            let conservative_w_cr = config.w_cr * 0.1; // Much more conservative
+            self.cr_m = (1.0 - conservative_w_cr) * self.cr_m + conservative_w_cr * mean_cr;
+            // Clamp to valid bounds
+            self.cr_m = self.cr_m.clamp(0.1, 0.9);
         }
 
         // Clear successful values for next generation
@@ -341,16 +349,31 @@ impl AdaptiveState {
         self.successful_cr.push(cr_val);
     }
 
-    /// Sample adaptive F parameter using simple perturbation
+    /// Sample adaptive F parameter using conservative normal distribution
     fn sample_f<R: Rng + ?Sized>(&self, rng: &mut R) -> f64 {
-        let perturbation = (rng.random::<f64>() - 0.5) * 0.2;
-        (self.f_m + perturbation).clamp(0.0, 2.0) // Clamp to valid range
+        // Use simple normal distribution with smaller variance for stability
+        let u1: f64 = rng.random();
+        let u2: f64 = rng.random();
+
+        // Box-Muller transform with smaller standard deviation
+        let normal = (-2.0 * u1.ln()).sqrt() * (2.0 * std::f64::consts::PI * u2).cos();
+        let sample = self.f_m + 0.05 * normal; // Reduced variance from 0.1 to 0.05
+
+        // Clamp to conservative bounds
+        sample.clamp(0.3, 1.0)
     }
 
-    /// Sample adaptive CR parameter using simple perturbation
+    /// Sample adaptive CR parameter using conservative Gaussian distribution
     fn sample_cr<R: Rng + ?Sized>(&self, rng: &mut R) -> f64 {
-        let perturbation = (rng.random::<f64>() - 0.5) * 0.2;
-        (self.cr_m + perturbation).clamp(0.0, 1.0) // Clamp to valid range
+        // Use normal distribution with smaller variance for stability
+        let u1: f64 = rng.random();
+        let u2: f64 = rng.random();
+
+        // Box-Muller transform with smaller standard deviation
+        let normal = (-2.0 * u1.ln()).sqrt() * (2.0 * std::f64::consts::PI * u2).cos();
+        let sample = self.cr_m + 0.05 * normal; // Reduced variance from 0.1 to 0.05
+
+        sample.clamp(0.1, 0.9)
     }
 }
 

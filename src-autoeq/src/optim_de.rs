@@ -308,21 +308,35 @@ pub fn optimize_filters_autoeq_with_callback(
     let adaptive_config = if matches!(strategy, Strategy::AdaptiveBin | Strategy::AdaptiveExp) {
         Some(crate::de::AdaptiveConfig {
             adaptive_mutation: true,
-            wls_enabled: true, // Enable WLS for adaptive strategies
-            w_f: cli_args.adaptive_weight_f,
-            w_cr: cli_args.adaptive_weight_cr,
-            ..crate::de::AdaptiveConfig::default()
+            wls_enabled: false,                      // Disable WLS for stability
+            w_max: 0.8,                              // Reduce max weight for more stability
+            w_min: 0.2,                              // Increase min weight for more stability
+            w_f: cli_args.adaptive_weight_f * 0.5,   // Make adaptation even more conservative
+            w_cr: cli_args.adaptive_weight_cr * 0.5, // Make adaptation even more conservative
+            f_m: 0.6,                                // Start with slightly higher F
+            cr_m: 0.5,                               // Start with slightly lower CR
+            wls_prob: 0.0,                           // Completely disable WLS
+            wls_scale: 0.0,                          // Completely disable WLS
         })
     } else {
         None
     };
 
+    // Adjust tolerance for adaptive strategies (they need much more relaxed convergence)
+    let (tolerance, atolerance) =
+        if matches!(strategy, Strategy::AdaptiveBin | Strategy::AdaptiveExp) {
+            // Use much more relaxed tolerances for adaptive strategies - they converge differently
+            (cli_args.tolerance * 10.0, cli_args.atolerance * 10.0)
+        } else {
+            (cli_args.tolerance, cli_args.atolerance)
+        };
+
     // Use constraint helpers for nonlinear constraints
     let mut config_builder = DEConfigBuilder::new()
         .maxiter(setup.max_iter)
         .popsize(setup.pop_size)
-        .tol(cli_args.tolerance)
-        .atol(cli_args.atolerance)
+        .tol(tolerance)
+        .atol(atolerance)
         .strategy(strategy)
         .mutation(Mutation::Range { min: 0.4, max: 1.2 })
         .recombination(cli_args.recombination)
