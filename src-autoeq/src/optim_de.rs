@@ -358,84 +358,78 @@ pub fn optimize_filters_autoeq_with_callback(
         );
     }
 
-    // Add native nonlinear constraints (only in HP+PK mode)
-    let config = if setup.penalty_data.iir_hp_pk {
-        let mut config = config_builder.build();
+    // Add native nonlinear constraints (always apply, not just in HP+PK mode)
+    let mut config = config_builder.build();
 
-        // Ceiling constraint
-        if setup.penalty_data.max_db > 0.0 {
-            let ceiling_data = CeilingConstraintData {
-                freqs: setup.penalty_data.freqs.clone(),
-                srate: setup.penalty_data.srate,
-                max_db: setup.penalty_data.max_db,
-                iir_hp_pk: setup.penalty_data.iir_hp_pk,
-            };
+    // Ceiling constraint (only applies in HP+PK mode)
+    if setup.penalty_data.iir_hp_pk && setup.penalty_data.max_db > 0.0 {
+        let ceiling_data = CeilingConstraintData {
+            freqs: setup.penalty_data.freqs.clone(),
+            srate: setup.penalty_data.srate,
+            max_db: setup.penalty_data.max_db,
+            iir_hp_pk: setup.penalty_data.iir_hp_pk,
+        };
 
-            // Create nonlinear constraint helper for ceiling constraint
-            let ceiling_constraint = NonlinearConstraintHelper {
-                fun: Arc::new(move |x: &Array1<f64>| {
-                    let mut result = Array1::zeros(1);
-                    let mut data = ceiling_data.clone();
-                    result[0] = constraint_ceiling(x.as_slice().unwrap(), None, &mut data);
-                    result
-                }),
-                lb: Array1::from(vec![-f64::INFINITY]),
-                ub: Array1::from(vec![0.0]),
-            };
+        // Create nonlinear constraint helper for ceiling constraint
+        let ceiling_constraint = NonlinearConstraintHelper {
+            fun: Arc::new(move |x: &Array1<f64>| {
+                let mut result = Array1::zeros(1);
+                let mut data = ceiling_data.clone();
+                result[0] = constraint_ceiling(x.as_slice().unwrap(), None, &mut data);
+                result
+            }),
+            lb: Array1::from(vec![-f64::INFINITY]),
+            ub: Array1::from(vec![0.0]),
+        };
 
-            // Apply constraint with appropriate penalty weights
-            ceiling_constraint.apply_to(&mut config, 1e3, 1e3);
-        }
+        // Apply constraint with appropriate penalty weights
+        ceiling_constraint.apply_to(&mut config, 1e3, 1e3);
+    }
 
-        // Minimum gain constraint
-        if setup.penalty_data.min_db > 0.0 {
-            let min_gain_data = MinGainConstraintData {
-                min_db: setup.penalty_data.min_db,
-                iir_hp_pk: setup.penalty_data.iir_hp_pk,
-            };
+    // Minimum gain constraint (applies in all modes)
+    if setup.penalty_data.min_db > 0.0 {
+        let min_gain_data = MinGainConstraintData {
+            min_db: setup.penalty_data.min_db,
+            iir_hp_pk: setup.penalty_data.iir_hp_pk,
+        };
 
-            // Create nonlinear constraint helper for minimum gain constraint
-            let min_gain_constraint = NonlinearConstraintHelper {
-                fun: Arc::new(move |x: &Array1<f64>| {
-                    let mut result = Array1::zeros(1);
-                    let mut data = min_gain_data.clone();
-                    result[0] = constraint_min_gain(x.as_slice().unwrap(), None, &mut data);
-                    result
-                }),
-                lb: Array1::from(vec![-f64::INFINITY]),
-                ub: Array1::from(vec![0.0]),
-            };
+        // Create nonlinear constraint helper for minimum gain constraint
+        let min_gain_constraint = NonlinearConstraintHelper {
+            fun: Arc::new(move |x: &Array1<f64>| {
+                let mut result = Array1::zeros(1);
+                let mut data = min_gain_data.clone();
+                result[0] = constraint_min_gain(x.as_slice().unwrap(), None, &mut data);
+                result
+            }),
+            lb: Array1::from(vec![-f64::INFINITY]),
+            ub: Array1::from(vec![0.0]),
+        };
 
-            // Apply constraint with appropriate penalty weights
-            min_gain_constraint.apply_to(&mut config, 1e3, 1e3);
-        }
+        // Apply constraint with appropriate penalty weights
+        min_gain_constraint.apply_to(&mut config, 1e3, 1e3);
+    }
 
-        // Minimum spacing constraint
-        if setup.penalty_data.min_spacing_oct > 0.0 {
-            let spacing_data = SpacingConstraintData {
-                min_spacing_oct: setup.penalty_data.min_spacing_oct,
-            };
+    // Minimum spacing constraint (applies in all modes)
+    if setup.penalty_data.min_spacing_oct > 0.0 {
+        let spacing_data = SpacingConstraintData {
+            min_spacing_oct: setup.penalty_data.min_spacing_oct,
+        };
 
-            // Create nonlinear constraint helper for minimum spacing constraint
-            let spacing_constraint = NonlinearConstraintHelper {
-                fun: Arc::new(move |x: &Array1<f64>| {
-                    let mut result = Array1::zeros(1);
-                    let mut data = spacing_data.clone();
-                    result[0] = constraint_spacing(x.as_slice().unwrap(), None, &mut data);
-                    result
-                }),
-                lb: Array1::from(vec![-f64::INFINITY]),
-                ub: Array1::from(vec![0.0]),
-            };
+        // Create nonlinear constraint helper for minimum spacing constraint
+        let spacing_constraint = NonlinearConstraintHelper {
+            fun: Arc::new(move |x: &Array1<f64>| {
+                let mut result = Array1::zeros(1);
+                let mut data = spacing_data.clone();
+                result[0] = constraint_spacing(x.as_slice().unwrap(), None, &mut data);
+                result
+            }),
+            lb: Array1::from(vec![-f64::INFINITY]),
+            ub: Array1::from(vec![0.0]),
+        };
 
-            // Apply constraint with appropriate penalty weights
-            spacing_constraint.apply_to(&mut config, 1e3, 1e3);
-        }
-
-        config
-    } else {
-        config_builder.build()
-    };
+        // Apply constraint with appropriate penalty weights
+        spacing_constraint.apply_to(&mut config, 1e3, 1e3);
+    }
 
     let result = differential_evolution(&base_objective_fn, &setup.bounds, config);
     process_de_results(x, result, "AutoDE")

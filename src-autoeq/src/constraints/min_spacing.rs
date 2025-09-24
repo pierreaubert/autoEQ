@@ -55,7 +55,7 @@ pub fn viol_spacing_from_xs(xs: &[f64], min_spacing_oct: f64) -> f64 {
         let fi = 10f64.powf(xs[i * 3]).max(1e-9);
         for j in (i + 1)..n {
             let fj = 10f64.powf(xs[j * 3]).max(1e-9);
-            let d_oct = (fj / fi).log2().abs();
+            let d_oct = (fj / fi).log10().abs();
             if d_oct < min_dist {
                 min_dist = d_oct;
             }

@@ -22,19 +22,8 @@ pub fn constraint_ceiling(
     data: &mut CeilingConstraintData,
 ) -> f64 {
     let peq_spl = x2peq(&data.freqs, x, data.srate, data.iir_hp_pk);
-    // return max excess (can be negative if no violation)
-    let mut max_excess = f64::NEG_INFINITY;
-    for &v in peq_spl.iter() {
-        let excess = v - data.max_db;
-        if excess > max_excess {
-            max_excess = excess;
-        }
-    }
-    if max_excess.is_finite() {
-        max_excess
-    } else {
-        0.0
-    }
+    let viol = viol_ceiling_from_spl(&peq_spl, data.max_db, data.iir_hp_pk);
+    viol
 }
 
 /// Compute ceiling constraint violation from frequency response
@@ -49,10 +38,7 @@ pub fn constraint_ceiling(
 ///
 /// # Returns
 /// Maximum violation amount (0.0 if no violation or not HP+PK mode)
-pub fn viol_ceiling_from_spl(peq_spl: &Array1<f64>, max_db: f64, iir_hp_pk: bool) -> f64 {
-    if !iir_hp_pk {
-        return 0.0;
-    }
+pub fn viol_ceiling_from_spl(peq_spl: &Array1<f64>, max_db: f64, _iir_hp_pk: bool) -> f64 {
     let mut max_excess = 0.0_f64;
     for &v in peq_spl.iter() {
         let excess = (v - max_db).max(0.0);

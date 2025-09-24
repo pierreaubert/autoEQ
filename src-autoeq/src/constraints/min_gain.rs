@@ -14,35 +14,8 @@ pub fn constraint_min_gain(
     _grad: Option<&mut [f64]>,
     data: &mut MinGainConstraintData,
 ) -> f64 {
-    if data.min_db <= 0.0 {
-        return 0.0;
-    }
-    let n = x.len() / 3;
-    if n == 0 {
-        return 0.0;
-    }
-    let mut worst = f64::NEG_INFINITY;
-    for i in 0..n {
-        if data.iir_hp_pk && i == 0 {
-            continue;
-        }
-        let g_abs = x[i * 3 + 2].abs();
-        // Allow filter removal (gain = 0) or enforce minimum gain
-        let short = if g_abs < 1e-12 {
-            // Effectively zero
-            0.0 // No violation for removed filter
-        } else {
-            data.min_db - g_abs // Enforce minimum gain for active filters
-        };
-        if short > worst {
-            worst = short;
-        }
-    }
-    if worst.is_finite() {
-        worst
-    } else {
-        0.0
-    }
+    let viol = viol_min_gain_from_xs(x, data.iir_hp_pk, data.min_db);
+    viol
 }
 
 /// Compute minimum gain constraint violation from parameter vector
@@ -59,9 +32,6 @@ pub fn constraint_min_gain(
 /// # Returns
 /// Worst gain deficiency (0.0 if no violation or disabled)
 pub fn viol_min_gain_from_xs(xs: &[f64], iir_hp_pk: bool, min_db: f64) -> f64 {
-    if min_db <= 0.0 {
-        return 0.0;
-    }
     let n = xs.len() / 3;
     if n == 0 {
         return 0.0;
@@ -73,7 +43,7 @@ pub fn viol_min_gain_from_xs(xs: &[f64], iir_hp_pk: bool, min_db: f64) -> f64 {
         }
         let g_abs = xs[i * 3 + 2].abs();
         // Allow filter removal (gain = 0) or enforce minimum gain
-        let short = if g_abs < 1e-12 {
+        let short = if g_abs < 0.1 {
             // Effectively zero
             0.0 // No violation for removed filter
         } else {
