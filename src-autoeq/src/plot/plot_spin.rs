@@ -6,6 +6,9 @@ use std::collections::HashMap;
 
 use crate::plot::filter_color::filter_color;
 use crate::plot::ref_lines::make_ref_lines;
+use crate::plot::trend_lines::{
+    calculate_tonal_balance, create_regression_trace, generate_regression_line,
+};
 
 /// Create CEA2034 combined traces for a single subplot, including DI on a secondary y-axis
 ///
@@ -202,18 +205,15 @@ fn create_cea2034_with_eq_traces(
 }
 
 pub fn plot_spin_details(
-    args: &crate::cli::Args,
-    input_curve: &crate::Curve,
-    plot_freqs: &Array1<f64>,
     cea2034_curves: Option<&HashMap<String, crate::Curve>>,
     eq_response: Option<&Array1<f64>>,
 ) -> plotly::Plot {
     let mut plot = Plot::new();
     // Add each CEA2034 curves if provided
-    let mut x_axis1_title = "On Axis".to_string();
-    let mut x_axis2_title = "Listening Window".to_string();
-    let mut x_axis3_title = "Early Reflections".to_string();
-    let mut x_axis4_title = "Sound Power".to_string();
+    let x_axis1_title = "On Axis".to_string();
+    let x_axis2_title = "Listening Window".to_string();
+    let x_axis3_title = "Early Reflections".to_string();
+    let x_axis4_title = "Sound Power".to_string();
     if let Some(curves) = cea2034_curves {
         let cea2034_traces = create_cea2034_traces(curves);
         for trace in cea2034_traces {
@@ -226,30 +226,6 @@ pub fn plot_spin_details(
                 plot.add_trace(Box::new(trace));
             }
         }
-    } else {
-        // No CEA2034 data: show input curve (left) and input + PEQ (right) on second row
-        x_axis1_title = format!("{} -- Frequency (Hz)", args.curve_name);
-        x_axis2_title = format!("{} EQ -- Frequency (Hz)", args.curve_name);
-        x_axis3_title = "unused".to_string();
-        x_axis4_title = "unused".to_string();
-        // Interpolate input to plotting freqs to align
-        let input_on_plot = crate::read::interpolate(plot_freqs, input_curve);
-
-        // Left subplot (x3/y3): Input Curve
-        let input_second_row = Scatter::new(plot_freqs.to_vec(), input_on_plot.spl.to_vec())
-            .mode(Mode::Lines)
-            .name(shorten_curve_name(&args.curve_name.clone()))
-            .line(plotly::common::Line::new().color("#1f77b4"));
-        plot.add_trace(input_second_row);
-
-        // Right subplot (x4/y4): Input Curve + PEQ response
-        let input_plus_peq_trace = Scatter::new(plot_freqs.to_vec(), input_on_plot.spl.to_vec())
-            .mode(Mode::Lines)
-            .name(format!("{} + EQ", shorten_curve_name(&args.curve_name)))
-            .x_axis("x2")
-            .y_axis("y2")
-            .line(plotly::common::Line::new().color("#2ca02c"));
-        plot.add_trace(input_plus_peq_trace);
     }
 
     // Add reference lines y=1 and y=-1 from x=100 to x=10000 (black) on both subplots
@@ -258,6 +234,155 @@ pub fn plot_spin_details(
     }
     for t in make_ref_lines("x2", "y2") {
         plot.add_trace(Box::new(t));
+    }
+
+    // Configure layout with subplots
+    let layout = Layout::new()
+        .grid(
+            LayoutGrid::new()
+                .rows(2)
+                .columns(2)
+                .pattern(GridPattern::Independent)
+                .row_order(RowOrder::BottomToTop),
+        )
+        .width(1024)
+        .height(600)
+        .x_axis(
+            plotly::layout::Axis::new()
+                .title(plotly::common::Title::with_text(x_axis1_title))
+                .type_(AxisType::Log)
+                .range(vec![1.301, 4.301])
+                .domain(&[0.0, 0.45]),
+        )
+        .y_axis(
+            plotly::layout::Axis::new()
+                .title(plotly::common::Title::with_text("SPL (dB)"))
+                .range(vec![-10.0, 10.0])
+                .domain(&[0.55, 1.0]),
+        )
+        .x_axis2(
+            plotly::layout::Axis::new()
+                .title(plotly::common::Title::with_text(x_axis2_title))
+                .type_(AxisType::Log)
+                .range(vec![1.301, 4.301])
+                .domain(&[0.55, 1.0]),
+        )
+        .y_axis2(
+            plotly::layout::Axis::new()
+                .title(plotly::common::Title::with_text("SPL (dB)"))
+                .range(vec![-10.0, 10.0])
+                .domain(&[0.55, 1.0]),
+        )
+        .x_axis3(
+            plotly::layout::Axis::new()
+                .title(plotly::common::Title::with_text(x_axis3_title))
+                .type_(AxisType::Log)
+                .range(vec![1.301, 4.301])
+                .domain(&[0.0, 0.45]),
+        )
+        .y_axis3(
+            plotly::layout::Axis::new()
+                .title(plotly::common::Title::with_text("SPL (dB)"))
+                .range(vec![-15.0, 5.0])
+                .domain(&[0.0, 0.45]),
+        )
+        .x_axis4(
+            plotly::layout::Axis::new()
+                .title(plotly::common::Title::with_text(x_axis4_title))
+                .type_(AxisType::Log)
+                .range(vec![1.301, 4.301])
+                .domain(&[0.55, 1.0]),
+        )
+        .y_axis4(
+            plotly::layout::Axis::new()
+                .title(plotly::common::Title::with_text("SPL (dB)"))
+                .range(vec![-15.0, 5.0])
+                .domain(&[0.0, 0.45]),
+        );
+
+    plot.set_layout(layout);
+
+    plot
+}
+
+pub fn plot_spin_tonal(
+    cea2034_curves: Option<&HashMap<String, crate::Curve>>,
+    eq_response: Option<&Array1<f64>>,
+) -> plotly::Plot {
+    let mut plot = Plot::new();
+    // Add each CEA2034 curves if provided
+    let x_axis1_title = "On Axis Tonal Balance".to_string();
+    let x_axis2_title = "Listening Window Tonal Balance".to_string();
+    let x_axis3_title = "Early Reflections Tonal Balance".to_string();
+    let x_axis4_title = "Sound Power Tonal Balance".to_string();
+    if let Some(curves) = cea2034_curves {
+        // Add regression lines for original curves (tonal balance)
+        for (i, curve_name) in CEA2034_CURVE_NAMES.iter().enumerate() {
+            let x_axis = if i == 0 {
+                "x".to_string()
+            } else {
+                format!("x{}", i + 1)
+            };
+            let y_axis = if i == 0 {
+                "y".to_string()
+            } else {
+                format!("y{}", i + 1)
+            };
+            if let Some(curve) = curves.get(*curve_name) {
+                if let Some((slope, intercept)) =
+                    calculate_tonal_balance(&curve.freq, &curve.spl, 100.0, 10000.0)
+                {
+                    let regression_line = generate_regression_line(slope, intercept, &curve.freq);
+                    let trace = create_regression_trace(
+                        &curve.freq,
+                        &regression_line,
+                        &format!("{} {:.2} dB/oct", shorten_curve_name(curve_name), slope),
+                        filter_color(i),
+                        Some(&x_axis),
+                        Some(&y_axis),
+                    );
+                    plot.add_trace(Box::new(trace));
+                }
+            }
+        }
+
+        // Add regression lines for EQ-applied curves (tonal balance)
+        if let Some(eq_resp) = eq_response {
+            for (i, curve_name) in CEA2034_CURVE_NAMES.iter().enumerate() {
+                let x_axis = if i == 0 {
+                    "x".to_string()
+                } else {
+                    format!("x{}", i + 1)
+                };
+                let y_axis = if i == 0 {
+                    "y".to_string()
+                } else {
+                    format!("y{}", i + 1)
+                };
+                if let Some(curve) = curves.get(*curve_name) {
+                    let eq_applied = &curve.spl + eq_resp;
+                    if let Some((slope, intercept)) =
+                        calculate_tonal_balance(&curve.freq, &eq_applied, 100.0, 10000.0)
+                    {
+                        let regression_line =
+                            generate_regression_line(slope, intercept, &curve.freq);
+                        let trace = create_regression_trace(
+                            &curve.freq,
+                            &regression_line,
+                            &format!(
+                                "{} w/EQ {:.2} dB/oct",
+                                shorten_curve_name(curve_name),
+                                slope
+                            ),
+                            filter_color(i + 4),
+                            Some(&x_axis),
+                            Some(&y_axis),
+                        );
+                        plot.add_trace(Box::new(trace));
+                    }
+                }
+            }
+        }
     }
 
     // Configure layout with subplots

@@ -20,8 +20,10 @@ mod plot_filters;
 mod plot_results;
 mod plot_spin;
 mod ref_lines;
+mod trend_lines;
 
 pub use filter_color::filter_color;
 pub use plot_filters::plot_filters;
 pub use plot_results::plot_results;
-pub use plot_spin::{plot_spin, plot_spin_details};
+pub use plot_spin::{plot_spin, plot_spin_details, plot_spin_tonal};
+pub use trend_lines::*;

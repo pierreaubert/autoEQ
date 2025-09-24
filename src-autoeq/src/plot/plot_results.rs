@@ -10,7 +10,7 @@ use plotly_static::{ImageFormat, StaticExporterBuilder};
 
 use crate::iir::compute_peq_response;
 use crate::plot::plot_filters::plot_filters;
-use crate::plot::plot_spin::{plot_spin, plot_spin_details};
+use crate::plot::plot_spin::{plot_spin, plot_spin_details, plot_spin_tonal};
 
 pub async fn plot_compute(
     args: &crate::cli::Args,
@@ -19,7 +19,7 @@ pub async fn plot_compute(
     target_curve: &crate::Curve,
     deviation_curve: &crate::Curve,
     cea2034_curves: &Option<HashMap<String, crate::Curve>>,
-) -> (Plot, Option<Plot>, Option<Plot>) {
+) -> (Plot, Option<Plot>, Option<Plot>, Option<Plot>) {
     let freqs = input_curve.freq.clone();
 
     // gather all subplots
@@ -35,22 +35,31 @@ pub async fn plot_compute(
         compute_peq_response(&freqs, optimized_params, args.sample_rate, args.iir_hp_pk);
     let plot_spin_details = if cea2034_curves.is_some() {
         Some(plot_spin_details(
-            args,
-            input_curve,
-            &freqs,
             cea2034_curves.as_ref(),
             Some(&eq_response),
         ))
     } else {
         None
     };
+
+    let plot_spin_tonal = if cea2034_curves.is_some() {
+        Some(plot_spin_tonal(cea2034_curves.as_ref(), Some(&eq_response)))
+    } else {
+        None
+    };
+
     let plot_spin_opt = if cea2034_curves.is_some() {
         Some(plot_spin(cea2034_curves.as_ref(), Some(&eq_response)))
     } else {
         None
     };
 
-    (plot_filters, plot_spin_details, plot_spin_opt)
+    (
+        plot_filters,
+        plot_spin_details,
+        plot_spin_tonal,
+        plot_spin_opt,
+    )
 }
 
 /// Generate and save an HTML plot comparing the input curve with the optimized EQ response.
@@ -77,7 +86,7 @@ pub async fn plot_results(
     output_path: &Path,
 ) -> Result<(), Box<dyn Error>> {
     let speaker = args.speaker.as_deref();
-    let (plot_filters, plot_spin_details, plot_spin_opt) = plot_compute(
+    let (plot_filters, plot_spin_details, plot_spin_tonal, plot_spin_opt) = plot_compute(
         args,
         optimized_params,
         input_curve,
@@ -98,17 +107,22 @@ pub async fn plot_results(
             .with_title(title_text)
             .with_script_link("https://cdn.plot.ly/plotly-latest.min.js")
             .with_raw(plot_filters.to_inline_html(Some("filters")));
-        let page = if let Some(ref plot_spin) = plot_spin_opt {
-            base.with_raw(plot_spin.to_inline_html(Some("spinorame")))
+        let page = if let Some(ref plot_spin) = plot_spin_details {
+            base.with_raw(plot_spin.to_inline_html(Some("details")))
         } else {
             base
         };
-        let page2 = if let Some(ref plot_spin) = plot_spin_details {
-            page.with_raw(plot_spin.to_inline_html(Some("details")))
+        let page2 = if let Some(ref plot_spin) = plot_spin_tonal {
+            page.with_raw(plot_spin.to_inline_html(Some("tonal")))
         } else {
             page
         };
-        page2.to_html_string()
+        let page3 = if let Some(ref plot_spin) = plot_spin_opt {
+            page2.with_raw(plot_spin.to_inline_html(Some("spinorama")))
+        } else {
+            page2
+        };
+        page3.to_html_string()
     };
 
     // Ensure parent directory exists before writing files
@@ -136,8 +150,12 @@ pub async fn plot_results(
         plots.push((plot_spin, "details", 1280, 650));
     }
 
+    if let Some(plot_spin) = plot_spin_tonal {
+        plots.push((plot_spin, "tonal", 1280, 650));
+    }
+
     if let Some(plot_spin) = plot_spin_opt {
-        plots.push((plot_spin, "spins", 1280, 450));
+        plots.push((plot_spin, "spinorama", 1280, 450));
     }
 
     // Try to create an async static exporter. If unavailable, skip PNG export and continue.
