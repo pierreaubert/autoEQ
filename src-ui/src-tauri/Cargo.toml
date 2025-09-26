@@ -29,6 +29,7 @@ ndarray = { workspace = true }
 reqwest = { workspace = true }
 urlencoding = { workspace = true }
 blas-src = { workspace = true }
+plotly = { workspace = true }
 tauri-plugin-clipboard-manager = "2"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]

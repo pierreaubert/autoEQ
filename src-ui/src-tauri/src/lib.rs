@@ -1,9 +1,54 @@
-use autoeq::{LossType, cli::Args as AutoEQArgs};
+use autoeq::{
+    Curve, LossType, cli::Args as AutoEQArgs, plot_filters, plot_spin, plot_spin_details,
+    plot_spin_tonal,
+};
 use ndarray::Array1;
+use plotly::Plot;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
-use tauri::{AppHandle, Emitter};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use tauri::{AppHandle, Emitter, State};
+
+#[cfg(test)]
+mod tests;
+
+#[cfg(test)]
+mod test_mocks;
+
+// Global cancellation state
+pub struct CancellationState {
+    pub cancelled: AtomicBool,
+}
+
+impl Clone for CancellationState {
+    fn clone(&self) -> Self {
+        Self {
+            cancelled: AtomicBool::new(self.cancelled.load(Ordering::Relaxed)),
+        }
+    }
+}
+
+impl CancellationState {
+    pub fn new() -> Self {
+        Self {
+            cancelled: AtomicBool::new(false),
+        }
+    }
+
+    pub fn cancel(&self) {
+        self.cancelled.store(true, Ordering::Relaxed);
+    }
+
+    pub fn reset(&self) {
+        self.cancelled.store(false, Ordering::Relaxed);
+    }
+
+    pub fn is_cancelled(&self) -> bool {
+        self.cancelled.load(Ordering::Relaxed)
+    }
+}
 
 #[derive(Debug, Clone, Deserialize)]
 struct OptimizationParams {
@@ -56,7 +101,7 @@ struct OptimizationResult {
     filter_plots: Option<PlotData>, // Individual filter responses and sum
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct ProgressUpdate {
     iteration: usize,
     fitness: f64,
@@ -69,6 +114,30 @@ struct PlotData {
     frequencies: Vec<f64>,
     curves: HashMap<String, Vec<f64>>,
     metadata: HashMap<String, serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct PlotFiltersParams {
+    input_curve: CurveData,
+    target_curve: CurveData,
+    deviation_curve: CurveData,
+    optimized_params: Vec<f64>,
+    sample_rate: f64,
+    num_filters: usize,
+    iir_hp_pk: bool,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct PlotSpinParams {
+    cea2034_curves: Option<HashMap<String, CurveData>>,
+    eq_response: Option<Vec<f64>>,
+    _frequencies: Option<Vec<f64>>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+struct CurveData {
+    freq: Vec<f64>,
+    spl: Vec<f64>,
 }
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
@@ -100,7 +169,7 @@ async fn get_speakers() -> Result<Vec<String>, String> {
 }
 
 #[tauri::command]
-async fn get_versions(speaker: String) -> Result<Vec<String>, String> {
+async fn get_speaker_versions(speaker: String) -> Result<Vec<String>, String> {
     let url = format!(
         "https://api.spinorama.org/v1/speaker/{}/versions",
         urlencoding::encode(&speaker)
@@ -126,7 +195,7 @@ async fn get_versions(speaker: String) -> Result<Vec<String>, String> {
 }
 
 #[tauri::command]
-async fn get_measurements(speaker: String, version: String) -> Result<Vec<String>, String> {
+async fn get_speaker_measurements(speaker: String, version: String) -> Result<Vec<String>, String> {
     let url = format!(
         "https://api.spinorama.org/v1/speaker/{}/version/{}/measurements",
         urlencoding::encode(&speaker),
@@ -307,7 +376,11 @@ fn validate_params(
 }
 
 #[tauri::command]
-async fn run_optimization(params: OptimizationParams, app_handle: AppHandle) -> OptimizationResult {
+async fn run_optimization(
+    params: OptimizationParams,
+    app_handle: AppHandle,
+    cancellation_state: State<'_, CancellationState>,
+) -> Result<OptimizationResult, String> {
     println!(
         "[RUST DEBUG] run_optimization called with algo: {}",
         params.algo
@@ -317,15 +390,20 @@ async fn run_optimization(params: OptimizationParams, app_handle: AppHandle) -> 
         params.num_filters, params.population, params.maxeval
     );
 
-    let result = run_optimization_internal(params, app_handle).await;
+    // Reset cancellation state at the start of optimization
+    cancellation_state.reset();
+
+    let result =
+        run_optimization_internal(params, app_handle, Arc::new((*cancellation_state).clone()))
+            .await;
     match result {
         Ok(res) => {
             println!("[RUST DEBUG] Optimization completed successfully");
-            res
+            Ok(res)
         }
         Err(e) => {
             println!("[RUST DEBUG] Optimization failed with error: {}", e);
-            OptimizationResult {
+            Ok(OptimizationResult {
                 success: false,
                 error_message: Some(e.to_string()),
                 filter_params: None,
@@ -335,7 +413,7 @@ async fn run_optimization(params: OptimizationParams, app_handle: AppHandle) -> 
                 filter_response: None,
                 spin_details: None,
                 filter_plots: None,
-            }
+            })
         }
     }
 }
@@ -343,8 +421,14 @@ async fn run_optimization(params: OptimizationParams, app_handle: AppHandle) -> 
 async fn run_optimization_internal(
     params: OptimizationParams,
     app_handle: AppHandle,
+    cancellation_state: Arc<CancellationState>,
 ) -> Result<OptimizationResult, Box<dyn std::error::Error + Send + Sync>> {
     println!("[RUST DEBUG] run_optimization_internal started");
+
+    // Check for cancellation at start
+    if cancellation_state.is_cancelled() {
+        return Err("Optimization cancelled before start".into());
+    }
 
     // Validate parameters first
     println!("[RUST DEBUG] Validating parameters...");
@@ -414,6 +498,11 @@ async fn run_optimization_internal(
         input_curve_raw.freq.len()
     );
 
+    // Check for cancellation after data loading
+    if cancellation_state.is_cancelled() {
+        return Err("Optimization cancelled during data loading".into());
+    }
+
     // Resample everything to standard frequency grid
     println!("[RUST DEBUG] Creating standard frequency grid...");
     let standard_freq = autoeq::read::create_log_frequency_grid(200, 20.0, 20000.0);
@@ -473,6 +562,11 @@ async fn run_optimization_internal(
         pref_score_before = Some(metrics.pref_score);
     }
 
+    // Check for cancellation before optimization
+    if cancellation_state.is_cancelled() {
+        return Err("Optimization cancelled before starting".into());
+    }
+
     // Run optimization with progress reporting for autoeq:de
     println!(
         "[RUST DEBUG] Starting optimization with algorithm: {}",
@@ -481,10 +575,16 @@ async fn run_optimization_internal(
     let filter_params = if args.algo == "autoeq:de" {
         println!("[RUST DEBUG] Using DE algorithm with progress reporting");
         let mut progress_count = 0;
+        let cancellation_state_clone = Arc::clone(&cancellation_state);
         autoeq::workflow::perform_optimization_with_callback(
             &args,
             &objective_data,
             Box::new(move |intermediate| {
+                // Check for cancellation in callback
+                if cancellation_state_clone.is_cancelled() {
+                    println!("[RUST DEBUG] Optimization cancelled during iteration {}", intermediate.iter);
+                    return autoeq::de::CallbackAction::Stop;
+                }
                 progress_count += 1;
                 if progress_count % 10 == 0 || progress_count <= 5 {
                     println!("[RUST DEBUG] Progress update #{}: iter={}, fitness={:.6}, convergence={:.4}",
@@ -651,9 +751,161 @@ async fn run_optimization_internal(
     })
 }
 
+// Helper function to convert CurveData to autoeq::Curve
+fn curve_data_to_curve(curve_data: &CurveData) -> Curve {
+    Curve {
+        freq: Array1::from_vec(curve_data.freq.clone()),
+        spl: Array1::from_vec(curve_data.spl.clone()),
+    }
+}
+
+// Helper function to convert plotly::Plot to JSON
+fn plot_to_json(plot: Plot) -> Result<serde_json::Value, String> {
+    match serde_json::to_value(plot) {
+        Ok(json) => Ok(json),
+        Err(e) => Err(format!("Failed to serialize plot: {}", e)),
+    }
+}
+
+#[tauri::command]
+async fn generate_plot_filters(params: PlotFiltersParams) -> Result<serde_json::Value, String> {
+    // Convert CurveData to autoeq::Curve
+    let input_curve = curve_data_to_curve(&params.input_curve);
+    let target_curve = curve_data_to_curve(&params.target_curve);
+    let deviation_curve = curve_data_to_curve(&params.deviation_curve);
+
+    // Create a minimal Args struct for the plot function
+    let args = AutoEQArgs {
+        num_filters: params.num_filters,
+        curve: None,
+        target: None,
+        sample_rate: params.sample_rate,
+        max_db: 3.0,
+        min_db: 1.0,
+        max_q: 3.0,
+        min_q: 1.0,
+        min_freq: 60.0,
+        max_freq: 16000.0,
+        output: None,
+        speaker: None,
+        version: None,
+        measurement: None,
+        curve_name: "Listening Window".to_string(),
+        algo: "nlopt:cobyla".to_string(),
+        population: 300,
+        maxeval: 2000,
+        refine: false,
+        local_algo: "cobyla".to_string(),
+        min_spacing_oct: 0.5,
+        spacing_weight: 20.0,
+        smooth: true,
+        smooth_n: 2,
+        loss: LossType::SpeakerFlat,
+        iir_hp_pk: params.iir_hp_pk,
+        algo_list: false,
+        tolerance: 1e-3,
+        atolerance: 1e-4,
+        recombination: 0.9,
+        strategy: "currenttobest1bin".to_string(),
+        strategy_list: false,
+        adaptive_weight_f: 0.9,
+        adaptive_weight_cr: 0.9,
+        no_parallel: false,
+        parallel_threads: 0,
+    };
+
+    // Generate the plot
+    let plot = plot_filters(
+        &args,
+        &input_curve,
+        &target_curve,
+        &deviation_curve,
+        &params.optimized_params,
+    );
+
+    // Convert to JSON
+    plot_to_json(plot)
+}
+
+#[tauri::command]
+async fn generate_plot_spin(params: PlotSpinParams) -> Result<serde_json::Value, String> {
+    // Convert CurveData HashMap to autoeq::Curve HashMap if provided
+    let cea2034_curves = params.cea2034_curves.as_ref().map(|curves| {
+        curves
+            .iter()
+            .map(|(name, curve_data)| (name.clone(), curve_data_to_curve(curve_data)))
+            .collect::<HashMap<String, Curve>>()
+    });
+
+    // Convert eq_response to Array1 if provided
+    let eq_response = params
+        .eq_response
+        .as_ref()
+        .map(|response| Array1::from_vec(response.clone()));
+
+    // Generate the plot
+    let plot = plot_spin(cea2034_curves.as_ref(), eq_response.as_ref());
+
+    // Convert to JSON
+    plot_to_json(plot)
+}
+
+#[tauri::command]
+async fn generate_plot_spin_details(params: PlotSpinParams) -> Result<serde_json::Value, String> {
+    // Convert CurveData HashMap to autoeq::Curve HashMap if provided
+    let cea2034_curves = params.cea2034_curves.as_ref().map(|curves| {
+        curves
+            .iter()
+            .map(|(name, curve_data)| (name.clone(), curve_data_to_curve(curve_data)))
+            .collect::<HashMap<String, Curve>>()
+    });
+
+    // Convert eq_response to Array1 if provided
+    let eq_response = params
+        .eq_response
+        .as_ref()
+        .map(|response| Array1::from_vec(response.clone()));
+
+    // Generate the plot
+    let plot = plot_spin_details(cea2034_curves.as_ref(), eq_response.as_ref());
+
+    // Convert to JSON
+    plot_to_json(plot)
+}
+
+#[tauri::command]
+async fn generate_plot_spin_tonal(params: PlotSpinParams) -> Result<serde_json::Value, String> {
+    // Convert CurveData HashMap to autoeq::Curve HashMap if provided
+    let cea2034_curves = params.cea2034_curves.as_ref().map(|curves| {
+        curves
+            .iter()
+            .map(|(name, curve_data)| (name.clone(), curve_data_to_curve(curve_data)))
+            .collect::<HashMap<String, Curve>>()
+    });
+
+    // Convert eq_response to Array1 if provided
+    let eq_response = params
+        .eq_response
+        .as_ref()
+        .map(|response| Array1::from_vec(response.clone()));
+
+    // Generate the plot
+    let plot = plot_spin_tonal(cea2034_curves.as_ref(), eq_response.as_ref());
+
+    // Convert to JSON
+    plot_to_json(plot)
+}
+
 #[tauri::command]
 fn exit_app(window: tauri::Window) {
     window.close().unwrap();
+}
+
+#[tauri::command]
+fn cancel_optimization(cancellation_state: State<CancellationState>) -> Result<(), String> {
+    println!("[RUST DEBUG] Cancellation requested");
+    cancellation_state.cancel();
+    Ok(())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -663,12 +915,18 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .manage(CancellationState::new())
         .invoke_handler(tauri::generate_handler![
             greet,
             run_optimization,
+            cancel_optimization,
             get_speakers,
-            get_versions,
-            get_measurements,
+            get_speaker_versions,
+            get_speaker_measurements,
+            generate_plot_filters,
+            generate_plot_spin,
+            generate_plot_spin_details,
+            generate_plot_spin_tonal,
             exit_app
         ])
         .run(tauri::generate_context!())

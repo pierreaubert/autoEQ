@@ -328,6 +328,7 @@ impl AdaptiveState {
     }
 
     /// Compute power mean as described in equation (10) from the paper
+    #[allow(dead_code)]
     fn compute_power_mean(&self, values: &[f64]) -> f64 {
         if values.is_empty() {
             return 0.5; // Default fallback

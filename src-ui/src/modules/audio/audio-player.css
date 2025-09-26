@@ -1,0 +1,468 @@
+/* Audio Player Standalone CSS */
+/* Extracted from main styles.css for standalone audio player component */
+
+/* CSS Variables - Define these if not available globally */
+:root {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f8f9fa;
+  --bg-accent: #e9ecef;
+  --text-primary: #212529;
+  --text-secondary: #6c757d;
+  --text-tertiary: #adb5bd;
+  --border-color: #dee2e6;
+  --border-active: #007bff;
+  --button-primary: #007bff;
+  --button-primary-hover: #0056b3;
+  --button-secondary: #6c757d;
+  --danger-color: #dc3545;
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --radius: 4px;
+}
+
+/* Dark theme support */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg-primary: #1a1a1a;
+    --bg-secondary: #2d2d2d;
+    --bg-accent: #3d3d3d;
+    --text-primary: #ffffff;
+    --text-secondary: #b0b0b0;
+    --text-tertiary: #808080;
+    --border-color: #404040;
+    --border-active: #4dabf7;
+    --button-primary: #4dabf7;
+    --button-primary-hover: #339af0;
+  }
+}
+
+/* Audio Player Container */
+.audio-player {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  padding: var(--spacing-md);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Audio Testing Controls */
+.audio-testing-controls {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border-color);
+  padding: var(--spacing-sm) var(--spacing-md);
+  z-index: 1000;
+}
+
+.audio-control-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  height: 40px; /* Fixed height for consistent alignment */
+}
+
+.audio-left-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  flex: 0 0 auto;
+}
+
+.audio-left-controls label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.audio-center-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  margin: 0 var(--spacing-sm);
+}
+
+.audio-right-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  flex: 0 0 auto;
+}
+
+/* Demo Audio Select */
+.demo-audio-select {
+  width: 140px;
+  height: 32px;
+  padding: 4px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.demo-audio-select:focus {
+  outline: none;
+  border-color: var(--border-active);
+}
+
+/* EQ Toggle Buttons */
+.eq-toggle-buttons {
+  display: flex;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--bg-primary);
+  height: 32px;
+  width: 80px;
+}
+
+.eq-toggle-btn {
+  flex: 1;
+  border: none;
+  background: var(--bg-accent);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  height: 100%;
+}
+
+.eq-toggle-btn:first-child {
+  border-right: 1px solid var(--border-color);
+}
+
+.eq-toggle-btn:hover {
+  background: var(--button-secondary);
+  color: white;
+}
+
+.eq-toggle-btn.active {
+  background: var(--button-primary);
+  color: white;
+  font-weight: 600;
+}
+
+.eq-toggle-btn.active:hover {
+  background: var(--button-primary-hover);
+  color: white;
+}
+
+/* Listen and Stop Buttons */
+.listen-button, .stop-button {
+  width: 80px;
+  height: 32px;
+  border: 1px solid var(--button-primary);
+  border-radius: var(--radius);
+  background: var(--button-primary);
+  color: white;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-xs);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.listen-button:hover {
+  background: var(--button-primary-hover);
+  transform: translateY(-1px);
+}
+
+.listen-button:disabled,
+.listen-button.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  pointer-events: none;
+  background: var(--text-secondary);
+  transform: none;
+}
+
+.stop-button {
+  background: var(--danger-color);
+  border-color: var(--danger-color);
+}
+
+.stop-button:hover {
+  background: #c82333;
+  border-color: #c82333;
+  transform: translateY(-1px);
+}
+
+/* Audio Playback Container */
+.audio-playback-container {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  width: 100%;
+}
+
+.audio-center-controls .audio-status {
+  border: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.audio-info-compact {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-xs);
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.audio-info-compact span {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.audio-center-controls .audio-progress {
+  width: 100px;
+  display: flex;
+  justify-content: center;
+}
+
+.audio-center-controls .audio-progress-bar {
+  width: 100%;
+  height: 4px;
+  background: var(--bg-accent);
+  border-radius: 2px;
+  overflow: hidden;
+  position: relative;
+}
+
+.audio-center-controls .audio-progress-fill {
+  height: 100%;
+  background: var(--button-primary);
+  border-radius: 1.5px;
+  transition: width 0.1s ease;
+}
+
+/* Frequency Analyzer */
+.frequency-analyzer {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  flex: 1;
+  padding: 2px 4px;
+  background: var(--bg-primary);
+  border-radius: var(--radius);
+  border: 1px solid var(--border-color);
+  overflow: hidden;
+}
+
+.spectrum-canvas {
+  display: block;
+  height: 28px;
+  width: 100%;
+  image-rendering: crisp-edges;
+  image-rendering: pixelated;
+}
+
+/* Frequency Labels */
+.frequency-labels {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 2px 0;
+  margin-top: 2px;
+  border-top: 1px solid var(--border-color);
+  min-height: 24px;
+}
+
+.freq-label {
+  flex: 1;
+  text-align: center;
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0 2px;
+}
+
+.freq-label small {
+  display: block;
+  font-size: 8px;
+  font-weight: 400;
+  color: var(--text-tertiary);
+  opacity: 0.8;
+}
+
+/* Color coding for frequency ranges */
+.freq-label[data-range="sub-bass"] {
+  color: #ff3333;
+}
+
+.freq-label[data-range="bass"] {
+  color: #ff6633;
+}
+
+.freq-label[data-range="low-mid"] {
+  color: #ffaa33;
+}
+
+.freq-label[data-range="mid"] {
+  color: #88cc33;
+}
+
+.freq-label[data-range="high-mid"] {
+  color: #33cc88;
+}
+
+.freq-label[data-range="presence"] {
+  color: #3388ff;
+}
+
+.freq-label[data-range="brilliance"] {
+  color: #aa33ff;
+}
+
+/* Responsive adjustments for audio controls */
+@media (max-width: 768px) {
+  .audio-testing-controls {
+    padding: var(--spacing-sm);
+  }
+
+  .audio-control-row {
+    gap: var(--spacing-xs);
+    flex-wrap: wrap;
+  }
+
+  .audio-left-controls {
+    justify-content: flex-start;
+    order: 1;
+    flex: 0 0 auto;
+  }
+
+  .audio-center-controls {
+    order: 2;
+    flex: 1 1 100%;
+    margin: var(--spacing-xs) 0;
+  }
+
+  .audio-playback-container {
+    flex-direction: column;
+    gap: var(--spacing-xs);
+  }
+
+  .audio-center-controls .audio-status {
+    width: 100%;
+  }
+
+  .frequency-analyzer {
+    width: 100%;
+  }
+
+  .audio-right-controls {
+    justify-content: flex-end;
+    order: 3;
+    flex: 0 0 auto;
+  }
+
+  .audio-left-controls label {
+    font-size: 11px;
+  }
+
+  .audio-info-compact {
+    font-size: 10px;
+  }
+
+  .listen-button, .stop-button {
+    font-size: 12px;
+    padding: var(--spacing-xs) var(--spacing-sm);
+  }
+
+  .eq-toggle-btn {
+    font-size: 11px;
+    padding: var(--spacing-xs) var(--spacing-sm);
+    min-width: 35px;
+  }
+}
+
+/* Standalone mode adjustments */
+.audio-player .audio-testing-controls {
+  position: relative;
+  border: none;
+  padding: 0;
+  background: transparent;
+}
+
+.audio-player .audio-control-row {
+  height: auto;
+  min-height: 40px;
+}
+
+/* Compact mode */
+.audio-player.compact .audio-center-controls {
+  flex: 0 0 auto;
+}
+
+.audio-player.compact .frequency-analyzer {
+  display: none;
+}
+
+.audio-player.compact .audio-info-compact {
+  font-size: 10px;
+}
+
+/* Error states */
+.audio-player .error {
+  color: var(--danger-color);
+  font-size: 12px;
+  text-align: center;
+  padding: var(--spacing-sm);
+  background: rgba(220, 53, 69, 0.1);
+  border-radius: var(--radius);
+  margin-top: var(--spacing-sm);
+}
+
+/* Loading states */
+.audio-player .loading {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.audio-player .loading::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 20px;
+  height: 20px;
+  margin: -10px 0 0 -10px;
+  border: 2px solid var(--border-color);
+  border-top-color: var(--button-primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

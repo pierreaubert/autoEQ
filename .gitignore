@@ -7,7 +7,7 @@ data_generated
 autoeq_*.html
 autoeq_*.png
 *.csv
-*.html
+/*.html
 *~
 .*~
 *#

@@ -1405,11 +1405,22 @@ input[type="checkbox"] {
   align-items: center;
   justify-content: center;
   gap: var(--spacing-xs);
+  opacity: 1;
+  pointer-events: auto;
 }
 
-.listen-button:hover:not(:disabled) {
+.listen-button:hover {
   background: var(--button-primary-hover);
   transform: translateY(-1px);
+}
+
+.listen-button:disabled,
+.listen-button.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  pointer-events: none;
+  background: var(--text-secondary);
+  transform: none;
 }
 
 .stop-button {
@@ -1421,12 +1432,6 @@ input[type="checkbox"] {
   background: #c82333;
   border-color: #c82333;
   transform: translateY(-1px);
-}
-
-.listen-button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-  transform: none !important;
 }
 
 .audio-playback-container {

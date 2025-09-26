@@ -470,6 +470,7 @@ dependencies = [
  "autoeq",
  "blas-src",
  "ndarray",
+ "plotly",
  "reqwest 0.12.23",
  "serde",
  "serde_json",
