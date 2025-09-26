@@ -302,23 +302,17 @@ impl AdaptiveState {
         let iter_ratio = iter as f64 / max_iter as f64;
         self.current_w = config.w_max - (config.w_max - config.w_min) * iter_ratio;
 
-        // Update F_m using arithmetic mean of successful F values for stability
-        if !self.successful_f.is_empty() && self.successful_f.len() >= 3 {
-            let mean_f = self.successful_f.iter().sum::<f64>() / self.successful_f.len() as f64;
-            // Use very conservative update rate for stability - only update if we have enough samples
-            let conservative_w_f = config.w_f * 0.1; // Much more conservative
-            self.f_m = (1.0 - conservative_w_f) * self.f_m + conservative_w_f * mean_f;
-            // Clamp to reasonable bounds
+        // Update F_m using Lehmer mean of successful F values
+        if !self.successful_f.is_empty() {
+            let mean_f = self.compute_lehmer_mean(&self.successful_f);
+            self.f_m = (1.0 - config.w_f) * self.f_m + config.w_f * mean_f;
             self.f_m = self.f_m.clamp(0.2, 1.2);
         }
 
-        // Update CR_m using arithmetic mean of successful CR values for stability
-        if !self.successful_cr.is_empty() && self.successful_cr.len() >= 3 {
-            let mean_cr = self.successful_cr.iter().sum::<f64>() / self.successful_cr.len() as f64;
-            // Use very conservative update rate for stability - only update if we have enough samples
-            let conservative_w_cr = config.w_cr * 0.1; // Much more conservative
-            self.cr_m = (1.0 - conservative_w_cr) * self.cr_m + conservative_w_cr * mean_cr;
-            // Clamp to valid bounds
+        // Update CR_m using arithmetic mean of successful CR values
+        if !self.successful_cr.is_empty() {
+            let mean_cr = self.compute_arithmetic_mean(&self.successful_cr);
+            self.cr_m = (1.0 - config.w_cr) * self.cr_m + config.w_cr * mean_cr;
             self.cr_m = self.cr_m.clamp(0.1, 0.9);
         }
 
@@ -327,21 +321,28 @@ impl AdaptiveState {
         self.successful_cr.clear();
     }
 
-    /// Compute power mean as described in equation (10) from the paper
-    #[allow(dead_code)]
-    fn compute_power_mean(&self, values: &[f64]) -> f64 {
+    /// Compute Lehmer mean for successful F values (p=2)
+    fn compute_lehmer_mean(&self, values: &[f64]) -> f64 {
         if values.is_empty() {
             return 0.5; // Default fallback
         }
 
-        let sum_powers: f64 = values.iter().map(|&x| x.powf(1.5)).sum();
-        let sum_inv_powers: f64 = values.iter().map(|&x| x.powf(-1.5)).sum();
+        let sum_sq: f64 = values.iter().map(|&x| x * x).sum();
+        let sum: f64 = values.iter().sum();
 
-        if sum_inv_powers > 0.0 {
-            sum_powers / sum_inv_powers
+        if sum > 0.0 {
+            sum_sq / sum
         } else {
-            values.iter().sum::<f64>() / values.len() as f64 // Fallback to arithmetic mean
+            0.5 // Fallback if sum is zero
         }
+    }
+
+    /// Compute arithmetic mean for successful CR values
+    fn compute_arithmetic_mean(&self, values: &[f64]) -> f64 {
+        if values.is_empty() {
+            return 0.5; // Default fallback
+        }
+        values.iter().sum::<f64>() / values.len() as f64
     }
 
     /// Record successful parameter values
@@ -963,6 +964,23 @@ where
             improvement_count = 0;
 
             let iter_start = Instant::now();
+
+            // Pre-sort indices for adaptive strategies to avoid re-sorting in the loop
+            let sorted_indices = if matches!(
+                self.config.strategy,
+                Strategy::AdaptiveBin | Strategy::AdaptiveExp
+            ) {
+                let mut indices: Vec<usize> = (0..npop).collect();
+                indices.sort_by(|&a, &b| {
+                    energies[a]
+                        .partial_cmp(&energies[b])
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                });
+                indices
+            } else {
+                Vec::new() // Not needed for other strategies
+            };
+
             // Generate all trials first, then evaluate in parallel
             let t_build0 = Instant::now();
 
@@ -1054,7 +1072,7 @@ where
                                     mutant_adaptive(
                                         i,
                                         &pop,
-                                        &energies,
+                                        &sorted_indices,
                                         adaptive.current_w,
                                         f,
                                         &mut local_rng,
@@ -1075,7 +1093,7 @@ where
                                     mutant_adaptive(
                                         i,
                                         &pop,
-                                        &energies,
+                                        &sorted_indices,
                                         adaptive.current_w,
                                         f,
                                         &mut local_rng,

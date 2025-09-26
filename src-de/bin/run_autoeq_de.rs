@@ -6,7 +6,6 @@ use autoeq_de::{
 use autoeq_testfunctions::{get_function_metadata, FunctionMetadata};
 use clap::{Parser, ValueEnum};
 use ndarray::Array1;
-use std::collections::HashMap;
 use std::fmt::Write as FmtWrite;
 use std::process;
 use std::str::FromStr;
@@ -175,9 +174,7 @@ fn main() {
     let function_name = match &args.function {
         Some(name) => name.trim(),
         None => {
-            eprintln!(
-                "Error: --function must be provided unless --list-functions is used."
-            );
+            eprintln!("Error: --function must be provided unless --list-functions is used.");
             process::exit(2);
         }
     };
@@ -309,9 +306,7 @@ fn main() {
 
     println!(
         "Running AutoEQ DE on '{}' ({}D) with {:?} strategy...",
-        resolved_name,
-        dimension,
-        strategy
+        resolved_name, dimension, strategy
     );
 
     let config = builder.build();

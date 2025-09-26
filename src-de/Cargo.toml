@@ -41,6 +41,10 @@ path = "bin/plot_functions.rs"
 name = "benchmark_convergence"
 path = "bin/benchmark_convergence.rs"
 
+[[bin]]
+name = "run_autoeq_de"
+path = "bin/run_autoeq_de.rs"
+
 [lib]
 name = "autoeq_de"
 path = "src/mod.rs"

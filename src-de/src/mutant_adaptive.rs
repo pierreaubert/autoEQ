@@ -1,7 +1,6 @@
 use ndarray::{Array1, Array2};
 use rand::seq::SliceRandom;
 use rand::Rng;
-use std::cmp::Ordering;
 
 use crate::mutant_rand1::mutant_rand1;
 
@@ -10,7 +9,7 @@ use crate::mutant_rand1::mutant_rand1;
 pub(crate) fn mutant_adaptive<R: Rng + ?Sized>(
     i: usize,
     pop: &Array2<f64>,
-    energies: &Array1<f64>,
+    sorted_indices: &[usize],
     w: f64,
     f: f64,
     rng: &mut R,
@@ -19,14 +18,6 @@ pub(crate) fn mutant_adaptive<R: Rng + ?Sized>(
     let w_size = ((w * pop.nrows() as f64) as usize)
         .max(1)
         .min(pop.nrows() - 1);
-
-    // Get sorted indices by fitness (best to worst)
-    let mut sorted_indices: Vec<usize> = (0..pop.nrows()).collect();
-    sorted_indices.sort_by(|&a, &b| {
-        energies[a]
-            .partial_cmp(&energies[b])
-            .unwrap_or(Ordering::Equal)
-    });
 
     // Select gr_better from top w% individuals randomly
     let top_indices = &sorted_indices[0..w_size];
