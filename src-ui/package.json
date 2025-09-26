@@ -1,11 +1,14 @@
 {
   "name": "autoeq-ui",
   "private": true,
-  "version": "0.2.3",
+  "version": "0.2.4",
   "type": "module",
   "scripts": {
+    "predev": "node scripts/build-html.js",
     "dev": "vite",
+    "prebuild": "node scripts/build-html.js",
     "build": "tsc && vite build",
+    "build:html": "node scripts/build-html.js",
     "build:audio-player": "node src/modules/audio/build-audio-player.js",
     "preview": "vite preview",
     "tauri": "tauri",
@@ -29,6 +32,7 @@
     "jsdom": "^25.0.1",
     "typescript": "~5.6.2",
     "vite": "^6.0.3",
+    "vite-plugin-html": "^3.2.2",
     "vitest": "^2.1.8"
   }
 }

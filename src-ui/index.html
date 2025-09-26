@@ -1,992 +1,724 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
     <head>
-        <meta charset="UTF-8" />
-        <link rel="stylesheet" href="/src/styles.css" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>AutoEQ UI</title>
-        <script type="module" src="/src/main.ts" defer></script>
-    </head>
-
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="/src/styles.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AutoEQ - Automatic Speaker Equalization</title>
+    <script type="module" src="/src/main.ts" defer></script>
+</head>
     <body>
         <div class="app">
             <main class="main-content">
                 <div class="left-panel" id="left_panel">
                     <form id="autoeq_form" class="parameter-form">
                         <!-- Data Source -->
-                        <div class="section-group">
-                            <h3>Data Acquisition</h3>
-                            <div class="input-source-tabs">
-                                <label class="tab-label" data-tab="file">
-                                    <input
-                                        type="radio"
-                                        name="input_source"
-                                        value="file"
-                                    />
-                                    Files
-                                </label>
-                                <label class="tab-label active" data-tab="api">
-                                    <input
-                                        type="radio"
-                                        name="input_source"
-                                        value="api"
-                                    />
-                                    Speakers
-                                </label>
-                                <label class="tab-label" data-tab="capture">
-                                    <input
-                                        type="radio"
-                                        name="input_source"
-                                        value="capture"
-                                    />
-                                    Capture
-                                </label>
-                            </div>
+<div class="section-group">
+    <h3>Data Acquisition</h3>
+    <div class="input-source-tabs">
+        <label class="tab-label" data-tab="file">
+            <input type="radio" name="input_source" value="file" />
+            Files
+        </label>
+        <label class="tab-label active" data-tab="api">
+            <input type="radio" name="input_source" value="api" />
+            Speakers
+        </label>
+        <label class="tab-label" data-tab="capture">
+            <input type="radio" name="input_source" value="capture" />
+            Capture
+        </label>
+    </div>
 
-                            <div id="file_inputs" class="tab-content">
-                                <div class="compact-row">
-                                    <input
-                                        type="text"
-                                        id="curve_path"
-                                        name="curve_path"
-                                        placeholder="Input CSV path"
-                                    />
-                                    <button
-                                        type="button"
-                                        id="browse_curve"
-                                        class="browse-btn"
-                                    >
-                                        📁
-                                    </button>
-                                </div>
-                                <div class="compact-row">
-                                    <input
-                                        type="text"
-                                        id="target_path"
-                                        name="target_path"
-                                        placeholder="Target CSV path (optional)"
-                                    />
-                                    <button
-                                        type="button"
-                                        id="browse_target"
-                                        class="browse-btn"
-                                    >
-                                        📁
-                                    </button>
-                                </div>
-                            </div>
+    <div id="file_inputs" class="tab-content">
+        <div class="compact-row">
+            <input type="text" id="curve_path" name="curve_path" placeholder="Input CSV path" />
+            <button type="button" id="browse_curve" class="browse-btn">📁</button>
+        </div>
+        <div class="compact-row">
+            <input type="text" id="target_path" name="target_path" placeholder="Target CSV path (optional)" />
+            <button type="button" id="browse_target" class="browse-btn">📁</button>
+        </div>
+    </div>
 
-                            <div id="api_inputs" class="tab-content active">
-                                <div class="autocomplete-container">
-                                    <input
-                                        type="text"
-                                        id="speaker"
-                                        name="speaker"
-                                        placeholder="Start typing speaker name..."
-                                        autocomplete="off"
-                                    />
-                                    <div
-                                        id="speaker_dropdown"
-                                        class="autocomplete-dropdown"
-                                    ></div>
-                                </div>
-                                <select id="version" name="version" disabled>
-                                    <option value="">Select Version</option>
-                                </select>
-                                <select
-                                    id="measurement"
-                                    name="measurement"
-                                    disabled
-                                >
-                                    <option value="">Select Measurement</option>
-                                </select>
-                            </div>
+    <div id="api_inputs" class="tab-content active">
+        <div class="autocomplete-container">
+            <input type="text" id="speaker" name="speaker" placeholder="Start typing speaker name..." autocomplete="off" />
+            <div id="speaker_dropdown" class="autocomplete-dropdown"></div>
+        </div>
+        <select id="version" name="version" disabled>
+            <option value="">Select Version</option>
+        </select>
+        <select id="measurement" name="measurement" disabled>
+            <option value="">Select Measurement</option>
+        </select>
+    </div>
 
-                            <div id="capture_inputs" class="tab-content">
-                                <div class="capture-controls">
-                                    <button
-                                        type="button"
-                                        id="capture_btn"
-                                        class="capture-button"
-                                    >
-                                        🎤 Start Capture
-                                    </button>
-                                    <div
-                                        id="capture_status"
-                                        class="capture-status"
-                                        style="display: none"
-                                    >
-                                        <div class="capture-progress">
-                                            <span id="capture_status_text"
-                                                >Ready</span
-                                            >
-                                            <div
-                                                class="capture-progress-bar"
-                                                style="display: none"
-                                            >
-                                                <div
-                                                    class="capture-progress-fill"
-                                                    id="capture_progress_fill"
-                                                ></div>
-                                            </div>
-                                        </div>
-                                        <canvas
-                                            id="capture_waveform"
-                                            class="capture-waveform"
-                                            style="display: none"
-                                        ></canvas>
-                                    </div>
-                                    <div
-                                        id="capture_result"
-                                        class="capture-result"
-                                        style="display: none"
-                                    >
-                                        <div class="capture-result-info">
-                                            <span
-                                                >✅ Captured response
-                                                ready</span
-                                            >
-                                            <button
-                                                type="button"
-                                                id="capture_clear"
-                                                class="capture-clear-btn"
-                                            >
-                                                Clear
-                                            </button>
-                                        </div>
-                                        <div
-                                            id="capture_plot"
-                                            class="capture-plot"
-                                        ></div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+    <div id="capture_inputs" class="tab-content">
+        <div class="capture-controls">
+            <button type="button" id="capture_btn" class="capture-button">🎤 Start Capture</button>
+            <div id="capture_status" class="capture-status" style="display: none">
+                <div class="capture-progress">
+                    <span id="capture_status_text">Ready</span>
+                    <div class="capture-progress-bar" style="display: none">
+                        <div class="capture-progress-fill" id="capture_progress_fill"></div>
+                    </div>
+                </div>
+                <canvas id="capture_waveform" class="capture-waveform" style="display: none"></canvas>
+            </div>
+            <div id="capture_result" class="capture-result" style="display: none">
+                <div class="capture-result-info">
+                    <span>✅ Captured response ready</span>
+                    <button type="button" id="capture_clear" class="capture-clear-btn">Clear</button>
+                </div>
+                <div id="capture_plot" class="capture-plot"></div>
+            </div>
+        </div>
+    </div>
+</div>
 
                         <!-- EQ Design -->
-                        <div class="section-group">
-                            <h3>EQ Design</h3>
-                            <div class="param-grid">
-                                <!-- Loss Function -->
-                                <div class="param-item">
-                                    <label>Loss</label>
-                                    <select id="loss" name="loss">
-                                        <option value="speaker-flat">
-                                            Speaker Flat
-                                        </option>
-                                        <option value="speaker-score">
-                                            Speaker Score
-                                        </option>
-                                        <option value="headphone-flat">
-                                            Headphone Target
-                                        </option>
-                                        <option value="headphone-score">
-                                            Headphone Score
-                                        </option>
-                                    </select>
-                                </div>
-                                <div class="param-item">
-                                    <label>Filters</label>
-                                    <input
-                                        type="number"
-                                        id="num_filters"
-                                        name="num_filters"
-                                    />
-                                </div>
+<div class="section-group">
+    <h3>EQ Design</h3>
+    <div class="param-grid">
+        <!-- Loss Function -->
+        <div class="param-item">
+            <label>Loss</label>
+            <select id="loss" name="loss">
+                <option value="speaker-flat">Speaker Flat</option>
+                <option value="speaker-score">Speaker Score</option>
+                <option value="headphone-flat">Headphone Target</option>
+                <option value="headphone-score">Headphone Score</option>
+            </select>
+        </div>
+        <div class="param-item">
+            <label>Filters</label>
+            <input type="number" id="num_filters" name="num_filters" />
+        </div>
 
-                                <!-- Basic Settings -->
-                                <div class="param-item">
-                                    <label>Sample Rate</label>
-                                    <input
-                                        type="number"
-                                        id="sample_rate"
-                                        name="sample_rate"
-                                    />
-                                </div>
-                                <div class="param-item">
-                                    <label>Curve</label>
-                                    <select id="curve_name" name="curve_name">
-                                        <option value="Listening Window">
-                                            Listening Window
-                                        </option>
-                                        <option value="On Axis">On Axis</option>
-                                        <option value="Early Reflections">
-                                            Early Reflections
-                                        </option>
-                                        <option value="Sound Power">
-                                            Sound Power
-                                        </option>
-                                        <option
-                                            value="Estimated In-Room Response"
-                                        >
-                                            Estimated In-Room Response
-                                        </option>
-                                    </select>
-                                </div>
+        <!-- Basic Settings -->
+        <div class="param-item">
+            <label>Sample Rate</label>
+            <input type="number" id="sample_rate" name="sample_rate" />
+        </div>
+        <div class="param-item">
+            <label>Curve</label>
+            <select id="curve_name" name="curve_name">
+                <option value="Listening Window">Listening Window</option>
+                <option value="On Axis">On Axis</option>
+                <option value="Early Reflections">Early Reflections</option>
+                <option value="Sound Power">Sound Power</option>
+                <option value="Estimated In-Room Response">Estimated In-Room Response</option>
+            </select>
+        </div>
 
-                                <!-- dB Range -->
-                                <div class="param-item">
-                                    <label>Min dB</label>
-                                    <input
-                                        type="number"
-                                        id="min_db"
-                                        name="min_db"
-                                    />
-                                </div>
-                                <div class="param-item">
-                                    <label>Max dB</label>
-                                    <input
-                                        type="number"
-                                        id="max_db"
-                                        name="max_db"
-                                    />
-                                </div>
+        <!-- dB Range -->
+        <div class="param-item">
+            <label>Min dB</label>
+            <input type="number" id="min_db" name="min_db" />
+        </div>
+        <div class="param-item">
+            <label>Max dB</label>
+            <input type="number" id="max_db" name="max_db" />
+        </div>
 
-                                <!-- Q Range -->
-                                <div class="param-item">
-                                    <label>Min Q</label>
-                                    <input
-                                        type="number"
-                                        id="min_q"
-                                        name="min_q"
-                                    />
-                                </div>
-                                <div class="param-item">
-                                    <label>Max Q</label>
-                                    <input
-                                        type="number"
-                                        id="max_q"
-                                        name="max_q"
-                                    />
-                                </div>
+        <!-- Q Range -->
+        <div class="param-item">
+            <label>Min Q</label>
+            <input type="number" id="min_q" name="min_q" />
+        </div>
+        <div class="param-item">
+            <label>Max Q</label>
+            <input type="number" id="max_q" name="max_q" />
+        </div>
 
-                                <!-- Frequency Range -->
-                                <div class="param-item">
-                                    <label>Min Freq</label>
-                                    <input
-                                        type="number"
-                                        id="min_freq"
-                                        name="min_freq"
-                                    />
-                                </div>
-                                <div class="param-item">
-                                    <label>Max Freq</label>
-                                    <input
-                                        type="number"
-                                        id="max_freq"
-                                        name="max_freq"
-                                    />
-                                </div>
-                            </div>
+        <!-- Frequency Range -->
+        <div class="param-item">
+            <label>Min Freq</label>
+            <input type="number" id="min_freq" name="min_freq" />
+        </div>
+        <div class="param-item">
+            <label>Max Freq</label>
+            <input type="number" id="max_freq" name="max_freq" />
+        </div>
+    </div>
 
-                            <div class="checkbox-group">
-                                <label
-                                    ><input
-                                        type="checkbox"
-                                        id="iir_hp_pk"
-                                        name="iir_hp_pk"
-                                    />
-                                    Use HP+PK Filters</label
-                                >
-                            </div>
-                        </div>
+    <div class="checkbox-group">
+        <label><input type="checkbox" id="iir_hp_pk" name="iir_hp_pk" /> Use HP+PK Filters</label>
+    </div>
+</div>
 
                         <!-- Optimization Fine Tuning -->
-                        <div class="section-group">
-                            <h3>Optimization Fine Tuning</h3>
-                            <div class="param-grid">
-                                <!-- Algorithm -->
-                                <div class="param-item">
-                                    <label>Algorithm</label>
-                                    <select id="algo" name="algo">
-                                        <optgroup label="AutoEQ Algorithms">
-                                            <option value="autoeq:de">
-                                                Auto DE (Recommended)
-                                            </option>
-                                        </optgroup>
-                                        <optgroup
-                                            label="NLOPT Global Optimizers"
-                                        >
-                                            <option value="nlopt:isres">
-                                                NLOPT ISRES
-                                            </option>
-                                            <option value="nlopt:ags">
-                                                NLOPT AGS
-                                            </option>
-                                            <option value="nlopt:origdirect">
-                                                NLOPT Original DIRECT
-                                            </option>
-                                            <option value="nlopt:crs2lm">
-                                                NLOPT CRS2 LM
-                                            </option>
-                                            <option value="nlopt:direct">
-                                                NLOPT DIRECT
-                                            </option>
-                                            <option value="nlopt:directl">
-                                                NLOPT DIRECT-L
-                                            </option>
-                                            <option value="nlopt:gmlsl">
-                                                NLOPT GMLSL
-                                            </option>
-                                            <option value="nlopt:gmlsllds">
-                                                NLOPT GMLSL LDS
-                                            </option>
-                                            <option value="nlopt:stogo">
-                                                NLOPT StoGO
-                                            </option>
-                                            <option value="nlopt:stogorand">
-                                                NLOPT StoGO Rand
-                                            </option>
-                                        </optgroup>
-                                        <optgroup
-                                            label="NLOPT Local Optimizers"
-                                        >
-                                            <option value="nlopt:cobyla">
-                                                NLOPT COBYLA
-                                            </option>
-                                            <option value="nlopt:bobyqa">
-                                                NLOPT BOBYQA
-                                            </option>
-                                            <option value="nlopt:neldermead">
-                                                NLOPT Nelder-Mead
-                                            </option>
-                                            <option value="nlopt:sbplx">
-                                                NLOPT Subplex
-                                            </option>
-                                            <option value="nlopt:slsqp">
-                                                NLOPT SLSQP
-                                            </option>
-                                        </optgroup>
-                                        <optgroup label="Metaheuristics">
-                                            <option value="mh:de">
-                                                MH Differential Evolution
-                                            </option>
-                                            <option value="mh:pso">
-                                                MH Particle Swarm
-                                            </option>
-                                            <option value="mh:rga">
-                                                MH Genetic Algorithm
-                                            </option>
-                                            <option value="mh:tlbo">
-                                                MH TLBO
-                                            </option>
-                                            <option value="mh:firefly">
-                                                MH Firefly
-                                            </option>
-                                        </optgroup>
-                                    </select>
-                                </div>
+<div class="section-group">
+    <h3>Optimization Fine Tuning</h3>
+    <div class="param-grid">
+        <!-- Algorithm -->
+        <div class="param-item">
+            <label>Algorithm</label>
+            <select id="algo" name="algo">
+                <optgroup label="AutoEQ Algorithms">
+                    <option value="autoeq:de">
+                        Auto DE (Recommended)
+                    </option>
+                </optgroup>
+                <optgroup label="NLOPT Global Optimizers">
+                    <option value="nlopt:isres">
+                        NLOPT ISRES
+                    </option>
+                    <option value="nlopt:ags">
+                        NLOPT AGS
+                    </option>
+                    <option value="nlopt:origdirect">
+                        NLOPT Original DIRECT
+                    </option>
+                    <option value="nlopt:crs2lm">
+                        NLOPT CRS2 LM
+                    </option>
+                    <option value="nlopt:direct">
+                        NLOPT DIRECT
+                    </option>
+                    <option value="nlopt:directl">
+                        NLOPT DIRECT-L
+                    </option>
+                    <option value="nlopt:gmlsl">
+                        NLOPT GMLSL
+                    </option>
+                    <option value="nlopt:gmlsllds">
+                        NLOPT GMLSL LDS
+                    </option>
+                    <option value="nlopt:stogo">
+                        NLOPT StoGO
+                    </option>
+                    <option value="nlopt:stogorand">
+                        NLOPT StoGO Rand
+                    </option>
+                </optgroup>
+                <optgroup label="NLOPT Local Optimizers">
+                    <option value="nlopt:cobyla">
+                        NLOPT COBYLA
+                    </option>
+                    <option value="nlopt:bobyqa">
+                        NLOPT BOBYQA
+                    </option>
+                    <option value="nlopt:neldermead">
+                        NLOPT Nelder-Mead
+                    </option>
+                    <option value="nlopt:sbplx">
+                        NLOPT Subplex
+                    </option>
+                    <option value="nlopt:slsqp">
+                        NLOPT SLSQP
+                    </option>
+                </optgroup>
+                <optgroup label="Metaheuristics">
+                    <option value="mh:de">
+                        MH Differential Evolution
+                    </option>
+                    <option value="mh:pso">
+                        MH Particle Swarm
+                    </option>
+                    <option value="mh:rga">
+                        MH Genetic Algorithm
+                    </option>
+                    <option value="mh:tlbo">
+                        MH TLBO
+                    </option>
+                    <option value="mh:firefly">
+                        MH Firefly
+                    </option>
+                </optgroup>
+            </select>
+        </div>
 
-                                <!-- DE Strategy Parameters (conditional) -->
-                                <div
-                                    class="param-item de-param"
-                                    id="strategy_param"
-                                    style="display: none"
-                                >
-                                    <label>Strategy</label>
-                                    <select id="strategy" name="strategy">
-                                        <option value="currenttobest1bin">
-                                            Current-to-Best/1/Bin (Recommended)
-                                        </option>
-                                        <option value="rand1bin">
-                                            Rand/1/Bin
-                                        </option>
-                                        <option value="best1bin">
-                                            Best/1/Bin
-                                        </option>
-                                        <option value="rand2bin">
-                                            Rand/2/Bin
-                                        </option>
-                                        <option value="best2bin">
-                                            Best/2/Bin
-                                        </option>
-                                        <option value="randtobest1bin">
-                                            Rand-to-Best/1/Bin
-                                        </option>
-                                        <option value="rand1exp">
-                                            Rand/1/Exp
-                                        </option>
-                                        <option value="best1exp">
-                                            Best/1/Exp
-                                        </option>
-                                        <option value="rand2exp">
-                                            Rand/2/Exp
-                                        </option>
-                                        <option value="best2exp">
-                                            Best/2/Exp
-                                        </option>
-                                        <option value="currenttobest1exp">
-                                            Current-to-Best/1/Exp
-                                        </option>
-                                        <option value="randtobest1exp">
-                                            Rand-to-Best/1/Exp
-                                        </option>
-                                        <option value="adaptivebin">
-                                            Adaptive/Bin (Experimental)
-                                        </option>
-                                        <option value="adaptiveexp">
-                                            Adaptive/Exp (Experimental)
-                                        </option>
-                                    </select>
-                                </div>
+        <!-- DE Strategy Parameters (conditional) -->
+        <div
+            class="param-item de-param"
+            id="strategy_param"
+            style="display: none"
+        >
+            <label>Strategy</label>
+            <select id="strategy" name="strategy">
+                <option value="currenttobest1bin">
+                    Current-to-Best/1/Bin (Recommended)
+                </option>
+                <option value="rand1bin">
+                    Rand/1/Bin
+                </option>
+                <option value="best1bin">
+                    Best/1/Bin
+                </option>
+                <option value="rand2bin">
+                    Rand/2/Bin
+                </option>
+                <option value="best2bin">
+                    Best/2/Bin
+                </option>
+                <option value="randtobest1bin">
+                    Rand-to-Best/1/Bin
+                </option>
+                <option value="rand1exp">
+                    Rand/1/Exp
+                </option>
+                <option value="best1exp">
+                    Best/1/Exp
+                </option>
+                <option value="rand2exp">
+                    Rand/2/Exp
+                </option>
+                <option value="best2exp">
+                    Best/2/Exp
+                </option>
+                <option value="currenttobest1exp">
+                    Current-to-Best/1/Exp
+                </option>
+                <option value="randtobest1exp">
+                    Rand-to-Best/1/Exp
+                </option>
+                <option value="adaptivebin">
+                    Adaptive/Bin (Experimental)
+                </option>
+                <option value="adaptiveexp">
+                    Adaptive/Exp (Experimental)
+                </option>
+            </select>
+        </div>
 
-                                <!-- Global Algorithm Parameters -->
-                                <div class="param-item global_algo_param">
-                                    <label>Population</label>
-                                    <input
-                                        type="number"
-                                        id="population"
-                                        name="population"
-                                    />
-                                    <div
-                                        class="param-warning"
-                                        id="population_warning_yellow"
-                                        style="
-                                            display: none;
-                                            color: #ffc107;
-                                            font-size: 0.8em;
-                                            margin-top: 2px;
-                                        "
-                                    >
-                                        ⚠️ Values above 3000 may be slow
-                                    </div>
-                                    <div
-                                        class="param-warning"
-                                        id="population_warning_red"
-                                        style="
-                                            display: none;
-                                            color: #dc3545;
-                                            font-size: 0.8em;
-                                            margin-top: 2px;
-                                        "
-                                    >
-                                        🚨 Values above 30000 will be very slow
-                                        and may cause issues
-                                    </div>
-                                </div>
-                                <div class="param-item global_algo_param">
-                                    <label>Max Eval</label>
-                                    <input
-                                        type="number"
-                                        id="maxeval"
-                                        name="maxeval"
-                                    />
-                                </div>
+        <!-- Global Algorithm Parameters -->
+        <div class="param-item global_algo_param">
+            <label>Population</label>
+            <input
+                type="number"
+                id="population"
+                name="population"
+            />
+            <div
+                class="param-warning"
+                id="population_warning_yellow"
+                style="
+                    display: none;
+                    color: #ffc107;
+                    font-size: 0.8em;
+                    margin-top: 2px;
+                "
+            >
+                ⚠️ Values above 3000 may be slow
+            </div>
+            <div
+                class="param-warning"
+                id="population_warning_red"
+                style="
+                    display: none;
+                    color: #dc3545;
+                    font-size: 0.8em;
+                    margin-top: 2px;
+                "
+            >
+                🚨 Values above 30000 will be very slow
+                and may cause issues
+            </div>
+        </div>
+        <div class="param-item global_algo_param">
+            <label>Max Eval</label>
+            <input
+                type="number"
+                id="maxeval"
+                name="maxeval"
+            />
+        </div>
 
-                                <!-- DE Parameters for mutation and recombination -->
-                                <div
-                                    class="param-item de-param"
-                                    id="mutation_param"
-                                >
-                                    <label>F/Mutation</label>
-                                    <input
-                                        type="number"
-                                        id="de_f"
-                                        name="de_f"
-                                    />
-                                </div>
-                                <div
-                                    class="param-item de-param"
-                                    id="recombination_param"
-                                >
-                                    <label>CR/Recombination</label>
-                                    <input
-                                        type="number"
-                                        id="de_cr"
-                                        name="de_cr"
-                                    />
-                                </div>
+        <!-- DE Parameters for mutation and recombination -->
+        <div
+            class="param-item de-param"
+            id="mutation_param"
+        >
+            <label>F/Mutation</label>
+            <input
+                type="number"
+                id="de_f"
+                name="de_f"
+            />
+        </div>
+        <div
+            class="param-item de-param"
+            id="recombination_param"
+        >
+            <label>CR/Recombination</label>
+            <input
+                type="number"
+                id="de_cr"
+                name="de_cr"
+            />
+        </div>
 
-                                <!-- Spacing Parameters -->
-                                <div class="param-item">
-                                    <label>Min Spacing</label>
-                                    <input
-                                        type="number"
-                                        id="min_spacing_oct"
-                                        name="min_spacing_oct"
-                                    />
-                                </div>
-                                <div class="param-item">
-                                    <label>Spacing Weight</label>
-                                    <input
-                                        type="number"
-                                        id="spacing_weight"
-                                        name="spacing_weight"
-                                    />
-                                </div>
+        <!-- Spacing Parameters -->
+        <div class="param-item">
+            <label>Min Spacing</label>
+            <input
+                type="number"
+                id="min_spacing_oct"
+                name="min_spacing_oct"
+            />
+        </div>
+        <div class="param-item">
+            <label>Spacing Weight</label>
+            <input
+                type="number"
+                id="spacing_weight"
+                name="spacing_weight"
+            />
+        </div>
 
-                                <!-- Tolerance Parameters -->
-                                <div class="param-item">
-                                    <label>Tolerance</label>
-                                    <input
-                                        type="number"
-                                        id="tolerance"
-                                        name="tolerance"
-                                    />
-                                </div>
-                                <div class="param-item">
-                                    <label>Abs Tolerance</label>
-                                    <input
-                                        type="number"
-                                        id="abs_tolerance"
-                                        name="abs_tolerance"
-                                    />
-                                </div>
+        <!-- Tolerance Parameters -->
+        <div class="param-item">
+            <label>Tolerance</label>
+            <input
+                type="number"
+                id="tolerance"
+                name="tolerance"
+            />
+        </div>
+        <div class="param-item">
+            <label>Abs Tolerance</label>
+            <input
+                type="number"
+                id="abs_tolerance"
+                name="abs_tolerance"
+            />
+        </div>
 
-                                <!-- Adaptive Weight F (conditional) -->
-                                <div
-                                    class="param-item adaptive-param"
-                                    id="adaptive_weight_f_param"
-                                    style="display: none"
-                                >
-                                    <label>Adaptive F</label>
-                                    <input
-                                        type="number"
-                                        id="adaptive_weight_f"
-                                        name="adaptive_weight_f"
-                                    />
-                                </div>
+        <!-- Adaptive Weight F (conditional) -->
+        <div
+            class="param-item adaptive-param"
+            id="adaptive_weight_f_param"
+            style="display: none"
+        >
+            <label>Adaptive F</label>
+            <input
+                type="number"
+                id="adaptive_weight_f"
+                name="adaptive_weight_f"
+            />
+        </div>
 
-                                <!-- Adaptive Weight CR (conditional) -->
-                                <div
-                                    class="param-item adaptive-param"
-                                    id="adaptive_weight_cr_param"
-                                    style="display: none"
-                                >
-                                    <label>Adaptive CR</label>
-                                    <input
-                                        type="number"
-                                        id="adaptive_weight_cr"
-                                        name="adaptive_weight_cr"
-                                    />
-                                </div>
-                            </div>
+        <!-- Adaptive Weight CR (conditional) -->
+        <div
+            class="param-item adaptive-param"
+            id="adaptive_weight_cr_param"
+            style="display: none"
+        >
+            <label>Adaptive CR</label>
+            <input
+                type="number"
+                id="adaptive_weight_cr"
+                name="adaptive_weight_cr"
+            />
+        </div>
+    </div>
 
-                            <div class="param-group-section">
-                                <div class="param-group-header">Refinement</div>
-                                <div class="inline-params">
-                                    <div class="inline-item checkbox-item">
-                                        <label class="checkbox-label"
-                                            ><input
-                                                type="checkbox"
-                                                id="refine"
-                                                name="refine"
-                                            />Enable</label
-                                        >
-                                    </div>
-                                    <div class="inline-item flex-grow">
-                                        <label>Local Optimiser</label>
-                                        <select
-                                            id="local_algo"
-                                            name="local_algo"
-                                            disabled
-                                        >
-                                            <option value="cobyla">
-                                                COBYLA
-                                            </option>
-                                            <option value="bobyqa">
-                                                BOBYQA
-                                            </option>
-                                            <option value="newuoa">
-                                                NEWUOA
-                                            </option>
-                                        </select>
-                                    </div>
-                                </div>
-                            </div>
+    <div class="param-group-section">
+        <div class="param-group-header">Refinement</div>
+        <div class="inline-params">
+            <div class="inline-item checkbox-item">
+                <label class="checkbox-label"
+                    ><input
+                        type="checkbox"
+                        id="refine"
+                        name="refine"
+                    />Enable</label
+                >
+            </div>
+            <div class="inline-item flex-grow">
+                <label>Local Optimiser</label>
+                <select
+                    id="local_algo"
+                    name="local_algo"
+                    disabled
+                >
+                    <option value="cobyla">
+                        COBYLA
+                    </option>
+                    <option value="bobyqa">
+                        BOBYQA
+                    </option>
+                    <option value="newuoa">
+                        NEWUOA
+                    </option>
+                </select>
+            </div>
+        </div>
+    </div>
 
-                            <div class="param-group-section">
-                                <div class="param-group-header">Smoothing</div>
-                                <div class="inline-params">
-                                    <div class="inline-item checkbox-item">
-                                        <label class="checkbox-label"
-                                            ><input
-                                                type="checkbox"
-                                                id="smooth"
-                                                name="smooth"
-                                            />Enable</label
-                                        >
-                                    </div>
-                                    <div class="inline-item">
-                                        <label>Smooth N</label>
-                                        <input
-                                            type="number"
-                                            id="smooth_n"
-                                            name="smooth_n"
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+    <div class="param-group-section">
+        <div class="param-group-header">Smoothing</div>
+        <div class="inline-params">
+            <div class="inline-item checkbox-item">
+                <label class="checkbox-label"
+                    ><input
+                        type="checkbox"
+                        id="smooth"
+                        name="smooth"
+                    />Enable</label
+                >
+            </div>
+            <div class="inline-item">
+                <label>Smooth N</label>
+                <input
+                    type="number"
+                    id="smooth_n"
+                    name="smooth_n"
+                />
+            </div>
+        </div>
+    </div>
+</div>
                     </form>
 
                     <div class="form-actions-sticky">
-                        <button
-                            type="submit"
-                            form="autoeq_form"
-                            id="optimize_btn"
-                            class="optimize-button"
-                        >
-                            Run Optimization
-                        </button>
-                        <button
-                            type="button"
-                            id="reset_btn"
-                            class="reset-button"
-                        >
-                            Reset
-                        </button>
-                    </div>
+    <button
+        type="submit"
+        form="autoeq_form"
+        id="optimize_btn"
+        class="optimize-button"
+    >
+        Run Optimization
+    </button>
+    <button
+        type="button"
+        id="reset_btn"
+        class="reset-button"
+    >
+        Reset
+    </button>
+</div>
                 </div>
 
                 <div class="resizer" id="resizer"></div>
 
-                <div class="right-panel" id="right_panel">
-                    <div
-                        id="optimization_progress"
-                        class="progress-container"
-                        style="display: none"
-                    >
-                        <div class="progress-bar">
-                            <div class="progress-fill"></div>
-                        </div>
-                        <div class="progress-text">Running optimization...</div>
-                    </div>
+                <div id="optimization_progress" class="progress-container" style="display: none">
+    <div class="progress-bar">
+        <div class="progress-fill"></div>
+    </div>
+    <div class="progress-text">Running optimization...</div>
+</div>
 
-                    <div
-                        id="scores_display"
-                        class="scores-display"
-                        style="display: none"
-                    >
-                        <h4>Preference Scores</h4>
-                        <div class="score-grid">
-                            <div class="score-item">
-                                <span class="score-label">Before:</span>
-                                <span id="score_before" class="score-value"
-                                    >--</span
-                                >
-                            </div>
-                            <div class="score-item">
-                                <span class="score-label">After:</span>
-                                <span id="score_after" class="score-value"
-                                    >--</span
-                                >
-                            </div>
-                            <div class="score-item improvement">
-                                <span class="score-label">Improvement:</span>
-                                <span id="score_improvement" class="score-value"
-                                    >--</span
-                                >
-                            </div>
-                        </div>
-                    </div>
+<div
+    id="scores_display"
+    class="scores-display"
+    style="display: none"
+>
+    <h4>Preference Scores</h4>
+    <div class="score-grid">
+        <div class="score-item">
+            <span class="score-label">Before:</span>
+            <span id="score_before" class="score-value"
+                >--</span
+            >
+        </div>
+        <div class="score-item">
+            <span class="score-label">After:</span>
+            <span id="score_after" class="score-value"
+                >--</span
+            >
+        </div>
+        <div class="score-item improvement">
+            <span class="score-label">Improvement:</span>
+            <span id="score_improvement" class="score-value"
+                >--</span
+            >
+        </div>
+    </div>
+</div>
 
-                    <div class="plots-accordion">
-                        <div class="plot-section collapsed">
-                            <div class="plot-header" data-plot="filter">
-                                <h4>Filter Response</h4>
-                                <span class="accordion-arrow">▶</span>
-                            </div>
-                            <div id="filter_plot" class="plot-container">
-                                No data to display
-                            </div>
-                        </div>
+<div class="plots-grid">
+    <!-- Filter Response Graph - Always visible -->
+    <div class="plot-grid-item">
+        <div class="plot-grid-header">
+            <h4>Filter Response</h4>
+        </div>
+        <div id="filter_plot" class="plot-grid-container">
+            <div class="plot-placeholder">No data to display</div>
+        </div>
+    </div>
 
-                        <div class="plot-section collapsed">
-                            <div class="plot-header" data-plot="details">
-                                <h4>Details</h4>
-                                <span class="accordion-arrow">▶</span>
-                            </div>
-                            <div id="details_plot" class="plot-container">
-                                No data to display
-                            </div>
-                        </div>
+    <!-- Details Graph - Visible when CEA2034 data available -->
+    <div class="plot-grid-item" id="details_grid_item" style="display: none;">
+        <div class="plot-grid-header">
+            <h4>Details</h4>
+        </div>
+        <div id="details_plot" class="plot-grid-container">
+            <div class="plot-placeholder">No data to display</div>
+        </div>
+    </div>
 
-                        <div class="plot-section collapsed">
-                            <div class="plot-header" data-plot="spin">
-                                <h4>Spinorama</h4>
-                                <span class="accordion-arrow">▶</span>
-                            </div>
-                            <div id="spin_plot" class="plot-container">
-                                No data to display
-                            </div>
-                            <div
-                                id="spin_plot_corrected"
-                                class="plot-container"
-                                style="margin-top: 20px"
-                            >
-                                No data to display
-                            </div>
-                        </div>
+    <!-- Spinorama Graph - Visible when CEA2034 data available -->
+    <div class="plot-grid-item" id="spin_grid_item" style="display: none;">
+        <div class="plot-grid-header">
+            <h4>Spinorama</h4>
+        </div>
+        <div id="spin_plot" class="plot-grid-container">
+            <div class="plot-placeholder">No data to display</div>
+        </div>
+    </div>
 
-                        <div class="plot-section collapsed">
-                            <div class="plot-header" data-plot="spin">
-                                <h4>Tonal Balance</h4>
-                                <span class="accordion-arrow">▶</span>
-                            </div>
-                            <div id="tonal_plot" class="plot-container">
-                                No data to display
-                            </div>
-                            <div
-                                id="spin_plot_corrected"
-                                class="plot-container"
-                                style="margin-top: 20px"
-                            >
-                                No data to display
-                            </div>
-                        </div>
+    <!-- Tonal Balance Graph - Visible when CEA2034 data available -->
+    <div class="plot-grid-item" id="tonal_grid_item" style="display: none;">
+        <div class="plot-grid-header">
+            <h4>Tonal Balance</h4>
+        </div>
+        <div id="tonal_plot" class="plot-grid-container">
+            <div class="plot-placeholder">No data to display</div>
+        </div>
+    </div>
+</div>
 
-                        <div class="plot-section expanded">
-                            <div class="plot-header" data-plot="filter-details">
-                                <h4>
-                                    Filter Details
-                                    <span
-                                        class="help-tooltip"
-                                        title="Frequency values are in Hz, Q factors control filter bandwidth (higher Q = narrower filter), and gain values show boost (+) or cut (-) in dB. These parameters can be imported into your audio software or hardware EQ that supports parametric EQ with peak filters."
-                                        >❓</span
-                                    >
-                                </h4>
-                                <span class="accordion-arrow">▼</span>
-                            </div>
-                            <div
-                                id="filter_details_plot"
-                                class="plot-container"
-                            >
-                                <div id="filter_details_table">
-                                    No data to display
-                                </div>
-                                <div
-                                    id="filter_details_graph"
-                                    style="margin-top: 20px; min-height: 400px"
-                                ></div>
-                            </div>
-                        </div>
-                    </div>
+<div
+    id="error_display"
+    class="error-display"
+    style="display: none"
+>
+    <h4>Error</h4>
+    <div id="error_message" class="error-message"></div>
+</div>
 
-                    <div
-                        id="error_display"
-                        class="error-display"
-                        style="display: none"
-                    >
-                        <h4>Error</h4>
-                        <div id="error_message" class="error-message"></div>
-                    </div>
-                </div>
-
-                <!-- Audio Testing Controls - moved outside right panel -->
-                <div class="audio-testing-controls">
-                    <div class="audio-control-row">
-                        <div class="audio-left-controls">
-                            <label for="demo-audio-select">Demo Track</label>
-                            <select id="demo_audio_select" name="demo_audio">
-                                <option value="">Select track...</option>
-                                <option value="classical">Classical</option>
-                                <option value="country">Country</option>
-                                <option value="edm">EDM</option>
-                                <option value="female_vocal">
-                                    Female Vocal
-                                </option>
-                                <option value="jazz">Jazz</option>
-                                <option value="piano">Piano</option>
-                                <option value="rock">Rock</option>
-                            </select>
-                        </div>
-
-                        <div class="audio-center-controls">
-                            <div class="audio-playback-container">
-                                <div
-                                    class="audio-status"
-                                    id="audio_status"
-                                    style="display: none"
-                                >
-                                    <div class="audio-info-compact">
-                                        <span id="audio_status_text"
-                                            >Ready</span
-                                        >
-                                        •
-                                        <span id="audio_position">--:--</span> •
-                                        <span id="audio_duration">--:--</span>
-                                    </div>
-                                    <div class="audio-progress">
-                                        <div class="audio-progress-bar">
-                                            <div
-                                                class="audio-progress-fill"
-                                                id="audio_progress_fill"
-                                                style="width: 0%"
-                                            ></div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- Frequency Spectrum Analyzer -->
-                                <div
-                                    class="frequency-analyzer"
-                                    id="frequency_analyzer"
-                                    style="display: none"
-                                >
-                                    <canvas id="spectrum_canvas"></canvas>
-                                    <div class="frequency-labels">
-                                        <span
-                                            class="freq-label"
-                                            data-range="sub-bass"
-                                            >Sub Bass<br /><small
-                                                >&lt;60Hz</small
-                                            ></span
-                                        >
-                                        <span
-                                            class="freq-label"
-                                            data-range="bass"
-                                            >Bass<br /><small
-                                                >60-250Hz</small
-                                            ></span
-                                        >
-                                        <span
-                                            class="freq-label"
-                                            data-range="low-mid"
-                                            >Low Mid<br /><small
-                                                >250-500Hz</small
-                                            ></span
-                                        >
-                                        <span
-                                            class="freq-label"
-                                            data-range="mid"
-                                            >Mid<br /><small
-                                                >500-2kHz</small
-                                            ></span
-                                        >
-                                        <span
-                                            class="freq-label"
-                                            data-range="high-mid"
-                                            >High Mid<br /><small
-                                                >2-4kHz</small
-                                            ></span
-                                        >
-                                        <span
-                                            class="freq-label"
-                                            data-range="presence"
-                                            >Presence<br /><small
-                                                >4-6kHz</small
-                                            ></span
-                                        >
-                                        <span
-                                            class="freq-label"
-                                            data-range="brilliance"
-                                            >Brilliance<br /><small
-                                                >6-20kHz</small
-                                            ></span
-                                        >
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="audio-right-controls">
-                            <div class="eq-toggle-buttons">
-                                <button
-                                    type="button"
-                                    id="eq_on_btn"
-                                    class="eq-toggle-btn active"
-                                >
-                                    On
-                                </button>
-                                <button
-                                    type="button"
-                                    id="eq_off_btn"
-                                    class="eq-toggle-btn"
-                                >
-                                    Off
-                                </button>
-                            </div>
-                            <button
-                                type="button"
-                                id="listen_btn"
-                                class="listen-button"
-                                disabled
-                            >
-                                🎵 Listen
-                            </button>
-                            <button
-                                type="button"
-                                id="stop_btn"
-                                class="stop-button"
-                                disabled
-                            >
-                                ⏹️ Stop
-                            </button>
-                        </div>
-                    </div>
-                </div>
             </main>
+
+            <!-- Audio Testing Controls - fixed at bottom -->
+<div class="audio-testing-controls audio-bar-fixed">
+    <div class="audio-control-row">
+        <div class="audio-left-controls">
+            <div class="demo-track-container">
+                <label class="demo-track-label" for="demo_audio_select">Demo Track</label>
+                <select id="demo_audio_select" name="demo_audio" class="demo-audio-select">
+                    <option value="">Select track...</option>
+                    <option value="classical">Classical</option>
+                    <option value="country">Country</option>
+                    <option value="edm">EDM</option>
+                    <option value="female_vocal">Female Vocal</option>
+                    <option value="jazz">Jazz</option>
+                    <option value="piano">Piano</option>
+                    <option value="rock">Rock</option>
+                </select>
+            </div>
         </div>
 
-        <!-- Optimization Progress Modal -->
-        <div id="optimization_modal" class="modal" style="display: none">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h3>Optimization Progress</h3>
-                    <button id="modal_close" class="modal-close-btn">
-                        &times;
-                    </button>
-                </div>
-                <div class="modal-body">
-                    <div class="progress-info">
-                        <div class="progress-status" id="progress_status">
-                            Initializing...
-                        </div>
-                        <div class="progress-bar-container">
-                            <div class="progress-bar">
-                                <div
-                                    class="progress-fill"
-                                    id="progress_fill"
-                                    style="width: 0%"
-                                ></div>
-                            </div>
-                            <div
-                                class="progress-percentage"
-                                id="progress_percentage"
-                            >
-                                0%
-                            </div>
+        <div class="audio-center-controls">
+            <div class="audio-playback-container">
+                <div class="audio-status" id="audio_status" style="display: none">
+                    <div class="audio-info-compact">
+                        <span id="audio_status_text">Ready</span>
+                        •
+                        <span id="audio_position">--:--</span> •
+                        <span id="audio_duration">--:--</span>
+                    </div>
+                    <div class="audio-progress">
+                        <div class="audio-progress-bar">
+                            <div class="audio-progress-fill" id="audio_progress_fill" style="width: 0%"></div>
                         </div>
                     </div>
-
-                    <!-- Progress Graph -->
-                    <div class="progress-graph-container">
-                        <div
-                            id="progress_graph"
-                            style="width: 400px; height: 400px"
-                        ></div>
-                    </div>
-
-                    <div class="progress-table-container">
-                        <table class="progress-table" id="progress_table">
-                            <thead>
-                                <tr>
-                                    <th>Stage</th>
-                                    <th>Status</th>
-                                    <th>Duration</th>
-                                    <th>Details</th>
-                                </tr>
-                            </thead>
-                            <tbody id="progress_table_body">
-                                <!-- Progress rows will be added dynamically -->
-                            </tbody>
-                        </table>
-                    </div>
                 </div>
-                <div class="modal-footer">
-                    <button id="cancel_optimization" class="btn btn-danger">
-                        Cancel Optimization
+
+                <!-- Playback Buttons Row -->
+                <div class="playback-buttons">
+                    <button type="button" id="listen_btn" class="listen-button" disabled>
+                        🎵 Listen
                     </button>
-                    <button
-                        id="done_optimization"
-                        class="btn btn-success"
-                        style="display: none"
-                    >
-                        Done
+                    <button type="button" id="pause_btn" class="pause-button" disabled>
+                        ⏸️ Pause
+                    </button>
+                    <button type="button" id="stop_btn" class="stop-button" disabled>
+                        ⏹️ Stop
                     </button>
                 </div>
             </div>
+
+            <!-- Frequency Spectrum Analyzer -->
+            <div class="spectrum-column">
+                <div class="frequency-analyzer" id="frequency_analyzer" style="display: none">
+                    <canvas id="spectrum_canvas"></canvas>
+                    <div class="frequency-labels">
+                        <span class="freq-label" data-range="sub-bass">Sub Bass<br /><small>&lt;60Hz</small></span>
+                        <span class="freq-label" data-range="bass">Bass<br /><small>60-250Hz</small></span>
+                        <span class="freq-label" data-range="low-mid">Low Mid<br /><small>250-500Hz</small></span>
+                        <span class="freq-label" data-range="mid">Mid<br /><small>500-2kHz</small></span>
+                        <span class="freq-label" data-range="high-mid">High Mid<br /><small>2-4kHz</small></span>
+                        <span class="freq-label" data-range="presence">Presence<br /><small>4-6kHz</small></span>
+                        <span class="freq-label" data-range="brilliance">Brilliance<br /><small>6-20kHz</small></span>
+                    </div>
+                </div>
+            </div>
         </div>
+
+        <div class="audio-right-controls">
+            <div class="eq-toggle-buttons">
+                <button type="button" id="eq_on_btn" class="eq-toggle-btn active">
+                    On
+                </button>
+                <button type="button" id="eq_off_btn" class="eq-toggle-btn">
+                    Off
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+        </div>
+
+        <!-- Optimization Progress Modal -->
+<div id="optimization_modal" class="modal" style="display: none">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Optimization Progress</h3>
+            <button id="modal_close" class="modal-close-btn">
+                &times;
+            </button>
+        </div>
+        <div class="modal-body">
+            <div class="progress-info">
+                <div class="progress-status" id="progress_status">
+                    Initializing...
+                </div>
+                <div class="elapsed-time-container">
+                    <div class="elapsed-time-label">Elapsed Time:</div>
+                    <div class="elapsed-time" id="elapsed_time">00:00</div>
+                </div>
+            </div>
+
+            <!-- Progress Graph -->
+            <div class="progress-graph-container">
+                <div
+                    id="progress_graph"
+                    style="width: 400px; height: 400px"
+                ></div>
+            </div>
+
+            <div class="progress-table-container">
+                <table class="progress-table" id="progress_table">
+                    <thead>
+                        <tr>
+                            <th>Stage</th>
+                            <th>Status</th>
+                            <th>Duration</th>
+                            <th>Details</th>
+                        </tr>
+                    </thead>
+                    <tbody id="progress_table_body">
+                        <!-- Progress rows will be added dynamically -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button id="cancel_optimization" class="btn btn-danger">
+                Cancel Optimization
+            </button>
+            <button
+                id="done_optimization"
+                class="btn btn-success"
+                style="display: none"
+            >
+                Done
+            </button>
+        </div>
+    </div>
+</div>
     </body>
 </html>

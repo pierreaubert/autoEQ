@@ -1,0 +1,58 @@
+<!-- Optimization Progress Modal -->
+<div id="optimization_modal" class="modal" style="display: none">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Optimization Progress</h3>
+            <button id="modal_close" class="modal-close-btn">
+                &times;
+            </button>
+        </div>
+        <div class="modal-body">
+            <div class="progress-info">
+                <div class="progress-status" id="progress_status">
+                    Initializing...
+                </div>
+                <div class="elapsed-time-container">
+                    <div class="elapsed-time-label">Elapsed Time:</div>
+                    <div class="elapsed-time" id="elapsed_time">00:00</div>
+                </div>
+            </div>
+
+            <!-- Progress Graph -->
+            <div class="progress-graph-container">
+                <div
+                    id="progress_graph"
+                    style="width: 400px; height: 400px"
+                ></div>
+            </div>
+
+            <div class="progress-table-container">
+                <table class="progress-table" id="progress_table">
+                    <thead>
+                        <tr>
+                            <th>Stage</th>
+                            <th>Status</th>
+                            <th>Duration</th>
+                            <th>Details</th>
+                        </tr>
+                    </thead>
+                    <tbody id="progress_table_body">
+                        <!-- Progress rows will be added dynamically -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button id="cancel_optimization" class="btn btn-danger">
+                Cancel Optimization
+            </button>
+            <button
+                id="done_optimization"
+                class="btn btn-success"
+                style="display: none"
+            >
+                Done
+            </button>
+        </div>
+    </div>
+</div>

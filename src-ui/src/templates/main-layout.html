@@ -1,0 +1,27 @@
+<div class="app-container">
+    <main class="main-container">
+        <div class="left-panel" id="left_panel">
+            <form id="autoeq_form">
+                <!-- Data acquisition section will be included here -->
+                <% include './templates/data-acquisition.html' %>
+
+                <!-- EQ design section will be included here -->
+                <% include './templates/eq-design.html' %>
+
+                <!-- Optimization fine tuning section will be included here -->
+                <% include './templates/optimization-fine-tuning.html' %>
+            </form>
+
+            <!-- Form actions will be included here -->
+            <% include './templates/form-actions.html' %>
+        </div>
+
+        <div class="resizer" id="resizer"></div>
+
+        <!-- Right panel will be included here -->
+        <% include './templates/right-panel.html' %>
+
+        <!-- Audio controls will be included here -->
+        <% include './templates/audio-controls.html' %>
+    </main>
+</div>

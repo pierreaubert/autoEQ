@@ -13,11 +13,9 @@ interface ProgressData {
 }
 
 export class PlotManager {
-  private filterDetailsPlotElement: HTMLElement;
   private filterPlotElement: HTMLElement;
   private detailsPlotElement: HTMLElement;
   private spinPlotElement: HTMLElement;
-  private spinPlotCorrectedElement: HTMLElement;
   private tonalPlotElement: HTMLElement | null = null;
   private progressGraphElement: HTMLElement | null = null;
 
@@ -27,31 +25,28 @@ export class PlotManager {
   private progressData: ProgressData[] = [];
 
   constructor(
-    filterDetailsPlotElement: HTMLElement,
+    filterDetailsPlotElement: HTMLElement, // Will be ignored - kept for compatibility
     filterPlotElement: HTMLElement,
     detailsPlotElement: HTMLElement,
     spinPlotElement: HTMLElement,
-    spinPlotCorrectedElement: HTMLElement,
+    spinPlotCorrectedElement: HTMLElement, // Will be ignored - no longer used
     progressGraphElement?: HTMLElement,
     tonalPlotElement?: HTMLElement
   ) {
-    this.filterDetailsPlotElement = filterDetailsPlotElement;
     this.filterPlotElement = filterPlotElement;
     this.detailsPlotElement = detailsPlotElement;
     this.spinPlotElement = spinPlotElement;
-    this.spinPlotCorrectedElement = spinPlotCorrectedElement;
     this.progressGraphElement = progressGraphElement || null;
     this.tonalPlotElement = tonalPlotElement || null;
   }
 
   clearAllPlots(): void {
     const allPlotElements = [
-      this.filterDetailsPlotElement,
       this.filterPlotElement,
       this.detailsPlotElement,
       this.spinPlotElement,
-      this.spinPlotCorrectedElement
-    ];
+      this.tonalPlotElement
+    ].filter(Boolean); // Filter out null elements
 
     // Also clear progress graph
     this.clearProgressGraph();
@@ -65,85 +60,77 @@ export class PlotManager {
           } catch (e) {
             // Element may not have been plotted yet
           }
-          element.innerHTML = '';
+          element.innerHTML = '<div class="plot-placeholder">No data to display</div>';
           element.classList.remove('has-plot');
-          element.style.display = 'none';
         }
       });
+
+      // Hide spinorama grid items by default
+      this.hideSpinGridItems();
     } catch (error) {
       console.error('Error clearing plots:', error);
     }
   }
 
+  showSpinGridItems(): void {
+    const gridItems = ['details_grid_item', 'spin_grid_item', 'tonal_grid_item'];
+    gridItems.forEach(id => {
+      const element = document.getElementById(id);
+      if (element) {
+        element.style.display = 'flex';
+        console.log(`[GRID DEBUG] Showed grid item: ${id}`);
+      }
+    });
+  }
+
+  hideSpinGridItems(): void {
+    const gridItems = ['details_grid_item', 'spin_grid_item', 'tonal_grid_item'];
+    gridItems.forEach(id => {
+      const element = document.getElementById(id);
+      if (element) {
+        element.style.display = 'none';
+        console.log(`[GRID DEBUG] Hid grid item: ${id}`);
+      }
+    });
+  }
+
   showPlotContainer(plotId: string): void {
-    const element = document.getElementById(plotId) as HTMLElement;
-    if (element) {
-      // Show the plot element itself
-      element.style.display = 'block';
+    // For compatibility with existing code, but now we manage at grid item level
+    const gridItemMap: { [key: string]: string } = {
+      'details_plot': 'details_grid_item',
+      'spin_plot': 'spin_grid_item',
+      'tonal_plot': 'tonal_grid_item'
+    };
 
-      // Find and show the parent accordion/container
-      const container = element.closest('.plot-section, .accordion-item, .plot-container') as HTMLElement;
-      if (container) {
-        container.style.display = 'block';
+    const gridItemId = gridItemMap[plotId];
+    if (gridItemId) {
+      const element = document.getElementById(gridItemId);
+      if (element) {
+        element.style.display = 'flex';
+        console.log(`[GRID DEBUG] Showed plot container: ${plotId} via grid item ${gridItemId}`);
       }
-
-      // Find and show the header if it exists
-      const header = document.querySelector(`[data-target="${plotId}"], .plot-header[onclick*="${plotId}"]`) as HTMLElement;
-      if (header) {
-        header.style.display = 'block';
-        const headerContainer = header.closest('.plot-section, .accordion-item') as HTMLElement;
-        if (headerContainer) {
-          headerContainer.style.display = 'block';
-        }
-      }
-
-      console.log(`[TS DEBUG] Showed plot container: ${plotId}`);
-    } else {
-      console.warn(`[TS DEBUG] Plot element not found: ${plotId}`);
     }
   }
 
   hidePlotContainer(plotId: string): void {
-    const element = document.getElementById(plotId) as HTMLElement;
-    if (element) {
-      // Hide the plot element itself
-      element.style.display = 'none';
+    // For compatibility with existing code, but now we manage at grid item level
+    const gridItemMap: { [key: string]: string } = {
+      'details_plot': 'details_grid_item',
+      'spin_plot': 'spin_grid_item',
+      'tonal_plot': 'tonal_grid_item'
+    };
 
-      // Find and hide the parent accordion/container
-      const container = element.closest('.plot-section, .accordion-item, .plot-container') as HTMLElement;
-      if (container) {
-        container.style.display = 'none';
-      }
-
-      // Find and hide the header if it exists
-      const header = document.querySelector(`[data-target="${plotId}"], .plot-header[onclick*="${plotId}"]`) as HTMLElement;
-      if (header) {
-        header.style.display = 'none';
-        const headerContainer = header.closest('.plot-section, .accordion-item') as HTMLElement;
-        if (headerContainer) {
-          headerContainer.style.display = 'none';
-        }
-      }
-
-      console.log(`[TS DEBUG] Hid plot container: ${plotId}`);
-    } else {
-      console.warn(`[TS DEBUG] Plot element not found: ${plotId}`);
-    }
-  }
-
-  expandPlotSection(plotElementId: string): void {
-    const plotElement = document.getElementById(plotElementId);
-    if (plotElement) {
-      const plotSection = plotElement.closest('.plot-section');
-      if (plotSection) {
-        plotSection.classList.remove('collapsed');
-        plotSection.classList.add('expanded');
-        const arrow = plotSection.querySelector('.accordion-arrow');
-        if (arrow) arrow.textContent = '▼';
-        console.log('Plot section expanded:', plotElementId);
+    const gridItemId = gridItemMap[plotId];
+    if (gridItemId) {
+      const element = document.getElementById(gridItemId);
+      if (element) {
+        element.style.display = 'none';
+        console.log(`[GRID DEBUG] Hid plot container: ${plotId} via grid item ${gridItemId}`);
       }
     }
   }
+
+  // Removed expandPlotSection - no longer needed with grid layout
 
   async tryUpdateDetailsPlot(): Promise<void> {
     if (!this.lastSpinDetails) {
@@ -184,8 +171,8 @@ export class PlotManager {
 
       if (this.detailsPlotElement) {
         await Plotly.newPlot(this.detailsPlotElement, finalPlotData.data, finalPlotData.layout, config);
+        this.detailsPlotElement.classList.add('has-plot');
         this.showPlotContainer('details_plot');
-        this.expandPlotSection('details_plot');
       }
 
       console.log('Details plot generated successfully');
@@ -205,8 +192,6 @@ export class PlotManager {
     // Clear any existing content and prepare for plot
     this.spinPlotElement.innerHTML = '';
     this.spinPlotElement.classList.add('has-plot');
-    this.spinPlotElement.style.display = 'block';
-    this.spinPlotElement.style.padding = '0';
 
     const traces = Object.entries(data.curves).map(([name, values]) => ({
       x: data.frequencies,
@@ -250,8 +235,6 @@ export class PlotManager {
       }
     };
 
-    this.expandPlotSection('spin_plot');
-
     Plotly.newPlot(this.spinPlotElement, traces, layout, {
       responsive: true,
       displayModeBar: false
@@ -274,8 +257,6 @@ export class PlotManager {
     // Clear any existing content and prepare for plot
     this.filterPlotElement.innerHTML = '';
     this.filterPlotElement.classList.add('has-plot');
-    this.filterPlotElement.style.display = 'block';
-    this.filterPlotElement.style.padding = '0';
 
     const traces = Object.entries(data.curves).map(([name, values]) => ({
       x: data.frequencies,
@@ -364,9 +345,6 @@ export class PlotManager {
       ]
     };
 
-    // Expand the accordion section for this plot
-    this.expandPlotSection('filter-plot');
-
     console.log('[TS DEBUG] Creating Plotly plot with traces:', traces.length);
     console.log('[TS DEBUG] Layout:', layout);
 
@@ -383,22 +361,23 @@ export class PlotManager {
     });
   }
 
-  configureAccordionVisibility(hasSpinData: boolean): void {
-    console.log('[TS DEBUG] Configuring accordion visibility, hasSpinData:', hasSpinData);
+  configureGridVisibility(hasSpinData: boolean): void {
+    console.log('[GRID DEBUG] Configuring grid visibility, hasSpinData:', hasSpinData);
 
     if (hasSpinData) {
-      // Speaker-based: show spinorama sections, hide response curve
-      console.log('[TS DEBUG] Showing spinorama sections for speaker-based optimization');
-      this.showPlotContainer('details_plot');
-      this.showPlotContainer('spin_plot');
-      this.hidePlotContainer('tonal_plot');
+      // Speaker-based: show all 4 graphs (Filter Response + 3 spinorama graphs)
+      console.log('[GRID DEBUG] Showing all graphs for speaker-based optimization');
+      this.showSpinGridItems();
     } else {
-      // Curve+target: hide spinorama sections, show response curve
-      console.log('[TS DEBUG] Hiding spinorama sections for curve+target optimization');
-      this.hidePlotContainer('details_plot');
-      this.hidePlotContainer('spin_plot');
-      this.hidePlotContainer('tonal_plot');
+      // Curve+target: only show Filter Response graph
+      console.log('[GRID DEBUG] Showing only Filter Response for curve+target optimization');
+      this.hideSpinGridItems();
     }
+  }
+
+  // Deprecated method - kept for compatibility
+  configureAccordionVisibility(hasSpinData: boolean): void {
+    this.configureGridVisibility(hasSpinData);
   }
 
   // Getters for cached data
@@ -568,115 +547,10 @@ export class PlotManager {
     return [...this.progressData];
   }
 
-  // Filter details plot methods
+  // Filter details plot methods - removed in grid layout
   async updateFilterDetailsPlot(optimizationResult: any): Promise<void> {
-    if (!this.filterDetailsPlotElement) {
-      console.warn('[PLOT DEBUG] Filter details plot element not available');
-      return;
-    }
-
-    console.log('[PLOT DEBUG] Updating filter details with optimization result:', optimizationResult);
-
-    try {
-      // Update the filter details table first
-      if (optimizationResult.filter_params) {
-        this.updateFilterDetailsTable(optimizationResult.filter_params);
-      }
-
-      // Generate the filter plot using Tauri backend if we have the required data
-      if (optimizationResult.input_curve && optimizationResult.target_curve && optimizationResult.filter_params) {
-        console.log('[PLOT DEBUG] Calling generate_plot_filters via Tauri backend');
-
-        const plotParams: PlotFiltersParams = {
-          input_curve: optimizationResult.input_curve,
-          target_curve: optimizationResult.target_curve,
-          deviation_curve: optimizationResult.deviation_curve || optimizationResult.input_curve, // fallback
-          optimized_params: optimizationResult.filter_params,
-          sample_rate: optimizationResult.sample_rate || 44100,
-          num_filters: optimizationResult.filter_params.length,
-          iir_hp_pk: optimizationResult.iir_hp_pk || false
-        };
-
-        const filterPlotData = await AutoEQPlotAPI.generatePlotFilters(plotParams);
-        console.log('[PLOT DEBUG] Generated filter plot data:', filterPlotData);
-
-        // Update the filter details graph
-        const graphElement = document.getElementById('filter_details_graph');
-        if (graphElement && filterPlotData && filterPlotData.data && filterPlotData.layout) {
-          await Plotly.newPlot(graphElement, filterPlotData.data, filterPlotData.layout, {
-            responsive: true,
-            displayModeBar: false
-          });
-          console.log('[PLOT DEBUG] ✅ Filter details plot created successfully');
-          this.showPlotContainer('filter_details_plot');
-          this.expandPlotSection('filter_details_plot');
-        }
-      } else {
-        console.warn('[PLOT DEBUG] Missing required data for filter plot generation. Available keys:', Object.keys(optimizationResult));
-        // Still show the table even if we can't generate the plot
-        if (optimizationResult.filter_params) {
-          this.showPlotContainer('filter_details_plot');
-          this.expandPlotSection('filter_details_plot');
-        }
-      }
-    } catch (error) {
-      console.error('[PLOT DEBUG] ❌ Error updating filter details plot:', error);
-      // Show error in the table
-      const tableElement = document.getElementById('filter_details_table');
-      if (tableElement) {
-        tableElement.innerHTML = `<div style="color: #dc3545; padding: 10px;">Error generating filter details: ${error}</div>`;
-      }
-    }
-  }
-
-  private updateFilterDetailsTable(filterParams: any[]): void {
-    const tableElement = document.getElementById('filter_details_table');
-    if (!tableElement) {
-      console.warn('[PLOT DEBUG] Filter details table element not found');
-      return;
-    }
-
-    if (!filterParams || filterParams.length === 0) {
-      tableElement.innerHTML = '<div style="padding: 10px;">No filter parameters to display</div>';
-      return;
-    }
-
-    // Create table HTML
-    let tableHTML = `
-      <table style="width: 100%; border-collapse: collapse; margin: 10px 0;">
-        <thead>
-          <tr style="background-color: #f5f5f5;">
-            <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Filter</th>
-            <th style="border: 1px solid #ddd; padding: 8px; text-align: right;">Frequency (Hz)</th>
-            <th style="border: 1px solid #ddd; padding: 8px; text-align: right;">Q Factor</th>
-            <th style="border: 1px solid #ddd; padding: 8px; text-align: right;">Gain (dB)</th>
-          </tr>
-        </thead>
-        <tbody>
-    `;
-
-    filterParams.forEach((param, index) => {
-      const frequency = param.frequency || param.freq || 0;
-      const q = param.q || param.Q || 1;
-      const gain = param.gain || 0;
-
-      tableHTML += `
-        <tr>
-          <td style="border: 1px solid #ddd; padding: 8px;">Filter ${index + 1}</td>
-          <td style="border: 1px solid #ddd; padding: 8px; text-align: right;">${frequency.toFixed(1)}</td>
-          <td style="border: 1px solid #ddd; padding: 8px; text-align: right;">${q.toFixed(2)}</td>
-          <td style="border: 1px solid #ddd; padding: 8px; text-align: right;">${gain > 0 ? '+' : ''}${gain.toFixed(2)}</td>
-        </tr>
-      `;
-    });
-
-    tableHTML += `
-        </tbody>
-      </table>
-    `;
-
-    tableElement.innerHTML = tableHTML;
-    console.log('[PLOT DEBUG] ✅ Filter details table updated with', filterParams.length, 'filters');
+    console.log('[PLOT DEBUG] Filter details plot functionality removed in grid layout');
+    // This method is deprecated but kept for compatibility
   }
 
   // Tonal balance plot methods
@@ -696,8 +570,8 @@ export class PlotManager {
           displayModeBar: false
         }).then(() => {
           console.log('[PLOT DEBUG] ✅ Tonal balance plot created successfully');
+          this.tonalPlotElement!.classList.add('has-plot');
           this.showPlotContainer('tonal_plot');
-          this.expandPlotSection('tonal_plot');
         }).catch((error: any) => {
           console.error('[PLOT DEBUG] ❌ Error creating tonal balance plot:', error);
         });

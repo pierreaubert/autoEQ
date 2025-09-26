@@ -1,0 +1,64 @@
+<!-- Data Source -->
+<div class="section-group">
+    <h3>Data Acquisition</h3>
+    <div class="input-source-tabs">
+        <label class="tab-label" data-tab="file">
+            <input type="radio" name="input_source" value="file" />
+            Files
+        </label>
+        <label class="tab-label active" data-tab="api">
+            <input type="radio" name="input_source" value="api" />
+            Speakers
+        </label>
+        <label class="tab-label" data-tab="capture">
+            <input type="radio" name="input_source" value="capture" />
+            Capture
+        </label>
+    </div>
+
+    <div id="file_inputs" class="tab-content">
+        <div class="compact-row">
+            <input type="text" id="curve_path" name="curve_path" placeholder="Input CSV path" />
+            <button type="button" id="browse_curve" class="browse-btn">📁</button>
+        </div>
+        <div class="compact-row">
+            <input type="text" id="target_path" name="target_path" placeholder="Target CSV path (optional)" />
+            <button type="button" id="browse_target" class="browse-btn">📁</button>
+        </div>
+    </div>
+
+    <div id="api_inputs" class="tab-content active">
+        <div class="autocomplete-container">
+            <input type="text" id="speaker" name="speaker" placeholder="Start typing speaker name..." autocomplete="off" />
+            <div id="speaker_dropdown" class="autocomplete-dropdown"></div>
+        </div>
+        <select id="version" name="version" disabled>
+            <option value="">Select Version</option>
+        </select>
+        <select id="measurement" name="measurement" disabled>
+            <option value="">Select Measurement</option>
+        </select>
+    </div>
+
+    <div id="capture_inputs" class="tab-content">
+        <div class="capture-controls">
+            <button type="button" id="capture_btn" class="capture-button">🎤 Start Capture</button>
+            <div id="capture_status" class="capture-status" style="display: none">
+                <div class="capture-progress">
+                    <span id="capture_status_text">Ready</span>
+                    <div class="capture-progress-bar" style="display: none">
+                        <div class="capture-progress-fill" id="capture_progress_fill"></div>
+                    </div>
+                </div>
+                <canvas id="capture_waveform" class="capture-waveform" style="display: none"></canvas>
+            </div>
+            <div id="capture_result" class="capture-result" style="display: none">
+                <div class="capture-result-info">
+                    <span>✅ Captured response ready</span>
+                    <button type="button" id="capture_clear" class="capture-clear-btn">Clear</button>
+                </div>
+                <div id="capture_plot" class="capture-plot"></div>
+            </div>
+        </div>
+    </div>
+</div>

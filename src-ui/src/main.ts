@@ -1,10 +1,6 @@
 // Refactored main application - streamlined and modular
 
-import { UIManager } from "./modules";
-import { PlotManager } from "./modules";
-import { OptimizationManager } from "./modules";
-import { APIManager } from "./modules";
-import { AudioProcessor } from "./modules";
+import { UIManager, PlotManager, OptimizationManager, APIManager, AudioPlayer, FilterParam, LayoutManager } from "./modules";
 import { OptimizationParams, OptimizationResult } from "./types";
 import { AutoEQPlotAPI, PlotFiltersParams, PlotSpinParams } from "./types";
 
@@ -13,7 +9,8 @@ class AutoEQApplication {
   private plotManager: PlotManager;
   private optimizationManager: OptimizationManager;
   private apiManager: APIManager;
-  private audioProcessor: AudioProcessor;
+  private audioPlayer: AudioPlayer | undefined;
+  private layoutManager: LayoutManager;
 
   constructor() {
     console.log("Initializing AutoEQ Application...");
@@ -21,7 +18,24 @@ class AutoEQApplication {
     // Initialize managers
     this.uiManager = new UIManager();
     this.apiManager = new APIManager();
-    this.audioProcessor = new AudioProcessor();
+
+    // Initialize AudioPlayer
+    const audioControlsContainer = document.querySelector('.audio-testing-controls') as HTMLElement;
+    if (audioControlsContainer) {
+        // Clear the old controls and let the AudioPlayer component build its own UI
+        audioControlsContainer.innerHTML = '';
+
+        this.audioPlayer = new AudioPlayer(
+            audioControlsContainer,
+            { enableEQ: true, enableSpectrum: true },
+            {
+                onEQToggle: (enabled) => this.setEQEnabled(enabled),
+                onError: (error) => this.uiManager.showError(error),
+            }
+        );
+    } else {
+        console.error("Audio controls container (.audio-testing-controls) not found!");
+    }
 
     // Initialize plot manager with DOM elements
     const progressGraphElement = document.getElementById("progress_graph");
@@ -41,6 +55,9 @@ class AutoEQApplication {
 
     // Initialize optimization manager
     this.optimizationManager = new OptimizationManager();
+
+    // Initialize layout manager
+    this.layoutManager = new LayoutManager();
 
     // Setup connections between managers
     this.setupManagerConnections();
@@ -70,6 +87,9 @@ class AutoEQApplication {
         // Update progress graph with new data
         this.plotManager.addProgressData(iteration, fitness, convergence);
 
+        // Update elapsed time display
+        this.uiManager.updateProgress('Optimization', `Iteration ${iteration}`, `Fitness: ${fitness.toFixed(4)}`, 0);
+
         // Update graph every 5 iterations or for early iterations
         if (iteration <= 5 || iteration % 5 === 0) {
           console.log(`[MAIN DEBUG] 📊 Updating progress graph at iteration ${iteration}`);
@@ -88,61 +108,21 @@ class AutoEQApplication {
     // Override the UI manager's event handlers to connect to our logic
     const form = this.uiManager.getForm();
     const optimizeBtn = this.uiManager.getOptimizeBtn();
-    const resetBtn = this.uiManager.getResetBtn();
-    const captureBtn = this.uiManager.getCaptureBtn();
-    const listenBtn = this.uiManager.getListenBtn();
-    const stopBtn = this.uiManager.getStopBtn();
-    const eqOnBtn = this.uiManager.getEqOnBtn();
-    const eqOffBtn = this.uiManager.getEqOffBtn();
     const cancelBtn = this.uiManager.getCancelOptimizationBtn();
 
-    // Remove existing event listeners and add our own
-    const newOptimizeBtn = optimizeBtn.cloneNode(true) as HTMLButtonElement;
-    optimizeBtn.parentNode?.replaceChild(newOptimizeBtn, optimizeBtn);
-    newOptimizeBtn.addEventListener("click", (e) => {
-      e.preventDefault();
-      this.runOptimization();
-    });
-
+    // Add event listeners directly
     form.addEventListener("submit", (e) => {
       e.preventDefault();
       this.runOptimization();
     });
 
-    if (captureBtn) {
-      const newCaptureBtn = captureBtn.cloneNode(true) as HTMLButtonElement;
-      captureBtn.parentNode?.replaceChild(newCaptureBtn, captureBtn);
-      newCaptureBtn.addEventListener("click", () => this.startCapture());
-    }
-
-    if (listenBtn) {
-      const newListenBtn = listenBtn.cloneNode(true) as HTMLButtonElement;
-      listenBtn.parentNode?.replaceChild(newListenBtn, listenBtn);
-      newListenBtn.addEventListener("click", () => this.startAudioPlayback());
-    }
-
-    if (stopBtn) {
-      const newStopBtn = stopBtn.cloneNode(true) as HTMLButtonElement;
-      stopBtn.parentNode?.replaceChild(newStopBtn, stopBtn);
-      newStopBtn.addEventListener("click", () => this.stopAudioPlayback());
-    }
-
-    if (eqOnBtn) {
-      const newEqOnBtn = eqOnBtn.cloneNode(true) as HTMLButtonElement;
-      eqOnBtn.parentNode?.replaceChild(newEqOnBtn, eqOnBtn);
-      newEqOnBtn.addEventListener("click", () => this.setEQEnabled(true));
-    }
-
-    if (eqOffBtn) {
-      const newEqOffBtn = eqOffBtn.cloneNode(true) as HTMLButtonElement;
-      eqOffBtn.parentNode?.replaceChild(newEqOffBtn, eqOffBtn);
-      newEqOffBtn.addEventListener("click", () => this.setEQEnabled(false));
-    }
+    optimizeBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        this.runOptimization();
+    });
 
     if (cancelBtn) {
-      const newCancelBtn = cancelBtn.cloneNode(true) as HTMLButtonElement;
-      cancelBtn.parentNode?.replaceChild(newCancelBtn, cancelBtn);
-      newCancelBtn.addEventListener("click", () => this.cancelOptimization());
+      cancelBtn.addEventListener("click", () => this.cancelOptimization());
     }
   }
 
@@ -160,9 +140,6 @@ class AutoEQApplication {
     const targetFileBtn = document.getElementById(
       "browse_target",
     ) as HTMLButtonElement;
-    const demoAudioSelect = document.getElementById(
-      "demo_audio_select",
-    ) as HTMLSelectElement;
 
     if (speakerSelect) {
       speakerSelect.addEventListener("change", (e) => {
@@ -187,8 +164,6 @@ class AutoEQApplication {
         console.log("Curve file button clicked");
         this.apiManager.selectCurveFile();
       });
-    } else {
-      console.warn("Curve file button not found");
     }
 
     if (targetFileBtn) {
@@ -196,46 +171,6 @@ class AutoEQApplication {
         console.log("Target file button clicked");
         this.apiManager.selectTargetFile();
       });
-    } else {
-      console.warn("Target file button not found");
-    }
-
-    if (demoAudioSelect) {
-      console.log("Demo audio select element found, adding event listener");
-      demoAudioSelect.addEventListener("change", async (e) => {
-        const audioName = (e.target as HTMLSelectElement).value;
-        console.log("Demo audio selected:", audioName);
-
-        if (audioName) {
-          try {
-            this.uiManager.setAudioStatus("Loading audio...");
-            this.uiManager.setListenButtonEnabled(false);
-
-            const url = await this.apiManager.getDemoAudioUrl(audioName);
-            console.log("Demo audio URL:", url);
-
-            if (url) {
-              await this.audioProcessor.loadAudioFromUrl(url);
-              console.log("Demo audio loaded successfully");
-
-              // Enable the Listen button and update UI
-              this.uiManager.setListenButtonEnabled(true);
-              this.uiManager.setAudioStatus("Audio ready");
-            }
-          } catch (error) {
-            console.error("Error loading demo audio:", error);
-            this.uiManager.setAudioStatus("Failed to load audio");
-            this.uiManager.setListenButtonEnabled(false);
-            this.uiManager.showError("Failed to load demo audio: " + error);
-          }
-        } else {
-          // No audio selected, disable Listen button
-          this.uiManager.setListenButtonEnabled(false);
-          this.uiManager.setAudioStatus("No audio selected");
-        }
-      });
-    } else {
-      console.warn("Demo audio select element not found!");
     }
   }
 
@@ -254,24 +189,6 @@ class AutoEQApplication {
 
       // Setup autocomplete
       this.apiManager.setupAutocomplete();
-
-      // Setup audio spectrum analyzer if canvas exists
-      const spectrumCanvas = document.getElementById(
-        "spectrum_canvas",
-      ) as HTMLCanvasElement;
-      if (spectrumCanvas) {
-        this.audioProcessor.setupSpectrumAnalyzer(spectrumCanvas);
-      }
-
-      // Setup audio status elements
-      this.audioProcessor.setupAudioStatusElements({
-        status: document.getElementById("audio_status") || undefined,
-        statusText: document.getElementById("audio_status_text") || undefined,
-        duration: document.getElementById("audio_duration") || undefined,
-        position: document.getElementById("audio_position") || undefined,
-        progressFill:
-          document.getElementById("audio_progress_fill") || undefined,
-      });
 
       console.log("Application initialization completed");
     } catch (error) {
@@ -345,10 +262,19 @@ class AutoEQApplication {
         );
       }
 
-      // Update audio processor with new filter parameters
+      // Update audio player with new filter parameters
       if (result.filter_params) {
-        this.audioProcessor.updateFilterParams(result.filter_params);
-        this.uiManager.setEQEnabled(true);
+        const filterParams: FilterParam[] = [];
+        for (let i = 0; i < result.filter_params.length; i += 3) {
+            filterParams.push({
+                frequency: result.filter_params[i],
+                q: result.filter_params[i+1],
+                gain: result.filter_params[i+2],
+                enabled: true
+            });
+        }
+        this.audioPlayer?.updateFilterParams(filterParams);
+        this.audioPlayer?.setEQEnabled(true);
 
         // Update filter details plot and table
         console.log("Updating filter details plot with optimization result");
@@ -365,7 +291,10 @@ class AutoEQApplication {
       const hasSpinData = !!result.spin_details;
 
       // Configure plot visibility
-      this.plotManager.configureAccordionVisibility(hasSpinData);
+      this.plotManager.configureGridVisibility(hasSpinData);
+
+      // Force layout recalculation after plots are updated
+      this.layoutManager.forceRecalculate();
 
       if (hasSpinData) {
         // Speaker-based optimization: show spinorama plots
@@ -382,15 +311,25 @@ class AutoEQApplication {
       } else {
         // Curve+target optimization: show response curve with/without EQ
         console.log("Processing curve+target optimization plots");
+        console.log("Full optimization result:", result);
+        console.log("result.filter_response:", result.filter_response);
+        console.log("result.filter_plots:", result.filter_plots);
+
         if (result.filter_response) {
           console.log(
             "Updating filter plot with response curve data:",
             result.filter_response,
           );
           this.plotManager.updateFilterPlot(result.filter_response);
+        } else if (result.filter_plots) {
+          console.log(
+            "Using filter_plots data instead:",
+            result.filter_plots,
+          );
+          this.plotManager.updateFilterPlot(result.filter_plots);
         } else {
           console.warn(
-            "No filter_response data available for curve+target optimization",
+            "No filter_response or filter_plots data available for curve+target optimization",
           );
         }
       }
@@ -400,6 +339,12 @@ class AutoEQApplication {
       console.error("Error processing optimization results:", error);
       this.uiManager.showError("Error processing results: " + error);
     }
+  }
+
+  private setEQEnabled(enabled: boolean): void {
+    // This method is called by the AudioPlayer callback
+    // It can be used to sync EQ state with other parts of the application if needed
+    console.log(`[MAIN] EQ state changed to: ${enabled}`);
   }
 
   private handleOptimizationError(error: string): void {
@@ -503,135 +448,13 @@ class AutoEQApplication {
     }
   }
 
-  private async startCapture(): Promise<void> {
-    console.log("Starting audio capture...");
 
-    try {
-      // Update UI to show capture is starting
-      const captureBtn = this.uiManager.getCaptureBtn();
-      const captureStatus = this.uiManager.getCaptureStatus();
-      const captureStatusText = this.uiManager.getCaptureStatusText();
-      const captureResult = this.uiManager.getCaptureResult();
-
-      if (captureBtn) {
-        captureBtn.textContent = "⏹️ Stop Capture";
-        captureBtn.classList.add("capturing");
-      }
-
-      if (captureStatus) {
-        captureStatus.style.display = "block";
-      }
-
-      if (captureStatusText) {
-        captureStatusText.textContent = "Starting capture...";
-      }
-
-      // Hide previous results
-      if (captureResult) {
-        captureResult.style.display = "none";
-      }
-
-      // Start the actual capture
-      if (captureStatusText) {
-        captureStatusText.textContent = "Capturing audio (please wait)...";
-      }
-
-      const result = await this.audioProcessor.startCapture();
-
-      if (result.success && result.frequencies.length > 0) {
-        console.log("Capture successful:", result.frequencies.length, "points");
-
-        // Store the captured data in optimization manager
-        this.optimizationManager.setCapturedData(
-          result.frequencies,
-          result.magnitudes,
-        );
-
-        if (captureStatusText) {
-          captureStatusText.textContent = `✅ Captured ${result.frequencies.length} frequency points`;
-        }
-
-        // Show results
-        if (captureResult) {
-          captureResult.style.display = "block";
-        }
-
-        // Plot the captured data
-        this.plotCapturedData(result.frequencies, result.magnitudes);
-      } else {
-        throw new Error(result.error || "Capture failed");
-      }
-    } catch (error) {
-      console.error("Capture error:", error);
-
-      const captureStatusText = this.uiManager.getCaptureStatusText();
-      if (captureStatusText) {
-        captureStatusText.textContent = `❌ Capture failed: ${error instanceof Error ? error.message : "Unknown error"}`;
-      }
-
-      this.uiManager.showError(
-        "Audio capture failed: " +
-          (error instanceof Error ? error.message : "Unknown error"),
-      );
-    } finally {
-      // Reset UI
-      const captureBtn = this.uiManager.getCaptureBtn();
-      if (captureBtn) {
-        captureBtn.textContent = "🎤 Start Capture";
-        captureBtn.classList.remove("capturing");
-      }
-    }
-  }
-
-  private plotCapturedData(frequencies: number[], magnitudes: number[]): void {
-    console.log("Plotting captured frequency response...");
-
-    try {
-      // Create plot data structure
-      const plotData = {
-        frequencies: frequencies,
-        curves: {
-          "Captured Response": magnitudes,
-        },
-        metadata: {
-          title: "Captured Frequency Response",
-          type: "capture",
-        },
-      };
-
-      // Use the plot manager to display the captured data
-      this.plotManager.updateFilterPlot(plotData);
-
-      console.log("Captured data plotted successfully");
-    } catch (error) {
-      console.error("Error plotting captured data:", error);
-    }
-  }
-
-  private async startAudioPlayback(): Promise<void> {
-    try {
-      await this.audioProcessor.play();
-      this.audioProcessor.startSpectrumAnalysis();
-    } catch (error) {
-      console.error("Error starting audio playback:", error);
-      this.uiManager.showError("Failed to start audio playback: " + error);
-    }
-  }
-
-  private stopAudioPlayback(): void {
-    this.audioProcessor.stop();
-    this.audioProcessor.stopSpectrumAnalysis();
-  }
-
-  private setEQEnabled(enabled: boolean): void {
-    this.uiManager.setEQEnabled(enabled);
-    this.audioProcessor.setEQEnabled(enabled);
-  }
 
   // Cleanup method
   destroy(): void {
     this.optimizationManager.destroy();
-    this.audioProcessor.destroy();
+    this.audioPlayer?.destroy();
+    this.layoutManager.destroy();
   }
 }
 

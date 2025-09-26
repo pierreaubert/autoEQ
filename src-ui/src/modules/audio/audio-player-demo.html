@@ -124,20 +124,20 @@
         <h1>Audio Player Demo</h1>
         <p>This demo showcases the standalone audio player module extracted from the AutoEQ application.</p>
 
-        <!-- Basic Audio Player -->
+        <!-- Basic Audio Player
         <div class="demo-section">
             <h2>Basic Audio Player</h2>
             <p>Full-featured audio player with EQ controls, spectrum analyzer, and demo tracks.</p>
             <div id="audio-player-basic"></div>
         </div>
-
-        <!-- Compact Audio Player -->
+ -->
+        <!-- Compact Audio Player
         <div class="demo-section">
             <h2>Compact Audio Player</h2>
             <p>Compact version without spectrum analyzer and frequency labels.</p>
             <div id="audio-player-compact"></div>
         </div>
-
+ -->
         <!-- Custom Configuration -->
         <div class="demo-section">
             <h2>Custom Configuration</h2>
@@ -190,42 +190,52 @@
             eventLog.innerHTML = '';
         });
 
-        // Basic Audio Player
-        const basicPlayer = new AudioPlayer(
-            document.getElementById('audio-player-basic'),
-            {
-                enableEQ: true,
-                enableSpectrum: true,
-                showProgress: true,
-                showFrequencyLabels: true,
-                compactMode: false
-            },
-            {
-                onPlay: () => logEvent('Basic player: Started playing', 'success'),
-                onStop: () => logEvent('Basic player: Stopped playing'),
-                onEQToggle: (enabled) => logEvent(`Basic player: EQ ${enabled ? 'enabled' : 'disabled'}`),
-                onTrackChange: (track) => logEvent(`Basic player: Changed to track "${track}"`),
-                onError: (error) => logEvent(`Basic player error: ${error}`, 'error')
+        // Basic Audio Player (guarded: only init if container exists)
+        {
+            const basicEl = document.getElementById('audio-player-basic');
+            if (basicEl) {
+                const basicPlayer = new AudioPlayer(
+                    basicEl,
+                    {
+                        enableEQ: true,
+                        enableSpectrum: true,
+                        showProgress: true,
+                        showFrequencyLabels: true,
+                        compactMode: false
+                    },
+                    {
+                        onPlay: () => logEvent('Basic player: Started playing', 'success'),
+                        onStop: () => logEvent('Basic player: Stopped playing'),
+                        onEQToggle: (enabled) => logEvent(`Basic player: EQ ${enabled ? 'enabled' : 'disabled'}`),
+                        onTrackChange: (track) => logEvent(`Basic player: Changed to track "${track}"`),
+                        onError: (error) => logEvent(`Basic player error: ${error}`, 'error')
+                    }
+                );
             }
-        );
+        }
 
-        // Compact Audio Player
-        const compactPlayer = new AudioPlayer(
-            document.getElementById('audio-player-compact'),
-            {
-                enableEQ: false,
-                enableSpectrum: false,
-                showProgress: true,
-                showFrequencyLabels: false,
-                compactMode: true
-            },
-            {
-                onPlay: () => logEvent('Compact player: Started playing', 'success'),
-                onStop: () => logEvent('Compact player: Stopped playing'),
-                onTrackChange: (track) => logEvent(`Compact player: Changed to track "${track}"`),
-                onError: (error) => logEvent(`Compact player error: ${error}`, 'error')
+        // Compact Audio Player (guarded)
+        {
+            const compactEl = document.getElementById('audio-player-compact');
+            if (compactEl) {
+                const compactPlayer = new AudioPlayer(
+                    compactEl,
+                    {
+                        enableEQ: false,
+                        enableSpectrum: false,
+                        showProgress: true,
+                        showFrequencyLabels: false,
+                        compactMode: true
+                    },
+                    {
+                        onPlay: () => logEvent('Compact player: Started playing', 'success'),
+                        onStop: () => logEvent('Compact player: Stopped playing'),
+                        onTrackChange: (track) => logEvent(`Compact player: Changed to track "${track}"`),
+                        onError: (error) => logEvent(`Compact player error: ${error}`, 'error')
+                    }
+                );
             }
-        );
+        }
 
         // Custom Audio Player
         const customPlayer = new AudioPlayer(
@@ -235,7 +245,7 @@
                 enableSpectrum: true,
                 showProgress: true,
                 showFrequencyLabels: true,
-                maxFilters: 5,
+                maxFilters: 11,
                 demoTracks: {
                     'test1': '/demo-audio/classical.wav',
                     'test2': '/demo-audio/jazz.wav'
@@ -329,9 +339,11 @@
         });
 
         // Initialize with some default EQ bands
-        createEQBand(100, 1, 0);
-        createEQBand(1000, 1, 0);
-        createEQBand(10000, 1, 0);
+        createEQBand(100, 0.2, 3);
+        createEQBand(300, 1, -5);
+        createEQBand(500, 1, +5);
+        createEQBand(1000, 1, +5);
+        createEQBand(10000, 1, -5);
 
         logEvent('Audio Player Demo initialized', 'success');
     </script>

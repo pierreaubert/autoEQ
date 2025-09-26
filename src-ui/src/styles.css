@@ -1,3 +1,6 @@
+/* Import Audio Player Styles */
+@import './modules/audio/audio-player.css';
+
 :root {
   --bg-primary: #f8f9fa;
   --bg-secondary: #ffffff;
@@ -69,7 +72,55 @@ body {
   display: flex;
   overflow: hidden;
   position: relative;
-  padding-bottom: 56px; /* Space for fixed audio bar */
+  padding-bottom: 70px; /* Space for fixed audio bar */
+}
+
+/* Fixed Audio Controls at Bottom */
+.audio-bar-fixed {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  width: 100vw;
+  height: 70px;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border-color);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  padding: 0 var(--spacing-lg);
+}
+
+/* Audio control row takes full width */
+.audio-bar-fixed .audio-control-row {
+  width: 100%;
+  max-width: none;
+  justify-content: space-between;
+}
+
+/* Audio playback buttons layout */
+.playback-buttons {
+  display: flex;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-xs);
+  justify-content: center;
+}
+
+/* Spectrum analyzer column layout */
+.spectrum-column {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  margin-left: var(--spacing-md);
+}
+
+/* Center controls take more space */
+.audio-bar-fixed .audio-center-controls {
+  flex: 2;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: var(--spacing-lg);
 }
 
 .left-panel {
@@ -579,137 +630,107 @@ input[type="checkbox"] {
   color: var(--success-color);
 }
 
-/* Plot Section - Vertical Accordion */
-.plots-accordion {
+/* Plot Section - 4-Graph Grid Layout */
+.plots-grid {
   flex: 1;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
   gap: var(--spacing-sm);
-  overflow-y: auto;
-  overflow-x: hidden;
-  /* Enable smooth scrolling */
-  scroll-behavior: smooth;
-  /* Custom scrollbar styling */
-  scrollbar-width: thin;
-  scrollbar-color: var(--border-color) transparent;
-}
-
-/* WebKit scrollbar styling */
-.plots-accordion::-webkit-scrollbar {
-  width: 8px;
-}
-
-.plots-accordion::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.plots-accordion::-webkit-scrollbar-thumb {
-  background-color: var(--border-color);
-  border-radius: 4px;
-  transition: background-color 0.2s;
-}
-
-.plots-accordion::-webkit-scrollbar-thumb:hover {
-  background-color: var(--text-secondary);
-}
-
-.plot-section {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius);
-  overflow: visible; /* Changed from hidden to visible */
-  margin-bottom: var(--spacing-sm);
-}
-
-.plot-section.collapsed .plot-container {
-  display: none !important;
-  height: 0;
-  min-height: 0;
   overflow: hidden;
-}
-
-.plot-section.expanded .plot-container {
-  display: block;
-  height: 400px;
+  height: var(--plots-grid-height, 100%);
+  width: var(--plots-grid-width, 100%);
   min-height: 400px;
 }
 
-.plot-section .plot-container {
-  display: none; /* Default to hidden */
-  height: 0;
-  min-height: 0;
-  transition: height 0.3s ease, min-height 0.3s ease;
-}
-
-.plot-header {
-  background: var(--bg-accent);
-  padding: var(--spacing-sm) var(--spacing-md);
-  cursor: pointer;
+.plot-grid-item {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: var(--plot-item-height, 200px);
+  height: var(--plot-item-height, auto);
+}
+
+.plot-grid-header {
+  background: var(--bg-accent);
+  padding: var(--spacing-xs) var(--spacing-sm);
   border-bottom: 1px solid var(--border-color);
-  transition: background-color 0.2s;
+  flex-shrink: 0;
 }
 
-.plot-header:hover {
-  background: var(--border-color);
-}
-
-.plot-header h4 {
-  font-size: 14px;
+.plot-grid-header h4 {
+  font-size: 12px;
   font-weight: 600;
   color: var(--text-primary);
   margin: 0;
 }
 
-.accordion-arrow {
-  font-size: 12px;
-  color: var(--text-secondary);
-  transition: transform 0.2s;
-}
-
-.plot-container {
-  width: 100%;
+.plot-grid-container {
+  flex: 1;
   position: relative;
   background: var(--bg-secondary);
-  border-radius: var(--radius);
-  overflow: visible;
+  overflow: hidden;
   padding: 0;
+  min-height: 0;
 }
 
-/* When plot has no data, show centered message */
-.plot-section.expanded .plot-container:not(.has-plot) {
+/* Plot placeholder styling */
+.plot-placeholder {
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--text-secondary);
-  font-size: 14px;
-  padding: var(--spacing-lg);
-  height: 400px;
-  min-height: 400px;
+  font-size: 12px;
+  height: 100%;
+  padding: var(--spacing-md);
 }
 
-/* When plot has data, remove padding and centering */
-.plot-container.has-plot {
+/* When plot has data, hide placeholder */
+.plot-grid-container.has-plot .plot-placeholder {
+  display: none;
+}
+
+/* When plot has data, ensure proper display */
+.plot-grid-container.has-plot {
   padding: 0;
-  display: block !important;
 }
 
 /* Ensure Plotly plots fill their container */
-.plot-container .js-plotly-plot {
+.plot-grid-container .js-plotly-plot {
   width: 100% !important;
   height: 100% !important;
   display: block !important;
 }
 
-/* When a plot container is active, give it more space */
-.plot-section {
-  flex: 0 0 auto;
+/* Responsive behavior for smaller screens */
+@media (max-width: 1024px) {
+  .plots-grid {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto auto auto;
+    min-height: 800px;
+  }
+
+  .plot-grid-item {
+    min-height: 200px;
+  }
 }
 
-.plot-section.expanded {
-  flex: 1;
+@media (max-width: 768px) {
+  .plots-grid {
+    gap: var(--spacing-xs);
+    min-height: 600px;
+  }
+
+  .plot-grid-item {
+    min-height: 150px;
+  }
+
+  .plot-grid-header h4 {
+    font-size: 11px;
+  }
 }
 
 /* Error Display */
@@ -1050,33 +1071,28 @@ input[type="checkbox"] {
   margin-bottom: var(--spacing-md);
 }
 
-.progress-bar-container {
+.elapsed-time-container {
   display: flex;
   align-items: center;
   gap: var(--spacing-md);
-}
-
-.progress-bar {
-  flex: 1;
-  height: 8px;
+  padding: var(--spacing-md);
   background: var(--bg-accent);
-  border-radius: 4px;
-  overflow: hidden;
+  border-radius: var(--radius);
+  border-left: 4px solid var(--button-primary);
 }
 
-.progress-fill {
-  height: 100%;
-  background: linear-gradient(90deg, var(--button-primary), var(--info-color));
-  transition: width 0.3s ease;
-  border-radius: 4px;
-}
-
-.progress-percentage {
+.elapsed-time-label {
+  font-weight: 500;
+  color: var(--text-secondary);
   font-size: 14px;
+}
+
+.elapsed-time {
+  font-family: 'Courier New', monospace;
   font-weight: 600;
-  color: var(--text-primary);
-  min-width: 40px;
-  text-align: right;
+  color: var(--button-primary);
+  font-size: 16px;
+  letter-spacing: 0.5px;
 }
 
 .progress-table-container {
@@ -1273,364 +1289,4 @@ input[type="checkbox"] {
   border-top: 6px solid var(--border-color);
   z-index: 1001;
   margin-bottom: -2px;
-}
-
-/* Audio Testing Controls */
-.audio-testing-controls {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  width: 100%;
-  background: var(--bg-secondary);
-  border-top: 1px solid var(--border-color);
-  padding: var(--spacing-sm) var(--spacing-md);
-  display: flex;
-  align-items: center;
-  z-index: 1000;
-  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.1);
-}
-
-/* Remove the header styles as there's no h4 anymore */
-
-.audio-control-row {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--spacing-md);
-  height: 40px; /* Fixed height for consistent alignment */
-}
-
-.audio-left-controls {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  flex: 0 0 auto;
-}
-
-.audio-left-controls label {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-secondary);
-  white-space: nowrap;
-}
-
-.audio-center-controls {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex: 1;
-  margin: 0 var(--spacing-sm);
-}
-
-.audio-right-controls {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  flex: 0 0 auto;
-}
-
-#demo-audio-select {
-  width: 140px;
-  height: 32px;
-  padding: 4px 8px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius);
-  background: var(--bg-primary);
-  color: var(--text-primary);
-  font-size: 12px;
-  cursor: pointer;
-}
-
-#demo-audio-select:focus {
-  outline: none;
-  border-color: var(--border-active);
-}
-
-/* EQ Toggle Buttons */
-.eq-toggle-buttons {
-  display: flex;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius);
-  overflow: hidden;
-  background: var(--bg-primary);
-  height: 32px;
-  width: 80px;
-}
-
-.eq-toggle-btn {
-  flex: 1;
-  border: none;
-  background: var(--bg-accent);
-  color: var(--text-primary);
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-  height: 100%;
-}
-
-.eq-toggle-btn:first-child {
-  border-right: 1px solid var(--border-color);
-}
-
-.eq-toggle-btn:hover {
-  background: var(--button-secondary);
-  color: white;
-}
-
-.eq-toggle-btn.active {
-  background: var(--button-primary);
-  color: white;
-  font-weight: 600;
-}
-
-.eq-toggle-btn.active:hover {
-  background: var(--button-primary-hover);
-  color: white;
-}
-.listen-button, .stop-button {
-  width: 80px;
-  height: 32px;
-  border: 1px solid var(--button-primary);
-  border-radius: var(--radius);
-  background: var(--button-primary);
-  color: white;
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--spacing-xs);
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.listen-button:hover {
-  background: var(--button-primary-hover);
-  transform: translateY(-1px);
-}
-
-.listen-button:disabled,
-.listen-button.disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-  pointer-events: none;
-  background: var(--text-secondary);
-  transform: none;
-}
-
-.stop-button {
-  background: var(--danger-color);
-  border-color: var(--danger-color);
-}
-
-.stop-button:hover {
-  background: #c82333;
-  border-color: #c82333;
-  transform: translateY(-1px);
-}
-
-.audio-playback-container {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-md);
-  width: 100%;
-}
-
-.audio-center-controls .audio-status {
-  border: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.audio-info-compact {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--spacing-xs);
-  white-space: nowrap;
-  font-size: 11px;
-  color: var(--text-secondary);
-  margin-bottom: 4px;
-}
-
-.audio-info-compact span {
-  font-weight: 500;
-  color: var(--text-primary);
-}
-
-.audio-center-controls .audio-progress {
-  width: 100px;
-  display: flex;
-  justify-content: center;
-}
-
-.audio-center-controls .audio-progress-bar {
-  width: 100%;
-  height: 4px;
-  background: var(--bg-accent);
-  border-radius: 2px;
-  overflow: hidden;
-  position: relative;
-}
-
-.audio-center-controls .audio-progress-fill {
-  height: 100%;
-  background: var(--button-primary);
-  border-radius: 1.5px;
-  transition: width 0.1s ease;
-}
-
-/* Frequency Analyzer */
-.frequency-analyzer {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  justify-content: flex-start;
-  flex: 1;
-  padding: 2px 4px;
-  background: var(--bg-primary);
-  border-radius: var(--radius);
-  border: 1px solid var(--border-color);
-  overflow: hidden;
-}
-
-#spectrum-canvas {
-  display: block;
-  height: 28px;
-  width: 100%;
-  image-rendering: crisp-edges;
-  image-rendering: pixelated;
-}
-
-/* Frequency Labels */
-.frequency-labels {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 2px 0;
-  margin-top: 2px;
-  border-top: 1px solid var(--border-color);
-  min-height: 24px;
-}
-
-.freq-label {
-  flex: 1;
-  text-align: center;
-  font-size: 9px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  line-height: 1.1;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  padding: 0 2px;
-}
-
-.freq-label small {
-  display: block;
-  font-size: 8px;
-  font-weight: 400;
-  color: var(--text-tertiary);
-  opacity: 0.8;
-}
-
-/* Color coding for frequency ranges */
-.freq-label[data-range="sub-bass"] {
-  color: #ff3333;
-}
-
-.freq-label[data-range="bass"] {
-  color: #ff6633;
-}
-
-.freq-label[data-range="low-mid"] {
-  color: #ffaa33;
-}
-
-.freq-label[data-range="mid"] {
-  color: #88cc33;
-}
-
-.freq-label[data-range="high-mid"] {
-  color: #33cc88;
-}
-
-.freq-label[data-range="presence"] {
-  color: #3388ff;
-}
-
-.freq-label[data-range="brilliance"] {
-  color: #aa33ff;
-}
-
-/* Responsive adjustments for audio controls */
-@media (max-width: 768px) {
-  .audio-testing-controls {
-    padding: var(--spacing-sm);
-  }
-
-  .audio-control-row {
-    gap: var(--spacing-xs);
-    flex-wrap: wrap;
-  }
-
-  .audio-left-controls {
-    justify-content: flex-start;
-    order: 1;
-    flex: 0 0 auto;
-  }
-
-  .audio-center-controls {
-    order: 2;
-    flex: 1 1 100%;
-    margin: var(--spacing-xs) 0;
-  }
-
-  .audio-playback-container {
-    flex-direction: column;
-    gap: var(--spacing-xs);
-  }
-
-  .audio-center-controls .audio-status {
-    width: 100%;
-  }
-
-  .frequency-analyzer {
-    width: 100%;
-  }
-
-  .audio-right-controls {
-    justify-content: flex-end;
-    order: 3;
-    flex: 0 0 auto;
-  }
-
-  .audio-left-controls label {
-    font-size: 11px;
-  }
-
-  .audio-info-compact {
-    font-size: 10px;
-  }
-
-  .listen-button, .stop-button {
-    font-size: 12px;
-    padding: var(--spacing-xs) var(--spacing-sm);
-  }
-
-  .eq-toggle-btn {
-    font-size: 11px;
-    padding: var(--spacing-xs) var(--spacing-sm);
-    min-width: 35px;
-  }
 }

@@ -1,0 +1,85 @@
+<div id="optimization_progress" class="progress-container" style="display: none">
+    <div class="progress-bar">
+        <div class="progress-fill"></div>
+    </div>
+    <div class="progress-text">Running optimization...</div>
+</div>
+
+<div
+    id="scores_display"
+    class="scores-display"
+    style="display: none"
+>
+    <h4>Preference Scores</h4>
+    <div class="score-grid">
+        <div class="score-item">
+            <span class="score-label">Before:</span>
+            <span id="score_before" class="score-value"
+                >--</span
+            >
+        </div>
+        <div class="score-item">
+            <span class="score-label">After:</span>
+            <span id="score_after" class="score-value"
+                >--</span
+            >
+        </div>
+        <div class="score-item improvement">
+            <span class="score-label">Improvement:</span>
+            <span id="score_improvement" class="score-value"
+                >--</span
+            >
+        </div>
+    </div>
+</div>
+
+<div class="plots-grid">
+    <!-- Filter Response Graph - Always visible -->
+    <div class="plot-grid-item">
+        <div class="plot-grid-header">
+            <h4>Filter Response</h4>
+        </div>
+        <div id="filter_plot" class="plot-grid-container">
+            <div class="plot-placeholder">No data to display</div>
+        </div>
+    </div>
+
+    <!-- Details Graph - Visible when CEA2034 data available -->
+    <div class="plot-grid-item" id="details_grid_item" style="display: none;">
+        <div class="plot-grid-header">
+            <h4>Details</h4>
+        </div>
+        <div id="details_plot" class="plot-grid-container">
+            <div class="plot-placeholder">No data to display</div>
+        </div>
+    </div>
+
+    <!-- Spinorama Graph - Visible when CEA2034 data available -->
+    <div class="plot-grid-item" id="spin_grid_item" style="display: none;">
+        <div class="plot-grid-header">
+            <h4>Spinorama</h4>
+        </div>
+        <div id="spin_plot" class="plot-grid-container">
+            <div class="plot-placeholder">No data to display</div>
+        </div>
+    </div>
+
+    <!-- Tonal Balance Graph - Visible when CEA2034 data available -->
+    <div class="plot-grid-item" id="tonal_grid_item" style="display: none;">
+        <div class="plot-grid-header">
+            <h4>Tonal Balance</h4>
+        </div>
+        <div id="tonal_plot" class="plot-grid-container">
+            <div class="plot-placeholder">No data to display</div>
+        </div>
+    </div>
+</div>
+
+<div
+    id="error_display"
+    class="error-display"
+    style="display: none"
+>
+    <h4>Error</h4>
+    <div id="error_message" class="error-message"></div>
+</div>

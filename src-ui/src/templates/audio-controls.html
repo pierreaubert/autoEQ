@@ -1,0 +1,78 @@
+<!-- Audio Testing Controls - fixed at bottom -->
+<div class="audio-testing-controls audio-bar-fixed">
+    <div class="audio-control-row">
+        <div class="audio-left-controls">
+            <div class="demo-track-container">
+                <label class="demo-track-label" for="demo_audio_select">Demo Track</label>
+                <select id="demo_audio_select" name="demo_audio" class="demo-audio-select">
+                    <option value="">Select track...</option>
+                    <option value="classical">Classical</option>
+                    <option value="country">Country</option>
+                    <option value="edm">EDM</option>
+                    <option value="female_vocal">Female Vocal</option>
+                    <option value="jazz">Jazz</option>
+                    <option value="piano">Piano</option>
+                    <option value="rock">Rock</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="audio-center-controls">
+            <div class="audio-playback-container">
+                <div class="audio-status" id="audio_status" style="display: none">
+                    <div class="audio-info-compact">
+                        <span id="audio_status_text">Ready</span>
+                        •
+                        <span id="audio_position">--:--</span> •
+                        <span id="audio_duration">--:--</span>
+                    </div>
+                    <div class="audio-progress">
+                        <div class="audio-progress-bar">
+                            <div class="audio-progress-fill" id="audio_progress_fill" style="width: 0%"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Playback Buttons Row -->
+                <div class="playback-buttons">
+                    <button type="button" id="listen_btn" class="listen-button" disabled>
+                        🎵 Listen
+                    </button>
+                    <button type="button" id="pause_btn" class="pause-button" disabled>
+                        ⏸️ Pause
+                    </button>
+                    <button type="button" id="stop_btn" class="stop-button" disabled>
+                        ⏹️ Stop
+                    </button>
+                </div>
+            </div>
+
+            <!-- Frequency Spectrum Analyzer -->
+            <div class="spectrum-column">
+                <div class="frequency-analyzer" id="frequency_analyzer" style="display: none">
+                    <canvas id="spectrum_canvas"></canvas>
+                    <div class="frequency-labels">
+                        <span class="freq-label" data-range="sub-bass">Sub Bass<br /><small>&lt;60Hz</small></span>
+                        <span class="freq-label" data-range="bass">Bass<br /><small>60-250Hz</small></span>
+                        <span class="freq-label" data-range="low-mid">Low Mid<br /><small>250-500Hz</small></span>
+                        <span class="freq-label" data-range="mid">Mid<br /><small>500-2kHz</small></span>
+                        <span class="freq-label" data-range="high-mid">High Mid<br /><small>2-4kHz</small></span>
+                        <span class="freq-label" data-range="presence">Presence<br /><small>4-6kHz</small></span>
+                        <span class="freq-label" data-range="brilliance">Brilliance<br /><small>6-20kHz</small></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="audio-right-controls">
+            <div class="eq-toggle-buttons">
+                <button type="button" id="eq_on_btn" class="eq-toggle-btn active">
+                    On
+                </button>
+                <button type="button" id="eq_off_btn" class="eq-toggle-btn">
+                    Off
+                </button>
+            </div>
+        </div>
+    </div>
+</div>

@@ -528,31 +528,15 @@ export class APIManager {
   private hideAutocomplete: () => void = () => {};
 
   async loadDemoAudioList(): Promise<string[]> {
+    let audioList: string[];
     try {
       // Try to get demo audio list from backend first
-      const audioList = await invoke('get_demo_audio_list') as string[];
-
-      const demoAudioSelect = document.getElementById('demo_audio_select') as HTMLSelectElement;
-      if (demoAudioSelect) {
-        // Clear existing options
-        demoAudioSelect.innerHTML = '<option value="">Select demo audio...</option>';
-
-        // Add audio options
-        audioList.forEach(audio => {
-          const option = document.createElement('option');
-          option.value = audio.replace('.wav', ''); // Remove .wav for the value
-          option.textContent = audio.replace('.wav', '').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-          demoAudioSelect.appendChild(option);
-        });
-      }
-
+      audioList = await invoke('get_demo_audio_list') as string[];
       console.log('Loaded demo audio list from backend:', audioList);
-      return audioList;
     } catch (error) {
       console.log('Backend demo audio list not available, using local files');
-
       // Fallback: Use actual demo audio files from public/demo-audio/
-      const localAudioFiles = [
+      audioList = [
         'classical.wav',
         'country.wav',
         'edm.wav',
@@ -561,24 +545,36 @@ export class APIManager {
         'piano.wav',
         'rock.wav'
       ];
-
-      const demoAudioSelect = document.getElementById('demo_audio_select') as HTMLSelectElement;
-      if (demoAudioSelect) {
-        // Clear existing options
-        demoAudioSelect.innerHTML = '<option value="">Select demo audio...</option>';
-
-        // Add local audio options
-        localAudioFiles.forEach(audio => {
-          const option = document.createElement('option');
-          option.value = audio.replace('.wav', ''); // Remove .wav for the value
-          option.textContent = audio.replace('.wav', '').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-          demoAudioSelect.appendChild(option);
-        });
-      }
-
-      console.log('Using local demo audio files:', localAudioFiles);
-      return localAudioFiles;
+      console.log('Using local demo audio files:', audioList);
     }
+
+    const demoAudioSelect = document.getElementById('demo_audio_select') as HTMLSelectElement;
+    if (demoAudioSelect) {
+      // Clear existing options
+      demoAudioSelect.innerHTML = '<option value="">Select demo audio...</option>';
+
+      // Add a special option for loading from file
+      const loadFromFileOption = document.createElement('option');
+      loadFromFileOption.value = 'load_from_file';
+      loadFromFileOption.textContent = 'Load from file...';
+      demoAudioSelect.appendChild(loadFromFileOption);
+
+      // Add a separator
+      const separator = document.createElement('option');
+      separator.disabled = true;
+      separator.textContent = '──────────';
+      demoAudioSelect.appendChild(separator);
+
+      // Add audio options from the determined list
+      audioList.forEach(audio => {
+        const option = document.createElement('option');
+        option.value = audio.replace('.wav', ''); // Remove .wav for the value
+        option.textContent = audio.replace('.wav', '').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+        demoAudioSelect.appendChild(option);
+      });
+    }
+
+    return audioList;
   }
 
   async getDemoAudioUrl(audioName: string): Promise<string | null> {

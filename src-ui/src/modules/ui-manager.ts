@@ -13,13 +13,15 @@ export class UIManager {
   // Modal elements
   private optimizationModal!: HTMLElement;
   private progressStatus!: HTMLElement;
-  private progressFill!: HTMLElement;
-  private progressPercentage!: HTMLElement;
+  private elapsedTimeElement!: HTMLElement;
   private progressTableBody!: HTMLElement;
   private cancelOptimizationBtn!: HTMLButtonElement;
   private doneOptimizationBtn!: HTMLButtonElement;
   private modalCloseBtn!: HTMLButtonElement;
   private progressGraphElement!: HTMLElement;
+
+  // Timing
+  private optimizationStartTime: number = 0;
 
   // Audio testing elements
   private demoAudioSelect!: HTMLSelectElement;
@@ -69,16 +71,14 @@ export class UIManager {
     // Initialize modal elements
     this.optimizationModal = document.getElementById('optimization_modal') as HTMLElement;
     this.progressStatus = document.getElementById('progress_status') as HTMLElement;
-    this.progressFill = document.getElementById('progress_fill') as HTMLElement;
-    this.progressPercentage = document.getElementById('progress_percentage') as HTMLElement;
+    this.elapsedTimeElement = document.getElementById('elapsed_time') as HTMLElement;
     this.progressTableBody = document.getElementById('progress_table_body') as HTMLElement;
 
     // Debug element initialization
     console.log('[UI INIT] Modal elements found:');
     console.log('  optimizationModal:', !!this.optimizationModal);
     console.log('  progressStatus:', !!this.progressStatus);
-    console.log('  progressFill:', !!this.progressFill);
-    console.log('  progressPercentage:', !!this.progressPercentage);
+    console.log('  elapsedTimeElement:', !!this.elapsedTimeElement);
     console.log('  progressTableBody:', !!this.progressTableBody);
     this.cancelOptimizationBtn = document.getElementById('cancel_optimization') as HTMLButtonElement;
     this.doneOptimizationBtn = document.getElementById('done_optimization') as HTMLButtonElement;
@@ -213,16 +213,7 @@ export class UIManager {
       });
     });
 
-    // Accordion functionality
-    document.addEventListener('click', (e) => {
-      const target = e.target as HTMLElement;
-      if (target.classList.contains('plot-header') || target.closest('.plot-header')) {
-        const header = target.classList.contains('plot-header') ? target : target.closest('.plot-header');
-        if (header) {
-          this.toggleAccordion(header as HTMLElement);
-        }
-      }
-    });
+    // Grid layout - accordion functionality removed
   }
 
   private setupModalEventListeners(): void {
@@ -347,6 +338,14 @@ export class UIManager {
     // Update modal buttons based on optimization state
     if (running) {
       this.showCancelButton();
+      // Start the timer
+      this.optimizationStartTime = Date.now();
+      if (this.elapsedTimeElement) {
+        this.elapsedTimeElement.textContent = '00:00';
+      }
+    } else {
+      // Reset timer
+      this.optimizationStartTime = 0;
     }
   }
 
@@ -366,6 +365,11 @@ export class UIManager {
       this.doneOptimizationBtn.textContent = 'Close';
       this.doneOptimizationBtn.className = 'btn btn-primary'; // Blue button
     }
+
+    // Update progress status to show completion
+    if (this.progressStatus) {
+      this.progressStatus.textContent = 'Optimization Complete';
+    }
   }
 
   openOptimizationModal(): void {
@@ -383,7 +387,7 @@ export class UIManager {
   }
 
   updateProgress(stage: string, status: string, details: string, percentage: number): void {
-    console.log(`[UI DEBUG] updateProgress called: stage="${stage}", status="${status}", percentage=${percentage}, details="${details}"`);
+    console.log(`[UI DEBUG] updateProgress called: stage="${stage}", status="${status}", details="${details}"`);
 
     if (this.progressStatus) {
       this.progressStatus.textContent = `${stage}: ${status}`;
@@ -392,58 +396,33 @@ export class UIManager {
       console.warn('[UI DEBUG] progressStatus element not found!');
     }
 
-    if (this.progressFill) {
-      this.progressFill.style.width = `${percentage}%`;
-      console.log(`[UI DEBUG] Updated progress fill width to: ${percentage}%`);
-    } else {
-      console.warn('[UI DEBUG] progressFill element not found!');
-    }
-
-    if (this.progressPercentage) {
-      this.progressPercentage.textContent = `${percentage.toFixed(1)}%`;
-      console.log(`[UI DEBUG] Updated progress percentage text to: ${percentage.toFixed(1)}%`);
-    } else {
-      console.warn('[UI DEBUG] progressPercentage element not found!');
-    }
-
-    console.log(`[UI DEBUG] Progress update completed: ${stage} - ${status} (${percentage}%): ${details}`);
+    // Update elapsed time
+    this.updateElapsedTime();
   }
 
-  private toggleAccordion(header: HTMLElement): void {
-    const section = header.closest('.plot-section');
-    if (!section) return;
+  private updateElapsedTime(): void {
+    if (this.optimizationStartTime > 0 && this.elapsedTimeElement) {
+      const elapsedMs = Date.now() - this.optimizationStartTime;
+      const elapsedSeconds = Math.floor(elapsedMs / 1000);
+      const minutes = Math.floor(elapsedSeconds / 60);
+      const seconds = elapsedSeconds % 60;
+      const timeString = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
 
-    const isExpanded = section.classList.contains('expanded');
-    const arrow = section.querySelector('.accordion-arrow');
-
-    if (isExpanded) {
-      section.classList.remove('expanded');
-      section.classList.add('collapsed');
-      if (arrow) arrow.textContent = '▶';
-    } else {
-      section.classList.remove('collapsed');
-      section.classList.add('expanded');
-      if (arrow) arrow.textContent = '▼';
+      this.elapsedTimeElement.textContent = timeString;
+      console.log(`[UI DEBUG] Updated elapsed time to: ${timeString}`);
     }
   }
+
+  // toggleAccordion method removed - using grid layout
 
   collapseAllAccordion(): void {
-    const sections = document.querySelectorAll('.plot-section');
-    sections.forEach(section => {
-      section.classList.remove('expanded');
-      section.classList.add('collapsed');
-      const header = section.querySelector('.plot-header');
-      const arrow = section.querySelector('.accordion-arrow');
-      if (header) (header as HTMLElement).setAttribute('aria-expanded', 'false');
-      if (arrow) (arrow as HTMLElement).textContent = '▶';
-    });
+    // Grid layout - accordion functionality removed
+    console.log('[UI] Accordion collapse functionality not needed in grid layout');
   }
 
   showAccordionSection(sectionId: string): void {
-    const section = document.getElementById(sectionId)?.closest('.plot-section');
-    if (section) {
-      (section as HTMLElement).style.display = 'block';
-    }
+    // Grid layout - accordion functionality removed
+    console.log(`[UI] Grid layout - section ${sectionId} visibility managed automatically`);
   }
 
   setEQEnabled(enabled: boolean): void {
@@ -732,25 +711,19 @@ export class UIManager {
   getForm(): HTMLFormElement { return this.form; }
   getOptimizeBtn(): HTMLButtonElement { return this.optimizeBtn; }
   getResetBtn(): HTMLButtonElement { return this.resetBtn; }
-  getProgressElement(): HTMLElement { return this.progressElement; }
-  getScoresElement(): HTMLElement { return this.scoresElement; }
-  getErrorElement(): HTMLElement { return this.errorElement; }
-  getOptimizationModal(): HTMLElement { return this.optimizationModal; }
-  getProgressStatus(): HTMLElement { return this.progressStatus; }
-  getProgressFill(): HTMLElement { return this.progressFill; }
-  getProgressPercentage(): HTMLElement { return this.progressPercentage; }
-  getProgressTableBody(): HTMLElement { return this.progressTableBody; }
-  getCancelOptimizationBtn(): HTMLButtonElement { return this.cancelOptimizationBtn; }
-  getDoneOptimizationBtn(): HTMLButtonElement { return this.doneOptimizationBtn; }
-  getModalCloseBtn(): HTMLButtonElement { return this.modalCloseBtn; }
-  getProgressGraphElement(): HTMLElement { return this.progressGraphElement; }
-
-  // Audio elements
-  getDemoAudioSelect(): HTMLSelectElement { return this.demoAudioSelect; }
-  getEqOnBtn(): HTMLButtonElement { return this.eqOnBtn; }
-  getEqOffBtn(): HTMLButtonElement { return this.eqOffBtn; }
   getListenBtn(): HTMLButtonElement { return this.listenBtn; }
   getStopBtn(): HTMLButtonElement { return this.stopBtn; }
+  getEqOnBtn(): HTMLButtonElement { return this.eqOnBtn; }
+  getEqOffBtn(): HTMLButtonElement { return this.eqOffBtn; }
+  getCancelOptimizationBtn(): HTMLButtonElement { return this.cancelOptimizationBtn; }
+
+  updateOptimizeBtn(btn: HTMLButtonElement): void { this.optimizeBtn = btn; }
+  updateResetBtn(btn: HTMLButtonElement): void { this.resetBtn = btn; }
+  updateListenBtn(btn: HTMLButtonElement): void { this.listenBtn = btn; }
+  updateStopBtn(btn: HTMLButtonElement): void { this.stopBtn = btn; }
+  updateEqOnBtn(btn: HTMLButtonElement): void { this.eqOnBtn = btn; }
+  updateEqOffBtn(btn: HTMLButtonElement): void { this.eqOffBtn = btn; }
+  updateCancelOptimizationBtn(btn: HTMLButtonElement): void { this.cancelOptimizationBtn = btn; }
   getAudioStatus(): HTMLElement { return this.audioStatus; }
   getAudioStatusText(): HTMLElement { return this.audioStatusText; }
   getAudioDuration(): HTMLElement { return this.audioDuration; }
@@ -783,60 +756,13 @@ export class UIManager {
   }
 
   setListenButtonEnabled(enabled: boolean): void {
-    console.log('setListenButtonEnabled called with:', enabled);
     if (this.listenBtn) {
-      console.log('Listen button current state:', {
-        disabled: this.listenBtn.disabled,
-        classList: Array.from(this.listenBtn.classList),
-        style: this.listenBtn.style.cssText
-      });
-
-      // Simple and clean button state management
       this.listenBtn.disabled = !enabled;
-
       if (enabled) {
         this.listenBtn.classList.remove('disabled');
-        console.log('Listen button enabled');
-
-        // Check if something immediately re-disables it
-        setTimeout(() => {
-          if (this.listenBtn.disabled) {
-            console.warn('Listen button was re-disabled after enabling! Current state:', {
-              disabled: this.listenBtn.disabled,
-              hasDisabledAttribute: this.listenBtn.hasAttribute('disabled'),
-              classList: Array.from(this.listenBtn.classList)
-            });
-          } else {
-            console.log('Listen button is properly enabled. Testing click handler...');
-            // Test if the button is actually clickable
-            const computedStyle = window.getComputedStyle(this.listenBtn);
-            console.log('Button computed styles:', {
-              opacity: computedStyle.opacity,
-              cursor: computedStyle.cursor,
-              pointerEvents: computedStyle.pointerEvents,
-              backgroundColor: computedStyle.backgroundColor,
-              color: computedStyle.color
-            });
-
-            // Add a test click handler to verify the button is clickable
-            const testClickHandler = () => {
-              console.log('🎵 Listen button clicked successfully!');
-              this.listenBtn.removeEventListener('click', testClickHandler);
-            };
-            this.listenBtn.addEventListener('click', testClickHandler);
-            console.log('Test click handler added. Try clicking the Listen button now.');
-          }
-        }, 100);
       } else {
         this.listenBtn.classList.add('disabled');
-        console.log('Listen button disabled');
       }
-
-      console.log('Listen button new state:', {
-        disabled: this.listenBtn.disabled,
-        classList: Array.from(this.listenBtn.classList),
-        style: this.listenBtn.style.cssText
-      });
     } else {
       console.warn('Listen button not found in UIManager!');
     }

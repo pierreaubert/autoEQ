@@ -239,8 +239,8 @@ export class AudioPlayer {
             </div>
           </div>
 
-          ${this.config.enableSpectrum ? `
-            <div class="audio-spectrum-controls">
+          <div class="audio-right-controls">
+            ${this.config.enableSpectrum ? `
               <div class="frequency-analyzer" style="display: none;">
                 <canvas class="spectrum-canvas"></canvas>
                 ${this.config.showFrequencyLabels ? `
@@ -255,10 +255,7 @@ export class AudioPlayer {
                   </div>
                 ` : ''}
               </div>
-            </div>
-          ` : ''}
-
-          <div class="audio-right-controls">
+            ` : ''}
             ${this.config.enableEQ ? `
               <div class="eq-toggle-buttons">
                 <button type="button" class="eq-toggle-btn eq-on-btn active">On</button>
