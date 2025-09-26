@@ -40,23 +40,12 @@
 
 /* Audio Player Container */
 .audio-player {
+  position: relative; /* Needed for EQ popover positioning */
   background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
+  border: 2px solid var(--border-color);
   border-radius: var(--radius);
-  padding: var(--spacing-md);
+  padding: var(--spacing-xs);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-}
-
-/* Audio Testing Controls */
-.audio-testing-controls {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  background: var(--bg-secondary);
-  border-top: 1px solid var(--border-color);
-  padding: var(--spacing-sm) var(--spacing-md);
-  z-index: 1000;
 }
 
 .audio-control-row {
@@ -64,7 +53,7 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--spacing-md);
-  height: 40px; /* Fixed height for consistent alignment */
+  height: 80px;
 }
 
 .audio-left-controls {
@@ -74,14 +63,31 @@
   flex: 0 0 auto;
 }
 
-.audio-left-controls label {
+/* Demo Track Container - Vertical Layout */
+.demo-track-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.demo-track-label {
   font-size: 12px;
   font-weight: 500;
   color: var(--text-secondary);
   white-space: nowrap;
+  text-align: center;
 }
 
 .audio-center-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  margin: 0 var(--spacing-sm);
+}
+
+.audio-spectrum-controls {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -122,7 +128,7 @@
   overflow: hidden;
   background: var(--bg-primary);
   height: 32px;
-  width: 80px;
+  width: 120px;
 }
 
 .eq-toggle-btn {
@@ -157,16 +163,14 @@
   color: white;
 }
 
-/* Listen and Stop Buttons */
-.listen-button, .stop-button {
-  width: 80px;
-  height: 32px;
+/* Listen, Pause and Stop Buttons */
+.listen-button, .pause-button, .stop-button {
+  width: 24px;
+  height: 24px;
   border: 1px solid var(--button-primary);
   border-radius: var(--radius);
   background: var(--button-primary);
   color: white;
-  font-size: 12px;
-  font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
   display: flex;
@@ -177,13 +181,13 @@
   pointer-events: auto;
 }
 
-.listen-button:hover {
+.listen-button:hover, .pause-button:hover {
   background: var(--button-primary-hover);
   transform: translateY(-1px);
 }
 
-.listen-button:disabled,
-.listen-button.disabled {
+.listen-button:disabled, .pause-button:disabled,
+.listen-button.disabled, .pause-button.disabled {
   opacity: 0.6;
   cursor: not-allowed;
   pointer-events: none;
@@ -196,6 +200,17 @@
   border-color: var(--danger-color);
 }
 
+.pause-button {
+  background: #ffc107;
+  border-color: #ffc107;
+}
+
+.pause-button:hover {
+  background: #e0a800;
+  border-color: #e0a800;
+  transform: translateY(-1px);
+}
+
 .stop-button:hover {
   background: #c82333;
   border-color: #c82333;
@@ -205,9 +220,19 @@
 /* Audio Playback Container */
 .audio-playback-container {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: var(--spacing-md);
+  gap: var(--spacing-sm);
   width: 100%;
+}
+
+/* Audio Playback Controls - Horizontal Button Row */
+.audio-playback-controls {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin-top: 4px; /* Match the margin-bottom of .audio-info-compact */
 }
 
 .audio-center-controls .audio-status {
@@ -238,14 +263,14 @@
 }
 
 .audio-center-controls .audio-progress {
-  width: 100px;
+  width: 140px;
   display: flex;
   justify-content: center;
 }
 
 .audio-center-controls .audio-progress-bar {
   width: 100%;
-  height: 4px;
+  height: 16px;
   background: var(--bg-accent);
   border-radius: 2px;
   overflow: hidden;
@@ -266,16 +291,15 @@
   align-items: stretch;
   justify-content: flex-start;
   flex: 1;
-  padding: 2px 4px;
+  padding: 0;
   background: var(--bg-primary);
-  border-radius: var(--radius);
-  border: 1px solid var(--border-color);
   overflow: hidden;
+  margin: 0;
 }
 
 .spectrum-canvas {
   display: block;
-  height: 28px;
+  height: 56px;
   width: 100%;
   image-rendering: crisp-edges;
   image-rendering: pixelated;
@@ -290,8 +314,8 @@
   margin-top: 2px;
   border-top: 1px solid var(--border-color);
   min-height: 24px;
+  background: var(--bg-secondary);
 }
-
 .freq-label {
   flex: 1;
   text-align: center;
@@ -344,10 +368,6 @@
 
 /* Responsive adjustments for audio controls */
 @media (max-width: 768px) {
-  .audio-testing-controls {
-    padding: var(--spacing-sm);
-  }
-
   .audio-control-row {
     gap: var(--spacing-xs);
     flex-wrap: wrap;
@@ -365,8 +385,13 @@
     margin: var(--spacing-xs) 0;
   }
 
+  .audio-spectrum-controls {
+    order: 3;
+    flex: 1 1 100%;
+    margin: var(--spacing-xs) 0;
+  }
+
   .audio-playback-container {
-    flex-direction: column;
     gap: var(--spacing-xs);
   }
 
@@ -380,11 +405,11 @@
 
   .audio-right-controls {
     justify-content: flex-end;
-    order: 3;
+    order: 4;
     flex: 0 0 auto;
   }
 
-  .audio-left-controls label {
+  .demo-track-label {
     font-size: 11px;
   }
 
@@ -392,7 +417,7 @@
     font-size: 10px;
   }
 
-  .listen-button, .stop-button {
+  .listen-button, .pause-button, .stop-button {
     font-size: 12px;
     padding: var(--spacing-xs) var(--spacing-sm);
   }
@@ -404,65 +429,93 @@
   }
 }
 
-/* Standalone mode adjustments */
-.audio-player .audio-testing-controls {
-  position: relative;
-  border: none;
-  padding: 0;
-  background: transparent;
-}
-
-.audio-player .audio-control-row {
-  height: auto;
-  min-height: 40px;
-}
-
-/* Compact mode */
-.audio-player.compact .audio-center-controls {
-  flex: 0 0 auto;
-}
-
-.audio-player.compact .frequency-analyzer {
+/* Modal backdrop - transparent for popover style */
+.eq-modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: transparent; /* Transparent backdrop for popover */
+  z-index: 1000;
   display: none;
 }
 
-.audio-player.compact .audio-info-compact {
-  font-size: 10px;
+.eq-modal-backdrop.visible {
+  display: block;
 }
 
-/* Error states */
-.audio-player .error {
-  color: var(--danger-color);
-  font-size: 12px;
-  text-align: center;
-  padding: var(--spacing-sm);
-  background: rgba(220, 53, 69, 0.1);
+/* Modal as popover - positioned dynamically */
+.eq-modal {
+  position: fixed;
+  z-index: 1001;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
   border-radius: var(--radius);
-  margin-top: var(--spacing-sm);
+  box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+  width: 450px;
+  max-width: 90vw;
+  max-height: 350px;
+  overflow-y: auto;
+  display: none;
+  /* Will be positioned dynamically via JS */
 }
 
-/* Loading states */
-.audio-player .loading {
-  opacity: 0.6;
-  pointer-events: none;
+.eq-modal.visible {
+  display: block;
 }
 
-.audio-player .loading::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 20px;
-  height: 20px;
-  margin: -10px 0 0 -10px;
-  border: 2px solid var(--border-color);
-  border-top-color: var(--button-primary);
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
+.eq-modal-content {
+  /* No special styling needed for popover content */
 }
 
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
+.eq-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-accent);
+}
+
+.eq-modal-header h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.eq-modal-close-btn {
+  background: none;
+  border: none;
+  font-size: 20px;
+  font-weight: bold;
+  cursor: pointer;
+  color: var(--text-secondary);
+}
+
+.eq-modal-body {
+  padding: var(--spacing-sm);
+}
+
+.eq-table-container table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.eq-table-container th,
+.eq-table-container td {
+  border: 1px solid var(--border-color);
+  padding: var(--spacing-sm);
+  text-align: center;
+  font-size: 12px;
+}
+
+.eq-table-container th {
+  background: var(--bg-accent);
+}
+
+.eq-table-container input[type="checkbox"],
+.eq-table-container input[type="number"] {
+  width: 100%;
+  max-width: 100px;
+  text-align: right;
 }

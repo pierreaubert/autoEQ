@@ -24,6 +24,7 @@ export interface FilterParam {
   frequency: number;
   q: number;
   gain: number;
+  enabled: boolean;
 }
 
 export interface AudioPlayerCallbacks {
@@ -41,9 +42,14 @@ export class AudioPlayer {
   private eqFilters: BiquadFilterNode[] = [];
   private gainNode: GainNode | null = null;
   private isAudioPlaying: boolean = false;
+  private isAudioPaused: boolean = false;
   private audioStartTime: number = 0;
   private audioAnimationFrame: number | null = null;
-  private currentFilterParams: FilterParam[] = [];
+  private currentFilterParams: FilterParam[] = [
+    { frequency: 100, q: 1.0, gain: 0, enabled: true },
+    { frequency: 1000, q: 1.0, gain: 0, enabled: true },
+    { frequency: 10000, q: 1.0, gain: 0, enabled: true }
+  ];
   private eqEnabled: boolean = true;
 
   // Frequency analyzer
@@ -56,9 +62,15 @@ export class AudioPlayer {
   private container: HTMLElement;
   private demoSelect: HTMLSelectElement | null = null;
   private listenBtn: HTMLButtonElement | null = null;
+  private pauseBtn: HTMLButtonElement | null = null;
   private stopBtn: HTMLButtonElement | null = null;
   private eqOnBtn: HTMLButtonElement | null = null;
   private eqOffBtn: HTMLButtonElement | null = null;
+  private eqConfigBtn: HTMLButtonElement | null = null;
+  private eqModal: HTMLElement | null = null;
+  private eqBackdrop: HTMLElement | null = null;
+  private eqModalCloseBtn: HTMLButtonElement | null = null;
+  private eqTableContainer: HTMLElement | null = null;
   private statusText: HTMLElement | null = null;
   private positionText: HTMLElement | null = null;
   private durationText: HTMLElement | null = null;
@@ -69,7 +81,14 @@ export class AudioPlayer {
   private callbacks: AudioPlayerCallbacks;
   private instanceId: string;
 
+  // Pause double-click tracking
+  private pauseClickCount: number = 0;
+  private pauseClickTimer: number | null = null;
+
   constructor(container: HTMLElement, config: AudioPlayerConfig = {}, callbacks: AudioPlayerCallbacks = {}) {
+    if (!container) {
+      throw new Error('AudioPlayer: container element is required but was null/undefined');
+    }
     this.container = container;
     this.instanceId = 'audio-player-' + Math.random().toString(36).substr(2, 9);
     this.config = {
@@ -97,9 +116,50 @@ export class AudioPlayer {
     this.init();
   }
 
+  private _createEQModal(): void {
+    console.log('[EQ Debug] Creating modal element');
+    const existingModal = document.getElementById(this.instanceId + '-eq-modal');
+    if (existingModal) {
+      console.log('[EQ Debug] Modal already exists:', existingModal);
+      return;
+    }
+
+    // Create backdrop
+    const backdrop = document.createElement('div');
+    backdrop.id = this.instanceId + '-eq-backdrop';
+    backdrop.className = 'eq-modal-backdrop';
+
+    // Create modal
+    const modal = document.createElement('div');
+    modal.id = this.instanceId + '-eq-modal';
+    modal.className = 'eq-modal';
+    console.log('[EQ Debug] Modal element created:', modal);
+    console.log('[EQ Debug] Modal ID:', modal.id);
+    modal.innerHTML = `
+      <div class="eq-modal-content">
+        <div class="eq-modal-header">
+          <h3>Equalizer Configuration</h3>
+          <button type="button" class="eq-modal-close-btn">&times;</button>
+        </div>
+        <div class="eq-modal-body">
+          <div class="eq-table-container"></div>
+        </div>
+      </div>
+    `;
+
+    // Append both to body for proper layering
+    document.body.appendChild(backdrop);
+    document.body.appendChild(modal);
+    console.log('[EQ Debug] Modal and backdrop inserted into body');
+    console.log('[EQ Debug] Modal in DOM:', document.contains(modal));
+    const foundModal = document.getElementById(this.instanceId + '-eq-modal');
+    console.log('[EQ Debug] Can find modal after insertion:', !!foundModal);
+  }
+
   private async init(): Promise<void> {
     try {
       await this.setupAudioContext();
+      this._createEQModal();
       this.createUI();
       this.setupEventListeners();
       console.log('AudioPlayer initialized successfully');
@@ -127,17 +187,25 @@ export class AudioPlayer {
 
   private createUI(): void {
     const selectId = `demo-audio-select-${this.instanceId}`;
+    console.log('[EQ Debug] Creating UI with config:', {
+      enableEQ: this.config.enableEQ,
+      enableSpectrum: this.config.enableSpectrum,
+      showProgress: this.config.showProgress
+    });
+
     const html = `
       <div class="audio-player">
         <div class="audio-control-row">
           <div class="audio-left-controls">
-            <label for="${selectId}">Demo Track</label>
-            <select id="${selectId}" class="demo-audio-select">
-              <option value="">Select track...</option>
-              ${Object.keys(this.config.demoTracks || {}).map(key =>
-                `<option value="${key}">${this.formatTrackName(key)}</option>`
-              ).join('')}
-            </select>
+            <div class="demo-track-container">
+              <label for="${selectId}" class="demo-track-label">Demo Track</label>
+              <select id="${selectId}" class="demo-audio-select">
+                <option value="">Select track...</option>
+                ${Object.keys(this.config.demoTracks || {}).map(key =>
+                  `<option value="${key}">${this.formatTrackName(key)}</option>`
+                ).join('')}
+              </select>
+            </div>
           </div>
 
           <div class="audio-center-controls">
@@ -157,58 +225,103 @@ export class AudioPlayer {
                 </div>
               ` : ''}
 
-              ${this.config.enableSpectrum ? `
-                <div class="frequency-analyzer" style="display: none;">
-                  <canvas class="spectrum-canvas"></canvas>
-                  ${this.config.showFrequencyLabels ? `
-                    <div class="frequency-labels">
-                      <span class="freq-label" data-range="sub-bass">Sub Bass<br><small>&lt;60Hz</small></span>
-                      <span class="freq-label" data-range="bass">Bass<br><small>60-250Hz</small></span>
-                      <span class="freq-label" data-range="low-mid">Low Mid<br><small>250-500Hz</small></span>
-                      <span class="freq-label" data-range="mid">Mid<br><small>500-2kHz</small></span>
-                      <span class="freq-label" data-range="high-mid">High Mid<br><small>2-4kHz</small></span>
-                      <span class="freq-label" data-range="presence">Presence<br><small>4-6kHz</small></span>
-                      <span class="freq-label" data-range="brilliance">Brilliance<br><small>6-20kHz</small></span>
-                    </div>
-                  ` : ''}
-                </div>
-              ` : ''}
+              <div class="audio-playback-controls">
+                <button type="button" class="listen-button" disabled>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M8 5V19L19 12L8 5Z"/></svg>
+                </button>
+                <button type="button" class="pause-button" disabled>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M6 4H10V20H6V4ZM14 4H18V20H14V4Z"/></svg>
+                </button>
+                <button type="button" class="stop-button" disabled>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M6 6H18V18H6V6Z"/></svg>
+                </button>
+              </div>
             </div>
           </div>
+
+          ${this.config.enableSpectrum ? `
+            <div class="audio-spectrum-controls">
+              <div class="frequency-analyzer" style="display: none;">
+                <canvas class="spectrum-canvas"></canvas>
+                ${this.config.showFrequencyLabels ? `
+                  <div class="frequency-labels">
+                    <span class="freq-label" data-range="sub-bass">Sub Bass<br><small>&lt;60Hz</small></span>
+                    <span class="freq-label" data-range="bass">Bass<br><small>60-250Hz</small></span>
+                    <span class="freq-label" data-range="low-mid">Low Mid<br><small>250-500Hz</small></span>
+                    <span class="freq-label" data-range="mid">Mid<br><small>500-2kHz</small></span>
+                    <span class="freq-label" data-range="high-mid">High Mid<br><small>2-4kHz</small></span>
+                    <span class="freq-label" data-range="presence">Presence<br><small>4-6kHz</small></span>
+                    <span class="freq-label" data-range="brilliance">Brilliance<br><small>6-20kHz</small></span>
+                  </div>
+                ` : ''}
+              </div>
+            </div>
+          ` : ''}
 
           <div class="audio-right-controls">
             ${this.config.enableEQ ? `
               <div class="eq-toggle-buttons">
                 <button type="button" class="eq-toggle-btn eq-on-btn active">On</button>
+                <button type="button" class="eq-toggle-btn eq-config-btn">⚙️</button>
                 <button type="button" class="eq-toggle-btn eq-off-btn">Off</button>
               </div>
             ` : ''}
-            <button type="button" class="listen-button" disabled>
-              🎵 Listen
-            </button>
-            <button type="button" class="stop-button" disabled style="display: none;">
-              ⏹️ Stop
-            </button>
           </div>
         </div>
       </div>
     `;
 
+    console.log('[EQ Debug] Generated HTML contains gear button:', html.includes('eq-config-btn'));
     this.container.innerHTML = html;
+    console.log('[EQ Debug] HTML injected into container');
     this.cacheUIElements();
   }
 
   private cacheUIElements(): void {
+    console.log('[EQ Debug] Caching UI elements from container:', this.container);
+    console.log('[EQ Debug] Container HTML:', this.container.innerHTML.substring(0, 500) + '...');
+
     this.demoSelect = this.container.querySelector('.demo-audio-select');
     this.listenBtn = this.container.querySelector('.listen-button');
+    this.pauseBtn = this.container.querySelector('.pause-button');
     this.stopBtn = this.container.querySelector('.stop-button');
     this.eqOnBtn = this.container.querySelector('.eq-on-btn');
     this.eqOffBtn = this.container.querySelector('.eq-off-btn');
+    this.eqConfigBtn = this.container.querySelector('.eq-config-btn');
+
+    console.log('[EQ Debug] Elements found:', {
+      demoSelect: !!this.demoSelect,
+      listenBtn: !!this.listenBtn,
+      eqOnBtn: !!this.eqOnBtn,
+      eqOffBtn: !!this.eqOffBtn,
+      eqConfigBtn: !!this.eqConfigBtn
+    });
+
+    console.log('[EQ Debug] Gear button element:', this.eqConfigBtn);
+    console.log('[EQ Debug] Gear button found:', !!this.eqConfigBtn);
+
+    // Check if EQ buttons container exists
+    const eqButtonsContainer = this.container.querySelector('.eq-toggle-buttons');
+    console.log('[EQ Debug] EQ buttons container found:', !!eqButtonsContainer);
+    if (eqButtonsContainer) {
+      console.log('[EQ Debug] EQ buttons container HTML:', eqButtonsContainer.innerHTML);
+    }
     this.statusText = this.container.querySelector('.audio-status-text');
     this.positionText = this.container.querySelector('.audio-position');
     this.durationText = this.container.querySelector('.audio-duration');
     this.progressFill = this.container.querySelector('.audio-progress-fill');
     this.spectrumCanvas = this.container.querySelector('.spectrum-canvas');
+
+    // Modal and backdrop elements are in the body
+    this.eqModal = document.getElementById(this.instanceId + '-eq-modal');
+    this.eqBackdrop = document.getElementById(this.instanceId + '-eq-backdrop');
+    console.log('[EQ Debug] Modal element lookup ID:', this.instanceId + '-eq-modal');
+    console.log('[EQ Debug] Modal element found:', this.eqModal);
+    console.log('[EQ Debug] Backdrop element found:', this.eqBackdrop);
+    if (this.eqModal) {
+        this.eqModalCloseBtn = this.eqModal.querySelector('.eq-modal-close-btn');
+        this.eqTableContainer = this.eqModal.querySelector('.eq-table-container');
+    }
 
     if (this.spectrumCanvas) {
       this.spectrumCtx = this.spectrumCanvas.getContext('2d');
@@ -228,12 +341,179 @@ export class AudioPlayer {
     });
 
     // Playback controls
-    this.listenBtn?.addEventListener('click', () => this.play());
-    this.stopBtn?.addEventListener('click', () => this.stop());
+    this.listenBtn?.addEventListener('click', () => {
+        // If truly paused, resume; otherwise, play from beginning
+        if (this.isAudioPaused) {
+            this.resume();
+        } else {
+            this.play();
+        }
+    });
+
+    this.pauseBtn?.addEventListener('click', () => {
+        this.handlePauseClick();
+    });
+
+    this.stopBtn?.addEventListener('click', () => {
+        this.stop();
+    });
 
     // EQ controls
     this.eqOnBtn?.addEventListener('click', () => this.setEQEnabled(true));
     this.eqOffBtn?.addEventListener('click', () => this.setEQEnabled(false));
+    if (this.eqConfigBtn) {
+      console.log('[EQ Debug] Adding click event listener to gear button');
+      this.eqConfigBtn.addEventListener('click', () => {
+        console.log('[EQ Debug] Gear button clicked - event triggered');
+        try {
+          console.log('[EQ Debug] Executing modal show logic');
+          this.openEQModal();
+        } catch (error) {
+          console.error('[EQ Debug] Error in click handler:', error);
+        }
+      });
+      console.log('[EQ Debug] Click event listener attached to gear button');
+    } else {
+      console.error('[EQ Debug] Gear button not found, cannot attach event listener');
+    }
+    this.eqModalCloseBtn?.addEventListener('click', () => this.closeEQModal());
+    this.eqBackdrop?.addEventListener('click', () => this.closeEQModal());
+  }
+
+  private openEQModal(): void {
+    console.log('[EQ Debug] Attempting to show modal');
+    console.log('[EQ Debug] Current modal state:', {
+      exists: !!this.eqModal,
+      backdropExists: !!this.eqBackdrop,
+      id: this.eqModal?.id,
+      className: this.eqModal?.className,
+      parentElement: this.eqModal?.parentElement?.tagName
+    });
+
+    if (this.eqModal && this.eqBackdrop && this.eqConfigBtn) {
+      this.renderEQTable();
+
+      // Position the modal above the gear button
+      const buttonRect = this.eqConfigBtn.getBoundingClientRect();
+      const modalWidth = 450; // Match CSS width
+      const modalHeight = 350; // Approximate height
+
+      // Calculate position - center above the button
+      let left = buttonRect.left + (buttonRect.width / 2) - (modalWidth / 2);
+      let top = buttonRect.top - modalHeight - 10; // 10px gap
+
+      // Keep modal within viewport
+      const padding = 10;
+      if (left < padding) left = padding;
+      if (left + modalWidth > window.innerWidth - padding) {
+        left = window.innerWidth - modalWidth - padding;
+      }
+
+      // If not enough space above, show below
+      if (top < padding) {
+        top = buttonRect.bottom + 10;
+      }
+
+      // Apply positioning
+      this.eqModal.style.left = `${left}px`;
+      this.eqModal.style.top = `${top}px`;
+
+      console.log('[EQ Debug] Modal positioned at:', { left, top, buttonRect });
+
+      // Show backdrop and modal
+      this.eqBackdrop.classList.add('visible');
+      this.eqModal.classList.add('visible');
+
+      console.log('[EQ Debug] Modal classes after show:', {
+        modal: this.eqModal.className,
+        backdrop: this.eqBackdrop.className
+      });
+
+      // Add click outside handler
+      document.addEventListener('mousedown', this.handleClickOutside, true);
+    } else {
+      console.error('[EQ Debug] Modal, backdrop, or gear button element is null or undefined');
+    }
+  }
+
+  private closeEQModal(): void {
+    if (this.eqModal) {
+      this.eqModal.classList.remove('visible');
+    }
+    if (this.eqBackdrop) {
+      this.eqBackdrop.classList.remove('visible');
+    }
+    document.removeEventListener('mousedown', this.handleClickOutside, true);
+  }
+
+  private handleClickOutside = (event: MouseEvent): void => {
+    if (this.eqModal && !this.eqModal.contains(event.target as Node) && !this.eqConfigBtn?.contains(event.target as Node)) {
+      this.closeEQModal();
+    }
+  };
+
+  private renderEQTable(): void {
+    console.log('[EQ Debug] Rendering EQ table');
+    console.log('[EQ Debug] EQ table container:', this.eqTableContainer);
+    console.log('[EQ Debug] Current filter params:', this.currentFilterParams);
+    if (!this.eqTableContainer) {
+      console.error('[EQ Debug] EQ table container not found');
+      return;
+    }
+
+    const table = document.createElement('table');
+    table.innerHTML = `
+      <thead>
+        <tr>
+          <th>Enabled</th>
+          <th>Frequency (Hz)</th>
+          <th>Q</th>
+          <th>Gain (dB)</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${this.currentFilterParams.map((filter, index) => `
+          <tr>
+            <td><input type="checkbox" data-index="${index}" class="eq-enabled" ${filter.enabled ? 'checked' : ''}></td>
+            <td><input type="number" data-index="${index}" class="eq-frequency" value="${filter.frequency.toFixed(1)}" step="1"></td>
+            <td><input type="number" data-index="${index}" class="eq-q" value="${filter.q.toFixed(2)}" step="0.1"></td>
+            <td><input type="number" data-index="${index}" class="eq-gain" value="${filter.gain.toFixed(2)}" step="0.1"></td>
+          </tr>
+        `).join('')}
+      </tbody>
+    `;
+
+    this.eqTableContainer.innerHTML = '';
+    this.eqTableContainer.appendChild(table);
+
+    table.addEventListener('input', (e) => this.handleEQTableChange(e));
+  }
+
+  private handleEQTableChange(e: Event): void {
+    const target = e.target as HTMLInputElement;
+    const index = parseInt(target.dataset.index || '0', 10);
+    const type = target.className.replace('eq-', '');
+
+    if (isNaN(index) || !this.currentFilterParams[index]) return;
+
+    let value: number | boolean;
+    if (target.type === 'checkbox') {
+      value = target.checked;
+    } else {
+      value = parseFloat(target.value);
+      if (isNaN(value)) return;
+    }
+
+    (this.currentFilterParams[index] as any)[type] = value;
+
+    this.updateFilterParams(this.currentFilterParams);
+
+    // If playing, the change is applied immediately because setupEQFilters is called
+    // and the audio graph is reconnected.
+    if (this.isAudioPlaying) {
+        this.setupEQFilters();
+        this.connectAudioChain();
+    }
   }
 
   private formatTrackName(key: string): string {
@@ -264,6 +544,8 @@ export class AudioPlayer {
   }
 
   private async loadAudioFromUrl(url: string): Promise<void> {
+    this.stop(); // Stop any currently playing audio
+
     if (!this.audioContext) {
       throw new Error('Audio context not initialized');
     }
@@ -287,6 +569,10 @@ export class AudioPlayer {
       });
 
       this.updateAudioInfo();
+
+      if (this.config.enableSpectrum) {
+        this.startSpectrumAnalysis();
+      }
     } catch (error) {
       console.error('Error loading audio from URL:', error);
       throw error;
@@ -295,6 +581,7 @@ export class AudioPlayer {
 
   private clearAudio(): void {
     this.stop();
+    this.stopSpectrumAnalysis();
     this.audioBuffer = null;
     this.setListenButtonEnabled(false);
     this.showAudioStatus(false);
@@ -339,8 +626,8 @@ export class AudioPlayer {
   }
 
   // EQ Filter Management
-  updateFilterParams(filterParams: FilterParam[]): void {
-    this.currentFilterParams = [...filterParams];
+  updateFilterParams(filterParams: Partial<FilterParam>[]): void {
+    this.currentFilterParams = filterParams.map(p => ({ ...p, frequency: p.frequency || 0, q: p.q || 1, gain: p.gain || 0, enabled: p.enabled ?? true }));
     this.setupEQFilters();
   }
 
@@ -351,19 +638,36 @@ export class AudioPlayer {
     this.eqFilters.forEach(filter => filter.disconnect());
     this.eqFilters = [];
 
+    // Calculate maximum positive gain for compensation
+    let maxPositiveGain = 0;
+
     // Create new filters from parameters
     this.currentFilterParams.forEach(param => {
-      if (Math.abs(param.gain) > 0.1) { // Only create filter if gain is significant
+      if (param.enabled && Math.abs(param.gain) > 0.1) { // Only create filter if enabled and gain is significant
         const filter = this.audioContext!.createBiquadFilter();
         filter.type = 'peaking';
         filter.frequency.value = param.frequency;
         filter.Q.value = param.q;
         filter.gain.value = param.gain;
         this.eqFilters.push(filter);
+
+        // Track maximum positive gain
+        if (param.gain > maxPositiveGain) {
+          maxPositiveGain = param.gain;
+        }
       }
     });
 
-    console.log(`Created ${this.eqFilters.length} EQ filters`);
+    // Apply gain compensation to prevent clipping
+    if (maxPositiveGain > 0) {
+      const compensationGain = Math.pow(10, -maxPositiveGain / 20); // Convert dB to linear scale
+      this.gainNode.gain.value = compensationGain;
+      console.log(`Applied gain compensation: -${maxPositiveGain.toFixed(1)} dB (${compensationGain.toFixed(3)} linear)`);
+    } else {
+      this.gainNode.gain.value = 1.0; // No compensation needed
+    }
+
+    console.log(`Created ${this.eqFilters.length} EQ filters with gain compensation`);
   }
 
   private connectAudioChain(): void {
@@ -426,29 +730,79 @@ export class AudioPlayer {
       frequencyAnalyzer.style.display = 'flex';
     }
 
+    if (this.spectrumAnimationFrame) return; // Animation already running
+
     const dataArray = new Uint8Array(this.analyserNode.frequencyBinCount);
 
     const draw = () => {
-      if (!this.analyserNode || !this.spectrumCanvas || !this.spectrumCtx || !this.isAudioPlaying) return;
-
-      this.analyserNode.getByteFrequencyData(dataArray);
+      if (!this.analyserNode || !this.spectrumCanvas || !this.spectrumCtx) {
+        this.spectrumAnimationFrame = null;
+        return;
+      }
 
       const width = this.spectrumCanvas.width;
       const height = this.spectrumCanvas.height;
 
-      this.spectrumCtx.fillStyle = 'rgb(0, 0, 0)';
+      // Detect color scheme and set appropriate colors
+      const isDarkMode = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+
+      // Set background color based on theme
+      this.spectrumCtx.fillStyle = isDarkMode ? 'rgb(0, 0, 0)' : 'rgb(255, 255, 255)';
       this.spectrumCtx.fillRect(0, 0, width, height);
 
-      const barWidth = width / dataArray.length;
-      let x = 0;
+      if (this.isAudioPlaying) {
+        this.analyserNode.getByteFrequencyData(dataArray);
 
-      for (let i = 0; i < dataArray.length; i++) {
-        const barHeight = (dataArray[i] / 255) * height;
+        // Use logarithmic frequency mapping (20Hz - 20kHz)
+        const minFreq = 20;
+        const maxFreq = 20000;
+        const sampleRate = this.audioContext!.sampleRate;
+        const nyquist = sampleRate / 2;
+        const barsCount = Math.min(width / 2, 256); // Limit bars for performance
+        const barWidth = width / barsCount;
 
-        this.spectrumCtx.fillStyle = `rgb(${barHeight + 100}, 50, 50)`;
-        this.spectrumCtx.fillRect(x, height - barHeight, barWidth, barHeight);
+        for (let i = 0; i < barsCount; i++) {
+          // Calculate logarithmic frequency for this bar
+          const logMin = Math.log10(minFreq);
+          const logMax = Math.log10(maxFreq);
+          const logFreq = logMin + (logMax - logMin) * (i / barsCount);
+          const freq = Math.pow(10, logFreq);
 
-        x += barWidth;
+          // Map frequency to FFT bin
+          const binIndex = Math.round((freq / nyquist) * dataArray.length);
+          const clampedBin = Math.min(binIndex, dataArray.length - 1);
+
+          // Get magnitude and apply some smoothing by averaging nearby bins
+          let magnitude = 0;
+          const smoothingRange = Math.max(1, Math.floor(dataArray.length / barsCount / 2));
+          let count = 0;
+
+          for (let j = Math.max(0, clampedBin - smoothingRange);
+               j <= Math.min(dataArray.length - 1, clampedBin + smoothingRange); j++) {
+            magnitude += dataArray[j];
+            count++;
+          }
+          magnitude = count > 0 ? magnitude / count : 0;
+
+          const barHeight = (magnitude / 255) * height * 0.9; // Use 90% of height for better visuals
+
+          // Use different colors based on theme and frequency
+          if (isDarkMode) {
+            // Dark mode: bright colors with frequency-based hues
+            const hueShift = (i / barsCount) * 60; // 0-60 degrees (red to yellow)
+            const intensity = Math.floor(barHeight / height * 155 + 100);
+            this.spectrumCtx.fillStyle = `hsl(${hueShift}, 80%, ${Math.min(intensity / 255 * 70 + 30, 90)}%)`;
+          } else {
+            // Light mode: darker colors with frequency-based variation
+            const hueShift = (i / barsCount) * 240; // 0-240 degrees (red to blue)
+            const saturation = 70 + (barHeight / height) * 30; // 70-100%
+            const lightness = Math.max(20, 60 - (barHeight / height) * 40); // 60-20%
+            this.spectrumCtx.fillStyle = `hsl(${hueShift}, ${saturation}%, ${lightness}%)`;
+          }
+
+          const x = i * barWidth;
+          this.spectrumCtx.fillRect(x, height - barHeight, barWidth - 1, barHeight);
+        }
       }
 
       this.spectrumAnimationFrame = requestAnimationFrame(draw);
@@ -548,16 +902,64 @@ export class AudioPlayer {
       this.updatePlaybackUI();
       this.startPositionUpdates();
 
-      if (this.config.enableSpectrum) {
-        this.startSpectrumAnalysis();
-      }
-
       this.callbacks.onPlay?.();
       console.log('Audio playback started successfully');
     } catch (error) {
       console.error('Error during audio playback:', error);
       this.callbacks.onError?.('Playback failed: ' + error);
       throw error;
+    }
+  }
+
+  private handlePauseClick(): void {
+    this.pauseClickCount++;
+
+    if (this.pauseClickCount === 1) {
+      // First click - pause
+      this.pause();
+
+      // Set a timer to reset click count
+      this.pauseClickTimer = window.setTimeout(() => {
+        this.pauseClickCount = 0;
+        this.pauseClickTimer = null;
+      }, 500); // 500ms window for double-click
+    } else if (this.pauseClickCount === 2) {
+      // Second click - restart
+      if (this.pauseClickTimer) {
+        clearTimeout(this.pauseClickTimer);
+        this.pauseClickTimer = null;
+      }
+      this.pauseClickCount = 0;
+      this.restart();
+    }
+  }
+
+  pause(): void {
+    if (this.audioContext && this.audioContext.state === 'running') {
+      this.audioContext.suspend();
+      this.isAudioPlaying = false;
+      this.isAudioPaused = true;
+      this.updatePlaybackUI();
+      console.log('Audio playback paused');
+    }
+  }
+
+  private restart(): void {
+    console.log('Restarting audio playback');
+    this.stop();
+    // Small delay to ensure stop is complete
+    setTimeout(() => {
+      this.play();
+    }, 50);
+  }
+
+  resume(): void {
+    if (this.audioContext && this.audioContext.state === 'suspended' && this.isAudioPaused) {
+      this.audioContext.resume();
+      this.isAudioPlaying = true;
+      this.isAudioPaused = false;
+      this.updatePlaybackUI();
+      console.log('Audio playback resumed');
     }
   }
 
@@ -572,13 +974,13 @@ export class AudioPlayer {
     }
 
     this.isAudioPlaying = false;
+    this.isAudioPaused = false;
 
     if (this.audioAnimationFrame) {
       cancelAnimationFrame(this.audioAnimationFrame);
       this.audioAnimationFrame = null;
     }
 
-    this.stopSpectrumAnalysis();
     this.updatePlaybackUI();
     this.callbacks.onStop?.();
     console.log('Audio playback stopped');
@@ -586,20 +988,28 @@ export class AudioPlayer {
 
   private updatePlaybackUI(): void {
     const isPlaying = this.isAudioPlaying;
+    const isPaused = this.isAudioPaused;
 
+    // Update button states based on playback status
     if (this.listenBtn) {
-      this.listenBtn.style.display = isPlaying ? 'none' : 'flex';
+      this.listenBtn.disabled = isPlaying;
+    }
+
+    if (this.pauseBtn) {
+      this.pauseBtn.disabled = !isPlaying;
     }
 
     if (this.stopBtn) {
-      this.stopBtn.style.display = isPlaying ? 'flex' : 'none';
-      this.stopBtn.disabled = !isPlaying;
+      this.stopBtn.disabled = !isPlaying && !isPaused;
     }
 
     if (this.statusText) {
-      const status = isPlaying ?
-        (this.eqEnabled ? 'Playing (EQ On)' : 'Playing (EQ Off)') :
-        'Audio ready';
+      let status = 'Audio ready';
+      if (isPaused) {
+        status = this.eqEnabled ? 'Paused (EQ On)' : 'Paused (EQ Off)';
+      } else if (isPlaying) {
+        status = this.eqEnabled ? 'Playing (EQ On)' : 'Playing (EQ Off)';
+      }
       this.statusText.textContent = status;
     }
   }
@@ -619,6 +1029,8 @@ export class AudioPlayer {
 
   // Load external audio file
   async loadAudioFile(file: File): Promise<void> {
+    this.stop(); // Stop any currently playing audio
+
     if (!this.audioContext) {
       throw new Error('Audio context not initialized');
     }
@@ -630,8 +1042,11 @@ export class AudioPlayer {
 
       this.updateAudioInfo();
       this.setListenButtonEnabled(true);
-      this.showAudioStatus(true);
       this.setStatus('Audio ready');
+
+      if (this.config.enableSpectrum) {
+        this.startSpectrumAnalysis();
+      }
     } catch (error) {
       console.error('Error loading audio file:', error);
       this.callbacks.onError?.('Failed to load audio file: ' + error);
@@ -642,6 +1057,7 @@ export class AudioPlayer {
   // Cleanup
   destroy(): void {
     this.stop();
+    this.stopSpectrumAnalysis();
 
     this.eqFilters.forEach(filter => filter.disconnect());
     this.eqFilters = [];

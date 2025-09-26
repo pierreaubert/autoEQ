@@ -71,6 +71,9 @@ export class AudioProcessor {
       const arrayBuffer = await file.arrayBuffer();
       this.audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
       console.log('Audio file loaded successfully');
+
+      // Update audio status elements if available
+      this.updateAudioStatus();
     } catch (error) {
       console.error('Error loading audio file:', error);
       throw error;
