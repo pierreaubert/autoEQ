@@ -1,6 +1,6 @@
 [package]
 name = "autoeq-testfunctions"
-version = "0.2.31"
+version = "0.2.32"
 edition = "2021"
 authors = ["Pierre Aubert <pierre@spinorama.org>"]
 license = "GPL-3.0-or-later"
@@ -9,7 +9,17 @@ repository = "https://github.com/pierreaubert/autoeq"
 
 [dependencies]
 ndarray = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
+plotly = { workspace = true }
+autoeq-env = { path = "../src-env" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+regex = "1.10"
 
 [lib]
 name = "autoeq_testfunctions"
 path = "src/lib.rs"
+
+[[bin]]
+name = "plot_functions"
+path = "bin/plot_functions.rs"

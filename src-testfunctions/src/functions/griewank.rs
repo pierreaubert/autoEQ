@@ -14,6 +14,7 @@ pub fn griewank(x: &Array1<f64>) -> f64 {
         .product();
     1.0 + sum_squares / 4000.0 - product_cos
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;

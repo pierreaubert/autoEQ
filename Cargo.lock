@@ -458,14 +458,20 @@ dependencies = [
 
 [[package]]
 name = "autoeq-testfunctions"
-version = "0.2.31"
+version = "0.2.32"
 dependencies = [
+ "autoeq-env",
+ "clap",
  "ndarray",
+ "plotly",
+ "regex",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
 name = "autoeq-ui-tauri"
-version = "0.3.34"
+version = "0.3.50"
 dependencies = [
  "autoeq",
  "blas-src",

@@ -75,6 +75,10 @@ export class AudioPlayer {
   private positionText: HTMLElement | null = null;
   private durationText: HTMLElement | null = null;
   private progressFill: HTMLElement | null = null;
+  private eqFilterCountText: HTMLElement | null = null;
+  private eqGainCompText: HTMLElement | null = null;
+  private eqMiniCanvas: HTMLCanvasElement | null = null;
+  private eqMiniCtx: CanvasRenderingContext2D | null = null;
 
   // Configuration
   private config: AudioPlayerConfig;
@@ -260,10 +264,22 @@ export class AudioPlayer {
               </div>
             ` : ''}
             ${this.config.enableEQ ? `
-              <div class="eq-toggle-buttons">
-                <button type="button" class="eq-toggle-btn eq-on-btn active">On</button>
-                <button type="button" class="eq-toggle-btn eq-config-btn">⚙️</button>
-                <button type="button" class="eq-toggle-btn eq-off-btn">Off</button>
+              <div class="eq-control-section">
+                <div class="eq-info-display">
+                  <div class="eq-info-text">
+                    <span class="eq-label">EQ</span> •
+                    <span class="eq-filter-count">0 filters</span> •
+                    <span class="eq-gain-compensation">0dB comp</span>
+                  </div>
+                  <div class="eq-mini-graph">
+                    <canvas class="eq-mini-canvas" width="160" height="30"></canvas>
+                  </div>
+                </div>
+                <div class="eq-toggle-buttons">
+                  <button type="button" class="eq-toggle-btn eq-on-btn active">On</button>
+                  <button type="button" class="eq-toggle-btn eq-config-btn">⚙️</button>
+                  <button type="button" class="eq-toggle-btn eq-off-btn">Off</button>
+                </div>
               </div>
             ` : ''}
           </div>
@@ -332,6 +348,15 @@ export class AudioPlayer {
         this.initializeSpectrumDisplay();
       }
     }
+
+    // Cache EQ info elements
+    this.eqFilterCountText = this.container.querySelector('.eq-filter-count');
+    this.eqGainCompText = this.container.querySelector('.eq-gain-compensation');
+    this.eqMiniCanvas = this.container.querySelector('.eq-mini-canvas');
+    if (this.eqMiniCanvas) {
+      this.eqMiniCtx = this.eqMiniCanvas.getContext('2d');
+      this.drawEQMiniGraph();
+    }
   }
 
   private setupEventListeners(): void {
@@ -375,6 +400,12 @@ export class AudioPlayer {
     // EQ controls
     this.eqOnBtn?.addEventListener('click', () => this.setEQEnabled(true));
     this.eqOffBtn?.addEventListener('click', () => this.setEQEnabled(false));
+
+    // Initialize EQ info display
+    if (this.config.enableEQ) {
+      this.updateEQInfo(0, 0);
+      this.drawEQMiniGraph();
+    }
     if (this.eqConfigBtn) {
       console.log('[EQ Debug] Adding click event listener to gear button');
       this.eqConfigBtn.addEventListener('click', () => {
@@ -520,14 +551,8 @@ export class AudioPlayer {
 
     (this.currentFilterParams[index] as any)[type] = value;
 
+    // Update filter parameters - this will also update the display
     this.updateFilterParams(this.currentFilterParams);
-
-    // If playing, the change is applied immediately because setupEQFilters is called
-    // and the audio graph is reconnected.
-    if (this.isAudioPlaying) {
-        this.setupEQFilters();
-        this.connectAudioChain();
-    }
   }
 
   private formatTrackName(key: string): string {
@@ -643,8 +668,36 @@ export class AudioPlayer {
 
   // EQ Filter Management
   updateFilterParams(filterParams: Partial<FilterParam>[]): void {
-    this.currentFilterParams = filterParams.map(p => ({ ...p, frequency: p.frequency || 0, q: p.q || 1, gain: p.gain || 0, enabled: p.enabled ?? true }));
+    this.currentFilterParams = filterParams.map(p => ({
+      ...p,
+      frequency: p.frequency || 0,
+      q: p.q || 1,
+      gain: p.gain || 0,
+      enabled: p.enabled ?? true
+    }));
+
+    // Recalculate and apply filters
     this.setupEQFilters();
+
+    // If playing, reconnect audio chain to apply changes immediately
+    if (this.isAudioPlaying && this.audioSource) {
+      this.connectAudioChain();
+    }
+  }
+
+  // Clear all EQ filters
+  clearEQFilters(): void {
+    this.currentFilterParams = [];
+    this.setupEQFilters();
+
+    // Update display to show no filters
+    this.updateEQInfo(0, 0);
+    this.drawEQMiniGraph();
+
+    // If playing, reconnect to remove all filters
+    if (this.isAudioPlaying && this.audioSource) {
+      this.connectAudioChain();
+    }
   }
 
   private setupEQFilters(): void {
@@ -656,6 +709,7 @@ export class AudioPlayer {
 
     // Calculate maximum positive gain for compensation
     let maxPositiveGain = 0;
+    let activeFilterCount = 0;
 
     // Create new filters from parameters
     this.currentFilterParams.forEach(param => {
@@ -666,6 +720,7 @@ export class AudioPlayer {
         filter.Q.value = param.q;
         filter.gain.value = param.gain;
         this.eqFilters.push(filter);
+        activeFilterCount++;
 
         // Track maximum positive gain
         if (param.gain > maxPositiveGain) {
@@ -682,6 +737,12 @@ export class AudioPlayer {
     } else {
       this.gainNode.gain.value = 1.0; // No compensation needed
     }
+
+    // Update EQ info display
+    this.updateEQInfo(activeFilterCount, maxPositiveGain);
+
+    // Draw mini EQ graph
+    this.drawEQMiniGraph();
 
     console.log(`Created ${this.eqFilters.length} EQ filters with gain compensation`);
   }
@@ -728,13 +789,164 @@ export class AudioPlayer {
       }
     }
 
-    // Reconnect audio chain if playing
+    // Reconnect audio chain if playing to apply/remove EQ
     if (this.isAudioPlaying && this.audioSource) {
       this.connectAudioChain();
     }
 
+    // Recalculate active filters and compensation when toggling
+    let activeFilterCount = 0;
+    let maxPositiveGain = 0;
+
+    if (enabled) {
+      // Count active filters and calculate compensation when EQ is on
+      this.currentFilterParams.forEach(param => {
+        if (param.enabled && Math.abs(param.gain) > 0.1) {
+          activeFilterCount++;
+          if (param.gain > maxPositiveGain) {
+            maxPositiveGain = param.gain;
+          }
+        }
+      });
+    }
+
+    // Update EQ info display
+    this.updateEQInfo(enabled ? activeFilterCount : 0, enabled ? maxPositiveGain : 0);
+
+    // Update mini graph to show enabled/disabled state
+    this.drawEQMiniGraph();
+
     console.log(`EQ ${enabled ? 'enabled' : 'disabled'}`);
     this.callbacks.onEQToggle?.(enabled);
+  }
+
+  // Update EQ info display
+  private updateEQInfo(filterCount: number, compensationDb: number): void {
+    if (this.eqFilterCountText) {
+      this.eqFilterCountText.textContent = `${filterCount} filter${filterCount !== 1 ? 's' : ''}`;
+    }
+    if (this.eqGainCompText) {
+      this.eqGainCompText.textContent = compensationDb > 0 ?
+        `-${compensationDb.toFixed(1)}dB comp` :
+        '0dB comp';
+    }
+  }
+
+  // Draw mini EQ graph
+  private drawEQMiniGraph(): void {
+    if (!this.eqMiniCanvas || !this.eqMiniCtx || !this.audioContext) return;
+
+    const ctx = this.eqMiniCtx;
+    const width = this.eqMiniCanvas.width;
+    const height = this.eqMiniCanvas.height;
+
+    // Detect color scheme
+    const isDarkMode = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+
+    // Clear canvas
+    ctx.fillStyle = isDarkMode ? 'rgba(0, 0, 0, 0.2)' : 'rgba(255, 255, 255, 0.2)';
+    ctx.fillRect(0, 0, width, height);
+
+    // Draw grid line at 0dB
+    ctx.strokeStyle = isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, height / 2);
+    ctx.lineTo(width, height / 2);
+    ctx.stroke();
+
+    // Check if we should draw the EQ curve
+    const hasFilters = this.currentFilterParams.some(p => p.enabled && Math.abs(p.gain) > 0.1);
+
+    if (!hasFilters) {
+      // Draw flat line when no active filters
+      ctx.strokeStyle = isDarkMode ? 'rgba(255, 255, 255, 0.3)' : 'rgba(0, 0, 0, 0.3)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(0, height / 2);
+      ctx.lineTo(width, height / 2);
+      ctx.stroke();
+      return;
+    }
+
+    // Calculate frequency response
+    const numPoints = width;
+    const minFreq = 20;
+    const maxFreq = 20000;
+    const maxGain = 15; // ±15dB range for display
+
+    // Use different colors/opacity based on whether EQ is enabled
+    if (this.eqEnabled) {
+      ctx.strokeStyle = isDarkMode ? '#4dabf7' : '#007bff';
+      ctx.lineWidth = 2;
+    } else {
+      // Show dimmed curve when EQ is disabled
+      ctx.strokeStyle = isDarkMode ? 'rgba(77, 171, 247, 0.4)' : 'rgba(0, 123, 255, 0.4)';
+      ctx.lineWidth = 1.5;
+    }
+    ctx.beginPath();
+
+    for (let x = 0; x < numPoints; x++) {
+      // Calculate frequency for this x position (logarithmic scale)
+      const logMin = Math.log10(minFreq);
+      const logMax = Math.log10(maxFreq);
+      const logFreq = logMin + (logMax - logMin) * (x / numPoints);
+      const freq = Math.pow(10, logFreq);
+
+      // Calculate combined gain at this frequency
+      let totalGain = 0;
+      this.currentFilterParams.forEach(param => {
+        if (param.enabled && Math.abs(param.gain) > 0.1) {
+          // Simplified peaking filter response calculation
+          const relativeFreq = freq / param.frequency;
+          const bandwidth = param.frequency / param.q;
+          const distance = Math.abs(Math.log2(relativeFreq));
+          const attenuation = Math.exp(-Math.pow(distance * param.q, 2));
+          totalGain += param.gain * attenuation;
+        }
+      });
+
+      // Clamp and scale to canvas
+      totalGain = Math.max(-maxGain, Math.min(maxGain, totalGain));
+      const y = height / 2 - (totalGain / maxGain) * (height / 2 - 2);
+
+      if (x === 0) {
+        ctx.moveTo(x, y);
+      } else {
+        ctx.lineTo(x, y);
+      }
+    }
+
+    ctx.stroke();
+
+    // Draw filter center frequencies as dots
+    this.currentFilterParams.forEach(param => {
+      if (param.enabled && Math.abs(param.gain) > 0.1) {
+        // Calculate x position for this frequency
+        const logMin = Math.log10(minFreq);
+        const logMax = Math.log10(maxFreq);
+        const logFreq = Math.log10(param.frequency);
+        const x = ((logFreq - logMin) / (logMax - logMin)) * width;
+
+        // Calculate y position for the gain
+        const y = height / 2 - (param.gain / maxGain) * (height / 2 - 2);
+
+        // Draw dot with opacity based on EQ enabled state
+        if (this.eqEnabled) {
+          ctx.fillStyle = param.gain > 0 ?
+            (isDarkMode ? '#57f287' : '#28a745') :
+            (isDarkMode ? '#ed4245' : '#dc3545');
+        } else {
+          // Dimmed dots when EQ is disabled
+          ctx.fillStyle = param.gain > 0 ?
+            (isDarkMode ? 'rgba(87, 242, 135, 0.4)' : 'rgba(40, 167, 69, 0.4)') :
+            (isDarkMode ? 'rgba(237, 66, 69, 0.4)' : 'rgba(220, 53, 69, 0.4)');
+        }
+        ctx.beginPath();
+        ctx.arc(x, y, this.eqEnabled ? 2 : 1.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    });
   }
 
   // Resize spectrum canvas to fit container

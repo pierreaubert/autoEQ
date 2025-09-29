@@ -22,6 +22,8 @@ bin: rust-bin ts-bin
 
 rust-bin:
 	cargo build --release --workspace
+	cargo build --release --bin autoeq
+	cargo build --release --bin plot_functions
 
 ts-bin:
 	cd src-ui && npm run tauri build
@@ -59,8 +61,13 @@ pre-commit-update:
 
 demo: rust-demo ts-demo
 
-rust-demo:
+rust-demo: headphone_loss_demo print_functions
+
+headphone_loss_demo:
 	cargo run --example headphone_loss_demo -- --spl "./data_tests/headphone/asr/bowerwilkins_p7/Bowers & Wilkins P7.csv" --target "./data_tests/targets/harman-over-ear-2018.csv"
+
+print_functions:
+	cargo run --bin print_functions
 
 ts-demo:
 	cd src-ui && npm run build:audio-player

@@ -34,8 +34,8 @@ blas-src = { version = "0.12.1", features = ["openblas"] }
 openblas-src = { version = "0.10", features = ["cblas", "system"] }
 
 [[bin]]
-name = "plot_functions"
-path = "bin/plot_functions.rs"
+name = "plot_autoeq_de"
+path = "bin/plot_autoeq_de.rs"
 
 [[bin]]
 name = "benchmark_convergence"

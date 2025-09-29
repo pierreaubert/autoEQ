@@ -64,6 +64,9 @@
   justify-content: flex-start;
   gap: var(--spacing-sm);
   flex: 0 0 auto;
+  padding-right: var(--spacing-md);
+  border-right: 1px solid var(--border-color);
+  margin-right: var(--spacing-md);
 }
 
 /* Demo Track Container - Vertical Layout */
@@ -115,6 +118,65 @@
 .demo-audio-select:focus {
   outline: none;
   border-color: var(--border-active);
+}
+
+/* EQ Control Section */
+.eq-control-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  align-items: center;
+}
+
+/* EQ Info Display */
+.eq-info-display {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  max-width: 180px;
+}
+
+.eq-info-text {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-xs);
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.eq-info-text .eq-label {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.eq-info-text .eq-filter-count,
+.eq-info-text .eq-gain-compensation {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+/* EQ Mini Graph */
+.eq-mini-graph {
+  width: 100%;
+  height: 30px;
+  background: var(--bg-accent);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.eq-mini-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: crisp-edges;
 }
 
 /* EQ Toggle Buttons */
@@ -417,6 +479,12 @@
     flex-wrap: wrap;
   }
 
+  .audio-left-controls {
+    border-right: none;
+    padding-right: var(--spacing-sm);
+    margin-right: var(--spacing-sm);
+  }
+
   .audio-left-controls,
   .audio-center-controls {
     flex: 0 0 auto;
@@ -441,12 +509,28 @@
   }
 
   .eq-toggle-buttons {
-    position: absolute;
-    top: var(--spacing-xs);
-    right: var(--spacing-xs);
     width: 90px;
     height: 28px;
     font-size: 11px;
+  }
+
+  .eq-control-section {
+    flex-direction: row;
+    gap: var(--spacing-sm);
+    width: 100%;
+    justify-content: center;
+  }
+
+  .eq-info-display {
+    max-width: 140px;
+  }
+
+  .eq-mini-graph {
+    height: 24px;
+  }
+
+  .eq-info-text {
+    font-size: 10px;
   }
 
   .audio-playback-container {
@@ -487,6 +571,26 @@
     font-size: 11px;
     padding: var(--spacing-xs) var(--spacing-sm);
     min-width: 35px;
+  }
+}
+
+/* Hide spectrum analyzer on very small screens */
+@media (max-width: 480px) {
+  .frequency-analyzer {
+    display: none !important;
+  }
+
+  .audio-right-controls {
+    justify-content: center;
+    flex: 0 0 auto;
+  }
+
+  .eq-control-section {
+    width: auto;
+  }
+
+  .eq-info-display {
+    max-width: 160px;
   }
 }
 

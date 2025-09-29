@@ -294,8 +294,11 @@ class AutoEQApplication {
       if (result.filter_params) {
         const filterParams: FilterParam[] = [];
         for (let i = 0; i < result.filter_params.length; i += 3) {
+            // Convert frequency from log space to linear space
+            const logFreq = result.filter_params[i];
+            const linearFreq = Math.pow(10, logFreq);
             filterParams.push({
-                frequency: result.filter_params[i],
+                frequency: linearFreq,
                 q: result.filter_params[i+1],
                 gain: result.filter_params[i+2],
                 enabled: true
