@@ -1,6 +1,6 @@
 // Refactored main application - streamlined and modular
 
-import { UIManager, PlotManager, OptimizationManager, APIManager, AudioPlayer, FilterParam, LayoutManager } from "./modules";
+import { UIManager, PlotManager, OptimizationManager, APIManager, AudioPlayer, FilterParam, LayoutManager, generateAppHTML } from "./modules";
 import { OptimizationParams, OptimizationResult } from "./types";
 import { AutoEQPlotAPI, PlotFiltersParams, PlotSpinParams } from "./types";
 
@@ -15,6 +15,9 @@ class AutoEQApplication {
   constructor() {
     console.log("Initializing AutoEQ Application...");
 
+    // Generate and inject HTML content FIRST, before initializing managers
+    this.injectHTML();
+
     // Initialize managers
     this.uiManager = new UIManager();
     this.apiManager = new APIManager();
@@ -24,14 +27,22 @@ class AutoEQApplication {
     if (audioControlsContainer) {
         // Clear the old controls and let the AudioPlayer component build its own UI
         audioControlsContainer.innerHTML = '';
+        // Add the fixed positioning class
+        audioControlsContainer.classList.add('audio-bar-fixed');
 
         this.audioPlayer = new AudioPlayer(
             audioControlsContainer,
-            { enableEQ: true, enableSpectrum: true },
-            {
-                onEQToggle: (enabled) => this.setEQEnabled(enabled),
-                onError: (error) => this.uiManager.showError(error),
-            }
+          {
+	    enableEQ: true,
+	    enableSpectrum: true,
+            showProgress: true,
+            showFrequencyLabels: true,
+            maxFilters: 11
+	  },
+          {
+            onEQToggle: (enabled) => this.setEQEnabled(enabled),
+            onError: (error) => this.uiManager.showError(error),
+          }
         );
     } else {
         console.error("Audio controls container (.audio-testing-controls) not found!");
@@ -43,12 +54,20 @@ class AutoEQApplication {
     console.log("[INIT DEBUG] Progress graph element found:", !!progressGraphElement);
     console.log("[INIT DEBUG] Tonal plot element found:", !!tonalPlotElement);
 
+    // Debug plot element availability
+    const filterPlotElement = document.getElementById("filter_plot") as HTMLElement;
+    const spinPlotElement = document.getElementById("spin_plot") as HTMLElement;
+    console.log("[INIT DEBUG] Filter plot element found:", !!filterPlotElement);
+    console.log("[INIT DEBUG] Spin plot element found:", !!spinPlotElement);
+    console.log("[INIT DEBUG] Progress graph element found:", !!progressGraphElement);
+    console.log("[INIT DEBUG] Tonal plot element found:", !!tonalPlotElement);
+
     this.plotManager = new PlotManager(
-      document.getElementById("filter_details_plot") as HTMLElement,
-      document.getElementById("filter_plot") as HTMLElement,
-      document.getElementById("details_plot") as HTMLElement,
-      document.getElementById("spin_plot") as HTMLElement,
-      document.getElementById("spin_plot_corrected") as HTMLElement,
+      null, // filter_details_plot - no longer used
+      filterPlotElement,
+      null, // details_plot - no longer used
+      spinPlotElement,
+      null, // spin_plot_corrected - no longer used
       progressGraphElement as HTMLElement,
       tonalPlotElement as HTMLElement
     );
@@ -67,6 +86,15 @@ class AutoEQApplication {
     this.initialize();
 
     console.log("AutoEQ Application initialized successfully");
+  }
+
+  private injectHTML(): void {
+    const appElement = document.getElementById('app');
+    if (!appElement) {
+      throw new Error('Application container element not found');
+    }
+    appElement.innerHTML = generateAppHTML();
+    console.log("HTML content dynamically generated and injected");
   }
 
   private setupManagerConnections(): void {
@@ -291,7 +319,7 @@ class AutoEQApplication {
       const hasSpinData = !!result.spin_details;
 
       // Configure plot visibility
-      this.plotManager.configureGridVisibility(hasSpinData);
+      this.plotManager.configureVerticalVisibility(hasSpinData);
 
       // Force layout recalculation after plots are updated
       this.layoutManager.forceRecalculate();
@@ -346,6 +374,7 @@ class AutoEQApplication {
     // It can be used to sync EQ state with other parts of the application if needed
     console.log(`[MAIN] EQ state changed to: ${enabled}`);
   }
+
 
   private handleOptimizationError(error: string): void {
     console.error("Optimization error:", error);

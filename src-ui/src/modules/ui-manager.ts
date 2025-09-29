@@ -7,7 +7,6 @@ export class UIManager {
   private optimizeBtn!: HTMLButtonElement;
   private resetBtn!: HTMLButtonElement;
   private progressElement!: HTMLElement;
-  private scoresElement!: HTMLElement;
   private errorElement!: HTMLElement;
 
   // Modal elements
@@ -65,7 +64,7 @@ export class UIManager {
     this.optimizeBtn = document.getElementById('optimize_btn') as HTMLButtonElement;
     this.resetBtn = document.getElementById('reset_btn') as HTMLButtonElement;
     this.progressElement = document.getElementById('optimization_progress') as HTMLElement;
-    this.scoresElement = document.getElementById('scores_display') as HTMLElement;
+    // Scores are now always visible in the bottom row
     this.errorElement = document.getElementById('error_display') as HTMLElement;
 
     // Initialize modal elements
@@ -314,16 +313,26 @@ export class UIManager {
       scoreImprovementElement.textContent = (improvement >= 0 ? '+' : '') + improvement.toFixed(3);
     }
 
-    if (this.scoresElement) {
-      this.scoresElement.style.display = 'block';
-    }
+    // Scores are now always visible in the bottom row
   }
 
   clearResults(): void {
     console.log('clearResults called');
-    if (this.scoresElement) {
-      this.scoresElement.style.display = 'none';
+    // Reset scores to default values instead of hiding
+    const scoreBeforeElement = document.getElementById('score_before') as HTMLElement;
+    const scoreAfterElement = document.getElementById('score_after') as HTMLElement;
+    const scoreImprovementElement = document.getElementById('score_improvement') as HTMLElement;
+
+    if (scoreBeforeElement) {
+      scoreBeforeElement.textContent = '-';
     }
+    if (scoreAfterElement) {
+      scoreAfterElement.textContent = '-';
+    }
+    if (scoreImprovementElement) {
+      scoreImprovementElement.textContent = '-';
+    }
+
     if (this.errorElement) {
       this.errorElement.style.display = 'none';
     }

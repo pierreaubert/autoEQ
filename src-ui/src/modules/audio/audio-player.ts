@@ -85,6 +85,9 @@ export class AudioPlayer {
   private pauseClickCount: number = 0;
   private pauseClickTimer: number | null = null;
 
+  // Resize handler reference for cleanup
+  private resizeHandler: (() => void) | null = null;
+
   constructor(container: HTMLElement, config: AudioPlayerConfig = {}, callbacks: AudioPlayerCallbacks = {}) {
     if (!container) {
       throw new Error('AudioPlayer: container element is required but was null/undefined');
@@ -95,7 +98,7 @@ export class AudioPlayer {
       enableEQ: true,
       maxFilters: 10,
       enableSpectrum: true,
-      fftSize: 2048,
+      fftSize: 4096,
       smoothingTimeConstant: 0.8,
       showProgress: true,
       showFrequencyLabels: true,
@@ -211,7 +214,7 @@ export class AudioPlayer {
           <div class="audio-center-controls">
             <div class="audio-playback-container">
               ${this.config.showProgress ? `
-                <div class="audio-status" style="display: none;">
+                <div class="audio-status" style="display: flex;">
                   <div class="audio-info-compact">
                     <span class="audio-status-text">Ready</span> •
                     <span class="audio-position">--:--</span> •
@@ -241,7 +244,7 @@ export class AudioPlayer {
 
           <div class="audio-right-controls">
             ${this.config.enableSpectrum ? `
-              <div class="frequency-analyzer" style="display: none;">
+              <div class="frequency-analyzer" style="display: flex;">
                 <canvas class="spectrum-canvas"></canvas>
                 ${this.config.showFrequencyLabels ? `
                   <div class="frequency-labels">
@@ -322,10 +325,24 @@ export class AudioPlayer {
 
     if (this.spectrumCanvas) {
       this.spectrumCtx = this.spectrumCanvas.getContext('2d');
+      // Set canvas dimensions
+      this.resizeSpectrumCanvas();
+      // Initialize spectrum analyzer immediately if enabled
+      if (this.config.enableSpectrum) {
+        this.initializeSpectrumDisplay();
+      }
     }
   }
 
   private setupEventListeners(): void {
+    // Handle window resize for spectrum canvas
+    this.resizeHandler = () => {
+      if (this.spectrumCanvas && this.config.enableSpectrum) {
+        this.resizeSpectrumCanvas();
+      }
+    };
+    window.addEventListener('resize', this.resizeHandler);
+
     // Demo track selection
     this.demoSelect?.addEventListener('change', async (e) => {
       const trackName = (e.target as HTMLSelectElement).value;
@@ -603,9 +620,11 @@ export class AudioPlayer {
   }
 
   private showAudioStatus(show: boolean): void {
+    // Progress bar is always visible now, so we don't hide it
+    // This method is kept for backward compatibility but does nothing
     const audioStatus = this.container.querySelector('.audio-status') as HTMLElement;
-    if (audioStatus) {
-      audioStatus.style.display = show ? 'flex' : 'none';
+    if (audioStatus && this.config.showProgress) {
+      audioStatus.style.display = 'flex'; // Always show if progress is enabled
     }
   }
 
@@ -718,6 +737,72 @@ export class AudioPlayer {
     this.callbacks.onEQToggle?.(enabled);
   }
 
+  // Resize spectrum canvas to fit container
+  private resizeSpectrumCanvas(): void {
+    if (!this.spectrumCanvas) return;
+
+    const container = this.spectrumCanvas.parentElement;
+    if (!container) return;
+
+    // Get the actual width of the container
+    const rect = container.getBoundingClientRect();
+    const width = Math.max(rect.width || container.clientWidth || 400, 200);
+    const height = 52; // Fixed height matching CSS
+
+    // Set canvas dimensions
+    this.spectrumCanvas.width = width;
+    this.spectrumCanvas.height = height;
+
+    // Redraw idle spectrum if not playing
+    if (!this.isAudioPlaying && this.config.enableSpectrum) {
+      this.drawIdleSpectrum();
+    }
+  }
+
+  // Initialize spectrum display even when not playing
+  private initializeSpectrumDisplay(): void {
+    if (!this.spectrumCanvas || !this.spectrumCtx) return;
+
+    const frequencyAnalyzer = this.container.querySelector('.frequency-analyzer') as HTMLElement;
+    if (frequencyAnalyzer) {
+      frequencyAnalyzer.style.display = 'flex';
+    }
+
+    // Draw initial empty spectrum
+    this.drawIdleSpectrum();
+  }
+
+  private drawIdleSpectrum(): void {
+    if (!this.spectrumCanvas || !this.spectrumCtx) return;
+
+    const width = this.spectrumCanvas.width;
+    const height = this.spectrumCanvas.height;
+
+    // Detect color scheme
+    const isDarkMode = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+
+    // Clear canvas with theme-appropriate background
+    this.spectrumCtx.fillStyle = isDarkMode ? 'rgb(0, 0, 0)' : 'rgb(255, 255, 255)';
+    this.spectrumCtx.fillRect(0, 0, width, height);
+
+    // Draw a subtle baseline to indicate the spectrum analyzer is ready
+    const barsCount = Math.min(width / 2, 256);
+    const barWidth = width / barsCount;
+
+    for (let i = 0; i < barsCount; i++) {
+      const baseHeight = 2; // Minimal height for idle state
+
+      if (isDarkMode) {
+        this.spectrumCtx.fillStyle = 'rgba(88, 101, 242, 0.3)'; // Subtle blue
+      } else {
+        this.spectrumCtx.fillStyle = 'rgba(0, 123, 255, 0.3)'; // Subtle blue
+      }
+
+      const x = i * barWidth;
+      this.spectrumCtx.fillRect(x, height - baseHeight, barWidth - 1, baseHeight);
+    }
+  }
+
   // Spectrum Analyzer
   private startSpectrumAnalysis(): void {
     if (!this.analyserNode || !this.spectrumCanvas || !this.spectrumCtx) return;
@@ -800,6 +885,9 @@ export class AudioPlayer {
           const x = i * barWidth;
           this.spectrumCtx.fillRect(x, height - barHeight, barWidth - 1, barHeight);
         }
+      } else {
+        // When not playing, show idle spectrum
+        this.drawIdleSpectrum();
       }
 
       this.spectrumAnimationFrame = requestAnimationFrame(draw);
@@ -814,9 +902,9 @@ export class AudioPlayer {
       this.spectrumAnimationFrame = null;
     }
 
-    const frequencyAnalyzer = this.container.querySelector('.frequency-analyzer') as HTMLElement;
-    if (frequencyAnalyzer) {
-      frequencyAnalyzer.style.display = 'none';
+    // Keep spectrum analyzer visible but show idle state
+    if (this.config.enableSpectrum) {
+      this.drawIdleSpectrum();
     }
   }
 
@@ -1055,6 +1143,18 @@ export class AudioPlayer {
   destroy(): void {
     this.stop();
     this.stopSpectrumAnalysis();
+
+    // Remove window resize listener
+    if (this.resizeHandler) {
+      window.removeEventListener('resize', this.resizeHandler);
+      this.resizeHandler = null;
+    }
+
+    // Remove modal and backdrop from DOM
+    const modal = document.getElementById(this.instanceId + '-eq-modal');
+    const backdrop = document.getElementById(this.instanceId + '-eq-backdrop');
+    if (modal) modal.remove();
+    if (backdrop) backdrop.remove();
 
     this.eqFilters.forEach(filter => filter.disconnect());
     this.eqFilters = [];

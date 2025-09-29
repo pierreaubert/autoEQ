@@ -14,7 +14,7 @@ interface ProgressData {
 
 export class PlotManager {
   private filterPlotElement: HTMLElement;
-  private detailsPlotElement: HTMLElement;
+  private detailsPlotElement: HTMLElement | null;
   private spinPlotElement: HTMLElement;
   private tonalPlotElement: HTMLElement | null = null;
   private progressGraphElement: HTMLElement | null = null;
@@ -25,11 +25,11 @@ export class PlotManager {
   private progressData: ProgressData[] = [];
 
   constructor(
-    filterDetailsPlotElement: HTMLElement, // Will be ignored - kept for compatibility
+    filterDetailsPlotElement: HTMLElement | null, // Will be ignored - kept for compatibility
     filterPlotElement: HTMLElement,
-    detailsPlotElement: HTMLElement,
+    detailsPlotElement: HTMLElement | null,
     spinPlotElement: HTMLElement,
-    spinPlotCorrectedElement: HTMLElement, // Will be ignored - no longer used
+    spinPlotCorrectedElement: HTMLElement | null, // Will be ignored - no longer used
     progressGraphElement?: HTMLElement,
     tonalPlotElement?: HTMLElement
   ) {
@@ -65,67 +65,65 @@ export class PlotManager {
         }
       });
 
-      // Hide spinorama grid items by default
-      this.hideSpinGridItems();
+      // Hide spinorama vertical items by default
+      this.hideSpinVerticalItems();
     } catch (error) {
       console.error('Error clearing plots:', error);
     }
   }
 
-  showSpinGridItems(): void {
-    const gridItems = ['details_grid_item', 'spin_grid_item', 'tonal_grid_item'];
-    gridItems.forEach(id => {
+  showSpinVerticalItems(): void {
+    const verticalItems = ['spin_vertical_item', 'tonal_vertical_item'];
+    verticalItems.forEach(id => {
       const element = document.getElementById(id);
       if (element) {
         element.style.display = 'flex';
-        console.log(`[GRID DEBUG] Showed grid item: ${id}`);
+        console.log(`[VERTICAL DEBUG] Showed vertical item: ${id}`);
       }
     });
   }
 
-  hideSpinGridItems(): void {
-    const gridItems = ['details_grid_item', 'spin_grid_item', 'tonal_grid_item'];
-    gridItems.forEach(id => {
+  hideSpinVerticalItems(): void {
+    const verticalItems = ['spin_vertical_item', 'tonal_vertical_item'];
+    verticalItems.forEach(id => {
       const element = document.getElementById(id);
       if (element) {
         element.style.display = 'none';
-        console.log(`[GRID DEBUG] Hid grid item: ${id}`);
+        console.log(`[VERTICAL DEBUG] Hid vertical item: ${id}`);
       }
     });
   }
 
   showPlotContainer(plotId: string): void {
-    // For compatibility with existing code, but now we manage at grid item level
-    const gridItemMap: { [key: string]: string } = {
-      'details_plot': 'details_grid_item',
-      'spin_plot': 'spin_grid_item',
-      'tonal_plot': 'tonal_grid_item'
+    // For compatibility with existing code, but now we manage at vertical item level
+    const verticalItemMap: { [key: string]: string } = {
+      'spin_plot': 'spin_vertical_item',
+      'tonal_plot': 'tonal_vertical_item'
     };
 
-    const gridItemId = gridItemMap[plotId];
-    if (gridItemId) {
-      const element = document.getElementById(gridItemId);
+    const verticalItemId = verticalItemMap[plotId];
+    if (verticalItemId) {
+      const element = document.getElementById(verticalItemId);
       if (element) {
         element.style.display = 'flex';
-        console.log(`[GRID DEBUG] Showed plot container: ${plotId} via grid item ${gridItemId}`);
+        console.log(`[VERTICAL DEBUG] Showed plot container: ${plotId} via vertical item ${verticalItemId}`);
       }
     }
   }
 
   hidePlotContainer(plotId: string): void {
-    // For compatibility with existing code, but now we manage at grid item level
-    const gridItemMap: { [key: string]: string } = {
-      'details_plot': 'details_grid_item',
-      'spin_plot': 'spin_grid_item',
-      'tonal_plot': 'tonal_grid_item'
+    // For compatibility with existing code, but now we manage at vertical item level
+    const verticalItemMap: { [key: string]: string } = {
+      'spin_plot': 'spin_vertical_item',
+      'tonal_plot': 'tonal_vertical_item'
     };
 
-    const gridItemId = gridItemMap[plotId];
-    if (gridItemId) {
-      const element = document.getElementById(gridItemId);
+    const verticalItemId = verticalItemMap[plotId];
+    if (verticalItemId) {
+      const element = document.getElementById(verticalItemId);
       if (element) {
         element.style.display = 'none';
-        console.log(`[GRID DEBUG] Hid plot container: ${plotId} via grid item ${gridItemId}`);
+        console.log(`[VERTICAL DEBUG] Hid plot container: ${plotId} via vertical item ${verticalItemId}`);
       }
     }
   }
@@ -361,18 +359,22 @@ export class PlotManager {
     });
   }
 
-  configureGridVisibility(hasSpinData: boolean): void {
-    console.log('[GRID DEBUG] Configuring grid visibility, hasSpinData:', hasSpinData);
+  configureVerticalVisibility(hasSpinData: boolean): void {
+    console.log('[VERTICAL DEBUG] Configuring vertical visibility, hasSpinData:', hasSpinData);
 
     if (hasSpinData) {
-      // Speaker-based: show all 4 graphs (Filter Response + 3 spinorama graphs)
-      console.log('[GRID DEBUG] Showing all graphs for speaker-based optimization');
-      this.showSpinGridItems();
+      // Speaker-based: show all 3 graphs (Filter Response + 2 spinorama graphs)
+      console.log('[VERTICAL DEBUG] Showing all graphs for speaker-based optimization');
+      this.showSpinVerticalItems();
     } else {
       // Curve+target: only show Filter Response graph
-      console.log('[GRID DEBUG] Showing only Filter Response for curve+target optimization');
-      this.hideSpinGridItems();
+      console.log('[VERTICAL DEBUG] Showing only Filter Response for curve+target optimization');
+      this.hideSpinVerticalItems();
     }
+  }
+
+  configureGridVisibility(hasSpinData: boolean): void {
+    this.configureVerticalVisibility(hasSpinData);
   }
 
   // Deprecated method - kept for compatibility

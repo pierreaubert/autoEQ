@@ -4,11 +4,8 @@
   "version": "0.2.4",
   "type": "module",
   "scripts": {
-    "predev": "node scripts/build-html.js",
     "dev": "vite",
-    "prebuild": "node scripts/build-html.js",
     "build": "tsc && vite build",
-    "build:html": "node scripts/build-html.js",
     "build:audio-player": "node src/modules/audio/build-audio-player.js",
     "preview": "vite preview",
     "tauri": "tauri",

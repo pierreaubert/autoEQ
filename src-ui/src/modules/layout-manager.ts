@@ -9,9 +9,9 @@ export class LayoutManager {
   }
 
   private initialize(): void {
-    this.plotsGridElement = document.querySelector('.plots-grid');
+    this.plotsGridElement = document.querySelector('.plots-vertical');
     if (!this.plotsGridElement) {
-      console.warn('[LAYOUT] Plots grid element not found');
+      console.warn('[LAYOUT] Plots vertical element not found');
       return;
     }
 
@@ -22,7 +22,7 @@ export class LayoutManager {
     this.calculateLayout();
 
     this.isInitialized = true;
-    console.log('[LAYOUT] Layout manager initialized');
+    console.log('[LAYOUT] Layout manager initialized for vertical layout');
   }
 
   private handleResize = (): void => {
@@ -45,38 +45,38 @@ export class LayoutManager {
 
     // Calculate available space for plots (excluding padding, margins, headers)
     const availableWidth = rightPanelRect.width - 40; // Account for panel padding
-    const availableHeight = rightPanelRect.height - 120; // Account for scores display and other elements
+    const availableHeight = rightPanelRect.height - 120; // Account for scores display, headers and other elements
 
     // Update CSS custom properties for dynamic sizing
-    document.documentElement.style.setProperty('--plots-grid-width', `${availableWidth}px`);
-    document.documentElement.style.setProperty('--plots-grid-height', `${availableHeight}px`);
+    document.documentElement.style.setProperty('--plots-vertical-width', `${availableWidth}px`);
+    document.documentElement.style.setProperty('--plots-vertical-height', `${availableHeight}px`);
 
-    // Calculate individual plot dimensions
+    // Calculate individual plot dimensions for 3 vertically stacked graphs
     const isMobile = window.innerWidth <= 768;
     const isTablet = window.innerWidth <= 1024;
 
     if (isMobile) {
-      // Single column layout
-      const plotHeight = Math.max(150, (availableHeight - 60) / 4); // 60px for gaps
-      document.documentElement.style.setProperty('--plot-item-height', `${plotHeight}px`);
+      // 3 vertically stacked graphs on mobile
+      const plotHeight = Math.max(120, (availableHeight - 30) / 3); // 30px for gaps between 3 graphs
+      document.documentElement.style.setProperty('--plot-vertical-height', `${plotHeight}px`);
     } else if (isTablet) {
-      // Single column layout for tablet
-      const plotHeight = Math.max(200, (availableHeight - 45) / 4); // 45px for gaps
-      document.documentElement.style.setProperty('--plot-item-height', `${plotHeight}px`);
+      // 3 vertically stacked graphs on tablet
+      const plotHeight = Math.max(150, (availableHeight - 30) / 3); // 30px for gaps between 3 graphs
+      document.documentElement.style.setProperty('--plot-vertical-height', `${plotHeight}px`);
     } else {
-      // 2x2 grid layout for desktop
-      const plotHeight = Math.max(200, (availableHeight - 15) / 2); // 15px for gap between rows
-      document.documentElement.style.setProperty('--plot-item-height', `${plotHeight}px`);
+      // 3 vertically stacked graphs on desktop
+      const plotHeight = Math.max(200, (availableHeight - 30) / 3); // 30px for gaps between 3 graphs
+      document.documentElement.style.setProperty('--plot-vertical-height', `${plotHeight}px`);
     }
 
-    console.log(`[LAYOUT] Updated layout: ${availableWidth}x${availableHeight}, mobile: ${isMobile}, tablet: ${isTablet}`);
+    console.log(`[LAYOUT] Updated vertical layout: ${availableWidth}x${availableHeight}, 3 graphs, mobile: ${isMobile}, tablet: ${isTablet}`);
   }
 
   public resizePlots(): void {
     if (!this.isInitialized) return;
 
     // Force Plotly plots to resize
-    const plotContainers = document.querySelectorAll('.plot-grid-container.has-plot');
+    const plotContainers = document.querySelectorAll('.plot-vertical-container.has-plot');
     plotContainers.forEach(container => {
       const plotlyDiv = container.querySelector('.js-plotly-plot') as HTMLElement;
       if (plotlyDiv && (window as any).Plotly) {

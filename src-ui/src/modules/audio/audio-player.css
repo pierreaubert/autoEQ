@@ -1,5 +1,4 @@
 /* Audio Player Standalone CSS */
-/* Extracted from main styles.css for standalone audio player component */
 
 /* CSS Variables - Define these if not available globally */
 :root {
@@ -19,7 +18,7 @@
   --spacing-sm: 8px;
   --spacing-md: 16px;
   --spacing-lg: 24px;
-  --radius: 4px;
+  --radius: 0px;
 }
 
 /* Dark theme support */
@@ -44,8 +43,9 @@
   background: var(--bg-secondary);
   border: 2px solid var(--border-color);
   border-radius: var(--radius);
-  padding: var(--spacing-sm);
+  padding: var(--spacing-md);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  width: 100%;
 }
 
 .audio-control-row {
@@ -53,13 +53,15 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--spacing-md);
-  min-height: 50px;
-  padding: var(--spacing-xs) 0;
+  min-height: 80px;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  width: 100%;
 }
 
 .audio-left-controls {
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   gap: var(--spacing-sm);
   flex: 0 0 auto;
 }
@@ -84,15 +86,17 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  flex: 1;
+  flex: 0 0 auto;
   margin: 0 var(--spacing-sm);
 }
 
 .audio-right-controls {
   display: flex;
   align-items: center;
-  gap: var(--spacing-md);
-  flex: 0 0 auto;
+  justify-content: flex-end;
+  gap: var(--spacing-sm);
+  flex: 1;
+  min-width: 0;
 }
 
 /* Demo Audio Select */
@@ -122,6 +126,7 @@
   background: var(--bg-primary);
   height: 32px;
   width: 120px;
+  flex-shrink: 0;
 }
 
 .eq-toggle-btn {
@@ -217,8 +222,9 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--spacing-sm);
-  width: 100%;
+  justify-content: center;
+  gap: var(--spacing-xs);
+  width: auto;
 }
 
 /* Audio Playback Controls - Horizontal Button Row */
@@ -258,24 +264,25 @@
 }
 
 .audio-center-controls .audio-progress {
-  width: 140px;
+  width: 160px;
   display: flex;
   justify-content: center;
 }
 
 .audio-center-controls .audio-progress-bar {
   width: 100%;
-  height: 16px;
+  height: 14px;
   background: var(--bg-accent);
-  border-radius: 2px;
+  border-radius: var(--radius);
   overflow: hidden;
   position: relative;
+  border: 1px solid var(--border-color);
 }
 
 .audio-center-controls .audio-progress-fill {
   height: 100%;
   background: var(--button-primary);
-  border-radius: 1.5px;
+  border-radius: var(--radius);
   transition: width 0.1s ease;
 }
 
@@ -284,20 +291,25 @@
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  justify-content: flex-start;
+  justify-content: center;
   flex: 1;
+  min-width: 300px;
+  max-width: none;
   padding: 0;
   background: var(--bg-primary);
   overflow: hidden;
   margin: 0;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
 }
 
 .spectrum-canvas {
   display: block;
-  height: 56px;
+  height: 52px;
   width: 100%;
   image-rendering: crisp-edges;
   image-rendering: pixelated;
+  border-radius: 0;
 }
 
 /* Frequency Labels */
@@ -305,11 +317,11 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 2px 0;
-  margin-top: 2px;
+  padding: 4px 2px;
+  margin: 0;
   border-top: 1px solid var(--border-color);
-  min-height: 24px;
-  background: var(--bg-secondary);
+  min-height: 28px;
+  border-radius: 0;
 }
 .freq-label {
   flex: 1;
@@ -317,19 +329,20 @@
   font-size: 9px;
   font-weight: 600;
   color: var(--text-secondary);
-  line-height: 1.1;
+  line-height: 1.2;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  padding: 0 2px;
+  padding: 0 1px;
+  transition: all 0.2s ease;
 }
 
 .freq-label small {
   display: block;
-  font-size: 8px;
-  font-weight: 400;
+  font-size: 9px;
+  font-weight: 500;
   color: var(--text-tertiary);
-  opacity: 0.8;
+  opacity: 1.8;
 }
 
 /* Color coding for frequency ranges */
@@ -362,41 +375,99 @@
 }
 
 /* Responsive adjustments for audio controls */
+@media (max-width: 1200px) {
+  .frequency-analyzer {
+    min-width: 250px;
+  }
+
+  .demo-audio-select {
+    width: 130px;
+  }
+
+  .audio-center-controls .audio-progress {
+    width: 140px;
+  }
+}
+
+@media (max-width: 900px) {
+  .frequency-analyzer {
+    min-width: 200px;
+  }
+
+  .spectrum-canvas {
+    height: 44px;
+  }
+
+  .demo-audio-select {
+    width: 120px;
+  }
+
+  .eq-toggle-buttons {
+    width: 100px;
+  }
+
+  .audio-center-controls .audio-progress {
+    width: 130px;
+  }
+}
+
 @media (max-width: 768px) {
   .audio-control-row {
     gap: var(--spacing-xs);
     flex-wrap: wrap;
   }
 
-  .audio-left-controls {
-    justify-content: flex-start;
-    order: 1;
-    flex: 0 0 auto;
-  }
-
+  .audio-left-controls,
   .audio-center-controls {
-    order: 2;
-    flex: 1 1 100%;
-    margin: var(--spacing-xs) 0;
-  }
-
-  .audio-playback-container {
-    gap: var(--spacing-xs);
-  }
-
-  .audio-center-controls .audio-status {
-    width: 100%;
-  }
-
-  .frequency-analyzer {
-    width: 100%;
+    flex: 0 0 auto;
+    order: 1;
   }
 
   .audio-right-controls {
-    justify-content: flex-end;
-    order: 3;
-    flex: 0 0 auto;
-    gap: var(--spacing-sm);
+    flex: 1 1 100%;
+    order: 2;
+    margin-top: var(--spacing-sm);
+    justify-content: center;
+  }
+
+  .frequency-analyzer {
+    flex: 1;
+    min-width: 100%;
+    max-width: 100%;
+  }
+
+  .spectrum-canvas {
+    height: 40px;
+  }
+
+  .eq-toggle-buttons {
+    position: absolute;
+    top: var(--spacing-xs);
+    right: var(--spacing-xs);
+    width: 90px;
+    height: 28px;
+    font-size: 11px;
+  }
+
+  .audio-playback-container {
+    gap: 2px;
+  }
+
+  .audio-center-controls .audio-status {
+    margin-bottom: 0;
+  }
+
+  .audio-center-controls .audio-progress {
+    width: 120px;
+  }
+
+  .audio-center-controls .audio-progress-bar {
+    height: 12px;
+  }
+
+  .demo-audio-select {
+    width: 110px;
+    font-size: 11px;
   }
 
   .demo-track-label {

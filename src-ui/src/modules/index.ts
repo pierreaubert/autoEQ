@@ -1,6 +1,7 @@
 // Central export file for all modules
 
 export * from './optimization-constants';
+export * from './templates';
 export { UIManager } from './ui-manager';
 export { PlotManager } from './plot-manager';
 export { OptimizationManager } from './optimization-manager';
