@@ -155,7 +155,7 @@ describe('AutoEQPlotAPI', () => {
 
       const result = await AutoEQPlotAPI.generatePlotFilters(params);
 
-      expect(mockTauriInvoke).toHaveBeenCalledWith('generate_plot_filters', params);
+      expect(mockTauriInvoke).toHaveBeenCalledWith('generate_plot_filters', { params });
       expect(result).toEqual(mockResponse);
     });
   });
@@ -177,7 +177,7 @@ describe('AutoEQPlotAPI', () => {
 
       const result = await AutoEQPlotAPI.generatePlotSpin(params);
 
-      expect(mockTauriInvoke).toHaveBeenCalledWith('generate_plot_spin', params);
+      expect(mockTauriInvoke).toHaveBeenCalledWith('generate_plot_spin', { params });
       expect(result).toEqual(mockResponse);
     });
   });
@@ -199,7 +199,7 @@ describe('AutoEQPlotAPI', () => {
 
       const result = await AutoEQPlotAPI.generatePlotSpinDetails(params);
 
-      expect(mockTauriInvoke).toHaveBeenCalledWith('generate_plot_spin_details', params);
+      expect(mockTauriInvoke).toHaveBeenCalledWith('generate_plot_spin_details', { params });
       expect(result).toEqual(mockResponse);
     });
   });
@@ -221,7 +221,7 @@ describe('AutoEQPlotAPI', () => {
 
       const result = await AutoEQPlotAPI.generatePlotSpinTonal(params);
 
-      expect(mockTauriInvoke).toHaveBeenCalledWith('generate_plot_spin_tonal', params);
+      expect(mockTauriInvoke).toHaveBeenCalledWith('generate_plot_spin_tonal', { params });
       expect(result).toEqual(mockResponse);
     });
   });

@@ -10,6 +10,9 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "test": "vitest --run",
+    "test:unit": "vitest --run --exclude '**/e2e/**'",
+    "test:e2e": "vitest --run src/tests/e2e",
+    "test:e2e:force": "FORCE_E2E=true vitest --run src/tests/e2e",
     "test:watch": "vitest --watch",
     "test:coverage": "vitest --coverage"
   },

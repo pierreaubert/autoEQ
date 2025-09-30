@@ -373,7 +373,7 @@ describe('APIManager', () => {
 
     test('should detect missing speaker selection parameters', () => {
       const formData = new FormData();
-      formData.set('input_source', 'api');
+      formData.set('input_source', 'speaker');
       // Missing speaker, version, measurement
 
       const result = apiManager.validateOptimizationParams(formData);
@@ -480,12 +480,12 @@ describe('APIManager', () => {
       expect(OPTIMIZATION_DEFAULTS.max_db).toBe(3.0);
       expect(OPTIMIZATION_DEFAULTS.algo).toBe('autoeq:de');
       expect(OPTIMIZATION_DEFAULTS.loss).toBe('speaker-flat');
-      expect(OPTIMIZATION_DEFAULTS.input_source).toBe('api');
+      expect(OPTIMIZATION_DEFAULTS.input_source).toBe('file');
     });
 
     test('should validate parameters with default fallbacks', () => {
       const formData = new FormData();
-      formData.set('input_source', 'api');
+      formData.set('input_source', 'speaker');
       formData.set('speaker', 'Test Speaker');
       formData.set('version', 'v1.0');
       formData.set('measurement', 'On Axis');
