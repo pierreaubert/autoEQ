@@ -33,6 +33,7 @@ pub mod optim_de;
 /// Metaheuristics-specific optimization code
 pub mod optim_mh;
 /// NLOPT-specific optimization code
+#[cfg(not(target_os = "windows"))]
 pub mod optim_nlopt;
 /// Plotting and visualization functions
 pub mod plot;

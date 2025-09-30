@@ -1,5 +1,6 @@
 [target.x86_64-unknown-linux-gnu]
-image = "ghcr.io/cross-rs/x86_64-unknown-linux-gnu:main"
+# Use custom Ubuntu 24.04 image with modern dependencies
+dockerfile = "./Dockerfile.x86_64-unknown-linux-gnu"
 
 [target.aarch64-unknown-linux-gnu]
 image = "ghcr.io/cross-rs/aarch64-unknown-linux-gnu:main"

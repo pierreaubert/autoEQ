@@ -13,7 +13,6 @@ chrono = { workspace = true }
 clap = { workspace = true }
 csv = { workspace = true }
 ndarray = { workspace = true }
-nlopt = { workspace = true }
 num_cpus = { workspace = true }
 metaheuristics-nature = { workspace = true }
 plotly = { workspace = true }
@@ -22,7 +21,6 @@ rand = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-signal-hook-tokio = { workspace = true }
 strsim = { workspace = true }
 tokio = { workspace = true }
 urlencoding = { workspace = true }
@@ -32,6 +30,11 @@ autoeq-iir = { path = "../src-iir" }
 autoeq-de = { path = "../src-de" }
 autoeq-cea2034 = { path = "../src-cea2034" }
 autoeq-env = { path = "../src-env" }
+
+# Unix-only dependencies for CLI
+[target.'cfg(not(target_os = "windows"))'.dependencies]
+nlopt = { workspace = true }
+signal-hook-tokio = { workspace = true }
 
 # External BLAS - platform-specific
 [target.'cfg(target_os = "macos")'.dependencies]

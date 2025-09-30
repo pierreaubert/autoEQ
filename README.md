@@ -4,7 +4,7 @@
 
 The software can find the best EQ for you based on your measurements. There are extensive options to configure the optimiser. You can use a graphical version of the optimiser or a command line version.
 
-## Building the optimiser
+## Setting up for rust developement
 
 If you already have cargo / rustup:
 ```
@@ -13,60 +13,13 @@ cargo build --release
 
 If not install [rustup](https://rustup.rs/) first.
 
-## Building cross platform
+## Using just
 
-### Prerequisites
-
-1. **Rust toolchain** (install via [rustup.rs](https://rustup.rs/))
-2. **Docker** (for Linux/Windows cross-compilation)
-3. **Node.js 18+** (for Tauri desktop app)
-
-### CLI Tools (Simple Method)
-
-Use the provided build script:
-
-```bash
-# Make the script executable
-chmod +x ./scripts/build-cross.sh
-
-# Run the build
-./scripts/build-cross.sh
+```
+just
 ```
 
-This will create a `dist/` directory with binaries for all supported platforms.
-
-### Supported Platforms
-
-#### CLI Tools
-- ✅ **macOS ARM64** (Apple Silicon) - `aarch64-apple-darwin`
-- ✅ **macOS Intel** - `x86_64-apple-darwin`
-- 🐳 **Linux x86_64** - `x86_64-unknown-linux-gnu` (requires Docker)
-- 🐳 **Linux ARM64** - `aarch64-unknown-linux-gnu` (requires Docker)
-- 🐳 **Windows x86_64** - `x86_64-pc-windows-gnu` (requires Docker)
-
-#### Desktop App (Tauri)
-- ✅ **macOS** - Intel and Apple Silicon
-- 🔧 **Linux** - x86_64 (needs UI fixes)
-- 🔧 **Windows** - x86_64 (needs UI fixes)
-
-### Manual Build Instructions
-
-#### 1. Install Rust Targets
-
-```bash
-# Install cross-compilation targets
-rustup target add x86_64-apple-darwin aarch64-apple-darwin
-rustup target add x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu
-rustup target add x86_64-pc-windows-gnu
-```
-
-#### 2. Install Cross-Compilation Tools
-
-For Linux/Windows builds, install the `cross` tool:
-
-```bash
-cargo install cross --git https://github.com/cross-rs/cross
-```
+will give you the list of possible commands
 
 #### 3. Build CLI Tools
 
@@ -75,26 +28,9 @@ cargo install cross --git https://github.com/cross-rs/cross
 cargo build --release
 ```
 
-##### macOS Cross-Compilation
-```bash
-# Intel macOS
-cargo build --release --target x86_64-apple-darwin
+## Building cross platform
 
-# Apple Silicon macOS
-cargo build --release --target aarch64-apple-darwin
-```
-
-##### Linux/Windows (with Docker)
-```bash
-# Linux x86_64
-cross build --release --target x86_64-unknown-linux-gnu
-
-# Linux ARM64
-cross build --release --target aarch64-unknown-linux-gnu
-
-# Windows x86_64
-cross build --release --target x86_64-pc-windows-gnu
-```
+See the [BUILD.md](./BUILD.md) file for details.
 
 ### Build Desktop App
 

@@ -92,3 +92,17 @@ examples-de :
         cargo run --example optde_linear_constraints
         cargo run --example optde_nonlinear_constraints
         cargo run --example optde_parallel
+
+# ----------------------------------------------------------------------
+# CROSS
+# ----------------------------------------------------------------------
+
+cross : cross-linux-x86
+
+cross-linux-x86 :
+      echo "This can take minutes!"
+      cd src-ui/src-tauri && cross build --release --target x86_64-unknown-linux-gnu
+
+cross-win-x86-gnu :
+      echo "This is not working well yet from macos!"
+      cd src-ui/src-tauri && cross build --release --target x86_64-pc-windows-gnu

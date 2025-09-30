@@ -1,9 +1,0 @@
-I want to add more features to the data acquisition section.
-
-1. Add a new section called Headphone. You can load a curve and the target is one of targets available in the ./data_tests/targets directory.
-
-When selecting a Headphone:
-- the curve choice is not available in the eq design section.
-- The possible loss are headphone-loss and headphone-flat.
-
-2.
