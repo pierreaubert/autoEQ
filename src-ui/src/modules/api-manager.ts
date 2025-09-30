@@ -394,25 +394,29 @@ export class APIManager {
   }
 
   async selectHeadphoneCurveFile(): Promise<string | null> {
-    const input = document.getElementById('headphone_curve_path') as HTMLInputElement;
-    if (!input) {
-      console.error('Headphone curve path input not found');
-      return null;
-    }
-
+    console.log('selectHeadphoneCurveFile called');
     try {
+      const input = document.getElementById('headphone_curve_path') as HTMLInputElement;
+      if (!input) {
+        console.error('Headphone curve path input element not found');
+        return null;
+      }
+
       console.log('Opening file dialog for headphone curve file...');
 
-      // Use Tauri dialog API
-      const result = await invoke('show_file_dialog', {
-        title: 'Select Headphone Curve CSV File',
+      // Enhanced dialog options for better compatibility
+      const result = await openDialog({
+        multiple: false,
+        directory: false,
         filters: [{
           name: 'CSV Files',
           extensions: ['csv']
+        }, {
+          name: 'All Files',
+          extensions: ['*']
         }],
-        multiple: false,
-        directory: false
-      }) as string | string[] | null;
+        title: 'Select Headphone Curve CSV File'
+      });
 
       console.log('Dialog result:', result);
 
@@ -426,7 +430,7 @@ export class APIManager {
       } else if (result === null) {
         console.log('Dialog cancelled by user');
       } else if (Array.isArray(result) && result.length > 0) {
-        // Handle array result
+        // Handle array result (shouldn't happen with multiple: false, but just in case)
         const filePath = result[0];
         console.log('Setting input value to (from array):', filePath);
         input.value = filePath;

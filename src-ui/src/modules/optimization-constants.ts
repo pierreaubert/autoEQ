@@ -150,7 +150,7 @@ export const OPTIMIZATION_DEFAULTS: OptimizationDefaults = {
   curve_name: 'Listening Window',
 
   // Input Source
-  input_source: 'speaker'
+  input_source: 'file'
 };
 
 // Minimum and maximum limits for parameters

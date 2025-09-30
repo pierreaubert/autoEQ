@@ -87,15 +87,15 @@ export function generateDataAcquisition(): string {
 <div class="section-group">
     <h3>Data Acquisition</h3>
     <div class="input-source-tabs">
-        <label class="tab-label" data-tab="file" title="Files">
-            <input type="radio" name="input_source" value="file" />
+        <label class="tab-label active" data-tab="file" title="Files">
+            <input type="radio" name="input_source" value="file" checked />
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
                 <polyline points="13 2 13 9 20 9"></polyline>
             </svg>
         </label>
-        <label class="tab-label active" data-tab="speaker" title="Speakers">
-            <input type="radio" name="input_source" value="speaker" checked />
+        <label class="tab-label" data-tab="speaker" title="Speakers">
+            <input type="radio" name="input_source" value="speaker" />
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
                 <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
@@ -120,7 +120,7 @@ export function generateDataAcquisition(): string {
         </label>
     </div>
 
-    <div id="file_inputs" class="tab-content">
+    <div id="file_inputs" class="tab-content active">
         <div class="compact-row">
             <input type="text" id="curve_path" name="curve_path" placeholder="Input CSV path" />
             <button type="button" id="browse_curve" class="browse-btn">📁</button>
@@ -131,7 +131,7 @@ export function generateDataAcquisition(): string {
         </div>
     </div>
 
-    <div id="speaker_inputs" class="tab-content active">
+    <div id="speaker_inputs" class="tab-content">
         <div class="autocomplete-container">
             <input type="text" id="speaker" name="speaker" placeholder="Start typing speaker name..." autocomplete="off" />
             <div id="speaker_dropdown" class="autocomplete-dropdown"></div>

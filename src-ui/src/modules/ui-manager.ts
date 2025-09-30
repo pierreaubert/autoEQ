@@ -599,25 +599,47 @@ export class UIManager {
     const lossSelect = document.getElementById('loss') as HTMLSelectElement;
     if (lossSelect) {
       if (tabName === 'speaker') {
-        lossSelect.value = 'speaker-flat';
-        console.log('Set loss function to speaker-flat for speaker tab');
+        // Only set to speaker-flat if current value is not a speaker option
+        if (!lossSelect.value.startsWith('speaker-')) {
+          lossSelect.value = 'speaker-flat';
+          console.log('Set loss function to speaker-flat for speaker tab');
+        }
       } else if (tabName === 'headphone') {
-        lossSelect.value = 'headphone-flat';
-        console.log('Set loss function to headphone-flat for headphone tab');
+        // Only set to headphone-flat if current value is not a headphone option
+        if (!lossSelect.value.startsWith('headphone-')) {
+          lossSelect.value = 'headphone-flat';
+          console.log('Set loss function to headphone-flat for headphone tab');
+        }
       }
+      // For 'file' and 'capture' tabs, keep whatever value is currently selected
     }
   }
 
   private updateLossOptions(inputType: string, lossSelect: HTMLSelectElement): void {
     // Import loss options
-    import('./optimization-constants').then(({ SPEAKER_LOSS_OPTIONS, HEADPHONE_LOSS_OPTIONS }) => {
+    import('./optimization-constants').then(({ LOSS_OPTIONS, SPEAKER_LOSS_OPTIONS, HEADPHONE_LOSS_OPTIONS }) => {
       const currentValue = lossSelect.value;
 
       // Clear existing options
       lossSelect.innerHTML = '';
 
       // Determine which options to use
-      const options = inputType === 'headphone' ? HEADPHONE_LOSS_OPTIONS : SPEAKER_LOSS_OPTIONS;
+      let options;
+      let defaultValue;
+
+      if (inputType === 'headphone') {
+        // Headphone: only headphone options
+        options = HEADPHONE_LOSS_OPTIONS;
+        defaultValue = 'headphone-flat';
+      } else if (inputType === 'speaker') {
+        // Speaker: only speaker options
+        options = SPEAKER_LOSS_OPTIONS;
+        defaultValue = 'speaker-flat';
+      } else {
+        // File, Capture, or any other: show all 4 options
+        options = LOSS_OPTIONS;
+        defaultValue = 'speaker-flat';
+      }
 
       // Populate with appropriate options
       Object.entries(options).forEach(([value, label]) => {
@@ -631,7 +653,7 @@ export class UIManager {
       if (lossSelect.querySelector(`option[value="${currentValue}"]`)) {
         lossSelect.value = currentValue;
       } else {
-        lossSelect.value = inputType === 'headphone' ? 'headphone-flat' : 'speaker-flat';
+        lossSelect.value = defaultValue;
       }
     });
   }
