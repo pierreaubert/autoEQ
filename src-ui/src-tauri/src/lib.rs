@@ -131,7 +131,6 @@ struct PlotFiltersParams {
 struct PlotSpinParams {
     cea2034_curves: Option<HashMap<String, CurveData>>,
     eq_response: Option<Vec<f64>>,
-    _frequencies: Option<Vec<f64>>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -732,7 +731,7 @@ async fn run_optimization_internal(
             spin_curves.insert(name.clone(), interpolated.spl.to_vec());
         }
         spin_details = Some(PlotData {
-            frequencies: plot_freqs,
+            frequencies: plot_freqs.clone(),
             curves: spin_curves,
             metadata: HashMap::new(),
         });

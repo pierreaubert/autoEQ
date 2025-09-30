@@ -73,7 +73,7 @@ export class PlotManager {
   }
 
   showSpinVerticalItems(): void {
-    const verticalItems = ['spin_vertical_item', 'tonal_vertical_item'];
+    const verticalItems = ['spin_vertical_item', 'details_vertical_item', 'tonal_vertical_item'];
     verticalItems.forEach(id => {
       const element = document.getElementById(id);
       if (element) {
@@ -84,7 +84,7 @@ export class PlotManager {
   }
 
   hideSpinVerticalItems(): void {
-    const verticalItems = ['spin_vertical_item', 'tonal_vertical_item'];
+    const verticalItems = ['spin_vertical_item', 'details_vertical_item', 'tonal_vertical_item'];
     verticalItems.forEach(id => {
       const element = document.getElementById(id);
       if (element) {
@@ -98,6 +98,7 @@ export class PlotManager {
     // For compatibility with existing code, but now we manage at vertical item level
     const verticalItemMap: { [key: string]: string } = {
       'spin_plot': 'spin_vertical_item',
+      'details_plot': 'details_vertical_item',
       'tonal_plot': 'tonal_vertical_item'
     };
 
@@ -115,6 +116,7 @@ export class PlotManager {
     // For compatibility with existing code, but now we manage at vertical item level
     const verticalItemMap: { [key: string]: string } = {
       'spin_plot': 'spin_vertical_item',
+      'details_plot': 'details_vertical_item',
       'tonal_plot': 'tonal_vertical_item'
     };
 
@@ -131,232 +133,138 @@ export class PlotManager {
   // Removed expandPlotSection - no longer needed with grid layout
 
   async tryUpdateDetailsPlot(): Promise<void> {
-    if (!this.lastSpinDetails) {
+    // This method is deprecated - details plot should be passed directly
+    console.warn('tryUpdateDetailsPlot is deprecated, pass plot data directly to generateDetailsPlot');
+  }
+
+  async generateDetailsPlot(plotData: any): Promise<void> {
+    if (!this.detailsPlotElement) {
+      console.warn('Details plot element not available');
       return;
     }
 
-    try {
-      await this.generateDetailsPlot(this.lastSpinDetails);
-    } catch (error) {
-      console.error('Error updating details plot:', error);
-    }
-  }
-
-  async generateDetailsPlot(spinDetails: PlotData): Promise<void> {
-    const cea2034Curves: { [key: string]: CurveData } = {};
-    for (const [curveName, curveData] of Object.entries(spinDetails.curves)) {
-      cea2034Curves[curveName] = {
-        freq: spinDetails.frequencies,
-        spl: curveData
-      };
+    // Show the details plot container first
+    const detailsVerticalItem = document.getElementById('details_vertical_item');
+    if (detailsVerticalItem) {
+      detailsVerticalItem.style.display = 'flex';
     }
 
     try {
-      const params: PlotSpinParams = { cea2034_curves: cea2034Curves };
-      const plotData = await AutoEQPlotAPI.generatePlotSpinDetails(params);
+      if (plotData && plotData.data && plotData.layout) {
+        // The backend provides subplot configuration in the layout
+        // Ensure responsive sizing while maintaining subplot grid
+        const config = {
+          responsive: true,
+          displayModeBar: false,
+          displaylogo: false
+        };
 
-      const customLayout = {
-        ...PlotUtils.createResponsiveLayout(),
-        title: 'Detailed CEA2034 Analysis',
-        paper_bgcolor: 'rgba(0,0,0,0)',
-        plot_bgcolor: 'rgba(0,0,0,0)',
-        font: { color: '#333', size: 12 },
-        margin: { l: 60, r: 40, t: 60, b: 60 }
-      };
+        // Adjust layout for responsive display if needed
+        const layout = {
+          ...plotData.layout,
+          autosize: true,
+          height: 550  // Fixed height for consistent display
+        };
 
-      const finalPlotData = PlotUtils.applyUILayout(plotData, customLayout);
-      const config = PlotUtils.createDefaultConfig();
-
-      if (this.detailsPlotElement) {
-        await Plotly.newPlot(this.detailsPlotElement, finalPlotData.data, finalPlotData.layout, config);
+        await Plotly.newPlot(
+          this.detailsPlotElement,
+          plotData.data,
+          layout,
+          config
+        );
         this.detailsPlotElement.classList.add('has-plot');
         this.showPlotContainer('details_plot');
+        setTimeout(() => Plotly.Plots.resize(this.detailsPlotElement!), 100);
+        console.log('Details subplot grid (2x2) generated successfully');
+      } else {
+        console.warn('Invalid details plot data structure:', plotData);
       }
-
-      console.log('Details plot generated successfully');
     } catch (error) {
       console.error('Error generating details plot:', error);
     }
   }
 
-  updateSpinPlot(data: PlotData): void {
-    console.log('updateSpinPlot called with:', data);
-
+  updateSpinPlot(plotData: any): void {
     if (!this.spinPlotElement) {
       console.error('Spin plot element not found!');
       return;
     }
 
-    // Clear any existing content and prepare for plot
-    this.spinPlotElement.innerHTML = '';
-    this.spinPlotElement.classList.add('has-plot');
+    // Show the spin plot container first
+    const spinVerticalItem = document.getElementById('spin_vertical_item');
+    if (spinVerticalItem) {
+      spinVerticalItem.style.display = 'flex';
+    }
 
-    const traces = Object.entries(data.curves).map(([name, values]) => ({
-      x: data.frequencies,
-      y: values,
-      type: 'scatter' as const,
-      mode: 'lines' as const,
-      name: name,
-      line: {
-        width: name === 'On Axis' ? 3 : 2
+    try {
+      if (plotData && plotData.data && plotData.layout) {
+        // Use the Plotly JSON directly from backend
+        Plotly.newPlot(
+          this.spinPlotElement,
+          plotData.data,
+          plotData.layout,
+          { responsive: true, displayModeBar: false }
+        ).then(() => {
+          console.log('Spin plot created successfully');
+          this.spinPlotElement.classList.add('has-plot');
+          setTimeout(() => Plotly.Plots.resize(this.spinPlotElement), 100);
+        });
+      } else {
+        console.warn('Invalid spin plot data structure:', plotData);
       }
-    }));
-
-    console.log('Created traces:', traces);
-
-    const layout = {
-      title: { text: '' },
-      xaxis: {
-        title: { text: 'Frequency (Hz)' },
-        type: 'log' as const,
-        range: [Math.log10(20), Math.log10(20000)]
-      },
-      yaxis: {
-        title: { text: 'SPL (dB)' },
-        range: [-40, 10]
-      },
-      paper_bgcolor: 'rgba(0,0,0,0)',
-      plot_bgcolor: 'rgba(0,0,0,0)',
-      font: {
-        color: getComputedStyle(document.documentElement).getPropertyValue('--text-primary').trim(),
-        size: 12
-      },
-      margin: { l: 50, r: 20, t: 20, b: 60 },
-      showlegend: true,
-      legend: {
-        x: 0.5,
-        y: -0.15,
-        xanchor: 'center' as const,
-        yanchor: 'top' as const,
-        orientation: 'h' as const,
-        bgcolor: 'rgba(0,0,0,0)'
-      }
-    };
-
-    Plotly.newPlot(this.spinPlotElement, traces, layout, {
-      responsive: true,
-      displayModeBar: false
-    }).then(() => {
-      console.log('Spin Plotly plot created successfully');
-      Plotly.Plots.resize(this.spinPlotElement);
-    }).catch((error: any) => {
-      console.error('Error creating Spin Plotly plot:', error);
-    });
+    } catch (error) {
+      console.error('Error creating spin plot:', error);
+    }
   }
 
-  updateFilterPlot(data: PlotData): void {
-    console.log('[TS DEBUG] updateFilterPlot called with:', data);
+  updateFilterPlot(plotData: any): void {
+    console.log('[FILTER PLOT] updateFilterPlot called');
+    console.log('[FILTER PLOT] filterPlotElement exists:', !!this.filterPlotElement);
 
     if (!this.filterPlotElement) {
-      console.error('Filter plot element not found!');
+      console.error('[FILTER PLOT] Filter plot element not found!');
       return;
     }
 
-    // Clear any existing content and prepare for plot
-    this.filterPlotElement.innerHTML = '';
-    this.filterPlotElement.classList.add('has-plot');
+    // Show the filter plot container first
+    const filterVerticalItem = document.getElementById('filter_vertical_item');
+    console.log('[FILTER PLOT] filterVerticalItem found:', !!filterVerticalItem);
+    if (filterVerticalItem) {
+      filterVerticalItem.style.display = 'flex';
+      console.log('[FILTER PLOT] Set filterVerticalItem display to flex');
+    }
 
-    const traces = Object.entries(data.curves).map(([name, values]) => ({
-      x: data.frequencies,
-      y: values,
-      type: 'scatter' as const,
-      mode: 'lines' as const,
-      name: name,
-      line: {
-        width: name === 'EQ Response' ? 3 : 2
+    try {
+      console.log('[FILTER PLOT] plotData structure:', {
+        hasData: !!plotData?.data,
+        hasLayout: !!plotData?.layout,
+        dataLength: plotData?.data?.length
+      });
+
+      if (plotData && plotData.data && plotData.layout) {
+        console.log('[FILTER PLOT] Creating Plotly plot...');
+        // Use the Plotly JSON directly from backend
+        Plotly.newPlot(
+          this.filterPlotElement,
+          plotData.data,
+          plotData.layout,
+          { responsive: true, displayModeBar: false }
+        ).then(() => {
+          console.log('[FILTER PLOT] Filter plot created successfully');
+          this.filterPlotElement.classList.add('has-plot');
+          setTimeout(() => {
+            console.log('[FILTER PLOT] Resizing filter plot');
+            Plotly.Plots.resize(this.filterPlotElement);
+          }, 100);
+        }).catch((error: any) => {
+          console.error('[FILTER PLOT] Plotly.newPlot failed:', error);
+        });
+      } else {
+        console.warn('[FILTER PLOT] Invalid filter plot data structure:', plotData);
       }
-    }));
-
-    console.log('Created traces:', traces);
-
-    // Read current form parameters for axis setup
-    const maxDbInput = document.getElementById('max_db') as HTMLInputElement;
-    const minFreqInput = document.getElementById('min_freq') as HTMLInputElement;
-    const maxFreqInput = document.getElementById('max_freq') as HTMLInputElement;
-    const maxDb = maxDbInput ? parseFloat(maxDbInput.value) : 5;
-    const minFreq = minFreqInput ? parseFloat(minFreqInput.value) : 20;
-    const maxFreq = maxFreqInput ? parseFloat(maxFreqInput.value) : 20000;
-
-    const yMin = -(maxDb + 2);
-    const yMax = (maxDb + 2);
-
-    // Always use horizontal legend below the plot for Filter Response
-    const legendConfig = {
-      x: 0.5,
-      y: -0.15,
-      xanchor: 'center' as const,
-      yanchor: 'top' as const,
-      orientation: 'h' as const
-    };
-
-    const rightMargin = 20; // Standard right margin
-    const bottomMargin = 80; // More space for bottom legend
-
-    const layout = {
-      title: { text: '' },
-      xaxis: {
-        title: { text: 'Frequency (Hz)' },
-        type: 'log' as const,
-        range: [Math.log10(20), Math.log10(20000)]
-      },
-      yaxis: {
-        title: { text: 'Magnitude (dB)' },
-        range: [yMin, yMax]
-      },
-      paper_bgcolor: 'rgba(0,0,0,0)',
-      plot_bgcolor: 'rgba(0,0,0,0)',
-      font: {
-        color: getComputedStyle(document.documentElement).getPropertyValue('--text-primary').trim(),
-        size: 12
-      },
-      margin: { l: 40, r: rightMargin, t: 20, b: bottomMargin },
-      showlegend: true,
-      legend: {
-        ...legendConfig,
-        bgcolor: 'rgba(0,0,0,0)'
-      },
-      shapes: [
-        // Left green rectangle: 20 Hz to min_freq
-        {
-          type: 'rect' as const,
-          xref: 'x' as const,
-          yref: 'paper' as const,
-          x0: 20,
-          x1: Math.max(20, minFreq),
-          y0: 0,
-          y1: 1,
-          fillcolor: 'rgba(0, 200, 0, 0.08)',
-          line: { width: 0 }
-        },
-        // Right green rectangle: max_freq to 20 kHz
-        {
-          type: 'rect' as const,
-          xref: 'x' as const,
-          yref: 'paper' as const,
-          x0: Math.min(maxFreq, 20000),
-          x1: 20000,
-          y0: 0,
-          y1: 1,
-          fillcolor: 'rgba(0, 200, 0, 0.08)',
-          line: { width: 0 }
-        }
-      ]
-    };
-
-    console.log('[TS DEBUG] Creating Plotly plot with traces:', traces.length);
-    console.log('[TS DEBUG] Layout:', layout);
-
-    Plotly.newPlot(this.filterPlotElement, traces, layout, {
-      responsive: true,
-      displayModeBar: false
-    }).then(() => {
-      console.log('[TS DEBUG] Filter Plotly plot created successfully');
-      // Force immediate resize
-      Plotly.Plots.resize(this.filterPlotElement);
-      console.log('[TS DEBUG] Plot resized');
-    }).catch((error: any) => {
-      console.error('[TS DEBUG] Error creating Filter Plotly plot:', error);
-    });
+    } catch (error) {
+      console.error('[FILTER PLOT] Error creating filter plot:', error);
+    }
   }
 
   configureVerticalVisibility(hasSpinData: boolean): void {
@@ -549,39 +457,52 @@ export class PlotManager {
     return [...this.progressData];
   }
 
-  // Filter details plot methods - removed in grid layout
-  async updateFilterDetailsPlot(optimizationResult: any): Promise<void> {
-    console.log('[PLOT DEBUG] Filter details plot functionality removed in grid layout');
-    // This method is deprecated but kept for compatibility
-  }
 
   // Tonal balance plot methods
   updateTonalPlot(plotData: any): void {
     if (!this.tonalPlotElement) {
-      console.warn('[PLOT DEBUG] Tonal plot element not available');
+      console.warn('Tonal plot element not available');
       return;
     }
 
-    console.log('[PLOT DEBUG] Updating tonal balance plot with data:', plotData);
+    // Show the tonal plot container first
+    const tonalVerticalItem = document.getElementById('tonal_vertical_item');
+    if (tonalVerticalItem) {
+      tonalVerticalItem.style.display = 'flex';
+    }
 
     try {
       if (plotData && plotData.data && plotData.layout) {
-        // Use the plot data directly from backend
-        Plotly.newPlot(this.tonalPlotElement, plotData.data, plotData.layout, {
+        // The backend provides subplot configuration in the layout
+        const config = {
           responsive: true,
-          displayModeBar: false
-        }).then(() => {
-          console.log('[PLOT DEBUG] ✅ Tonal balance plot created successfully');
+          displayModeBar: false,
+          displaylogo: false
+        };
+
+        // Adjust layout for responsive display
+        const layout = {
+          ...plotData.layout,
+          autosize: true,
+          height: 550  // Fixed height for consistent display
+        };
+
+        Plotly.newPlot(
+          this.tonalPlotElement,
+          plotData.data,
+          layout,
+          config
+        ).then(() => {
+          console.log('Tonal subplot grid (2x2) created successfully');
           this.tonalPlotElement!.classList.add('has-plot');
           this.showPlotContainer('tonal_plot');
-        }).catch((error: any) => {
-          console.error('[PLOT DEBUG] ❌ Error creating tonal balance plot:', error);
+          setTimeout(() => Plotly.Plots.resize(this.tonalPlotElement!), 100);
         });
       } else {
-        console.warn('[PLOT DEBUG] Invalid tonal plot data structure:', plotData);
+        console.warn('Invalid tonal plot data structure:', plotData);
       }
     } catch (error) {
-      console.error('[PLOT DEBUG] Error updating tonal balance plot:', error);
+      console.error('Error creating tonal plot:', error);
     }
   }
 }

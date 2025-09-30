@@ -27,6 +27,7 @@ use autoeq_env::DATA_GENERATED;
 use clap::Parser;
 use std::error::Error;
 use std::path::PathBuf;
+use tokio::fs;
 
 /// Print frequency spacing diagnostics and PEQ listing
 fn print_freq_spacing(x: &[f64], args: &autoeq::cli::Args, label: &str) {
@@ -53,6 +54,79 @@ fn print_freq_spacing(x: &[f64], args: &autoeq::cli::Args, label: &str) {
         println!("  - Not enough filters to compute spacing.");
     }
     iir::peq_print(x, args.iir_hp_pk);
+}
+
+/// Save PEQ settings to APO format file
+///
+/// # Arguments
+/// * `args` - Command line arguments
+/// * `x` - Optimized filter parameters
+/// * `output_path` - Base output path for files
+/// * `loss_type` - Type of optimization performed
+///
+/// # Returns
+/// * Result indicating success or error
+async fn save_peq_to_file(
+    args: &autoeq::cli::Args,
+    x: &[f64],
+    output_path: &PathBuf,
+    loss_type: &autoeq::LossType,
+) -> Result<(), Box<dyn Error>> {
+    // Build the PEQ from the optimized parameters
+    // PEQ is a vector of (weight, Biquad) tuples
+    let mut peq: Vec<(f64, iir::Biquad)> = Vec::new();
+    let num_filters = x.len() / 3;
+
+    for i in 0..num_filters {
+        let freq = 10f64.powf(x[i * 3]);
+        let q = x[i * 3 + 1];
+        let gain = x[i * 3 + 2];
+
+        // Determine filter type
+        let filter_type = if args.iir_hp_pk && i == 0 {
+            iir::BiquadFilterType::HighpassVariableQ
+        } else {
+            iir::BiquadFilterType::Peak
+        };
+
+        // Create biquad filter
+        let biquad = iir::Biquad::new(filter_type, freq, args.sample_rate, q, gain);
+        peq.push((1.0, biquad)); // Weight is always 1.0
+    }
+
+    // Determine filename based on loss type
+    let filename = match loss_type {
+        autoeq::LossType::SpeakerFlat | autoeq::LossType::HeadphoneFlat => "iir-autoeq-flat.txt",
+        autoeq::LossType::SpeakerScore | autoeq::LossType::HeadphoneScore => "iir-autoeq-score.txt",
+    };
+
+    // Create the full path (same directory as the plots)
+    let parent_dir = output_path.parent().unwrap_or(output_path);
+    let file_path = parent_dir.join(filename);
+
+    // Generate comment string with optimization details
+    let comment = format!(
+        "# AutoEQ Parametric Equalizer Settings\n# Speaker: {}\n# Loss Type: {:?}\n# Filters: {}\n# Generated: {}",
+        args.speaker.as_deref().unwrap_or("Unknown"),
+        loss_type,
+        args.num_filters,
+        chrono::Local::now().format("%Y-%m-%d %H:%M:%S")
+    );
+
+    // Format the PEQ as APO string
+    let apo_content = iir::peq_format_apo(&comment, &peq);
+
+    // Ensure parent directory exists
+    if let Some(parent) = file_path.parent() {
+        fs::create_dir_all(parent).await?;
+    }
+
+    // Write the file
+    fs::write(&file_path, apo_content).await?;
+
+    println!("🕶 PEQ settings saved to: {}", file_path.display());
+
+    Ok(())
 }
 
 fn perform_optimization(
@@ -275,6 +349,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     } else {
         println!("✅ Plots generated successfully");
     }
+
+    // Save PEQ settings to APO format file
+    save_peq_to_file(&args, &x, &output_path, &objective_data.loss_type).await?;
 
     Ok(())
 }

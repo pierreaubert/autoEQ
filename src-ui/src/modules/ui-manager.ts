@@ -296,21 +296,25 @@ export class UIManager {
     }
   }
 
-  updateScores(before: number, after: number): void {
-    const improvement = after - before;
-
+  updateScores(before: number | null | undefined, after: number | null | undefined): void {
     const scoreBeforeElement = document.getElementById('score_before') as HTMLElement;
     const scoreAfterElement = document.getElementById('score_after') as HTMLElement;
     const scoreImprovementElement = document.getElementById('score_improvement') as HTMLElement;
 
+    // Handle null/undefined values
     if (scoreBeforeElement) {
-      scoreBeforeElement.textContent = before.toFixed(3);
+      scoreBeforeElement.textContent = before !== null && before !== undefined ? before.toFixed(3) : '-';
     }
     if (scoreAfterElement) {
-      scoreAfterElement.textContent = after.toFixed(3);
+      scoreAfterElement.textContent = after !== null && after !== undefined ? after.toFixed(3) : '-';
     }
     if (scoreImprovementElement) {
-      scoreImprovementElement.textContent = (improvement >= 0 ? '+' : '') + improvement.toFixed(3);
+      if (before !== null && before !== undefined && after !== null && after !== undefined) {
+        const improvement = after - before;
+        scoreImprovementElement.textContent = (improvement >= 0 ? '+' : '') + improvement.toFixed(3);
+      } else {
+        scoreImprovementElement.textContent = '-';
+      }
     }
 
     // Scores are now always visible in the bottom row

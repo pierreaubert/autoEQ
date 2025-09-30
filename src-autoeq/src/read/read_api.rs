@@ -11,7 +11,7 @@ use urlencoding;
 use crate::cea2034 as score;
 use crate::read::directory::{measurement_filename, sanitize_dir_name};
 use crate::read::interpolate::interpolate;
-use crate::read::plot::{normalize_plotly_json_from_str, normalize_plotly_value};
+use crate::read::plot::{normalize_plotly_json_from_str, normalize_plotly_value_with_suggestions};
 use crate::Curve;
 use autoeq_env::DATA_CACHED;
 
@@ -85,7 +85,7 @@ pub async fn fetch_measurement_plot_data(
     let api_response: Value = response.json().await?;
 
     // Normalize from API response (array-of-string JSON) to Plotly JSON object
-    let plot_data = normalize_plotly_value(&api_response)?;
+    let plot_data = normalize_plotly_value_with_suggestions(&api_response).await?;
 
     // 2) Save normalized Plotly JSON to cache for future use
     if let Err(e) = fs::create_dir_all(&cache_dir).await {

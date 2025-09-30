@@ -151,14 +151,15 @@ fn create_cea2034_traces(curves: &HashMap<String, crate::Curve>) -> Vec<Scatter<
             x_axis_name = "x";
             y_axis_name = "y";
         }
-        let curve = curves.get(*curve_name).unwrap();
-        let trace = Scatter::new(curve.freq.to_vec(), curve.spl.to_vec())
-            .mode(Mode::Lines)
-            .name(shorten_curve_name(curve_name))
-            .x_axis(x_axis_name)
-            .y_axis(y_axis_name)
-            .line(plotly::common::Line::new().color(filter_color(i)));
-        traces.push(*trace);
+        if let Some(curve) = curves.get(*curve_name) {
+            let trace = Scatter::new(curve.freq.to_vec(), curve.spl.to_vec())
+                .mode(Mode::Lines)
+                .name(shorten_curve_name(curve_name))
+                .x_axis(x_axis_name)
+                .y_axis(y_axis_name)
+                .line(plotly::common::Line::new().color(filter_color(i)));
+            traces.push(*trace);
+        }
     }
 
     traces
@@ -191,14 +192,15 @@ fn create_cea2034_with_eq_traces(
             x_axis_name = "x";
             y_axis_name = "y";
         }
-        let curve = curves.get(*curve_name).unwrap();
-        let trace = Scatter::new(curve.freq.to_vec(), (&curve.spl + eq_response).to_vec())
-            .mode(Mode::Lines)
-            .name(format!("{} w/EQ", shorten_curve_name(curve_name)))
-            .x_axis(x_axis_name)
-            .y_axis(y_axis_name)
-            .line(plotly::common::Line::new().color(filter_color(i + 4)));
-        traces.push(*trace);
+        if let Some(curve) = curves.get(*curve_name) {
+            let trace = Scatter::new(curve.freq.to_vec(), (&curve.spl + eq_response).to_vec())
+                .mode(Mode::Lines)
+                .name(format!("{} w/EQ", shorten_curve_name(curve_name)))
+                .x_axis(x_axis_name)
+                .y_axis(y_axis_name)
+                .line(plotly::common::Line::new().color(filter_color(i + 4)));
+            traces.push(*trace);
+        }
     }
 
     traces

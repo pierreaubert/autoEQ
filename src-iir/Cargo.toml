@@ -1,6 +1,6 @@
 [package]
 name = "autoeq-iir"
-version = "0.2.18"
+version = "0.2.19"
 edition = "2021"
 authors = ["Pierre Aubert <pierre@spinorama.org>"]
 license = "GPL-3.0-or-later"
@@ -11,6 +11,8 @@ repository = "https://github.com/pierreaubert/autoeq"
 ndarray = { workspace = true }
 num-complex = { workspace = true }
 serde = { workspace = true }
+base64 = "0.22"
+byteorder = "1.5"
 
 [lib]
 name = "autoeq_iir"

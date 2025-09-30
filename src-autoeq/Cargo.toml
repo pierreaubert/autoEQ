@@ -1,6 +1,6 @@
 [package]
 name = "autoeq"
-version = "0.2.229"
+version = "0.2.232"
 edition = "2021"
 authors = ["Pierre Aubert <pierre@spinorama.org>"]
 license = "GPL-3.0-or-later"
@@ -9,6 +9,7 @@ repository = "https://github.com/pierreaubert/autoeq"
 
 [dependencies]
 build_html = { workspace = true }
+chrono = { workspace = true }
 clap = { workspace = true }
 csv = { workspace = true }
 ndarray = { workspace = true }
@@ -22,6 +23,7 @@ reqwest = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 signal-hook-tokio = { workspace = true }
+strsim = { workspace = true }
 tokio = { workspace = true }
 urlencoding = { workspace = true }
 

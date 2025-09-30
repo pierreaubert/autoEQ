@@ -271,7 +271,6 @@ mod tests {
         let params = PlotSpinParams {
             cea2034_curves: Some(cea2034_curves),
             eq_response: Some(vec![0.0, 0.5, 1.0, 0.5, 0.0]),
-            frequencies: Some(vec![20.0, 100.0, 1000.0, 10000.0, 20000.0]),
         };
 
         let result = generate_plot_spin(params).await;
@@ -293,7 +292,6 @@ mod tests {
         let params = PlotSpinParams {
             cea2034_curves: Some(cea2034_curves),
             eq_response: Some(vec![0.0, 0.0, 0.0, 0.0, 0.0]),
-            frequencies: Some(vec![20.0, 100.0, 1000.0, 10000.0, 20000.0]),
         };
 
         let result = generate_plot_spin_details(params).await;
@@ -311,7 +309,6 @@ mod tests {
         let params = PlotSpinParams {
             cea2034_curves: Some(cea2034_curves),
             eq_response: Some(vec![0.0, 0.0, 0.0, 0.0, 0.0]),
-            frequencies: Some(vec![20.0, 100.0, 1000.0, 10000.0, 20000.0]),
         };
 
         let result = generate_plot_spin_tonal(params).await;
@@ -469,17 +466,12 @@ mod tests {
             serde_json::Value::String("Test Plot".to_string()),
         );
 
-        let plot_data = PlotData {
-            frequencies: vec![20.0, 100.0, 1000.0],
-            curves,
-            metadata,
-        };
+        let plot_data = PlotData { curves, metadata };
 
         let serialized = serde_json::to_string(&plot_data);
         assert!(serialized.is_ok());
 
         let json_str = serialized.unwrap();
-        assert!(json_str.contains("\"frequencies\":[20.0,100.0,1000.0]"));
         assert!(json_str.contains("\"test_curve\":[1.0,2.0,3.0]"));
     }
 

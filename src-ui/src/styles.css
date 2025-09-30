@@ -672,15 +672,18 @@ input[type="checkbox"] {
   text-align: center;
 }
 
-/* Plot Section - Vertical 3-Graph Layout */
+/* Plot Section - Vertical 4-Graph Layout with Scrolling */
 .plots-vertical {
   flex: 1;
   display: flex;
   flex-direction: column;
   gap: var(--spacing-sm);
-  overflow: hidden;
-  height: var(--plots-vertical-height, 100%);
-  width: var(--plots-vertical-width, 100%);
+  overflow-y: auto; /* Enable vertical scrolling */
+  overflow-x: hidden;
+  height: 100%;
+  width: 100%;
+  min-height: 0; /* Allow shrinking */
+  padding-right: var(--spacing-xs); /* Space for scrollbar */
 }
 
 .plot-vertical-item {
@@ -690,9 +693,25 @@ input[type="checkbox"] {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  flex: 1;
-  height: var(--plot-vertical-height, auto);
-  min-height: var(--plot-vertical-height, 150px);
+  flex: 0 0 auto; /* Don't grow/shrink, use natural height */
+  min-height: 300px; /* Minimum height */
+}
+
+/* Different heights for different plot types to accommodate subplots */
+#filter_vertical_item {
+  height: 350px; /* Single plot */
+}
+
+#spin_vertical_item {
+  height: 400px; /* Multiple curves on one plot */
+}
+
+#details_vertical_item {
+  height: 600px; /* 2x2 subplot grid */
+}
+
+#tonal_vertical_item {
+  height: 600px; /* 2x2 subplot grid */
 }
 
 .plot-vertical-header {

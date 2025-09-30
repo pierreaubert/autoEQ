@@ -23,6 +23,7 @@ mod plot;
 mod read_api;
 mod read_csv;
 mod smooth;
+mod speaker_suggestions;
 
 // Re-export commonly used functions
 pub use clamp::clamp_positive_only;
@@ -36,3 +37,4 @@ pub use read_csv::load_frequency_response;
 pub use read_csv::read_curve_from_csv;
 pub use smooth::smooth_gaussian;
 pub use smooth::smooth_one_over_n_octave;
+pub use speaker_suggestions::*;

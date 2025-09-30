@@ -15,6 +15,8 @@
 //! You should have received a copy of the GNU General Public License
 //! along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+use base64::{engine::general_purpose, Engine as _};
+use byteorder::{BigEndian, WriteBytesExt};
 use ndarray::Array1;
 use std::f64::consts::PI;
 use std::fmt;
@@ -1009,5 +1011,425 @@ mod peq_tests {
         for (weight, _) in &hp {
             assert_eq!(*weight, 1.0);
         }
+    }
+}
+
+// ----------------------------------------------------------------------
+// RME Format Functions
+// ----------------------------------------------------------------------
+
+/// Convert BiquadFilterType to RME format code
+///
+/// # Arguments
+/// * `filter_type` - The biquad filter type
+/// * `pos` - The position (1-based index) of the filter in the chain
+///
+/// # Returns
+/// * RME type code as f64, or -1.0 if unsupported
+///
+/// # Notes
+/// RME format codes depend on both filter type and position:
+/// - PK (Peak): 0.0
+/// - LP (Lowpass): 3.0 at pos 1, 2.0 at pos 3
+/// - HP (Highpass): 2.0 at pos 1, 3.0 at pos 3
+/// - LS (Lowshelf): 2.0 at pos 3
+fn biquad_to_rme_type(filter_type: BiquadFilterType, pos: usize) -> f64 {
+    match filter_type {
+        BiquadFilterType::Peak => 0.0,
+        BiquadFilterType::Lowpass => {
+            if pos == 1 {
+                3.0
+            } else if pos == 3 {
+                2.0
+            } else {
+                -1.0
+            }
+        }
+        BiquadFilterType::Highpass | BiquadFilterType::HighpassVariableQ => {
+            if pos == 1 {
+                2.0
+            } else if pos == 3 {
+                3.0
+            } else {
+                -1.0
+            }
+        }
+        BiquadFilterType::Lowshelf => {
+            if pos == 3 {
+                2.0
+            } else {
+                -1.0
+            }
+        }
+        _ => -1.0,
+    }
+}
+
+/// Format PEQ as RME TotalMix channel preset XML
+///
+/// # Arguments
+/// * `peq` - PEQ vector containing weighted biquad filters
+///
+/// # Returns
+/// * String formatted as RME TotalMix channel preset XML
+///
+/// # Notes
+/// Generates XML in the format expected by RME TotalMix channel EQ.
+/// Includes LC Grade and LC Freq defaults, followed by Band parameters for
+/// frequency, Q, and gain, then Band Type specifications.
+pub fn peq_format_rme(peq: &Peq) -> String {
+    let mut lines = Vec::new();
+    lines.push("<Preset>".to_string());
+    lines.push("  <Equalizer>".to_string());
+    lines.push("    <Params>".to_string());
+
+    // Default LC parameters
+    lines.push("\t<val e=\"LC Grade\" v=\"1.00,\"/>".to_string());
+    lines.push("\t<val e=\"LC Freq\" v=\"20.00,\"/>".to_string());
+
+    // Add Band parameters (freq, Q, gain)
+    for (i, (_, biquad)) in peq.iter().enumerate() {
+        lines.push(format!(
+            "      <val e=\"Band{} Freq\" v=\"{:7.2},\"/>",
+            i + 1,
+            biquad.freq
+        ));
+        lines.push(format!(
+            "      <val e=\"Band{} Q\" v=\"{:4.2},\"/>",
+            i + 1,
+            biquad.q
+        ));
+        lines.push(format!(
+            "        <val e=\"Band{} Gain\" v=\"{:4.2},\"/>",
+            i + 1,
+            biquad.db_gain
+        ));
+    }
+
+    // Add Band types
+    for (i, (_, biquad)) in peq.iter().enumerate() {
+        let rme_type = biquad_to_rme_type(biquad.filter_type, i + 1);
+        if rme_type >= 0.0 {
+            lines.push(format!(
+                "        <val e=\"Band{} Type\" v=\"{:4.2},\"/>",
+                i + 1,
+                rme_type
+            ));
+        }
+    }
+
+    lines.push("    </Params>".to_string());
+    lines.push("  </Equalizer>".to_string());
+    lines.push("</Preset>".to_string());
+
+    lines.join("\n")
+}
+
+// ----------------------------------------------------------------------
+// Apple AUNBandEQ (aupreset) Format Functions
+// ----------------------------------------------------------------------
+
+// Apple AUNBandEQ parameter constants
+const K_AUNBANDEQ_PARAM_BYPASS_BAND: i32 = 1000;
+const K_AUNBANDEQ_PARAM_FILTER_TYPE: i32 = 2000;
+const K_AUNBANDEQ_PARAM_FREQUENCY: i32 = 3000;
+const K_AUNBANDEQ_PARAM_GAIN: i32 = 4000;
+const K_AUNBANDEQ_PARAM_BANDWIDTH: i32 = 5000;
+
+// Apple AUNBandEQ filter type constants
+const K_AUNBANDEQ_FILTER_TYPE_PARAMETRIC: i32 = 0;
+#[allow(dead_code)]
+const K_AUNBANDEQ_FILTER_TYPE_2ND_ORDER_BUTTERWORTH_LOW_PASS: i32 = 1;
+#[allow(dead_code)]
+const K_AUNBANDEQ_FILTER_TYPE_2ND_ORDER_BUTTERWORTH_HIGH_PASS: i32 = 2;
+const K_AUNBANDEQ_FILTER_TYPE_RESONANT_LOW_PASS: i32 = 3;
+const K_AUNBANDEQ_FILTER_TYPE_RESONANT_HIGH_PASS: i32 = 4;
+const K_AUNBANDEQ_FILTER_TYPE_BAND_PASS: i32 = 5;
+const K_AUNBANDEQ_FILTER_TYPE_LOW_SHELF: i32 = 7;
+const K_AUNBANDEQ_FILTER_TYPE_HIGH_SHELF: i32 = 8;
+
+/// Convert BiquadFilterType to Apple AUNBandEQ filter type constant
+///
+/// # Arguments
+/// * `filter_type` - The biquad filter type
+///
+/// # Returns
+/// * Apple AUNBandEQ filter type constant, or -1 if unsupported
+fn biquad_to_apple_type(filter_type: BiquadFilterType) -> i32 {
+    match filter_type {
+        BiquadFilterType::Peak => K_AUNBANDEQ_FILTER_TYPE_PARAMETRIC,
+        BiquadFilterType::Highshelf => K_AUNBANDEQ_FILTER_TYPE_HIGH_SHELF,
+        BiquadFilterType::Lowshelf => K_AUNBANDEQ_FILTER_TYPE_LOW_SHELF,
+        BiquadFilterType::Highpass | BiquadFilterType::HighpassVariableQ => {
+            K_AUNBANDEQ_FILTER_TYPE_RESONANT_HIGH_PASS
+        }
+        BiquadFilterType::Lowpass => K_AUNBANDEQ_FILTER_TYPE_RESONANT_LOW_PASS,
+        BiquadFilterType::Bandpass => K_AUNBANDEQ_FILTER_TYPE_BAND_PASS,
+        _ => -1,
+    }
+}
+
+/// Format PEQ as Apple AUNBandEQ preset (aupreset) plist XML
+///
+/// # Arguments
+/// * `peq` - PEQ vector containing weighted biquad filters
+/// * `name` - Name for the preset
+///
+/// # Returns
+/// * String formatted as Apple AUNBandEQ preset plist XML
+///
+/// # Notes
+/// Generates a plist XML file containing base64-encoded binary data
+/// in the format expected by Apple's AUNBandEQ audio unit.
+/// Supports up to 16 bands with parameters for bypass, type, frequency,
+/// gain, and bandwidth.
+pub fn peq_format_aupreset(peq: &Peq, name: &str) -> String {
+    let len_peq = peq.len().min(16); // Max 16 bands for Apple
+    let preamp_gain = peq_preamp_gain(peq);
+
+    // Build binary data structure
+    let mut buffer = Vec::new();
+
+    // Header: 5 values (4 integers + 1 float)
+    // Structure: [0, 0, ndata (81), 0, preamp_gain]
+    buffer.write_i32::<BigEndian>(0).unwrap();
+    buffer.write_i32::<BigEndian>(0).unwrap();
+    buffer.write_i32::<BigEndian>(81).unwrap(); // ndata is always 81
+    buffer.write_i32::<BigEndian>(0).unwrap();
+    buffer.write_f32::<BigEndian>(preamp_gain as f32).unwrap();
+
+    // Create parameter map
+    let mut params = std::collections::BTreeMap::new();
+
+    // Add parameters for each band
+    for (i, (_, biquad)) in peq.iter().take(16).enumerate() {
+        let idx = i as i32;
+        params.insert(K_AUNBANDEQ_PARAM_BYPASS_BAND + idx, 0.0f32); // 0.0 = enabled
+        params.insert(
+            K_AUNBANDEQ_PARAM_FILTER_TYPE + idx,
+            biquad_to_apple_type(biquad.filter_type) as f32,
+        );
+        params.insert(K_AUNBANDEQ_PARAM_FREQUENCY + idx, biquad.freq as f32);
+        params.insert(K_AUNBANDEQ_PARAM_GAIN + idx, biquad.db_gain as f32);
+        params.insert(K_AUNBANDEQ_PARAM_BANDWIDTH + idx, q2bw(biquad.q) as f32);
+    }
+
+    // Fill remaining bands (up to 16) with disabled/zero values
+    for i in len_peq..16 {
+        let idx = i as i32;
+        params.insert(K_AUNBANDEQ_PARAM_BYPASS_BAND + idx, 1.0f32); // 1.0 = disabled
+        params.insert(K_AUNBANDEQ_PARAM_FILTER_TYPE + idx, 0.0f32);
+        params.insert(K_AUNBANDEQ_PARAM_FREQUENCY + idx, 0.0f32);
+        params.insert(K_AUNBANDEQ_PARAM_GAIN + idx, 0.0f32);
+        params.insert(K_AUNBANDEQ_PARAM_BANDWIDTH + idx, 0.0f32);
+    }
+
+    // Write parameters in sorted order (param_id, value) pairs
+    for (param_id, value) in params.iter() {
+        buffer.write_i32::<BigEndian>(*param_id).unwrap();
+        buffer.write_f32::<BigEndian>(*value).unwrap();
+    }
+
+    // Base64 encode the buffer
+    let b64_text = general_purpose::STANDARD.encode(&buffer);
+
+    // Format as chunks of 68 characters with tabs
+    let chunk_size = 68;
+    let mut data_lines = Vec::new();
+    for chunk in b64_text.as_bytes().chunks(chunk_size) {
+        data_lines.push(format!("\t{}", String::from_utf8_lossy(chunk)));
+    }
+    let data_section = data_lines.join("\n");
+
+    // Build the plist XML
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>ParametricType</key>
+	<integer>11</integer>
+	<key>data</key>
+	<data>
+{}
+	</data>
+	<key>manufacturer</key>
+	<integer>1634758764</integer>
+	<key>name</key>
+	<string>{}</string>
+	<key>numberOfBands</key>
+	<integer>{}</integer>
+	<key>subtype</key>
+	<integer>1851942257</integer>
+	<key>type</key>
+	<integer>1635083896</integer>
+	<key>version</key>
+	<integer>0</integer>
+</dict>
+</plist>
+"#,
+        data_section, name, len_peq
+    )
+}
+
+#[cfg(test)]
+mod format_tests {
+    use super::*;
+
+    #[test]
+    fn test_peq_format_rme_single_peak() {
+        let bq = Biquad::new(BiquadFilterType::Peak, 1000.0, 48000.0, 1.0, 3.0);
+        let peq = vec![(1.0, bq)];
+        let rme_str = peq_format_rme(&peq);
+
+        // Verify structure
+        assert!(rme_str.contains("<Preset>"));
+        assert!(rme_str.contains("<Equalizer>"));
+        assert!(rme_str.contains("<Params>"));
+        assert!(rme_str.contains("LC Grade"));
+        assert!(rme_str.contains("LC Freq"));
+        assert!(rme_str.contains("Band1 Freq"));
+        assert!(rme_str.contains("Band1 Q"));
+        assert!(rme_str.contains("Band1 Gain"));
+        assert!(rme_str.contains("Band1 Type"));
+        assert!(rme_str.contains("</Preset>"));
+
+        // Peak filter should have type 0.0
+        assert!(rme_str.contains("0.00"));
+    }
+
+    #[test]
+    fn test_peq_format_rme_empty() {
+        let peq: Peq = vec![];
+        let rme_str = peq_format_rme(&peq);
+
+        // Should still have basic structure
+        assert!(rme_str.contains("<Preset>"));
+        assert!(rme_str.contains("<Equalizer>"));
+        assert!(rme_str.contains("LC Grade"));
+        assert!(rme_str.contains("</Preset>"));
+    }
+
+    #[test]
+    fn test_peq_format_rme_multiple_bands() {
+        let bq1 = Biquad::new(BiquadFilterType::Peak, 1000.0, 48000.0, 1.0, 3.0);
+        let bq2 = Biquad::new(BiquadFilterType::Peak, 2000.0, 48000.0, 2.0, -2.0);
+        let peq = vec![(1.0, bq1), (1.0, bq2)];
+        let rme_str = peq_format_rme(&peq);
+
+        assert!(rme_str.contains("Band1 Freq"));
+        assert!(rme_str.contains("Band2 Freq"));
+        assert!(rme_str.contains("Band1 Type"));
+        assert!(rme_str.contains("Band2 Type"));
+    }
+
+    #[test]
+    fn test_peq_format_aupreset_single_peak() {
+        let bq = Biquad::new(BiquadFilterType::Peak, 1000.0, 48000.0, 1.0, 3.0);
+        let peq = vec![(1.0, bq)];
+        let aupreset_str = peq_format_aupreset(&peq, "Test EQ");
+
+        // Verify plist structure
+        assert!(aupreset_str.contains("<?xml version="));
+        assert!(aupreset_str.contains("<!DOCTYPE plist"));
+        assert!(aupreset_str.contains("<plist version=\"1.0\">"));
+        assert!(aupreset_str.contains("<dict>"));
+        assert!(aupreset_str.contains("<key>ParametricType</key>"));
+        assert!(aupreset_str.contains("<key>data</key>"));
+        assert!(aupreset_str.contains("<data>"));
+        assert!(aupreset_str.contains("<key>name</key>"));
+        assert!(aupreset_str.contains("<string>Test EQ</string>"));
+        assert!(aupreset_str.contains("<key>numberOfBands</key>"));
+        assert!(aupreset_str.contains("<integer>1</integer>"));
+        assert!(aupreset_str.contains("</plist>"));
+    }
+
+    #[test]
+    fn test_peq_format_aupreset_empty() {
+        let peq: Peq = vec![];
+        let aupreset_str = peq_format_aupreset(&peq, "Empty EQ");
+
+        // Should still generate valid plist
+        assert!(aupreset_str.contains("<?xml version="));
+        assert!(aupreset_str.contains("<string>Empty EQ</string>"));
+        assert!(aupreset_str.contains("<integer>0</integer>"));
+    }
+
+    #[test]
+    fn test_peq_format_aupreset_multiple_bands() {
+        let bq1 = Biquad::new(BiquadFilterType::Peak, 1000.0, 48000.0, 1.0, 3.0);
+        let bq2 = Biquad::new(BiquadFilterType::Highshelf, 8000.0, 48000.0, 0.7, 2.0);
+        let bq3 = Biquad::new(BiquadFilterType::Lowshelf, 100.0, 48000.0, 0.7, -1.0);
+        let peq = vec![(1.0, bq1), (1.0, bq2), (1.0, bq3)];
+        let aupreset_str = peq_format_aupreset(&peq, "Multi Band EQ");
+
+        assert!(aupreset_str.contains("<string>Multi Band EQ</string>"));
+        assert!(aupreset_str.contains("<integer>3</integer>"));
+        // Should have base64 encoded data
+        assert!(aupreset_str.contains("<data>"));
+    }
+
+    #[test]
+    fn test_peq_format_aupreset_max_bands() {
+        // Test with more than 16 bands (should cap at 16)
+        let mut peq = Vec::new();
+        for i in 0..20 {
+            let freq = 100.0 + (i as f64 * 100.0);
+            let bq = Biquad::new(BiquadFilterType::Peak, freq, 48000.0, 1.0, 1.0);
+            peq.push((1.0, bq));
+        }
+        let aupreset_str = peq_format_aupreset(&peq, "Max Bands EQ");
+
+        // Should cap at 16 bands
+        assert!(aupreset_str.contains("<integer>16</integer>"));
+    }
+
+    #[test]
+    fn test_biquad_to_apple_type() {
+        assert_eq!(
+            biquad_to_apple_type(BiquadFilterType::Peak),
+            K_AUNBANDEQ_FILTER_TYPE_PARAMETRIC
+        );
+        assert_eq!(
+            biquad_to_apple_type(BiquadFilterType::Highshelf),
+            K_AUNBANDEQ_FILTER_TYPE_HIGH_SHELF
+        );
+        assert_eq!(
+            biquad_to_apple_type(BiquadFilterType::Lowshelf),
+            K_AUNBANDEQ_FILTER_TYPE_LOW_SHELF
+        );
+        assert_eq!(
+            biquad_to_apple_type(BiquadFilterType::Highpass),
+            K_AUNBANDEQ_FILTER_TYPE_RESONANT_HIGH_PASS
+        );
+        assert_eq!(
+            biquad_to_apple_type(BiquadFilterType::Lowpass),
+            K_AUNBANDEQ_FILTER_TYPE_RESONANT_LOW_PASS
+        );
+        assert_eq!(
+            biquad_to_apple_type(BiquadFilterType::Bandpass),
+            K_AUNBANDEQ_FILTER_TYPE_BAND_PASS
+        );
+    }
+
+    #[test]
+    fn test_biquad_to_rme_type() {
+        // Peak should always be 0.0
+        assert_eq!(biquad_to_rme_type(BiquadFilterType::Peak, 1), 0.0);
+        assert_eq!(biquad_to_rme_type(BiquadFilterType::Peak, 2), 0.0);
+        assert_eq!(biquad_to_rme_type(BiquadFilterType::Peak, 3), 0.0);
+
+        // Lowpass position-dependent
+        assert_eq!(biquad_to_rme_type(BiquadFilterType::Lowpass, 1), 3.0);
+        assert_eq!(biquad_to_rme_type(BiquadFilterType::Lowpass, 3), 2.0);
+        assert_eq!(biquad_to_rme_type(BiquadFilterType::Lowpass, 2), -1.0);
+
+        // Highpass position-dependent
+        assert_eq!(biquad_to_rme_type(BiquadFilterType::Highpass, 1), 2.0);
+        assert_eq!(biquad_to_rme_type(BiquadFilterType::Highpass, 3), 3.0);
+
+        // Lowshelf position-dependent
+        assert_eq!(biquad_to_rme_type(BiquadFilterType::Lowshelf, 3), 2.0);
+        assert_eq!(biquad_to_rme_type(BiquadFilterType::Lowshelf, 1), -1.0);
     }
 }

@@ -430,7 +430,7 @@ ${generateOptions(LOCAL_ALGO_OPTIONS, 'cobyla')}
 export function generatePlotsPanel(): string {
   return `<div class="plots-vertical">
     <!-- Filter Response Graph - Always visible -->
-    <div class="plot-vertical-item">
+    <div class="plot-vertical-item" id="filter_vertical_item" style="display: flex;">
         <div class="plot-vertical-header">
             <h4>Filter</h4>
         </div>
@@ -445,6 +445,16 @@ export function generatePlotsPanel(): string {
             <h4>Spinorama</h4>
         </div>
         <div id="spin_plot" class="plot-vertical-container">
+            <div class="plot-placeholder">No data to display</div>
+        </div>
+    </div>
+
+    <!-- Details Plot - Visible when CEA2034 data available -->
+    <div class="plot-vertical-item" id="details_vertical_item" style="display: none;">
+        <div class="plot-vertical-header">
+            <h4>Details</h4>
+        </div>
+        <div id="details_plot" class="plot-vertical-container">
             <div class="plot-placeholder">No data to display</div>
         </div>
     </div>

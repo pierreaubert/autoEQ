@@ -32,6 +32,8 @@ signal-hook-tokio = { version = "0.3", features = ["futures-v0_3"] }
 signal-hook = "0.3"
 num_cpus = "1.16"
 thiserror = "2.0.16"
+strsim = "0.11"
+chrono = "0.4"
 
 # Optimization and math
 nlopt = "0.8.1"

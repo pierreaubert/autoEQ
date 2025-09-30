@@ -57,15 +57,17 @@ class AutoEQApplication {
     // Debug plot element availability
     const filterPlotElement = document.getElementById("filter_plot") as HTMLElement;
     const spinPlotElement = document.getElementById("spin_plot") as HTMLElement;
+    const detailsPlotElement = document.getElementById("details_plot") as HTMLElement;
     console.log("[INIT DEBUG] Filter plot element found:", !!filterPlotElement);
     console.log("[INIT DEBUG] Spin plot element found:", !!spinPlotElement);
+    console.log("[INIT DEBUG] Details plot element found:", !!detailsPlotElement);
     console.log("[INIT DEBUG] Progress graph element found:", !!progressGraphElement);
     console.log("[INIT DEBUG] Tonal plot element found:", !!tonalPlotElement);
 
     this.plotManager = new PlotManager(
-      null, // filter_details_plot - no longer used
+      null, // filter_details_plot - deprecated, kept for compatibility
       filterPlotElement,
-      null, // details_plot - no longer used
+      detailsPlotElement, // CEA2034 details plot
       spinPlotElement,
       null, // spin_plot_corrected - no longer used
       progressGraphElement as HTMLElement,
@@ -277,6 +279,15 @@ class AutoEQApplication {
     result: OptimizationResult,
   ): Promise<void> {
     console.log("Optimization completed successfully:", result);
+    console.log("Result structure:", {
+      has_filter_params: !!result.filter_params,
+      filter_params_length: result.filter_params?.length,
+      has_filter_response: !!result.filter_response,
+      has_filter_plots: !!result.filter_plots,
+      has_spin_details: !!result.spin_details,
+      preference_score_before: result.preference_score_before,
+      preference_score_after: result.preference_score_after
+    });
 
     try {
       // Update scores if available
@@ -306,10 +317,6 @@ class AutoEQApplication {
         }
         this.audioPlayer?.updateFilterParams(filterParams);
         this.audioPlayer?.setEQEnabled(true);
-
-        // Update filter details plot and table
-        console.log("Updating filter details plot with optimization result");
-        this.plotManager.updateFilterDetailsPlot(result);
       }
 
       // Generate plots using Tauri backend
@@ -330,39 +337,11 @@ class AutoEQApplication {
       if (hasSpinData) {
         // Speaker-based optimization: show spinorama plots
         console.log("Processing speaker-based optimization plots");
-        if (result.spin_details) {
-          console.log(
-            "Updating spinorama plots with data:",
-            result.spin_details,
-          );
-          this.plotManager.setLastSpinDetails(result.spin_details);
-          await this.plotManager.tryUpdateDetailsPlot();
-          this.plotManager.updateSpinPlot(result.spin_details);
-        }
+        // Spin plots are generated in generateOptimizationPlots and passed as Plotly JSON
       } else {
         // Curve+target optimization: show response curve with/without EQ
         console.log("Processing curve+target optimization plots");
-        console.log("Full optimization result:", result);
-        console.log("result.filter_response:", result.filter_response);
-        console.log("result.filter_plots:", result.filter_plots);
-
-        if (result.filter_response) {
-          console.log(
-            "Updating filter plot with response curve data:",
-            result.filter_response,
-          );
-          this.plotManager.updateFilterPlot(result.filter_response);
-        } else if (result.filter_plots) {
-          console.log(
-            "Using filter_plots data instead:",
-            result.filter_plots,
-          );
-          this.plotManager.updateFilterPlot(result.filter_plots);
-        } else {
-          console.warn(
-            "No filter_response or filter_plots data available for curve+target optimization",
-          );
-        }
+        // Filter plots will be generated as Plotly JSON in generateOptimizationPlots
       }
 
       console.log("All plots updated successfully");
@@ -390,17 +369,51 @@ class AutoEQApplication {
 
   private async generateOptimizationPlots(result: OptimizationResult): Promise<void> {
     console.log("Generating optimization plots using Tauri backend...");
+    console.log("Result has filter_response:", !!result.filter_response);
+    console.log("Result has filter_plots:", !!result.filter_plots);
+    console.log("Result has spin_details:", !!result.spin_details);
 
     try {
-      // Generate filter response plots if we have filter parameters
+      // Always generate filter plot if we have filter data (for both speaker and curve+target)
       if (result.filter_params && result.filter_params.length > 0) {
-        console.log("Generating filter response plots...");
+        console.log("Generating filter response plot...");
 
-        // We need to get the original input data to generate filter plots
-        // For now, we'll use the existing filter_response data if available
-        if (result.filter_response) {
-          // The backend should have already generated this data
-          console.log("Filter response data already available from backend");
+        // Try filter_response first, then filter_plots
+        const filterData = result.filter_response || result.filter_plots;
+
+        if (filterData) {
+          console.log("Creating filter plot from filterData:", filterData);
+
+          // Create simple plot from PlotData format
+          const traces = Object.entries(filterData.curves).map(([name, values]) => ({
+            x: filterData.frequencies,
+            y: values,
+            type: 'scatter' as const,
+            mode: 'lines' as const,
+            name: name,
+            line: { width: name === 'EQ Response' || name === 'Sum' ? 3 : 2 }
+          }));
+
+          const layout = {
+            title: { text: '' },
+            xaxis: {
+              title: { text: 'Frequency (Hz)' },
+              type: 'log' as const,
+              range: [Math.log10(20), Math.log10(20000)]
+            },
+            yaxis: { title: { text: 'Magnitude (dB)' } },
+            paper_bgcolor: 'rgba(0,0,0,0)',
+            plot_bgcolor: 'rgba(0,0,0,0)',
+            margin: { l: 50, r: 20, t: 20, b: 60 },
+            showlegend: true,
+            legend: { bgcolor: 'rgba(0,0,0,0)' }
+          };
+
+          const plotlyJson = { data: traces, layout };
+          console.log("Calling updateFilterPlot with:", plotlyJson);
+          this.plotManager.updateFilterPlot(plotlyJson);
+        } else {
+          console.warn("No filter data available in result");
         }
       }
 
@@ -423,33 +436,32 @@ class AutoEQApplication {
             });
           }
 
-          // Generate detailed spin plot
+          // Generate plots as Plotly JSON from backend
           const spinParams: PlotSpinParams = {
             cea2034_curves,
             frequencies: result.spin_details.frequencies
           };
 
-          console.log("Calling generatePlotSpinDetails with params:", spinParams);
+          console.log("Generating spin plot (Plotly JSON)...");
+          const spinPlot = await AutoEQPlotAPI.generatePlotSpin(spinParams);
+          console.log("Generated spin plot:", spinPlot);
+
+          // Update spin plot with Plotly JSON
+          this.plotManager.updateSpinPlot(spinPlot);
+
+          console.log("Generating spin details plot (Plotly JSON)...");
           const detailsPlot = await AutoEQPlotAPI.generatePlotSpinDetails(spinParams);
           console.log("Generated spin details plot:", detailsPlot);
 
-          // Generate tonal balance plot
-          console.log("Calling generatePlotSpinTonal with params:", spinParams);
+          // Update details plot with Plotly JSON
+          await this.plotManager.generateDetailsPlot(detailsPlot);
+
+          console.log("Generating tonal balance plot (Plotly JSON)...");
           const tonalPlot = await AutoEQPlotAPI.generatePlotSpinTonal(spinParams);
           console.log("Generated tonal balance plot:", tonalPlot);
 
-          // Store the generated plots in metadata for later use
-          result.spin_details.metadata = {
-            ...result.spin_details.metadata,
-            detailsPlot,
-            tonalPlot
-          };
-
-          // Update tonal balance plot if generated successfully
-          if (tonalPlot) {
-            console.log("Updating tonal balance plot in UI");
-            this.plotManager.updateTonalPlot(tonalPlot);
-          }
+          // Update tonal plot with Plotly JSON
+          this.plotManager.updateTonalPlot(tonalPlot);
 
         } catch (plotError) {
           console.error("Error generating spinorama plots:", plotError);
