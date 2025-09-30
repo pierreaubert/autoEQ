@@ -292,10 +292,26 @@ class AutoEQApplication {
       filter_params_length: result.filter_params?.length,
       has_filter_response: !!result.filter_response,
       has_filter_plots: !!result.filter_plots,
+      has_input_curve: !!result.input_curve,
+      has_deviation_curve: !!result.deviation_curve,
       has_spin_details: !!result.spin_details,
       preference_score_before: result.preference_score_before,
       preference_score_after: result.preference_score_after
     });
+
+    // Debug: Log curve data availability
+    if (result.filter_response) {
+      console.log("filter_response frequencies length:", result.filter_response.frequencies?.length);
+      console.log("filter_response curves:", Object.keys(result.filter_response.curves || {}));
+    }
+    if (result.input_curve) {
+      console.log("input_curve frequencies length:", result.input_curve.frequencies?.length);
+      console.log("input_curve curves:", Object.keys(result.input_curve.curves || {}));
+    }
+    if (result.deviation_curve) {
+      console.log("deviation_curve frequencies length:", result.deviation_curve.frequencies?.length);
+      console.log("deviation_curve curves:", Object.keys(result.deviation_curve.curves || {}));
+    }
 
     try {
       // Update scores if available
@@ -379,90 +395,68 @@ class AutoEQApplication {
     console.log("Generating optimization plots using Tauri backend...");
     console.log("Result has filter_response:", !!result.filter_response);
     console.log("Result has filter_plots:", !!result.filter_plots);
+    console.log("Result has input_curve:", !!result.input_curve);
+    console.log("Result has deviation_curve:", !!result.deviation_curve);
     console.log("Result has spin_details:", !!result.spin_details);
 
     try {
-      // Always generate filter plot if we have filter data (for both speaker and curve+target)
+      // ALWAYS generate the filter plot - backend always provides this data
       if (result.filter_params && result.filter_params.length > 0) {
         console.log("Generating filter response plot...");
+        console.log("Filter params count:", result.filter_params.length / 3);
 
-        // We need to use the backend's plot_filters function to get the 4-subplot plot
-        // This requires input curve, target curve, deviation curve and optimized params
-        if (result.filter_response && result.filter_plots && result.input_curve && result.deviation_curve) {
-          console.log("Generating 4-subplot filter plot using backend...");
-
-          // Extract data from the optimization result
-          const frequencies = result.filter_response.frequencies;
-          const targetResponse = result.filter_response.curves["Target"] || new Array(frequencies.length).fill(0);
-
-          // Use the actual input and deviation curves from the optimization
-          const inputCurve = result.input_curve.curves["Input"];
-          const deviationCurve = result.deviation_curve.curves["Deviation"];
-
-          // Prepare parameters for backend plot generation
-          const plotParams: PlotFiltersParams = {
-            input_curve: {
-              freq: frequencies,
-              spl: inputCurve
-            },
-            target_curve: {
-              freq: frequencies,
-              spl: targetResponse
-            },
-            deviation_curve: {
-              freq: frequencies,
-              spl: deviationCurve
-            },
-            optimized_params: result.filter_params,
-            sample_rate: 48000, // Use default or get from form
-            num_filters: result.filter_params.length / 3,
-            iir_hp_pk: false // Get from form if needed
-          };
-
-          try {
-            // Call backend to generate the 4-subplot plot
-            const filterPlot = await AutoEQPlotAPI.generatePlotFilters(plotParams);
-            console.log("Generated 4-subplot filter plot:", filterPlot);
-
-            // Update the filter plot with the Plotly JSON from backend
-            this.plotManager.updateFilterPlot(filterPlot);
-          } catch (error) {
-            console.error("Failed to generate 4-subplot filter plot:", error);
-            // Fallback to simple plot
-            const filterData = result.filter_response || result.filter_plots;
-            if (filterData) {
-              const traces = Object.entries(filterData.curves).map(([name, values]) => ({
-                x: filterData.frequencies,
-                y: values,
-                type: 'scatter' as const,
-                mode: 'lines' as const,
-                name: name,
-                line: { width: name === 'EQ Response' || name === 'Sum' ? 3 : 2 }
-              }));
-
-              const layout = {
-                title: { text: '' },
-                xaxis: {
-                  title: { text: 'Frequency (Hz)' },
-                  type: 'log' as const,
-                  range: [Math.log10(20), Math.log10(20000)]
-                },
-                yaxis: { title: { text: 'Magnitude (dB)' } },
-                paper_bgcolor: 'rgba(0,0,0,0)',
-                plot_bgcolor: 'rgba(0,0,0,0)',
-                margin: { l: 50, r: 20, t: 20, b: 60 },
-                showlegend: true,
-                legend: { bgcolor: 'rgba(0,0,0,0)' }
-              };
-
-              const plotlyJson = { data: traces, layout };
-              console.log("Fallback: calling updateFilterPlot with simple plot:", plotlyJson);
-              this.plotManager.updateFilterPlot(plotlyJson);
-            }
-          }
-        } else {
-          console.warn("No filter data available in result");
+        // Verify we have all required curves (backend always provides these)
+        if (!result.filter_response || !result.input_curve || !result.deviation_curve) {
+          console.error("MISSING REQUIRED CURVES FROM BACKEND!");
+          console.error("  filter_response:", !!result.filter_response);
+          console.error("  input_curve:", !!result.input_curve);
+          console.error("  deviation_curve:", !!result.deviation_curve);
+          throw new Error("Backend did not return required curve data");
         }
+
+        // Extract data from the optimization result
+        const frequencies = result.filter_response.frequencies;
+        const targetResponse = result.filter_response.curves["Target"];
+        const inputCurve = result.input_curve.curves["Input"];
+        const deviationCurve = result.deviation_curve.curves["Deviation"];
+
+        if (!targetResponse || !inputCurve || !deviationCurve) {
+          console.error("MISSING CURVE DATA IN RESPONSE!");
+          console.error("  targetResponse:", !!targetResponse);
+          console.error("  inputCurve:", !!inputCurve);
+          console.error("  deviationCurve:", !!deviationCurve);
+          throw new Error("Required curves missing from response data");
+        }
+
+        // Prepare parameters for backend plot generation
+        const plotParams: PlotFiltersParams = {
+          input_curve: {
+            freq: frequencies,
+            spl: inputCurve
+          },
+          target_curve: {
+            freq: frequencies,
+            spl: targetResponse
+          },
+          deviation_curve: {
+            freq: frequencies,
+            spl: deviationCurve
+          },
+          optimized_params: result.filter_params,
+          sample_rate: 48000, // Use default or get from form
+          num_filters: result.filter_params.length / 3,
+          iir_hp_pk: false // Get from form if needed
+        };
+
+        console.log("Calling backend to generate 4-subplot filter plot...");
+        // Call backend to generate the 4-subplot plot
+        const filterPlot = await AutoEQPlotAPI.generatePlotFilters(plotParams);
+        console.log("✅ Generated 4-subplot filter plot successfully");
+
+        // Update the filter plot with the Plotly JSON from backend
+        this.plotManager.updateFilterPlot(filterPlot);
+      } else {
+        console.error("No filter params in optimization result");
       }
 
       // Generate spinorama plots if we have spin data

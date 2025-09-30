@@ -39,28 +39,28 @@ export class AutoEQPlotAPI {
    * Generate filter response plots
    */
   static async generatePlotFilters(params: PlotFiltersParams): Promise<PlotlyData> {
-    return this.invoke<PlotlyData>('generate_plot_filters', params);
+    return this.invoke<PlotlyData>('generate_plot_filters', { params });
   }
 
   /**
    * Generate CEA2034 spin plot
    */
   static async generatePlotSpin(params: PlotSpinParams): Promise<PlotlyData> {
-    return this.invoke<PlotlyData>('generate_plot_spin', params);
+    return this.invoke<PlotlyData>('generate_plot_spin', { params });
   }
 
   /**
    * Generate detailed CEA2034 spin plot
    */
   static async generatePlotSpinDetails(params: PlotSpinParams): Promise<PlotlyData> {
-    return this.invoke<PlotlyData>('generate_plot_spin_details', params);
+    return this.invoke<PlotlyData>('generate_plot_spin_details', { params });
   }
 
   /**
    * Generate tonal balance CEA2034 plot
    */
   static async generatePlotSpinTonal(params: PlotSpinParams): Promise<PlotlyData> {
-    return this.invoke<PlotlyData>('generate_plot_spin_tonal', params);
+    return this.invoke<PlotlyData>('generate_plot_spin_tonal', { params });
   }
 }
 

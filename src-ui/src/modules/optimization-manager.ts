@@ -290,13 +290,27 @@ export class OptimizationManager {
     // Add input-source specific parameters
     // IMPORTANT: Only set the parameters for the selected input type
     // to avoid backend confusion
-    if (inputType === 'api') {
+    if (inputType === 'speaker') {
+      // Speaker data from API
       baseParams.speaker = formData.get('speaker') as string;
       baseParams.version = formData.get('version') as string;
       baseParams.measurement = formData.get('measurement') as string;
       // Explicitly clear file params
       baseParams.curve_path = undefined;
       baseParams.target_path = undefined;
+      baseParams.captured_frequencies = undefined;
+      baseParams.captured_magnitudes = undefined;
+    } else if (inputType === 'headphone') {
+      // Headphone data from file with target curve
+      baseParams.curve_path = formData.get('headphone_curve_path') as string;
+      baseParams.curve_name = formData.get('headphone_target') as string || baseParams.curve_name;
+      // Explicitly clear other params
+      baseParams.target_path = undefined;
+      baseParams.speaker = undefined;
+      baseParams.version = undefined;
+      baseParams.measurement = undefined;
+      baseParams.captured_frequencies = undefined;
+      baseParams.captured_magnitudes = undefined;
     } else if (inputType === 'file') {
       baseParams.curve_path = formData.get('curve_path') as string;
       baseParams.target_path = formData.get('target_path') as string;
@@ -304,6 +318,8 @@ export class OptimizationManager {
       baseParams.speaker = undefined;
       baseParams.version = undefined;
       baseParams.measurement = undefined;
+      baseParams.captured_frequencies = undefined;
+      baseParams.captured_magnitudes = undefined;
     } else if (inputType === 'capture') {
       // Captured data will be added separately
       const capturedFreqs = this.getCapturedFrequencies();
@@ -333,6 +349,7 @@ export class OptimizationManager {
     console.log('[OPTIMIZATION] Input type:', inputType);
     console.log('[OPTIMIZATION] Parameters to send:', {
       curve_path: baseParams.curve_path,
+      curve_name: baseParams.curve_name,
       target_path: baseParams.target_path,
       speaker: baseParams.speaker,
       version: baseParams.version,
