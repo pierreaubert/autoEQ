@@ -46,34 +46,18 @@ const mockAudioContext = {
 (globalThis as any).webkitAudioContext = vi.fn(() => mockAudioContext);
 
 // Mock Canvas API
-const mockCanvas = {
-  getContext: vi.fn(() => ({
-    fillStyle: '',
-    fillRect: vi.fn(),
-    clearRect: vi.fn()
-  })),
-  width: 800,
-  height: 200
+const mockCanvasContext = {
+  fillStyle: '',
+  fillRect: vi.fn(),
+  clearRect: vi.fn()
 };
 
-// Mock DOM methods
-Object.defineProperty(document, 'createElement', {
-  value: vi.fn((tagName: string) => {
-    if (tagName === 'canvas') {
-      return mockCanvas;
-    }
-    return {
-      innerHTML: '',
-      style: {},
-      classList: {
-        add: vi.fn(),
-        remove: vi.fn()
-      },
-      addEventListener: vi.fn(),
-      querySelector: vi.fn(),
-      querySelectorAll: vi.fn(() => [])
-    };
-  })
+// Mock canvas getContext method
+HTMLCanvasElement.prototype.getContext = vi.fn((contextType: string) => {
+  if (contextType === '2d') {
+    return mockCanvasContext as any;
+  }
+  return null;
 });
 
 // Mock fetch for audio loading
@@ -95,6 +79,10 @@ describe('AudioPlayer', () => {
   beforeEach(() => {
     // Reset all mocks
     vi.clearAllMocks();
+
+    // Restore AudioContext to working state
+    (globalThis as any).AudioContext = vi.fn(() => mockAudioContext);
+    (globalThis as any).webkitAudioContext = vi.fn(() => mockAudioContext);
 
     // Create mock container
     container = document.createElement('div');
@@ -138,7 +126,7 @@ describe('AudioPlayer', () => {
       expect(audioPlayer).toBeInstanceOf(AudioPlayer);
     });
 
-    test('should handle audio context creation failure', () => {
+    test('should handle audio context creation failure', async () => {
       // Mock AudioContext to throw error
       (globalThis as any).AudioContext = vi.fn(() => {
         throw new Error('AudioContext not supported');
@@ -148,6 +136,9 @@ describe('AudioPlayer', () => {
       expect(() => {
         audioPlayer = new AudioPlayer(container, {}, mockCallbacks);
       }).not.toThrow(); // Should handle gracefully
+
+      // Wait for async init to complete
+      await new Promise(resolve => setTimeout(resolve, 50));
 
       expect(mockCallbacks.onError).toHaveBeenCalledWith(
         expect.stringContaining('Failed to initialize audio player')

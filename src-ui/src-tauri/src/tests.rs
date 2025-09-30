@@ -427,6 +427,8 @@ mod tests {
             filter_response: None,
             spin_details: None,
             filter_plots: None,
+            input_curve: None,
+            deviation_curve: None,
         };
 
         // Test that the struct can be serialized (important for Tauri commands)
@@ -466,7 +468,11 @@ mod tests {
             serde_json::Value::String("Test Plot".to_string()),
         );
 
-        let plot_data = PlotData { curves, metadata };
+        let plot_data = PlotData {
+            frequencies: vec![20.0, 100.0, 1000.0, 10000.0, 20000.0],
+            curves,
+            metadata,
+        };
 
         let serialized = serde_json::to_string(&plot_data);
         assert!(serialized.is_ok());
