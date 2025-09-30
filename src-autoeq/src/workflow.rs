@@ -23,22 +23,43 @@ pub async fn load_input_curve(
     let input_curve = if let (Some(speaker), Some(version), Some(measurement)) =
         (&args.speaker, &args.version, &args.measurement)
     {
-        let mut plot_data =
-            read::fetch_measurement_plot_data(speaker, version, measurement).await?;
-        let extracted_curve =
-            read::extract_curve_by_name(&plot_data, measurement, &args.curve_name)?;
-        // If EIR requested, fetch CEA2034 to extract spin data on the same grid
+        // Handle Estimated In-Room Response specially - it needs to be calculated from CEA2034
         if measurement == "Estimated In-Room Response" {
-            plot_data = read::fetch_measurement_plot_data(speaker, version, "CEA2034").await?;
+            // Fetch CEA2034 data to calculate PIR
+            let plot_data = read::fetch_measurement_plot_data(speaker, version, "CEA2034").await?;
+
+            // Create a standard frequency grid for extraction
+            let standard_freq = read::create_log_frequency_grid(200, 20.0, 20000.0);
+
+            // Extract all CEA2034 curves (this also calculates PIR)
+            let curves = read::extract_cea2034_curves(&plot_data, "CEA2034", &standard_freq)?;
+
+            // Store the spin data
+            spin_data = Some(curves.clone());
+
+            // Get the PIR curve specifically
+            let pir_curve = curves
+                .get("Estimated In-Room Response")
+                .ok_or("PIR curve not found in CEA2034 data")?;
+
+            pir_curve.clone()
+        } else {
+            // Regular measurement extraction
+            let plot_data =
+                read::fetch_measurement_plot_data(speaker, version, measurement).await?;
+            let extracted_curve =
+                read::extract_curve_by_name(&plot_data, measurement, &args.curve_name)?;
+
+            // If it's CEA2034, also extract spin data
+            if measurement == "CEA2034" {
+                spin_data = Some(read::extract_cea2034_curves(
+                    &plot_data,
+                    "CEA2034",
+                    &extracted_curve.freq,
+                )?);
+            }
+            extracted_curve
         }
-        if measurement == "CEA2034" || measurement == "Estimated In-Room Response" {
-            spin_data = Some(read::extract_cea2034_curves(
-                &plot_data,
-                "CEA2034",
-                &extracted_curve.freq,
-            )?);
-        }
-        extracted_curve
     } else {
         // No API params -> expect a CSV path
         let curve_path = args.curve.as_ref().ok_or(

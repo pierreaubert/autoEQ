@@ -82,9 +82,35 @@ body {
   border-bottom: 1px solid var(--border-color);
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 0 var(--spacing-lg);
   flex-shrink: 0;
+  padding: 0;
+}
+
+/* Left section (aligned with left panel) */
+.bottom-left {
+  width: var(--left-panel-width, 320px);
+  min-width: 280px;
+  max-width: 600px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 0 var(--spacing-lg);
+}
+
+/* Resizer spacer (matches the resizer width) */
+.bottom-resizer-spacer {
+  width: 4px;
+  background: var(--border-color);
+  flex-shrink: 0;
+}
+
+/* Right section (takes remaining space) */
+.bottom-right {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 0 var(--spacing-lg);
 }
 
 .bottom-actions {

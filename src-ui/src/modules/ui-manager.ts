@@ -267,6 +267,8 @@ export class UIManager {
 
     if (newWidth >= minWidth && newWidth <= maxWidth) {
       leftPanel.style.width = newWidth + 'px';
+      // Update CSS custom property for bottom-left to match
+      document.documentElement.style.setProperty('--left-panel-width', newWidth + 'px');
     }
   };
 

@@ -484,38 +484,45 @@ export function generatePlotsPanel(): string {
 export function generateBottomRow(): string {
   return `<!-- Unified Bottom Row with Controls and Results -->
 <div class="bottom-row">
-    <!-- Left side: Action buttons -->
-    <div class="bottom-actions">
-        <button
-            type="submit"
-            form="autoeq_form"
-            id="optimize_btn"
-            class="optimize-button"
-        >
-            Run Optimization
-        </button>
-        <button
-            type="button"
-            id="reset_btn"
-            class="reset-button"
-        >
-            Reset
-        </button>
+    <!-- Left side: Action buttons (centered in left panel) -->
+    <div class="bottom-left">
+        <div class="bottom-actions">
+            <button
+                type="submit"
+                form="autoeq_form"
+                id="optimize_btn"
+                class="optimize-button"
+            >
+                Run Optimization
+            </button>
+            <button
+                type="button"
+                id="reset_btn"
+                class="reset-button"
+            >
+                Reset
+            </button>
+        </div>
     </div>
 
-    <!-- Right side: Optimization results -->
-    <div class="optimization-results">
-        <div class="score-item">
-            <label>Before:</label>
-            <span id="score_before">-</span>
-        </div>
-        <div class="score-item">
-            <label>After:</label>
-            <span id="score_after">-</span>
-        </div>
-        <div class="score-item improvement">
-            <label>Improvement:</label>
-            <span id="score_improvement">-</span>
+    <!-- Resizer spacer -->
+    <div class="bottom-resizer-spacer"></div>
+
+    <!-- Right side: Optimization results (centered in right panel) -->
+    <div class="bottom-right">
+        <div class="optimization-results">
+            <div class="score-item">
+                <label>Before:</label>
+                <span id="score_before">-</span>
+            </div>
+            <div class="score-item">
+                <label>After:</label>
+                <span id="score_after">-</span>
+            </div>
+            <div class="score-item improvement">
+                <label>Improvement:</label>
+                <span id="score_improvement">-</span>
+            </div>
         </div>
     </div>
 </div>`;

@@ -5,63 +5,67 @@ default:
 # TEST
 # ----------------------------------------------------------------------
 
-test: rust-test ts-test
+test: test-rust test-ts
 
-rust-test:
+test-rust:
 	cargo check
 	cargo test --lib
 
-ts-test:
+test-ts:
 	cd src-ui && npm run test
 
 # ----------------------------------------------------------------------
 # BUILD
 # ----------------------------------------------------------------------
 
-bin: rust-bin ts-bin
+bin: bin-rust bin-ts
 
-rust-bin:
+bin-rust:
 	cargo build --release --workspace
 	cargo build --release --bin autoeq
 	cargo build --release --bin plot_functions
+	cargo build --release --bin download
+	cargo build --release --bin benchmark_convergence
+	cargo build --release --bin plot_autoeq_de
+	cargo build --release --bin run_autoeq_de
 
-ts-bin:
+bin-ts:
 	cd src-ui && npm run tauri build
 
-dev: rust-dev ts-dev
+dev: dev-rust dev-ts
 
-rust-dev:
+dev-rust:
 	cargo build --workspace
 
-ts-dev:
+dev-ts:
 	cd src-ui && npm run tauri dev
 
-download: rust-bin
+download: bin-rust
 	cargo run --bin download
 
 # ----------------------------------------------------------------------
 # UPDATE
 # ----------------------------------------------------------------------
 
-update: rust-update ts-update pre-commit-update
+update: update-rust update-ts update-pre-commit
 
-rust-update:
+update-rust:
 	rustup update
 	cargo update
 
-ts-update:
+update-ts:
 	cd src-ui && npm run tauri update && npm run upgrade
 
-pre-commit-update:
+update-pre-commit:
 	pre-commit autoupdate
 
 # ----------------------------------------------------------------------
 # DEMO
 # ----------------------------------------------------------------------
 
-demo: rust-demo ts-demo
+demo: demo-rust demo-ts
 
-rust-demo: headphone_loss_demo print_functions
+demo-rust: headphone_loss_demo print_functions
 
 headphone_loss_demo:
 	cargo run --example headphone_loss_demo -- --spl "./data_tests/headphone/asr/bowerwilkins_p7/Bowers & Wilkins P7.csv" --target "./data_tests/targets/harman-over-ear-2018.csv"
@@ -69,5 +73,22 @@ headphone_loss_demo:
 print_functions:
 	cargo run --bin print_functions
 
-ts-demo:
+demo-ts:
 	cd src-ui && npm run build:audio-player
+
+# ----------------------------------------------------------------------
+# EXAMPLES
+# ----------------------------------------------------------------------
+
+examples : examples-iir examples-de
+
+examples-iir :
+        cargo run --example format_demo
+        cargo run --example readme_example
+
+examples-de :
+        cargo run --example optde_basic
+        cargo run --example optde_adaptive_demo
+        cargo run --example optde_linear_constraints
+        cargo run --example optde_nonlinear_constraints
+        cargo run --example optde_parallel

@@ -206,12 +206,21 @@ export class AudioPlayer {
           <div class="audio-left-controls">
             <div class="demo-track-container">
               <label for="${selectId}" class="demo-track-label">Demo Track</label>
-              <select id="${selectId}" class="demo-audio-select">
-                <option value="">Select track...</option>
-                ${Object.keys(this.config.demoTracks || {}).map(key =>
-                  `<option value="${key}">${this.formatTrackName(key)}</option>`
-                ).join('')}
-              </select>
+              <div class="demo-track-select-row">
+                <select id="${selectId}" class="demo-audio-select">
+                  <option value="">Select track...</option>
+                  ${Object.keys(this.config.demoTracks || {}).map(key =>
+                    `<option value="${key}">${this.formatTrackName(key)}</option>`
+                  ).join('')}
+                </select>
+                <button type="button" class="file-upload-btn" title="Load WAV file">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
+                    <polyline points="13 2 13 9 20 9"></polyline>
+                  </svg>
+                </button>
+                <input type="file" class="file-upload-input" accept=".wav,audio/wav" style="display: none;" />
+              </div>
             </div>
           </div>
 
@@ -265,20 +274,19 @@ export class AudioPlayer {
             ` : ''}
             ${this.config.enableEQ ? `
               <div class="eq-control-section">
-                <div class="eq-info-display">
-                  <div class="eq-info-text">
-                    <span class="eq-label">EQ</span> •
-                    <span class="eq-filter-count">0 filters</span> •
-                    <span class="eq-gain-compensation">0dB comp</span>
-                  </div>
-                  <div class="eq-mini-graph">
-                    <canvas class="eq-mini-canvas" width="160" height="30"></canvas>
-                  </div>
+                <div class="eq-mini-graph">
+                  <canvas class="eq-mini-canvas" width="160" height="50"></canvas>
                 </div>
-                <div class="eq-toggle-buttons">
-                  <button type="button" class="eq-toggle-btn eq-on-btn active">On</button>
-                  <button type="button" class="eq-toggle-btn eq-config-btn">⚙️</button>
-                  <button type="button" class="eq-toggle-btn eq-off-btn">Off</button>
+                <div class="eq-controls-row">
+                  <div class="eq-info-text">
+                    <span class="eq-filter-count">#0</span>
+                    <span class="eq-gain-compensation">0dB</span>
+                  </div>
+                  <div class="eq-toggle-buttons">
+                    <button type="button" class="eq-toggle-btn eq-on-btn active">On</button>
+                    <button type="button" class="eq-toggle-btn eq-config-btn">⚙️</button>
+                    <button type="button" class="eq-toggle-btn eq-off-btn">Off</button>
+                  </div>
                 </div>
               </div>
             ` : ''}
@@ -823,12 +831,12 @@ export class AudioPlayer {
   // Update EQ info display
   private updateEQInfo(filterCount: number, compensationDb: number): void {
     if (this.eqFilterCountText) {
-      this.eqFilterCountText.textContent = `${filterCount} filter${filterCount !== 1 ? 's' : ''}`;
+      this.eqFilterCountText.textContent = `#${filterCount}`;
     }
     if (this.eqGainCompText) {
       this.eqGainCompText.textContent = compensationDb > 0 ?
-        `-${compensationDb.toFixed(1)}dB comp` :
-        '0dB comp';
+        `-${compensationDb.toFixed(1)}dB` :
+        '0dB';
     }
   }
 

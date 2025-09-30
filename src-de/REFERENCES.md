@@ -1,5 +1,9 @@
 # References
 
+- https://en.wikipedia.org/wiki/Differential_evolution
+- https://www.sfu.ca/~ssurjano/optimization.html
+- https://ch.mathworks.com/matlabcentral/fileexchange/23147-test-functions-for-global-optimization-algorithms
+
 ## Scipy
 
 ```bibtex
