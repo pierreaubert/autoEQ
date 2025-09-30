@@ -121,10 +121,24 @@ async fn save_peq_to_file(
         fs::create_dir_all(parent).await?;
     }
 
-    // Write the file
+    // Write the APO file
     fs::write(&file_path, apo_content).await?;
-
     println!("🕶 PEQ settings saved to: {}", file_path.display());
+
+    // Save RME TotalMix format (.xml)
+    let rme_filename = filename.replace(".txt", ".xml");
+    let rme_path = parent_dir.join(&rme_filename);
+    let rme_content = iir::peq_format_rme(&peq);
+    fs::write(&rme_path, rme_content).await?;
+    println!("🎚  RME TotalMix preset saved to: {}", rme_path.display());
+
+    // Save Apple AUNBandEQ format (.aupreset)
+    let aupreset_filename = filename.replace(".txt", ".aupreset");
+    let aupreset_path = parent_dir.join(&aupreset_filename);
+    let preset_name = format!("AutoEQ {}", args.speaker.as_deref().unwrap_or("Unknown"));
+    let aupreset_content = iir::peq_format_aupreset(&peq, &preset_name);
+    fs::write(&aupreset_path, aupreset_content).await?;
+    println!("🍎 Apple AUpreset saved to: {}", aupreset_path.display());
 
     Ok(())
 }
