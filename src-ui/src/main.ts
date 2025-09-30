@@ -65,11 +65,9 @@ class AutoEQApplication {
     console.log("[INIT DEBUG] Tonal plot element found:", !!tonalPlotElement);
 
     this.plotManager = new PlotManager(
-      null, // filter_details_plot - deprecated, kept for compatibility
       filterPlotElement,
       detailsPlotElement, // CEA2034 details plot
       spinPlotElement,
-      null, // spin_plot_corrected - no longer used
       progressGraphElement as HTMLElement,
       tonalPlotElement as HTMLElement
     );
@@ -378,40 +376,80 @@ class AutoEQApplication {
       if (result.filter_params && result.filter_params.length > 0) {
         console.log("Generating filter response plot...");
 
-        // Try filter_response first, then filter_plots
-        const filterData = result.filter_response || result.filter_plots;
+        // We need to use the backend's plot_filters function to get the 4-subplot plot
+        // This requires input curve, target curve, deviation curve and optimized params
+        if (result.filter_response && result.filter_plots && result.input_curve && result.deviation_curve) {
+          console.log("Generating 4-subplot filter plot using backend...");
 
-        if (filterData) {
-          console.log("Creating filter plot from filterData:", filterData);
+          // Extract data from the optimization result
+          const frequencies = result.filter_response.frequencies;
+          const targetResponse = result.filter_response.curves["Target"] || new Array(frequencies.length).fill(0);
 
-          // Create simple plot from PlotData format
-          const traces = Object.entries(filterData.curves).map(([name, values]) => ({
-            x: filterData.frequencies,
-            y: values,
-            type: 'scatter' as const,
-            mode: 'lines' as const,
-            name: name,
-            line: { width: name === 'EQ Response' || name === 'Sum' ? 3 : 2 }
-          }));
+          // Use the actual input and deviation curves from the optimization
+          const inputCurve = result.input_curve.curves["Input"];
+          const deviationCurve = result.deviation_curve.curves["Deviation"];
 
-          const layout = {
-            title: { text: '' },
-            xaxis: {
-              title: { text: 'Frequency (Hz)' },
-              type: 'log' as const,
-              range: [Math.log10(20), Math.log10(20000)]
+          // Prepare parameters for backend plot generation
+          const plotParams: PlotFiltersParams = {
+            input_curve: {
+              freq: frequencies,
+              spl: inputCurve
             },
-            yaxis: { title: { text: 'Magnitude (dB)' } },
-            paper_bgcolor: 'rgba(0,0,0,0)',
-            plot_bgcolor: 'rgba(0,0,0,0)',
-            margin: { l: 50, r: 20, t: 20, b: 60 },
-            showlegend: true,
-            legend: { bgcolor: 'rgba(0,0,0,0)' }
+            target_curve: {
+              freq: frequencies,
+              spl: targetResponse
+            },
+            deviation_curve: {
+              freq: frequencies,
+              spl: deviationCurve
+            },
+            optimized_params: result.filter_params,
+            sample_rate: 48000, // Use default or get from form
+            num_filters: result.filter_params.length / 3,
+            iir_hp_pk: false // Get from form if needed
           };
 
-          const plotlyJson = { data: traces, layout };
-          console.log("Calling updateFilterPlot with:", plotlyJson);
-          this.plotManager.updateFilterPlot(plotlyJson);
+          try {
+            // Call backend to generate the 4-subplot plot
+            const filterPlot = await AutoEQPlotAPI.generatePlotFilters(plotParams);
+            console.log("Generated 4-subplot filter plot:", filterPlot);
+
+            // Update the filter plot with the Plotly JSON from backend
+            this.plotManager.updateFilterPlot(filterPlot);
+          } catch (error) {
+            console.error("Failed to generate 4-subplot filter plot:", error);
+            // Fallback to simple plot
+            const filterData = result.filter_response || result.filter_plots;
+            if (filterData) {
+              const traces = Object.entries(filterData.curves).map(([name, values]) => ({
+                x: filterData.frequencies,
+                y: values,
+                type: 'scatter' as const,
+                mode: 'lines' as const,
+                name: name,
+                line: { width: name === 'EQ Response' || name === 'Sum' ? 3 : 2 }
+              }));
+
+              const layout = {
+                title: { text: '' },
+                xaxis: {
+                  title: { text: 'Frequency (Hz)' },
+                  type: 'log' as const,
+                  range: [Math.log10(20), Math.log10(20000)]
+                },
+                yaxis: { title: { text: 'Magnitude (dB)' } },
+                paper_bgcolor: 'rgba(0,0,0,0)',
+                plot_bgcolor: 'rgba(0,0,0,0)',
+                margin: { l: 50, r: 20, t: 20, b: 60 },
+                showlegend: true,
+                legend: { bgcolor: 'rgba(0,0,0,0)' }
+              };
+
+              const plotlyJson = { data: traces, layout };
+              console.log("Fallback: calling updateFilterPlot with simple plot:", plotlyJson);
+              this.plotManager.updateFilterPlot(plotlyJson);
+            }
+          }
         } else {
           console.warn("No filter data available in result");
         }
@@ -436,13 +474,17 @@ class AutoEQApplication {
             });
           }
 
+          // Extract EQ response for the spin plots
+          const eq_response = result.filter_response?.curves["EQ Response"] || [];
+
           // Generate plots as Plotly JSON from backend
           const spinParams: PlotSpinParams = {
             cea2034_curves,
+            eq_response, // Add eq_response to show "with EQ" traces
             frequencies: result.spin_details.frequencies
           };
 
-          console.log("Generating spin plot (Plotly JSON)...");
+          console.log("Generating spin plot (Plotly JSON) with eq_response...");
           const spinPlot = await AutoEQPlotAPI.generatePlotSpin(spinParams);
           console.log("Generated spin plot:", spinPlot);
 

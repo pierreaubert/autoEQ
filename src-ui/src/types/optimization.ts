@@ -56,6 +56,8 @@ export interface OptimizationResult {
   filter_response?: PlotData;
   spin_details?: PlotData;
   filter_plots?: PlotData;
+  input_curve?: PlotData;      // Original normalized input curve
+  deviation_curve?: PlotData;  // Target - Input (what needs to be corrected)
 }
 
 export interface ProgressData {

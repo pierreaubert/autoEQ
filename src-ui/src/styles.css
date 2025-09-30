@@ -694,24 +694,24 @@ input[type="checkbox"] {
   flex-direction: column;
   overflow: hidden;
   flex: 0 0 auto; /* Don't grow/shrink, use natural height */
-  min-height: 300px; /* Minimum height */
+  min-height: 400px; /* Minimum height */
 }
 
 /* Different heights for different plot types to accommodate subplots */
 #filter_vertical_item {
-  height: 350px; /* Single plot */
+  height: 680px; /* Single plot */
 }
 
 #spin_vertical_item {
-  height: 400px; /* Multiple curves on one plot */
+  height: 480px; /* Multiple curves on one plot */
 }
 
 #details_vertical_item {
-  height: 600px; /* 2x2 subplot grid */
+  height: 580px; /* 2x2 subplot grid */
 }
 
 #tonal_vertical_item {
-  height: 600px; /* 2x2 subplot grid */
+  height: 580px; /* 2x2 subplot grid */
 }
 
 .plot-vertical-header {

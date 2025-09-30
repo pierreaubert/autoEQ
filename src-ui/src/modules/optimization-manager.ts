@@ -288,13 +288,22 @@ export class OptimizationManager {
     };
 
     // Add input-source specific parameters
+    // IMPORTANT: Only set the parameters for the selected input type
+    // to avoid backend confusion
     if (inputType === 'api') {
       baseParams.speaker = formData.get('speaker') as string;
       baseParams.version = formData.get('version') as string;
       baseParams.measurement = formData.get('measurement') as string;
+      // Explicitly clear file params
+      baseParams.curve_path = undefined;
+      baseParams.target_path = undefined;
     } else if (inputType === 'file') {
       baseParams.curve_path = formData.get('curve_path') as string;
       baseParams.target_path = formData.get('target_path') as string;
+      // Explicitly clear API params
+      baseParams.speaker = undefined;
+      baseParams.version = undefined;
+      baseParams.measurement = undefined;
     } else if (inputType === 'capture') {
       // Captured data will be added separately
       const capturedFreqs = this.getCapturedFrequencies();
@@ -303,6 +312,12 @@ export class OptimizationManager {
         baseParams.captured_frequencies = capturedFreqs;
         baseParams.captured_magnitudes = capturedMags;
       }
+      // Explicitly clear both API and file params
+      baseParams.speaker = undefined;
+      baseParams.version = undefined;
+      baseParams.measurement = undefined;
+      baseParams.curve_path = undefined;
+      baseParams.target_path = undefined;
     }
 
     // Add DE-specific parameters if using DE algorithm
@@ -313,6 +328,18 @@ export class OptimizationManager {
       baseParams.adaptive_weight_f = parseFloat(formData.get('adaptive_weight_f') as string) || 0.1;
       baseParams.adaptive_weight_cr = parseFloat(formData.get('adaptive_weight_cr') as string) || 0.1;
     }
+
+    // Debug log the parameters being sent
+    console.log('[OPTIMIZATION] Input type:', inputType);
+    console.log('[OPTIMIZATION] Parameters to send:', {
+      curve_path: baseParams.curve_path,
+      target_path: baseParams.target_path,
+      speaker: baseParams.speaker,
+      version: baseParams.version,
+      measurement: baseParams.measurement,
+      num_filters: baseParams.num_filters,
+      algo: baseParams.algo
+    });
 
     return baseParams;
   }

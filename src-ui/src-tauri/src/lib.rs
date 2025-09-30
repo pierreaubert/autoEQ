@@ -99,6 +99,8 @@ struct OptimizationResult {
     filter_response: Option<PlotData>,
     spin_details: Option<PlotData>,
     filter_plots: Option<PlotData>, // Individual filter responses and sum
+    input_curve: Option<PlotData>,  // Original normalized input curve
+    deviation_curve: Option<PlotData>, // Target - Input (what needs to be corrected)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -412,6 +414,8 @@ async fn run_optimization(
                 filter_response: None,
                 spin_details: None,
                 filter_plots: None,
+                input_curve: None,
+                deviation_curve: None,
             })
         }
     }
@@ -737,6 +741,31 @@ async fn run_optimization_internal(
         });
     }
 
+    // Add input curve data
+    let input_curve_plot = PlotData {
+        frequencies: plot_freqs.clone(),
+        curves: {
+            let mut curves = HashMap::new();
+            let input_interpolated = autoeq::read::interpolate(&plot_freqs_array, &input_curve);
+            curves.insert("Input".to_string(), input_interpolated.spl.to_vec());
+            curves
+        },
+        metadata: HashMap::new(),
+    };
+
+    // Add deviation curve data (target - input, this is what needs to be corrected)
+    let deviation_curve_plot = PlotData {
+        frequencies: plot_freqs.clone(),
+        curves: {
+            let mut curves = HashMap::new();
+            let deviation_interpolated =
+                autoeq::read::interpolate(&plot_freqs_array, &deviation_curve);
+            curves.insert("Deviation".to_string(), deviation_interpolated.spl.to_vec());
+            curves
+        },
+        metadata: HashMap::new(),
+    };
+
     Ok(OptimizationResult {
         success: true,
         error_message: None,
@@ -747,6 +776,8 @@ async fn run_optimization_internal(
         filter_response: Some(filter_response),
         spin_details,
         filter_plots: Some(filter_plots),
+        input_curve: Some(input_curve_plot),
+        deviation_curve: Some(deviation_curve_plot),
     })
 }
 
