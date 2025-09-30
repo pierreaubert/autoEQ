@@ -393,6 +393,58 @@ export class APIManager {
     }
   }
 
+  async selectHeadphoneCurveFile(): Promise<string | null> {
+    const input = document.getElementById('headphone_curve_path') as HTMLInputElement;
+    if (!input) {
+      console.error('Headphone curve path input not found');
+      return null;
+    }
+
+    try {
+      console.log('Opening file dialog for headphone curve file...');
+
+      // Use Tauri dialog API
+      const result = await invoke('show_file_dialog', {
+        title: 'Select Headphone Curve CSV File',
+        filters: [{
+          name: 'CSV Files',
+          extensions: ['csv']
+        }],
+        multiple: false,
+        directory: false
+      }) as string | string[] | null;
+
+      console.log('Dialog result:', result);
+
+      if (result && typeof result === 'string') {
+        console.log('Setting input value to:', result);
+        input.value = result;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+        this.showFileSelectionSuccess('headphone_curve_path', result);
+        return result;
+      } else if (result === null) {
+        console.log('Dialog cancelled by user');
+      } else if (Array.isArray(result) && result.length > 0) {
+        // Handle array result
+        const filePath = result[0];
+        console.log('Setting input value to (from array):', filePath);
+        input.value = filePath;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+        this.showFileSelectionSuccess('headphone_curve_path', filePath);
+        return filePath;
+      }
+
+      return null;
+    } catch (error) {
+      console.error('Error selecting headphone curve file:', error);
+      this.showFileDialogError(error);
+      // Fallback: try to trigger a native file input
+      return this.fallbackFileDialog('headphone_curve_path');
+    }
+  }
+
   setupAutocomplete(): void {
     const speakerInput = document.getElementById('speaker') as HTMLInputElement;
     if (!speakerInput) return;
@@ -649,7 +701,7 @@ export class APIManager {
     }
 
     const inputType = formData.get('input_source') as string;
-    if (inputType === 'api') {
+    if (inputType === 'speaker') {
       const speaker = formData.get('speaker') as string;
       const version = formData.get('version') as string;
       const measurement = formData.get('measurement') as string;
@@ -657,6 +709,12 @@ export class APIManager {
       if (!speaker) errors.push('Speaker selection is required');
       if (!version) errors.push('Version selection is required');
       if (!measurement) errors.push('Measurement selection is required');
+    } else if (inputType === 'headphone') {
+      const curvePath = formData.get('headphone_curve_path') as string;
+      const target = formData.get('headphone_target') as string;
+
+      if (!curvePath) errors.push('Headphone curve file is required');
+      if (!target) errors.push('Headphone target selection is required');
     } else if (inputType === 'file') {
       const curvePath = formData.get('curve_path') as string;
       const targetPath = formData.get('target_path') as string;

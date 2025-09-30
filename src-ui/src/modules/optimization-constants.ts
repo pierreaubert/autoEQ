@@ -150,7 +150,7 @@ export const OPTIMIZATION_DEFAULTS: OptimizationDefaults = {
   curve_name: 'Listening Window',
 
   // Input Source
-  input_source: 'api'
+  input_source: 'speaker'
 };
 
 // Minimum and maximum limits for parameters
@@ -246,7 +246,19 @@ export const DE_STRATEGY_OPTIONS = {
 export const LOSS_OPTIONS = {
   'speaker-flat': 'Speaker Flat',
   'speaker-score': 'Speaker Score',
-  'headphone-flat': 'Headphone Target',
+  'headphone-flat': 'Headphone Flat',
+  'headphone-score': 'Headphone Score'
+};
+
+// Speaker-specific loss options
+export const SPEAKER_LOSS_OPTIONS = {
+  'speaker-flat': 'Speaker Flat',
+  'speaker-score': 'Speaker Score'
+};
+
+// Headphone-specific loss options
+export const HEADPHONE_LOSS_OPTIONS = {
+  'headphone-flat': 'Headphone Flat',
   'headphone-score': 'Headphone Score'
 };
 

@@ -541,7 +541,7 @@ export class UIManager {
     // Show/hide speaker selection
     const speakerSelection = document.getElementById('speaker-selection');
     if (speakerSelection) {
-      speakerSelection.style.display = inputType === 'api' ? 'block' : 'none';
+      speakerSelection.style.display = inputType === 'speaker' ? 'block' : 'none';
     }
 
     // Show/hide file selection
@@ -554,6 +554,19 @@ export class UIManager {
     const captureSection = document.getElementById('capture-section');
     if (captureSection) {
       captureSection.style.display = inputType === 'capture' ? 'block' : 'none';
+    }
+
+    // Show/hide curve selection based on input type
+    const curveNameParam = document.getElementById('curve_name')?.closest('.param-item') as HTMLElement;
+    if (curveNameParam) {
+      // Hide curve selection for headphones (they use targets instead)
+      curveNameParam.style.display = inputType === 'headphone' ? 'none' : 'block';
+    }
+
+    // Update loss function options based on input type
+    const lossSelect = document.getElementById('loss') as HTMLSelectElement;
+    if (lossSelect) {
+      this.updateLossOptions(inputType, lossSelect);
     }
   }
 
@@ -582,14 +595,45 @@ export class UIManager {
       console.warn(`Tab content for '${tabName}' not found`);
     }
 
-    // Set loss function to "speaker-flat" when speaker tab is selected
-    if (tabName === 'speaker') {
-      const lossSelect = document.getElementById('loss') as HTMLSelectElement;
-      if (lossSelect) {
+    // Set appropriate loss function based on tab
+    const lossSelect = document.getElementById('loss') as HTMLSelectElement;
+    if (lossSelect) {
+      if (tabName === 'speaker') {
         lossSelect.value = 'speaker-flat';
         console.log('Set loss function to speaker-flat for speaker tab');
+      } else if (tabName === 'headphone') {
+        lossSelect.value = 'headphone-flat';
+        console.log('Set loss function to headphone-flat for headphone tab');
       }
     }
+  }
+
+  private updateLossOptions(inputType: string, lossSelect: HTMLSelectElement): void {
+    // Import loss options
+    import('./optimization-constants').then(({ SPEAKER_LOSS_OPTIONS, HEADPHONE_LOSS_OPTIONS }) => {
+      const currentValue = lossSelect.value;
+
+      // Clear existing options
+      lossSelect.innerHTML = '';
+
+      // Determine which options to use
+      const options = inputType === 'headphone' ? HEADPHONE_LOSS_OPTIONS : SPEAKER_LOSS_OPTIONS;
+
+      // Populate with appropriate options
+      Object.entries(options).forEach(([value, label]) => {
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = label;
+        lossSelect.appendChild(option);
+      });
+
+      // Try to keep the current value if it's still valid, otherwise set default
+      if (lossSelect.querySelector(`option[value="${currentValue}"]`)) {
+        lossSelect.value = currentValue;
+      } else {
+        lossSelect.value = inputType === 'headphone' ? 'headphone-flat' : 'speaker-flat';
+      }
+    });
   }
 
   // Event handlers (to be connected to main application logic)

@@ -91,9 +91,13 @@ export function generateDataAcquisition(): string {
             <input type="radio" name="input_source" value="file" />
             Files
         </label>
-        <label class="tab-label active" data-tab="api">
-            <input type="radio" name="input_source" value="api" />
+        <label class="tab-label active" data-tab="speaker">
+            <input type="radio" name="input_source" value="speaker" checked />
             Speakers
+        </label>
+        <label class="tab-label" data-tab="headphone">
+            <input type="radio" name="input_source" value="headphone" />
+            Headphones
         </label>
         <label class="tab-label" data-tab="capture">
             <input type="radio" name="input_source" value="capture" />
@@ -112,7 +116,7 @@ export function generateDataAcquisition(): string {
         </div>
     </div>
 
-    <div id="api_inputs" class="tab-content active">
+    <div id="speaker_inputs" class="tab-content active">
         <div class="autocomplete-container">
             <input type="text" id="speaker" name="speaker" placeholder="Start typing speaker name..." autocomplete="off" />
             <div id="speaker_dropdown" class="autocomplete-dropdown"></div>
@@ -122,6 +126,20 @@ export function generateDataAcquisition(): string {
         </select>
         <select id="measurement" name="measurement" disabled>
             <option value="">Select Measurement</option>
+        </select>
+    </div>
+
+    <div id="headphone_inputs" class="tab-content">
+        <div class="compact-row">
+            <input type="text" id="headphone_curve_path" name="headphone_curve_path" placeholder="Headphone curve CSV path" />
+            <button type="button" id="browse_headphone_curve" class="browse-btn">📁</button>
+        </div>
+        <select id="headphone_target" name="headphone_target">
+            <option value="">Select Target...</option>
+            <option value="harman-over-ear-2018">Harman Over-Ear 2018</option>
+            <option value="harman-over-ear-2015">Harman Over-Ear 2015</option>
+            <option value="harman-over-ear-2013">Harman Over-Ear 2013</option>
+            <option value="harman-in-ear-2019">Harman In-Ear 2019</option>
         </select>
     </div>
 

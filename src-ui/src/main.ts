@@ -168,6 +168,9 @@ class AutoEQApplication {
     const targetFileBtn = document.getElementById(
       "browse_target",
     ) as HTMLButtonElement;
+    const headphoneCurveBtn = document.getElementById(
+      "browse_headphone_curve",
+    ) as HTMLButtonElement;
 
     if (speakerSelect) {
       speakerSelect.addEventListener("change", (e) => {
@@ -198,6 +201,13 @@ class AutoEQApplication {
       targetFileBtn.addEventListener("click", () => {
         console.log("Target file button clicked");
         this.apiManager.selectTargetFile();
+      });
+    }
+
+    if (headphoneCurveBtn) {
+      headphoneCurveBtn.addEventListener("click", () => {
+        console.log("Headphone curve file button clicked");
+        this.apiManager.selectHeadphoneCurveFile();
       });
     }
   }
