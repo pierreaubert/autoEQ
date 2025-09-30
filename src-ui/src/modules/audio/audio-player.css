@@ -85,6 +85,13 @@
   text-align: center;
 }
 
+/* Demo Track Select Row - Select + File Button */
+.demo-track-select-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
 .audio-center-controls {
   display: flex;
   align-items: center;
@@ -120,49 +127,45 @@
   border-color: var(--border-active);
 }
 
-/* EQ Control Section */
-.eq-control-section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-xs);
-  align-items: center;
-}
-
-/* EQ Info Display */
-.eq-info-display {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  width: 100%;
-  max-width: 180px;
-}
-
-.eq-info-text {
+/* File Upload Button */
+.file-upload-btn {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  background: var(--bg-accent);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.2s;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: var(--spacing-xs);
-  font-size: 11px;
-  color: var(--text-secondary);
-  white-space: nowrap;
+  flex-shrink: 0;
 }
 
-.eq-info-text .eq-label {
-  font-weight: 600;
-  color: var(--text-primary);
+.file-upload-btn:hover {
+  background: var(--button-secondary);
+  color: white;
+  border-color: var(--button-secondary);
 }
 
-.eq-info-text .eq-filter-count,
-.eq-info-text .eq-gain-compensation {
-  color: var(--text-primary);
-  font-weight: 500;
+.file-upload-btn:active {
+  transform: scale(0.95);
 }
 
-/* EQ Mini Graph */
+/* EQ Control Section - Vertical layout: graph on top, controls below */
+.eq-control-section {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: stretch;
+  width: 180px;
+}
+
+/* EQ Mini Graph - Top section */
 .eq-mini-graph {
   width: 100%;
-  height: 30px;
+  height: 50px;
   background: var(--bg-accent);
   border: 1px solid var(--border-color);
   border-radius: var(--radius);
@@ -170,6 +173,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
 }
 
 .eq-mini-canvas {
@@ -179,16 +183,44 @@
   image-rendering: crisp-edges;
 }
 
-/* EQ Toggle Buttons */
+/* EQ Controls Row - Info + Buttons */
+.eq-controls-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  height: 28px;
+}
+
+/* EQ Info Text - Small, vertical */
+.eq-info-text {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  color: var(--text-primary);
+  font-weight: 600;
+  line-height: 1.1;
+  width: 28px;
+  flex-shrink: 0;
+}
+
+.eq-info-text .eq-filter-count,
+.eq-info-text .eq-gain-compensation {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+/* EQ Toggle Buttons - Horizontal row */
 .eq-toggle-buttons {
   display: flex;
+  flex-direction: row;
   border: 1px solid var(--border-color);
   border-radius: var(--radius);
   overflow: hidden;
   background: var(--bg-primary);
-  height: 32px;
-  width: 120px;
-  flex-shrink: 0;
+  height: 100%;
+  flex: 1;
 }
 
 .eq-toggle-btn {
@@ -196,14 +228,16 @@
   border: none;
   background: var(--bg-accent);
   color: var(--text-primary);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
-  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.eq-toggle-btn:first-child {
+.eq-toggle-btn:not(:last-child) {
   border-right: 1px solid var(--border-color);
 }
 
