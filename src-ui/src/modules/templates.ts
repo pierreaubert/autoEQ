@@ -87,21 +87,36 @@ export function generateDataAcquisition(): string {
 <div class="section-group">
     <h3>Data Acquisition</h3>
     <div class="input-source-tabs">
-        <label class="tab-label" data-tab="file">
+        <label class="tab-label" data-tab="file" title="Files">
             <input type="radio" name="input_source" value="file" />
-            Files
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
+                <polyline points="13 2 13 9 20 9"></polyline>
+            </svg>
         </label>
-        <label class="tab-label active" data-tab="speaker">
+        <label class="tab-label active" data-tab="speaker" title="Speakers">
             <input type="radio" name="input_source" value="speaker" checked />
-            Speakers
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+            </svg>
         </label>
-        <label class="tab-label" data-tab="headphone">
+        <label class="tab-label" data-tab="headphone" title="Headphones">
             <input type="radio" name="input_source" value="headphone" />
-            Headphones
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 18v-6a9 9 0 0 1 18 0v6"></path>
+                <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"></path>
+            </svg>
         </label>
-        <label class="tab-label" data-tab="capture">
+        <label class="tab-label" data-tab="capture" title="Capture">
             <input type="radio" name="input_source" value="capture" />
-            Capture
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                <line x1="12" y1="19" x2="12" y2="23"></line>
+                <line x1="8" y1="23" x2="16" y2="23"></line>
+            </svg>
         </label>
     </div>
 
