@@ -205,10 +205,10 @@ export class AudioPlayer {
         <div class="audio-control-row">
           <div class="audio-left-controls">
             <div class="demo-track-container">
-              <label for="${selectId}" class="demo-track-label">Demo Track</label>
+              <label for="${selectId}" class="demo-track-label">Load a song</label>
               <div class="demo-track-select-row">
                 <select id="${selectId}" class="demo-audio-select">
-                  <option value="">Select track...</option>
+                <option value="">Pick a track...</option>
                   ${Object.keys(this.config.demoTracks || {}).map(key =>
                     `<option value="${key}">${this.formatTrackName(key)}</option>`
                   ).join('')}
@@ -881,18 +881,11 @@ export class AudioPlayer {
     const numPoints = width;
     const minFreq = 20;
     const maxFreq = 20000;
-    const maxGain = 15; // ±15dB range for display
 
-    // Use different colors/opacity based on whether EQ is enabled
-    if (this.eqEnabled) {
-      ctx.strokeStyle = isDarkMode ? '#4dabf7' : '#007bff';
-      ctx.lineWidth = 2;
-    } else {
-      // Show dimmed curve when EQ is disabled
-      ctx.strokeStyle = isDarkMode ? 'rgba(77, 171, 247, 0.4)' : 'rgba(0, 123, 255, 0.4)';
-      ctx.lineWidth = 1.5;
-    }
-    ctx.beginPath();
+    // First pass: calculate actual min/max gain values across the spectrum
+    let minGainValue = 0;
+    let maxGainValue = 0;
+    const gains: number[] = [];
 
     for (let x = 0; x < numPoints; x++) {
       // Calculate frequency for this x position (logarithmic scale)
@@ -914,9 +907,44 @@ export class AudioPlayer {
         }
       });
 
-      // Clamp and scale to canvas
-      totalGain = Math.max(-maxGain, Math.min(maxGain, totalGain));
-      const y = height / 2 - (totalGain / maxGain) * (height / 2 - 2);
+      gains.push(totalGain);
+      minGainValue = Math.min(minGainValue, totalGain);
+      maxGainValue = Math.max(maxGainValue, totalGain);
+    }
+
+    // Set y-axis range to [min-1, max+1] for better visualization
+    const yMin = minGainValue - 1;
+    const yMax = maxGainValue + 1;
+    const yRange = yMax - yMin;
+
+    // Calculate 0dB line position for grid
+    const zeroLineY = yRange !== 0 ? height - ((0 - yMin) / yRange) * height : height / 2;
+
+    // Clear and redraw grid line at 0dB with new scale
+    ctx.strokeStyle = isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, zeroLineY);
+    ctx.lineTo(width, zeroLineY);
+    ctx.stroke();
+
+    // Use different colors/opacity based on whether EQ is enabled
+    if (this.eqEnabled) {
+      ctx.strokeStyle = isDarkMode ? '#4dabf7' : '#007bff';
+      ctx.lineWidth = 2;
+    } else {
+      // Show dimmed curve when EQ is disabled
+      ctx.strokeStyle = isDarkMode ? 'rgba(77, 171, 247, 0.4)' : 'rgba(0, 123, 255, 0.4)';
+      ctx.lineWidth = 1.5;
+    }
+    ctx.beginPath();
+
+    // Second pass: draw the curve using calculated gains and optimized y-axis
+    for (let x = 0; x < numPoints; x++) {
+      const totalGain = gains[x];
+
+      // Scale to canvas using optimized y-axis range
+      const y = yRange !== 0 ? height - ((totalGain - yMin) / yRange) * height : height / 2;
 
       if (x === 0) {
         ctx.moveTo(x, y);
@@ -936,8 +964,8 @@ export class AudioPlayer {
         const logFreq = Math.log10(param.frequency);
         const x = ((logFreq - logMin) / (logMax - logMin)) * width;
 
-        // Calculate y position for the gain
-        const y = height / 2 - (param.gain / maxGain) * (height / 2 - 2);
+        // Calculate y position for the gain using optimized y-axis range
+        const y = yRange !== 0 ? height - ((param.gain - yMin) / yRange) * height : height / 2;
 
         // Draw dot with opacity based on EQ enabled state
         if (this.eqEnabled) {
