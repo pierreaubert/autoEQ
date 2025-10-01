@@ -1,4 +1,4 @@
-FROM ubuntu:20.04
+FROM ubuntu:24.04
 
 ARG DEBIAN_FRONTEND=noninteractive
 
@@ -14,10 +14,11 @@ RUN apt-get update && \
     ca-certificates \
     cmake \
     ninja-build \
+    perl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Rust
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+# Install Rust 1.90 (pinned version for compatibility)
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.90.0 --profile minimal
 ENV PATH="/root/.cargo/bin:${PATH}"
 
 # Add the target
@@ -34,10 +35,20 @@ RUN apt-get update && \
     patchelf \
     libopenblas-dev \
     gfortran \
+    chromium-browser \
+    chromium-chromedriver \
     && rm -rf /var/lib/apt/lists/*
 
 # Set up pkg-config paths
 ENV PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig
 ENV PKG_CONFIG_ALLOW_CROSS=1
+
+# Use vendored OpenSSL to avoid OpenSSL 3.0 compatibility issues
+ENV OPENSSL_STATIC=1
+ENV OPENSSL_VENDORED=1
+
+# Set browser and webdriver paths for plotly_static
+ENV BROWSER_PATH=/usr/bin/chromium-browser
+ENV WEBDRIVER_PATH=/usr/bin/chromedriver
 
 WORKDIR /project

@@ -6,12 +6,12 @@ The software can find the best EQ for you based on your measurements. There are 
 
 ## Setting up for rust developement
 
+Install [rustup](https://rustup.rs/) first.
+
 If you already have cargo / rustup:
 ```
-cargo build --release
+cargo install just
 ```
-
-If not install [rustup](https://rustup.rs/) first.
 
 ## Using just
 
@@ -19,33 +19,19 @@ If not install [rustup](https://rustup.rs/) first.
 just
 ```
 
-will give you the list of possible commands
-
-#### 3. Build CLI Tools
-
-##### Native Build (Current Platform)
-```bash
-cargo build --release
+will give you the list of possible commands:
+- Build everything:
+```
+just build
+```
+- Build the demos:
+```
+just demo
 ```
 
 ## Building cross platform
 
 See the [BUILD.md](./BUILD.md) file for details.
-
-### Build Desktop App
-
-```bash
-cd src-ui
-
-# Install dependencies
-npm install
-
-# Build for current platform
-npm run tauri build
-
-# Build for specific target (macOS)
-npm run tauri build -- --target aarch64-apple-darwin
-```
 
 ### GitHub Actions (Automated Builds)
 
@@ -54,56 +40,11 @@ The repository includes a GitHub Actions workflow (`.github/workflows/build.yml`
 - Pull requests
 - Git tags (creates releases)
 
-### Binary Information
-
-#### CLI Tools
-- **autoeq**: Main EQ optimization tool
-- **download**: Fetch speaker data from Spinorama.org
-- **benchmark**: Performance testing across speaker database
-
-#### Dependencies
-All binaries are statically linked with no external dependencies required.
-
-### Troubleshooting
-
-#### Docker Issues
-- Ensure Docker is running: `docker ps`
-- Update cross tool: `cargo install cross --git https://github.com/cross-rs/cross --force`
-
-#### macOS Builds
-- May require Xcode Command Line Tools: `xcode-select --install`
-- Ensure both Intel and ARM targets are installed
-
-#### Windows MinGW Issues
-- Cross-compilation may require additional MinGW toolchain setup
-- Consider using GitHub Actions for Windows builds
-
-#### UI Build Issues
-- Ensure Node.js 18+ is installed
-- Run `npm install` in the `ui/` directory
-- TypeScript errors need to be fixed in the UI code
-
 ### Testing Binaries
 
 ```bash
-# Test CLI tool
-./dist/aarch64-apple-darwin/autoeq --help
-
-# Test with sample data
-./dist/aarch64-apple-darwin/autoeq --speaker="KEF R3" --version=asr --measurement=CEA2034
-
-# Verify architecture
-file dist/x86_64-apple-darwin/autoeq
-file dist/aarch64-apple-darwin/autoeq
+just test
 ```
-
-### Distribution
-
-The build script creates compressed archives:
-- `autoeq-{target}.tar.gz` for Unix platforms
-- `autoeq-{target}.zip` for Windows
-
-These are ready for distribution or release uploads.
 
 ### Development Setup
 
@@ -191,12 +132,12 @@ Optimising the above loss functions is not easy. The functions are not convex (a
 AutoEQ use the algorithms from a few libraries which provides global and local algorithms.
 
 Global and supporting constraints:
+- autoeq:DE
 - ISRES
 - AGS
 - ORIGDIRECT
 
 Global with support for lower and upper bounds
-- DE
 - PSO
 - STOGO
 - GMLSL
