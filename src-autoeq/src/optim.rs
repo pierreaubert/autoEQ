@@ -17,8 +17,7 @@
 
 use super::constraints::{viol_ceiling_from_spl, viol_min_gain_from_xs, viol_spacing_from_xs};
 use super::loss::{
-    flat_loss, headphone_loss_with_target, speaker_score_loss, HeadphoneLossData, LossType,
-    SpeakerLossData,
+    flat_loss, headphone_loss, speaker_score_loss, HeadphoneLossData, LossType, SpeakerLossData,
 };
 use super::optim_de::optimize_filters_autoeq;
 use super::optim_mh::optimize_filters_mh;
@@ -369,24 +368,23 @@ pub fn compute_base_fitness(x: &[f64], data: &ObjectiveData) -> f64 {
             }
         }
         LossType::HeadphoneScore => {
-            let error = &peq_spl - &data.target_error;
-            let response_curve = Curve {
-                freq: data.freqs.clone(),
-                spl: error.clone(),
-            };
-            let target_curve = Curve {
-                freq: data.freqs.clone(),
-                spl: data.target_error.clone(),
-            };
-            // Create HeadphoneLossData for headphone loss calculation
-            let headphone_data = if let Some(ref sd) = data.headphone_score_data {
-                sd
+            if let Some(ref hd) = data.headphone_score_data {
+                let error = &peq_spl - &data.target_error;
+                let deviation_curve = Curve {
+                    freq: data.freqs.clone(),
+                    spl: -error.clone(),
+                };
+                // Create HeadphoneLossData for headphone loss calculation
+                let s = headphone_loss(&deviation_curve);
+                // compute flat error
+                let p = flat_loss(&data.freqs, &error);
+                // wants to minimise both
+                println!("Headphone score: s={} p={}", s, p);
+                s + p
             } else {
-                &crate::loss::HeadphoneLossData::new(true, 1)
-            };
-            let s = headphone_loss_with_target(headphone_data, &response_curve, &target_curve);
-            let p = flat_loss(&data.freqs, &error) / 3.0;
-            s + p
+                eprintln!("Error: headphone score loss requested but headphone data is missing");
+                process::exit(1);
+            }
         }
     }
 }
