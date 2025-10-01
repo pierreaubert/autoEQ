@@ -81,17 +81,8 @@ pub fn plot_filters(
         .name("Deviation")
         .x_axis("x2")
         .y_axis("y2")
-        .line(plotly::common::Line::new().color("#1f77b4"));
+        .line(plotly::common::Line::new().color(filter_color(0)));
     plot.add_trace(target_trace2);
-
-    let target_trace3 = Scatter::new(freqs.to_vec(), target_curve.spl.to_vec())
-        .mode(Mode::Lines)
-        .name("Target")
-        .show_legend(false)
-        .x_axis("x3")
-        .y_axis("y3")
-        .line(plotly::common::Line::new().color("#1f77b4"));
-    plot.add_trace(target_trace3);
 
     let error = &deviation_curve.spl - &combined_response;
     let target_trace4 = Scatter::new(freqs.to_vec(), error.to_vec())
@@ -99,16 +90,29 @@ pub fn plot_filters(
         .name("Error")
         .x_axis("x3")
         .y_axis("y3")
-        .line(plotly::common::Line::new().color(filter_color(6)));
+        .line(plotly::common::Line::new().color(filter_color(1)));
     plot.add_trace(target_trace4);
 
     // Add input curve and target curve subplot (new subplot)
+    let target_trace4 = Scatter::new(freqs.to_vec(), target_curve.spl.to_vec())
+        .mode(Mode::Lines)
+        .name("Target")
+        .show_legend(false)
+        .x_axis("x4")
+        .y_axis("y4")
+        .line(
+            plotly::common::Line::new()
+                .color(filter_color(0))
+                .width(2.0),
+        );
+    plot.add_trace(target_trace4);
+
     let input_trace = Scatter::new(input_curve.freq.to_vec(), input_curve.spl.to_vec())
         .mode(Mode::Lines)
         .name("Input")
         .x_axis("x4")
         .y_axis("y4")
-        .line(plotly::common::Line::new().color(filter_color(4)));
+        .line(plotly::common::Line::new().color(filter_color(1)));
     plot.add_trace(input_trace);
 
     // Add input curve + EQ and target curve subplot (new subplot)
@@ -120,7 +124,11 @@ pub fn plot_filters(
     .name("Input + EQ")
     .x_axis("x4")
     .y_axis("y4")
-    .line(plotly::common::Line::new().color(filter_color(5)));
+    .line(
+        plotly::common::Line::new()
+            .color(filter_color(2))
+            .width(3.0),
+    );
     plot.add_trace(input_plus_eq_trace);
 
     // Add reference lines
