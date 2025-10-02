@@ -17,10 +17,13 @@ fn create_test_objective_data() -> autoeq::optim::ObjectiveData {
     // Create simple test curves
     let freqs = Array1::from(vec![100.0, 1000.0, 10000.0]);
     let target = Array1::from(vec![1.0, 1.0, 1.0]); // Small deviation to optimize
+    let deviation = Array1::from(vec![0.5, 0.5, 0.5]); // Small deviation
 
     autoeq::optim::ObjectiveData {
         freqs: freqs.clone(),
-        target_error: target,
+        target,
+        deviation,
+        input_curve: None,
         srate: 48000.0,
         min_spacing_oct: 0.5,
         spacing_weight: 20.0,

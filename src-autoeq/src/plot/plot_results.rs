@@ -8,7 +8,7 @@ use build_html::*;
 use plotly::Plot;
 use plotly_static::{ImageFormat, StaticExporterBuilder};
 
-use crate::iir::compute_peq_response;
+use crate::iir::compute_peq_response_from_x;
 use crate::plot::plot_filters::plot_filters;
 use crate::plot::plot_spin::{plot_spin, plot_spin_details, plot_spin_tonal};
 
@@ -32,7 +32,7 @@ pub async fn plot_compute(
     );
 
     let eq_response =
-        compute_peq_response(&freqs, optimized_params, args.sample_rate, args.iir_hp_pk);
+        compute_peq_response_from_x(&freqs, optimized_params, args.sample_rate, args.iir_hp_pk);
     let plot_spin_details = if cea2034_curves.is_some() {
         Some(plot_spin_details(
             cea2034_curves.as_ref(),

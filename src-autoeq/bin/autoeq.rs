@@ -53,7 +53,7 @@ fn print_freq_spacing(x: &[f64], args: &autoeq::cli::Args, label: &str) {
     } else {
         println!("  - Not enough filters to compute spacing.");
     }
-    iir::peq_print(x, args.iir_hp_pk);
+    iir::peq_print_from_x(x, args.iir_hp_pk);
 }
 
 /// Save PEQ settings to APO format file
@@ -197,7 +197,7 @@ fn perform_optimization(
                 );
 
                 print_freq_spacing(&x, args, "local");
-                iir::peq_print(&x, args.iir_hp_pk);
+                iir::peq_print_from_x(&x, args.iir_hp_pk);
             }
             Err((e, final_value)) => {
                 eprintln!("⚠️  Local refinement failed: {:?}", e);
@@ -305,8 +305,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
             if let Some(before) = headphone_metrics_before {
                 println!("✅  Pre-Optimization Headphone Score: {:.3}", before);
             }
-            let peq_after =
-                iir::compute_peq_response(&standard_freq, &x, args.sample_rate, args.iir_hp_pk);
+            let peq_after = iir::compute_peq_response_from_x(
+                &standard_freq,
+                &x,
+                args.sample_rate,
+                args.iir_hp_pk,
+            );
             let input_autoeq = Curve {
                 freq: standard_freq.clone(),
                 spl: &input_curve.spl + peq_after,
@@ -321,7 +325,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             if use_cea {
                 let freq = &input_curve.freq;
                 let peq_after =
-                    iir::compute_peq_response(freq, &x, args.sample_rate, args.iir_hp_pk);
+                    iir::compute_peq_response_from_x(freq, &x, args.sample_rate, args.iir_hp_pk);
                 let metrics_after = score::compute_cea2034_metrics(
                     freq,
                     spin_data.as_ref().unwrap(),

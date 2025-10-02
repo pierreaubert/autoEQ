@@ -451,7 +451,8 @@ async fn run_one(
 
     if use_cea {
         let freq = &standard_freq;
-        let peq_after = iir::compute_peq_response(freq, &x, args.sample_rate, args.iir_hp_pk);
+        let peq_after =
+            iir::compute_peq_response_from_x(freq, &x, args.sample_rate, args.iir_hp_pk);
         let metrics =
             score::compute_cea2034_metrics(freq, spin_data.as_ref().unwrap(), Some(&peq_after))
                 .await

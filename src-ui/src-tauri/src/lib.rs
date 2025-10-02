@@ -684,7 +684,7 @@ async fn run_optimization_internal(
     // Calculate preference score after optimization
     let mut pref_score_after: Option<f64> = None;
     if use_cea {
-        let peq_response = autoeq::iir::compute_peq_response(
+        let peq_response = autoeq::iir::compute_peq_response_from_x(
             &input_curve.freq,
             &filter_params,
             args.sample_rate,
@@ -702,7 +702,7 @@ async fn run_optimization_internal(
     } else if args.loss == LossType::HeadphoneFlat || args.loss == LossType::HeadphoneScore {
         // Calculate headphone preference score after applying EQ
         println!("[RUST DEBUG] Calculating headphone preference score after optimization");
-        let peq_response = autoeq::iir::compute_peq_response(
+        let peq_response = autoeq::iir::compute_peq_response_from_x(
             &input_curve.freq,
             &filter_params,
             args.sample_rate,
@@ -734,7 +734,7 @@ async fn run_optimization_internal(
     let plot_freqs_array = Array1::from(plot_freqs.clone());
 
     // Generate filter response data
-    let eq_response = autoeq::iir::compute_peq_response(
+    let eq_response = autoeq::iir::compute_peq_response_from_x(
         &plot_freqs_array,
         &filter_params,
         args.sample_rate,

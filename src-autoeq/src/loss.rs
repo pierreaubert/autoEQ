@@ -396,7 +396,7 @@ pub fn headphone_loss(curve: &Curve) -> f64 {
 
     // Return negative preference rating for minimization during optimization
     // (minimizing the loss function maximizes the preference rating)
-    predicted_preference_rating
+    -predicted_preference_rating
 }
 
 /// Compute headphone preference score with additional target curve

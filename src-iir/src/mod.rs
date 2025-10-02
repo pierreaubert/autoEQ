@@ -47,6 +47,56 @@ pub const SRATE: f64 = 48000.0;
 /// Each tuple contains (weight, biquad_filter)
 pub type Peq = Vec<(f64, Biquad)>;
 
+/// Convert parameter vector to Peq structure
+///
+/// # Arguments
+/// * `x` - Parameter vector with triplets [log10(freq), Q, gain] for each filter
+/// * `sample_rate` - Sample rate in Hz
+/// * `iir_hp_pk` - If true, first filter is highpass; otherwise all are peak filters
+///
+/// # Returns
+/// A Peq structure containing the filters
+pub fn x2peq(x: &[f64], sample_rate: f64, iir_hp_pk: bool) -> Peq {
+    let num_filters = x.len() / 3;
+    let mut peq = Vec::with_capacity(num_filters);
+
+    for i in 0..num_filters {
+        let freq = 10f64.powf(x[i * 3]);
+        let q = x[i * 3 + 1];
+        let gain = x[i * 3 + 2];
+
+        let ftype = if iir_hp_pk && i == 0 {
+            BiquadFilterType::HighpassVariableQ
+        } else {
+            BiquadFilterType::Peak
+        };
+
+        let filter = Biquad::new(ftype, freq, sample_rate, q, gain);
+        peq.push((1.0, filter));
+    }
+
+    peq
+}
+
+/// Convert Peq structure back to parameter vector
+///
+/// # Arguments
+/// * `peq` - Peq structure containing the filters
+///
+/// # Returns
+/// Parameter vector with triplets [log10(freq), Q, gain] for each filter
+pub fn peq2x(peq: &Peq) -> Vec<f64> {
+    let mut x = Vec::with_capacity(peq.len() * 3);
+
+    for (_weight, filter) in peq {
+        x.push(filter.freq.log10());
+        x.push(filter.q);
+        x.push(filter.db_gain);
+    }
+
+    x
+}
+
 /// Filter types for biquad filters
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BiquadFilterType {
@@ -365,34 +415,40 @@ pub struct FilterRow {
     pub kind: &'static str,
 }
 
+/// Compute the combined PEQ response (in dB) on a given frequency grid for a Peq.
+///
+/// # Arguments
+/// * `freqs` - Frequency points for evaluation (Hz)
+/// * `peq` - Parametric equalizer containing weighted biquad filters
+/// * `_sample_rate` - Sample rate in Hz (unused, kept for API compatibility)
+///
+/// # Returns
+/// Frequency response in dB SPL at the specified frequency points
+pub fn compute_peq_response(freqs: &Array1<f64>, peq: &Peq, _sample_rate: f64) -> Array1<f64> {
+    if peq.is_empty() {
+        return Array1::zeros(freqs.len());
+    }
+    let mut response = Array1::zeros(freqs.len());
+    for (weight, filter) in peq {
+        // Note: we're not using sample_rate here as filters already have their own srate
+        response += &(filter.np_log_result(freqs) * *weight);
+    }
+    response
+}
+
 /// Compute the combined PEQ response (in dB) on a given frequency grid for the current params.
 ///
 /// The parameter vector `x` is laid out as triplets per filter: `[f0, Q, gain, f0, Q, gain, ...]`.
 /// If `iir_hp_pk` is true, the lowest-frequency filter is treated as a Highpass, others as Peak.
-pub fn compute_peq_response(
+/// This is a compatibility function that uses the new compute_peq_response internally.
+pub fn compute_peq_response_from_x(
     freqs: &Array1<f64>,
     x: &[f64],
     sample_rate: f64,
     iir_hp_pk: bool,
 ) -> Array1<f64> {
-    let n = x.len() / 3;
-    if n == 0 {
-        return Array1::zeros(freqs.len());
-    }
-    let mut peq = Array1::zeros(freqs.len());
-    for i in 0..n {
-        let f0 = 10f64.powf(x[i * 3]);
-        let q = x[i * 3 + 1];
-        let gain = x[i * 3 + 2];
-        let ftype = if iir_hp_pk && i == 0 {
-            BiquadFilterType::HighpassVariableQ
-        } else {
-            BiquadFilterType::Peak
-        };
-        let filter = Biquad::new(ftype, f0, sample_rate, q, gain);
-        peq += &filter.np_log_result(freqs);
-    }
-    peq
+    let peq = x2peq(x, sample_rate, iir_hp_pk);
+    compute_peq_response(freqs, &peq, sample_rate)
 }
 
 #[cfg(test)]
@@ -443,13 +499,13 @@ mod tests {
 }
 #[cfg(test)]
 mod peq_response_tests {
-    use super::compute_peq_response;
+    use super::compute_peq_response_from_x;
     use ndarray::array;
 
     #[test]
     fn zero_filters_returns_zero() {
         let freqs = array![100.0, 1000.0, 10000.0];
-        let peq = compute_peq_response(&freqs, &[], 48_000.0, false);
+        let peq = compute_peq_response_from_x(&freqs, &[], 48_000.0, false);
         for v in peq.iter() {
             assert!(v.abs() < 1e-12);
         }
@@ -459,7 +515,7 @@ mod peq_response_tests {
     fn one_peak_is_finite() {
         let freqs = array![100.0, 1000.0, 10000.0];
         let x = vec![1000.0_f64.log10(), 1.0, 6.0];
-        let peq = compute_peq_response(&freqs, &x, 48_000.0, false);
+        let peq = compute_peq_response_from_x(&freqs, &x, 48_000.0, false);
         for v in peq.iter() {
             assert!(v.is_finite());
         }
@@ -816,12 +872,26 @@ pub fn peq_linkwitzriley_highpass(order: usize, freq: f64, srate: f64) -> Peq {
         .collect()
 }
 
-/// Print a formatted table of the parametric EQ filters.
-///
-/// The filters are printed with any non-Peak (i.e., Highpass when `iir_hp_pk` is true)
-/// shown first, followed by Peak filters sorted by frequency.
-pub fn peq_print(x: &[f64], iir_hp_pk: bool) {
-    let rows = build_sorted_filters(x, iir_hp_pk);
+/// Print a formatted table of the parametric EQ filters from a Peq.
+pub fn peq_print(peq: &Peq) {
+    // Build filter rows from Peq
+    let mut rows: Vec<FilterRow> = Vec::new();
+    for (_weight, filter) in peq {
+        rows.push(FilterRow {
+            freq: filter.freq,
+            q: filter.q,
+            gain: filter.db_gain,
+            kind: filter.filter_type.short_name(),
+        });
+    }
+
+    // Sort by frequency
+    rows.sort_by(|a, b| {
+        a.freq
+            .partial_cmp(&b.freq)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
     println!("+-# -|-Freq (Hz)--|-Q ---------|-Gain (dB)--|-Type-----+");
     for (i, r) in rows.iter().enumerate() {
         println!(
@@ -836,9 +906,19 @@ pub fn peq_print(x: &[f64], iir_hp_pk: bool) {
     println!("+----|------------|------------|------------|----------+");
 }
 
+/// Print a formatted table of the parametric EQ filters.
+///
+/// The filters are printed with any non-Peak (i.e., Highpass when `iir_hp_pk` is true)
+/// shown first, followed by Peak filters sorted by frequency.
+/// This is a compatibility function that uses the new peq_print internally.
+pub fn peq_print_from_x(x: &[f64], iir_hp_pk: bool) {
+    let peq = x2peq(x, SRATE, iir_hp_pk);
+    peq_print(&peq);
+}
+
 #[cfg(test)]
 mod peq_print_tests {
-    use super::{build_sorted_filters, peq_print};
+    use super::{build_sorted_filters, peq_print_from_x};
 
     #[test]
     fn peq_print_does_not_panic() {
@@ -854,8 +934,8 @@ mod peq_print_tests {
             -3.0, // Peak
         ];
         // Ensure helper runs without panicking (output captured by test harness)
-        peq_print(&x, true);
-        peq_print(&x, false);
+        peq_print_from_x(&x, true);
+        peq_print_from_x(&x, false);
         // Also ensure build_sorted_filters remains consistent
         let rows = build_sorted_filters(&x, true);
         assert_eq!(rows.len(), 3);

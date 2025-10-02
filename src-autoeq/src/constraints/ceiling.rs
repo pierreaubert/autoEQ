@@ -1,4 +1,4 @@
-use super::super::x2peq::x2peq;
+use super::super::x2peq::x2spl;
 use ndarray::Array1;
 
 /// Data needed by the nonlinear ceiling constraint callback.
@@ -21,7 +21,7 @@ pub fn constraint_ceiling(
     _grad: Option<&mut [f64]>,
     data: &mut CeilingConstraintData,
 ) -> f64 {
-    let peq_spl = x2peq(&data.freqs, x, data.srate, data.iir_hp_pk);
+    let peq_spl = x2spl(&data.freqs, x, data.srate, data.iir_hp_pk);
     let viol = viol_ceiling_from_spl(&peq_spl, data.max_db, data.iir_hp_pk);
     viol
 }
