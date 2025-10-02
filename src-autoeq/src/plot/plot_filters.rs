@@ -6,6 +6,7 @@ use plotly::layout::{
 };
 use plotly::{Layout, Plot, Scatter};
 
+use crate::cli::PeqModel;
 use crate::iir::{Biquad, BiquadFilterType};
 use crate::plot::filter_color::filter_color;
 use crate::plot::ref_lines::make_ref_lines;
@@ -88,21 +89,24 @@ pub fn plot_filters(
 
     // For the first subplot (individual filters), compute responses on plot_freqs
     let mut combined_response: Array1<f64> = Array1::zeros(freqs.len());
+    let peq_model = args.effective_peq_model();
     for (display_idx, (orig_i, f0, q, gain)) in filters.iter().enumerate() {
-        let ftype = if args.iir_hp_pk && *orig_i == 0 {
-            BiquadFilterType::Highpass
-        } else {
-            BiquadFilterType::Peak
+        let ftype = match peq_model {
+            PeqModel::Pk => BiquadFilterType::Peak,
+            PeqModel::HpPk if *orig_i == 0 => BiquadFilterType::Highpass,
+            PeqModel::HpPkLp if *orig_i == 0 => BiquadFilterType::Highpass,
+            PeqModel::HpPkLp if *orig_i == args.num_filters - 1 => BiquadFilterType::Lowpass,
+            _ => BiquadFilterType::Peak,
         };
         let filter = Biquad::new(ftype, *f0, args.sample_rate, *q, *gain);
         // Compute filter response on plot_freqs for the first subplot
         let filter_response = filter.np_log_result(&freqs);
         combined_response += &filter_response;
 
-        let label = if args.iir_hp_pk && *orig_i == 0 {
-            "HPQ"
-        } else {
-            "PK"
+        let label = match ftype {
+            BiquadFilterType::Highpass | BiquadFilterType::HighpassVariableQ => "HPQ",
+            BiquadFilterType::Lowpass => "LP",
+            _ => "PK",
         };
         let individual_trace = Scatter::new(freqs.to_vec(), filter_response.to_vec())
             .mode(Mode::Lines)

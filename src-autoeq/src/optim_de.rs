@@ -3,6 +3,7 @@
 use ndarray::Array1;
 use std::sync::Arc;
 
+use super::cli::PeqModel;
 use super::constraints::{
     constraint_ceiling, constraint_min_gain, constraint_spacing, CeilingConstraintData,
     MinGainConstraintData, SpacingConstraintData,
@@ -376,12 +377,12 @@ pub fn optimize_filters_autoeq_with_callback(
     let mut config = config_builder.build();
 
     // Ceiling constraint (only applies in HP+PK mode)
-    if setup.penalty_data.iir_hp_pk && setup.penalty_data.max_db > 0.0 {
+    if setup.penalty_data.peq_model == PeqModel::HpPk && setup.penalty_data.max_db > 0.0 {
         let ceiling_data = CeilingConstraintData {
             freqs: setup.penalty_data.freqs.clone(),
             srate: setup.penalty_data.srate,
             max_db: setup.penalty_data.max_db,
-            iir_hp_pk: setup.penalty_data.iir_hp_pk,
+            peq_model: setup.penalty_data.peq_model,
         };
 
         // Create nonlinear constraint helper for ceiling constraint
@@ -404,7 +405,7 @@ pub fn optimize_filters_autoeq_with_callback(
     if setup.penalty_data.min_db > 0.0 {
         let min_gain_data = MinGainConstraintData {
             min_db: setup.penalty_data.min_db,
-            iir_hp_pk: setup.penalty_data.iir_hp_pk,
+            peq_model: setup.penalty_data.peq_model,
         };
 
         // Create nonlinear constraint helper for minimum gain constraint

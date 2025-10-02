@@ -1,17 +1,9 @@
 // Optimization management and progress tracking
 
-import { invoke } from '@tauri-apps/api/tauri';
+import { invoke } from '@tauri-apps/api/core';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import type { OptimizationParams, OptimizationResult, ProgressData, OptimizationStage, PeqModel } from '../types/optimization';
 import { OPTIMIZATION_DEFAULTS } from './optimization-constants';
-
-// Progress data interface
-interface ProgressData {
-  iteration: number;
-  fitness: number;
-  convergence: number;
-  timestamp?: number;
-}
 
 export class OptimizationManager {
   // Optimization state

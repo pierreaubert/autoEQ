@@ -45,7 +45,8 @@ export interface OptimizationDefaults {
   loss: string;
 
   // Filter Type
-  iir_hp_pk: boolean;
+  iir_hp_pk: boolean;  // Deprecated, kept for backward compatibility
+  peq_model: string;   // New PEQ model system
 
   // Curve Selection
   curve_name: string;
@@ -144,7 +145,8 @@ export const OPTIMIZATION_DEFAULTS: OptimizationDefaults = {
   loss: 'speaker-flat',
 
   // Filter Type
-  iir_hp_pk: false,
+  iir_hp_pk: false,  // Deprecated
+  peq_model: 'pk',  // Default to all peak filters
 
   // Curve Selection
   curve_name: 'Listening Window',

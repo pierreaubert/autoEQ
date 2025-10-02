@@ -197,12 +197,6 @@ pub struct Args {
     #[arg(long, default_value_t = false)]
     pub peq_model_list: bool,
 
-    /// If present/true: use a Highpass for the lowest-frequency IIR and do NOT clip the inverted curve.
-    /// If false: use all Peak filters and clip the inverted curve on the positive side (current behaviour).
-    /// DEPRECATED: Use --peq-model hp-pk instead
-    #[arg(long, default_value_t = false, hide = true)]
-    pub iir_hp_pk: bool,
-
     /// Display list of available optimization algorithms with descriptions and exit.
     #[arg(long, default_value_t = false)]
     pub algo_list: bool,
@@ -245,15 +239,9 @@ pub struct Args {
 }
 
 impl Args {
-    /// Get the effective PEQ model, handling the deprecated iir_hp_pk flag
+    /// Get the effective PEQ model
     pub fn effective_peq_model(&self) -> PeqModel {
-        if self.iir_hp_pk {
-            // If the deprecated flag is used, override with hp-pk model
-            eprintln!("⚠️  Warning: --iir-hp-pk is deprecated. Use --peq-model hp-pk instead.");
-            PeqModel::HpPk
-        } else {
-            self.peq_model
-        }
+        self.peq_model
     }
 
     /// Check if the first filter should be a highpass (for compatibility)
@@ -742,7 +730,7 @@ mod tests {
         assert_eq!(args.sample_rate, 48000.0);
         assert_eq!(args.maxeval, 2000);
         assert_eq!(args.curve_name, "Listening Window");
-        assert!(!args.iir_hp_pk);
+        assert_eq!(args.peq_model, PeqModel::Pk);
     }
 
     #[test]

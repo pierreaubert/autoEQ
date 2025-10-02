@@ -3,7 +3,7 @@
 //! These tests verify that the new CLI parameters actually change
 //! the behavior of the differential evolution algorithm.
 
-use autoeq::cli::Args;
+use autoeq::cli::{Args, PeqModel};
 use autoeq::de::Strategy;
 use autoeq::optim::optimize_filters;
 use autoeq::workflow::{initial_guess, setup_bounds};
@@ -29,7 +29,7 @@ fn create_test_objective_data() -> autoeq::optim::ObjectiveData {
         spacing_weight: 20.0,
         max_db: 3.0,
         min_db: 1.0,
-        iir_hp_pk: false,
+        peq_model: PeqModel::Pk,
         loss_type: LossType::SpeakerFlat,
         speaker_score_data: None,
         headphone_score_data: None,

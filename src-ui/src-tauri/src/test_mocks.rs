@@ -91,6 +91,7 @@ pub mod mocks {
             smooth: false,
             smooth_n: 1,
             loss: "speaker-flat".to_string(),
+            peq_model: Some("pk".to_string()),
             iir_hp_pk: false,
             strategy: None,
             de_f: None,

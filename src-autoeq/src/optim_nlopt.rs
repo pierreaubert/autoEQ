@@ -38,11 +38,11 @@ pub fn optimize_filters_nlopt(
         freqs: objective_data.freqs.clone(),
         srate: objective_data.srate,
         max_db: objective_data.max_db,
-        iir_hp_pk: objective_data.iir_hp_pk,
+        peq_model: objective_data.peq_model,
     };
     let min_gain_data = MinGainConstraintData {
         min_db: objective_data.min_db,
-        iir_hp_pk: objective_data.iir_hp_pk,
+        peq_model: objective_data.peq_model,
     };
 
     // Configure penalty weights when needed

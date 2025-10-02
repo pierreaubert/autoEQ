@@ -456,8 +456,8 @@ class AutoEQApplication {
           optimized_params: result.filter_params,
           sample_rate: 48000, // Use default or get from form
           num_filters: result.filter_params.length / 3,
-          iir_hp_pk: (document.getElementById('peq_model') as HTMLSelectElement)?.value === 'hp-pk' ||
-                     (document.getElementById('iir_hp_pk') as HTMLInputElement)?.checked || false
+          peq_model: (document.getElementById('peq_model') as HTMLSelectElement)?.value as any || 'pk',
+          iir_hp_pk: false  // Deprecated
         };
 
         console.log("Calling backend to generate 4-subplot filter plot...");

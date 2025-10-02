@@ -1,10 +1,12 @@
+use super::super::cli::PeqModel;
+
 /// Data needed by the nonlinear minimum gain constraint callback.
 #[derive(Clone, Copy)]
 pub struct MinGainConstraintData {
     /// Minimum required absolute gain in dB
     pub min_db: f64,
-    /// Whether first filter is highpass (skip in constraint)
-    pub iir_hp_pk: bool,
+    /// PEQ model that defines the filter structure
+    pub peq_model: PeqModel,
 }
 
 /// Inequality constraint: for Peak filters, require |gain| >= min_db OR |gain| = 0 (filter removal) (skip HP in HP+PK mode).
@@ -14,7 +16,7 @@ pub fn constraint_min_gain(
     _grad: Option<&mut [f64]>,
     data: &mut MinGainConstraintData,
 ) -> f64 {
-    let viol = viol_min_gain_from_xs(x, data.iir_hp_pk, data.min_db);
+    let viol = viol_min_gain_from_xs(x, data.peq_model, data.min_db);
     viol
 }
 
@@ -26,19 +28,27 @@ pub fn constraint_min_gain(
 ///
 /// # Arguments
 /// * `xs` - Parameter vector with [log10(freq), Q, gain] triplets
-/// * `iir_hp_pk` - Whether HP+PK mode is enabled (skip first filter)
+/// * `peq_model` - PEQ model that defines the filter structure
 /// * `min_db` - Minimum required absolute gain in dB
 ///
 /// # Returns
 /// Worst gain deficiency (0.0 if no violation or disabled)
-pub fn viol_min_gain_from_xs(xs: &[f64], iir_hp_pk: bool, min_db: f64) -> f64 {
+pub fn viol_min_gain_from_xs(xs: &[f64], peq_model: PeqModel, min_db: f64) -> f64 {
     let n = xs.len() / 3;
     if n == 0 {
         return 0.0;
     }
     let mut worst_short = 0.0_f64;
     for i in 0..n {
-        if iir_hp_pk && i == 0 {
+        // Skip non-peak filters based on the PEQ model
+        let should_skip = match peq_model {
+            PeqModel::HpPk => i == 0,                 // Skip first filter (highpass)
+            PeqModel::HpPkLp => i == 0 || i == n - 1, // Skip first and last
+            PeqModel::FreePkFree => i == 0 || i == n - 1, // Skip first and last
+            PeqModel::Free => true,                   // Skip all (no constraint)
+            PeqModel::Pk => false,                    // Apply to all
+        };
+        if should_skip {
             continue;
         }
         let g_abs = xs[i * 3 + 2].abs();

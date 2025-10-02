@@ -116,7 +116,7 @@ pub fn flat_loss(freqs: &Array1<f64>, error: &Array1<f64>) -> f64 {
     weighted_mse(freqs, error)
 }
 
-/// Compute the score-based loss. Returns -pref_score so that minimizing it maximizes the preference score.
+/// Compute the score-based loss.
 /// `peq_response` must be computed for the candidate parameters.
 pub fn speaker_score_loss(
     score_data: &SpeakerLossData,
@@ -146,7 +146,7 @@ pub fn speaker_score_loss(
             peq_response,
         )
     };
-    // Return negative preference score so minimizing improves preference.
+
     metrics.pref_score
 }
 
@@ -396,7 +396,7 @@ pub fn headphone_loss(curve: &Curve) -> f64 {
 
     // Return negative preference rating for minimization during optimization
     // (minimizing the loss function maximizes the preference rating)
-    -predicted_preference_rating
+    predicted_preference_rating
 }
 
 /// Compute headphone preference score with additional target curve
@@ -605,7 +605,7 @@ mod tests {
 
         // With zero deviation (SD=0, AS=0), predicted preference = 114.49
         // Function returns negative preference for minimization
-        let expected_score = -114.49;
+        let expected_score = 114.49;
         assert!(
             (score - expected_score).abs() < 1e-12,
             "Perfect Harman score incorrect: got {}, expected {}",
@@ -630,7 +630,7 @@ mod tests {
         // predicted preference = 114.49 - (12.62 * 0) - (15.52 * 0) = 114.49
         // But wait - SD should be 0 for constant values, but AS should also be 0
         let expected_preference = 114.49;
-        let expected_score = -expected_preference;
+        let expected_score = expected_preference;
         assert!(
             (score - expected_score).abs() < 1e-10,
             "Constant deviation score incorrect: got {}, expected {}",
@@ -659,7 +659,7 @@ mod tests {
         // predicted preference = 114.49 - (12.62 * SD) - (15.52 * 1.0)
         // Score should be worse (more negative) than perfect case (-114.49)
         assert!(
-            score < -50.0,
+            score > 50.0,
             "Sloped deviation should have lower preference: got {}",
             score
         );
@@ -684,7 +684,7 @@ mod tests {
         let score = headphone_loss_with_target(&data, &response_curve, &target_curve);
 
         // When response matches target, deviation is zero, so should get perfect score
-        let expected_perfect_score = -114.49;
+        let expected_perfect_score = 114.49;
         assert!(
             (score - expected_perfect_score).abs() < 1e-10,
             "Perfect target match score incorrect: got {}, expected {}",

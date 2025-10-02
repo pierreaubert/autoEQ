@@ -47,56 +47,6 @@ pub const SRATE: f64 = 48000.0;
 /// Each tuple contains (weight, biquad_filter)
 pub type Peq = Vec<(f64, Biquad)>;
 
-/// Convert parameter vector to Peq structure
-///
-/// # Arguments
-/// * `x` - Parameter vector with triplets [log10(freq), Q, gain] for each filter
-/// * `sample_rate` - Sample rate in Hz
-/// * `iir_hp_pk` - If true, first filter is highpass; otherwise all are peak filters
-///
-/// # Returns
-/// A Peq structure containing the filters
-pub fn x2peq(x: &[f64], sample_rate: f64, iir_hp_pk: bool) -> Peq {
-    let num_filters = x.len() / 3;
-    let mut peq = Vec::with_capacity(num_filters);
-
-    for i in 0..num_filters {
-        let freq = 10f64.powf(x[i * 3]);
-        let q = x[i * 3 + 1];
-        let gain = x[i * 3 + 2];
-
-        let ftype = if iir_hp_pk && i == 0 {
-            BiquadFilterType::HighpassVariableQ
-        } else {
-            BiquadFilterType::Peak
-        };
-
-        let filter = Biquad::new(ftype, freq, sample_rate, q, gain);
-        peq.push((1.0, filter));
-    }
-
-    peq
-}
-
-/// Convert Peq structure back to parameter vector
-///
-/// # Arguments
-/// * `peq` - Peq structure containing the filters
-///
-/// # Returns
-/// Parameter vector with triplets [log10(freq), Q, gain] for each filter
-pub fn peq2x(peq: &Peq) -> Vec<f64> {
-    let mut x = Vec::with_capacity(peq.len() * 3);
-
-    for (_weight, filter) in peq {
-        x.push(filter.freq.log10());
-        x.push(filter.q);
-        x.push(filter.db_gain);
-    }
-
-    x
-}
-
 /// Filter types for biquad filters
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BiquadFilterType {
@@ -436,21 +386,6 @@ pub fn compute_peq_response(freqs: &Array1<f64>, peq: &Peq, _sample_rate: f64) -
     response
 }
 
-/// Compute the combined PEQ response (in dB) on a given frequency grid for the current params.
-///
-/// The parameter vector `x` is laid out as triplets per filter: `[f0, Q, gain, f0, Q, gain, ...]`.
-/// If `iir_hp_pk` is true, the lowest-frequency filter is treated as a Highpass, others as Peak.
-/// This is a compatibility function that uses the new compute_peq_response internally.
-pub fn compute_peq_response_from_x(
-    freqs: &Array1<f64>,
-    x: &[f64],
-    sample_rate: f64,
-    iir_hp_pk: bool,
-) -> Array1<f64> {
-    let peq = x2peq(x, sample_rate, iir_hp_pk);
-    compute_peq_response(freqs, &peq, sample_rate)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -496,70 +431,6 @@ mod tests {
             assert!(v.is_finite(), "response at idx {} not finite: {}", i, v);
         }
     }
-}
-#[cfg(test)]
-mod peq_response_tests {
-    use super::compute_peq_response_from_x;
-    use ndarray::array;
-
-    #[test]
-    fn zero_filters_returns_zero() {
-        let freqs = array![100.0, 1000.0, 10000.0];
-        let peq = compute_peq_response_from_x(&freqs, &[], 48_000.0, false);
-        for v in peq.iter() {
-            assert!(v.abs() < 1e-12);
-        }
-    }
-
-    #[test]
-    fn one_peak_is_finite() {
-        let freqs = array![100.0, 1000.0, 10000.0];
-        let x = vec![1000.0_f64.log10(), 1.0, 6.0];
-        let peq = compute_peq_response_from_x(&freqs, &x, 48_000.0, false);
-        for v in peq.iter() {
-            assert!(v.is_finite());
-        }
-    }
-}
-
-/// Build a vector of sorted filter rows from optimization parameters
-///
-/// # Arguments
-/// * `x` - Slice of optimization parameters laid out as [f0, Q, gain, f0, Q, gain, ...]
-/// * `iir_hp_pk` - If true, treat the lowest-frequency filter as a Highpass filter
-///
-/// # Returns
-/// * Vector of FilterRow structs sorted by frequency
-///
-/// # Details
-/// Converts the flat parameter vector into a vector of FilterRow structs,
-/// sorts them by frequency, and optionally marks the lowest-frequency filter
-/// as a Highpass filter for display purposes.
-pub fn build_sorted_filters(x: &[f64], iir_hp_pk: bool) -> Vec<FilterRow> {
-    let mut rows: Vec<FilterRow> = Vec::with_capacity(x.len() / 3);
-    for i in 0..(x.len() / 3) {
-        let freq = 10f64.powf(x[i * 3]);
-        let q = x[i * 3 + 1];
-        let gain = x[i * 3 + 2];
-        rows.push(FilterRow {
-            freq,
-            q,
-            gain,
-            kind: "PK",
-        });
-    }
-    rows.sort_by(|a, b| {
-        a.freq
-            .partial_cmp(&b.freq)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
-
-    // If enabled, mark the lowest-frequency filter as Highpass for display purposes
-    if iir_hp_pk && !rows.is_empty() {
-        rows[0].kind = "HPQ";
-        rows[0].gain = 0.0;
-    }
-    rows
 }
 
 /// Check if two PEQs are equal
@@ -904,80 +775,6 @@ pub fn peq_print(peq: &Peq) {
         );
     }
     println!("+----|------------|------------|------------|----------+");
-}
-
-/// Print a formatted table of the parametric EQ filters.
-///
-/// The filters are printed with any non-Peak (i.e., Highpass when `iir_hp_pk` is true)
-/// shown first, followed by Peak filters sorted by frequency.
-/// This is a compatibility function that uses the new peq_print internally.
-pub fn peq_print_from_x(x: &[f64], iir_hp_pk: bool) {
-    let peq = x2peq(x, SRATE, iir_hp_pk);
-    peq_print(&peq);
-}
-
-#[cfg(test)]
-mod peq_print_tests {
-    use super::{build_sorted_filters, peq_print_from_x};
-
-    #[test]
-    fn peq_print_does_not_panic() {
-        let x = vec![
-            1000.0_f64.log10(),
-            1.0,
-            2.0, // Peak
-            80.0_f64.log10(),
-            0.707,
-            0.0, // Candidate HP when iir_hp_pk=true
-            5000.0_f64.log10(),
-            2.0,
-            -3.0, // Peak
-        ];
-        // Ensure helper runs without panicking (output captured by test harness)
-        peq_print_from_x(&x, true);
-        peq_print_from_x(&x, false);
-        // Also ensure build_sorted_filters remains consistent
-        let rows = build_sorted_filters(&x, true);
-        assert_eq!(rows.len(), 3);
-    }
-}
-
-#[cfg(test)]
-mod filter_tests {
-    use super::build_sorted_filters;
-
-    #[test]
-    fn sorts_by_freq_and_sets_type() {
-        let x = vec![
-            1000.0_f64.log10(),
-            1.0,
-            0.0, // Peak at 1k
-            100.0_f64.log10(),
-            2.0,
-            1.0, // Will become HPQ (lowest freq)
-            500.0_f64.log10(),
-            0.5,
-            -1.0, // Peak at 500
-        ];
-        let rows = build_sorted_filters(&x, true);
-        let freqs: Vec<f64> = rows.iter().map(|r| r.freq).collect();
-        let expected = [100.0, 500.0, 1000.0];
-        for (i, f) in freqs.iter().enumerate() {
-            assert!(
-                (f - expected[i]).abs() < 1e-9,
-                "freq idx {}: got {}, expected {}",
-                i,
-                f,
-                expected[i]
-            );
-        }
-        assert!(rows[0].kind == "HPQ");
-        assert!(rows.iter().skip(1).all(|r| r.kind == "PK"));
-        // Lowest-frequency row becomes HPQ and its gain is forced to 0.0
-        assert!((rows[0].q - 2.0).abs() < 1e-12 && (rows[0].gain - 0.0).abs() < 1e-12);
-        assert!((rows[1].q - 0.5).abs() < 1e-12 && (rows[1].gain + 1.0).abs() < 1e-12);
-        assert!((rows[2].q - 1.0).abs() < 1e-12 && (rows[2].gain - 0.0).abs() < 1e-12);
-    }
 }
 
 #[cfg(test)]

@@ -75,8 +75,9 @@ struct OptimizationParams {
     spacing_weight: f64,
     smooth: bool,
     smooth_n: usize,
-    loss: String, // "flat", "score", or "mixed"
-    iir_hp_pk: bool,
+    loss: String,              // "flat", "score", or "mixed"
+    peq_model: Option<String>, // New PEQ model system: "pk", "hp-pk", "hp-pk-lp", etc.
+    iir_hp_pk: bool,           // Deprecated, kept for backward compatibility
     // DE-specific parameters
     strategy: Option<String>,
     de_f: Option<f64>,
@@ -131,7 +132,8 @@ struct PlotFiltersParams {
     optimized_params: Vec<f64>,
     sample_rate: f64,
     num_filters: usize,
-    iir_hp_pk: bool,
+    peq_model: Option<String>, // "pk", "hp-pk", etc.
+    iir_hp_pk: Option<bool>,   // Deprecated
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -478,13 +480,14 @@ async fn run_optimization_internal(
             "headphone-score" => LossType::HeadphoneScore,
             _ => LossType::SpeakerFlat,
         },
-        peq_model: if params.iir_hp_pk {
-            autoeq::cli::PeqModel::HpPk
-        } else {
-            autoeq::cli::PeqModel::Pk
+        peq_model: match params.peq_model.as_deref() {
+            Some("hp-pk") => autoeq::cli::PeqModel::HpPk,
+            Some("hp-pk-lp") => autoeq::cli::PeqModel::HpPkLp,
+            Some("free-pk-free") => autoeq::cli::PeqModel::FreePkFree,
+            Some("free") => autoeq::cli::PeqModel::Free,
+            Some("pk") | _ => autoeq::cli::PeqModel::Pk, // Default to Pk
         },
         peq_model_list: false,
-        iir_hp_pk: params.iir_hp_pk,
         algo_list: false, // UI doesn't need to list algorithms
         tolerance: params.tolerance.unwrap_or(1e-3), // Use provided tolerance or default
         atolerance: params.atolerance.unwrap_or(1e-4), // Use provided atolerance or default
@@ -690,11 +693,11 @@ async fn run_optimization_internal(
     // Calculate preference score after optimization
     let mut pref_score_after: Option<f64> = None;
     if use_cea {
-        let peq_response = autoeq::iir::compute_peq_response_from_x(
+        let peq_response = autoeq::x2peq::compute_peq_response_from_x(
             &input_curve.freq,
             &filter_params,
             args.sample_rate,
-            args.iir_hp_pk,
+            args.peq_model,
         );
         if let Ok(metrics) = autoeq::cea2034::compute_cea2034_metrics(
             &input_curve.freq,
@@ -708,11 +711,11 @@ async fn run_optimization_internal(
     } else if args.loss == LossType::HeadphoneFlat || args.loss == LossType::HeadphoneScore {
         // Calculate headphone preference score after applying EQ
         println!("[RUST DEBUG] Calculating headphone preference score after optimization");
-        let peq_response = autoeq::iir::compute_peq_response_from_x(
+        let peq_response = autoeq::x2peq::compute_peq_response_from_x(
             &input_curve.freq,
             &filter_params,
             args.sample_rate,
-            args.iir_hp_pk,
+            args.peq_model,
         );
         // Create corrected curve by adding PEQ response to input
         let corrected_curve = autoeq::Curve {
@@ -740,11 +743,11 @@ async fn run_optimization_internal(
     let plot_freqs_array = Array1::from(plot_freqs.clone());
 
     // Generate filter response data
-    let eq_response = autoeq::iir::compute_peq_response_from_x(
+    let eq_response = autoeq::x2peq::compute_peq_response_from_x(
         &plot_freqs_array,
         &filter_params,
         args.sample_rate,
-        args.iir_hp_pk,
+        args.peq_model,
     );
 
     let mut filter_curves = HashMap::new();
@@ -783,21 +786,20 @@ async fn run_optimization_internal(
     for (orig_i, f0, q, gain) in filters.into_iter() {
         use autoeq::iir::{Biquad, BiquadFilterType};
 
-        let ftype = if args.uses_highpass_first() && orig_i == 0 {
-            BiquadFilterType::Highpass
-        } else {
-            BiquadFilterType::Peak
+        let (ftype, label_prefix) = match args.peq_model {
+            autoeq::cli::PeqModel::HpPk if orig_i == 0 => (BiquadFilterType::Highpass, "HPQ"),
+            autoeq::cli::PeqModel::HpPkLp if orig_i == 0 => (BiquadFilterType::Highpass, "HPQ"),
+            autoeq::cli::PeqModel::HpPkLp if orig_i == args.num_filters - 1 => {
+                (BiquadFilterType::Lowpass, "LP")
+            }
+            _ => (BiquadFilterType::Peak, "PK"),
         };
 
         let filter = Biquad::new(ftype, f0, args.sample_rate, q, gain);
         let filter_response = filter.np_log_result(&plot_freqs_array);
         combined_response = &combined_response + &filter_response;
 
-        let label = if args.uses_highpass_first() && orig_i == 0 {
-            format!("HPQ {} at {:.0}Hz", orig_i + 1, f0)
-        } else {
-            format!("PK {} at {:.0}Hz", orig_i + 1, f0)
-        };
+        let label = format!("{} {} at {:.0}Hz", label_prefix, orig_i + 1, f0);
 
         individual_filter_curves.insert(label, filter_response.to_vec());
     }
@@ -916,13 +918,21 @@ async fn generate_plot_filters(params: PlotFiltersParams) -> Result<serde_json::
         smooth: true,
         smooth_n: 2,
         loss: LossType::SpeakerFlat,
-        peq_model: if params.iir_hp_pk {
-            autoeq::cli::PeqModel::HpPk
-        } else {
-            autoeq::cli::PeqModel::Pk
+        peq_model: match params.peq_model.as_deref() {
+            Some("hp-pk") => autoeq::cli::PeqModel::HpPk,
+            Some("hp-pk-lp") => autoeq::cli::PeqModel::HpPkLp,
+            Some("free-pk-free") => autoeq::cli::PeqModel::FreePkFree,
+            Some("free") => autoeq::cli::PeqModel::Free,
+            Some("pk") | _ => {
+                // Fallback: if iir_hp_pk is set (deprecated), use HpPk
+                if params.iir_hp_pk.unwrap_or(false) {
+                    autoeq::cli::PeqModel::HpPk
+                } else {
+                    autoeq::cli::PeqModel::Pk
+                }
+            }
         },
         peq_model_list: false,
-        iir_hp_pk: params.iir_hp_pk,
         algo_list: false,
         tolerance: 1e-3,
         atolerance: 1e-4,

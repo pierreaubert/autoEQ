@@ -190,7 +190,7 @@ pub fn setup_objective_data(
         spacing_weight: args.spacing_weight,
         max_db: args.max_db,
         min_db: args.min_db,
-        iir_hp_pk: args.iir_hp_pk,
+        peq_model: args.effective_peq_model(),
         loss_type: args.loss,
         speaker_score_data: speaker_score_data_opt,
         headphone_score_data: headphone_score_data_opt,
@@ -295,9 +295,9 @@ pub fn setup_bounds(args: &crate::cli::Args) -> (Vec<f64>, Vec<f64>) {
             PeqModel::HpPkLp if i == 0 => "HP",
             PeqModel::HpPkLp if i == args.num_filters - 1 => "LP",
             PeqModel::HpPkLp => "PK",
-            PeqModel::FreePkFree if i == 0 || i == args.num_filters - 1 => "FREE",
+            PeqModel::FreePkFree if i == 0 || i == args.num_filters - 1 => "??",
             PeqModel::FreePkFree => "PK",
-            PeqModel::Free => "FREE",
+            PeqModel::Free => "??",
         };
 
         println!(

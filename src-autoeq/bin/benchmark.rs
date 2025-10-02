@@ -10,7 +10,6 @@
 //! optionally data_cached/{speaker}/metadata.json for metadata preference score.
 
 use autoeq::cea2034 as score;
-use autoeq::iir;
 use autoeq::optim::ObjectiveData;
 use autoeq::read;
 use clap::Parser;
@@ -451,8 +450,12 @@ async fn run_one(
 
     if use_cea {
         let freq = &standard_freq;
-        let peq_after =
-            iir::compute_peq_response_from_x(freq, &x, args.sample_rate, args.iir_hp_pk);
+        let peq_after = autoeq::x2peq::compute_peq_response_from_x(
+            freq,
+            &x,
+            args.sample_rate,
+            args.effective_peq_model(),
+        );
         let metrics =
             score::compute_cea2034_metrics(freq, spin_data.as_ref().unwrap(), Some(&peq_after))
                 .await

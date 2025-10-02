@@ -536,7 +536,7 @@ export class UIManager {
       setElementValue('max_freq', OPTIMIZATION_DEFAULTS.max_freq);
       setElementValue('curve_name', OPTIMIZATION_DEFAULTS.curve_name);
       setElementValue('loss', OPTIMIZATION_DEFAULTS.loss);
-      setElementValue('iir_hp_pk', OPTIMIZATION_DEFAULTS.iir_hp_pk);
+      setElementValue('peq_model', 'pk');  // Default PEQ model
 
       // Algorithm parameters
       setElementValue('algo', OPTIMIZATION_DEFAULTS.algo);

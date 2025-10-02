@@ -53,7 +53,7 @@ fn print_freq_spacing(x: &[f64], args: &autoeq::cli::Args, label: &str) {
     } else {
         println!("  - Not enough filters to compute spacing.");
     }
-    iir::peq_print_from_x(x, args.uses_highpass_first());
+    autoeq::x2peq::peq_print_from_x(x, args.effective_peq_model());
 }
 
 /// Save PEQ settings to APO format file
@@ -82,11 +82,14 @@ async fn save_peq_to_file(
         let q = x[i * 3 + 1];
         let gain = x[i * 3 + 2];
 
-        // Determine filter type
-        let filter_type = if args.uses_highpass_first() && i == 0 {
-            iir::BiquadFilterType::HighpassVariableQ
-        } else {
-            iir::BiquadFilterType::Peak
+        // Determine filter type based on PEQ model
+        let peq_model = args.effective_peq_model();
+        let filter_type = match peq_model {
+            autoeq::cli::PeqModel::Pk => iir::BiquadFilterType::Peak,
+            autoeq::cli::PeqModel::HpPk if i == 0 => iir::BiquadFilterType::HighpassVariableQ,
+            autoeq::cli::PeqModel::HpPkLp if i == 0 => iir::BiquadFilterType::HighpassVariableQ,
+            autoeq::cli::PeqModel::HpPkLp if i == num_filters - 1 => iir::BiquadFilterType::Lowpass,
+            _ => iir::BiquadFilterType::Peak,
         };
 
         // Create biquad filter
@@ -197,7 +200,7 @@ fn perform_optimization(
                 );
 
                 print_freq_spacing(&x, args, "local");
-                iir::peq_print_from_x(&x, args.uses_highpass_first());
+                autoeq::x2peq::peq_print_from_x(&x, args.effective_peq_model());
             }
             Err((e, final_value)) => {
                 eprintln!("⚠️  Local refinement failed: {:?}", e);
@@ -310,11 +313,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
             if let Some(before) = headphone_metrics_before {
                 println!("✅  Pre-Optimization Headphone Score: {:.3}", before);
             }
-            let peq_after = iir::compute_peq_response_from_x(
+            let peq_after = autoeq::x2peq::compute_peq_response_from_x(
                 &standard_freq,
                 &x,
                 args.sample_rate,
-                args.uses_highpass_first(),
+                args.effective_peq_model(),
             );
             let input_autoeq = Curve {
                 freq: standard_freq.clone(),
@@ -329,11 +332,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
         autoeq::LossType::SpeakerFlat | autoeq::LossType::SpeakerScore => {
             if use_cea {
                 let freq = &input_curve.freq;
-                let peq_after = iir::compute_peq_response_from_x(
+                let peq_after = autoeq::x2peq::compute_peq_response_from_x(
                     freq,
                     &x,
                     args.sample_rate,
-                    args.uses_highpass_first(),
+                    args.effective_peq_model(),
                 );
                 let metrics_after = score::compute_cea2034_metrics(
                     freq,

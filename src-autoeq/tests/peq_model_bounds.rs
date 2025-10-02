@@ -141,7 +141,7 @@ fn test_hp_pk_lp_model_with_insufficient_filters() {
 fn test_frequency_bounds_progression() {
     // Test that frequency bounds progress correctly (no backward movement)
     let args = create_test_args(PeqModel::Pk, 5);
-    let (lower, upper) = setup_bounds(&args);
+    let (lower, _upper) = setup_bounds(&args);
 
     for i in 1..5 {
         let prev_lower = lower[(i - 1) * 3];
@@ -241,7 +241,7 @@ fn test_gain_bounds_for_special_filters() {
 
 #[test]
 fn test_model_effective_peq_model() {
-    // Test that effective_peq_model handles the deprecated flag correctly
+    // Test that effective_peq_model returns the correct model
     let mut args = Args::parse_from(["test"]);
 
     // Default should be Pk
@@ -251,9 +251,8 @@ fn test_model_effective_peq_model() {
     args.peq_model = PeqModel::HpPkLp;
     assert_eq!(args.effective_peq_model(), PeqModel::HpPkLp);
 
-    // Deprecated flag should override to HpPk
-    args.iir_hp_pk = true;
-    args.peq_model = PeqModel::Pk; // Even if Pk is set
+    // Test various models
+    args.peq_model = PeqModel::HpPk;
     assert_eq!(args.effective_peq_model(), PeqModel::HpPk);
 }
 

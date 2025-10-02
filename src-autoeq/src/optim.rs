@@ -15,6 +15,7 @@
 //! You should have received a copy of the GNU General Public License
 //! along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+use super::cli::PeqModel;
 use super::constraints::{viol_ceiling_from_spl, viol_min_gain_from_xs, viol_spacing_from_xs};
 use super::loss::{
     flat_loss, headphone_loss, speaker_score_loss, HeadphoneLossData, LossType, SpeakerLossData,
@@ -275,8 +276,8 @@ pub struct ObjectiveData {
     pub max_db: f64,
     /// Minimum absolute gain for filters
     pub min_db: f64,
-    /// Whether to use highpass/peak filter configuration
-    pub iir_hp_pk: bool,
+    /// PEQ model that defines the filter structure
+    pub peq_model: PeqModel,
     /// Type of loss function to use
     pub loss_type: LossType,
     /// Optional score data for SpeakerScore loss type
@@ -353,7 +354,7 @@ pub fn parse_algorithm_name(name: &str) -> Option<AlgorithmCategory> {
 ///
 /// This is the unified fitness function used by both NLOPT and metaheuristics optimizers.
 pub fn compute_base_fitness(x: &[f64], data: &ObjectiveData) -> f64 {
-    let peq_spl = x2spl(&data.freqs, x, data.srate, data.iir_hp_pk);
+    let peq_spl = x2spl(&data.freqs, x, data.srate, data.peq_model);
 
     match data.loss_type {
         LossType::HeadphoneFlat | LossType::SpeakerFlat => {
@@ -419,8 +420,8 @@ pub fn compute_fitness_penalties(
     let mut penalty_terms = Vec::new();
 
     if data.penalty_w_ceiling > 0.0 {
-        let peq_spl = x2spl(&data.freqs, x, data.srate, data.iir_hp_pk);
-        let viol = viol_ceiling_from_spl(&peq_spl, data.max_db, data.iir_hp_pk);
+        let peq_spl = x2spl(&data.freqs, x, data.srate, data.peq_model);
+        let viol = viol_ceiling_from_spl(&peq_spl, data.max_db, data.peq_model);
         let penalty = data.penalty_w_ceiling * viol * viol;
         penalized += penalty;
         if viol > 0.0 {
@@ -444,7 +445,7 @@ pub fn compute_fitness_penalties(
     }
 
     if data.penalty_w_mingain > 0.0 && data.min_db > 0.0 {
-        let viol = viol_min_gain_from_xs(x, data.iir_hp_pk, data.min_db);
+        let viol = viol_min_gain_from_xs(x, data.peq_model, data.min_db);
         let penalty = data.penalty_w_mingain * viol * viol;
         penalized += penalty;
         if viol > 0.0 {
