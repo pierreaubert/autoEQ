@@ -1,3 +1,4 @@
+import path from 'path';
 import { defineConfig } from "vite";
 
 // @ts-expect-error process is a nodejs global
@@ -10,6 +11,7 @@ export default defineConfig(async () => ({
   //
   // 1. prevent Vite from obscuring rust errors
   clearScreen: false,
+
   // 2. tauri expects a fixed port, fail if that port is not available
   server: {
     port: 5173,
@@ -24,7 +26,19 @@ export default defineConfig(async () => ({
       : undefined,
     watch: {
       // 3. tell Vite to ignore watching `src-tauri`
-      ignored: ["**/src-tauri/**"],
+      ignored: ["*/src-{tauri,src-de,src-env,src-autoeq}/**"],
     },
   },
+
+  // The 'root' tells Vite to use the 'frontend' directory
+  // as the base for all its operations, including finding index.html
+  root: path.resolve(__dirname, 'src-ui'),
+
+  build: {
+    // 'outDir' is relative to the new 'root' (i.e., 'frontend')
+    // We use a relative path '../dist' to put the final build
+    // *outside* the 'frontend' folder, typically at project-root/dist
+    outDir: '../dist',
+  },
+
 }));

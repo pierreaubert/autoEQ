@@ -433,7 +433,7 @@ pub fn compute_fitness_penalties(
     }
 
     if data.penalty_w_spacing > 0.0 {
-        let viol = viol_spacing_from_xs(x, data.min_spacing_oct);
+        let viol = viol_spacing_from_xs(x, data.peq_model, data.min_spacing_oct);
         let penalty = data.penalty_w_spacing * viol * viol;
         penalized += penalty;
         if viol > 0.0 {
@@ -539,11 +539,15 @@ pub fn optimize_filters(
 }
 
 /// Extract sorted center frequencies from parameter vector and compute adjacent spacings in octaves.
-pub fn compute_sorted_freqs_and_adjacent_octave_spacings(x: &[f64]) -> (Vec<f64>, Vec<f64>) {
-    let n = x.len() / 3;
+pub fn compute_sorted_freqs_and_adjacent_octave_spacings(
+    x: &[f64],
+    peq_model: PeqModel,
+) -> (Vec<f64>, Vec<f64>) {
+    let n = crate::param_utils::num_filters(x, peq_model);
     let mut freqs: Vec<f64> = Vec::with_capacity(n);
     for i in 0..n {
-        freqs.push(10f64.powf(x[i * 3]));
+        let params = crate::param_utils::get_filter_params(x, i, peq_model);
+        freqs.push(10f64.powf(params.freq));
     }
     freqs.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
     let spacings: Vec<f64> = if freqs.len() < 2 {
@@ -575,7 +579,9 @@ mod spacing_diag_tests {
             1.0,
             0.0,
         ];
-        let (_freqs, spacings) = compute_sorted_freqs_and_adjacent_octave_spacings(&x);
+        use crate::cli::PeqModel;
+        let (_freqs, spacings) =
+            compute_sorted_freqs_and_adjacent_octave_spacings(&x, PeqModel::Pk);
         assert!((spacings[0] - 1.0).abs() < 1e-12);
         assert!((spacings[1] - 1.0).abs() < 1e-12);
     }

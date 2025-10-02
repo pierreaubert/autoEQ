@@ -16,51 +16,31 @@
 //! along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 use crate::cli::PeqModel;
-use crate::iir::{Biquad, BiquadFilterType, Peq};
+use crate::iir::{Biquad, Peq};
+use crate::param_utils::{self, FilterParams};
 use ndarray::Array1;
 
 /// Convert parameter vector to Peq structure
 ///
 /// # Arguments
-/// * `x` - Parameter vector with triplets [log10(freq), Q, gain] for each filter
+/// * `x` - Parameter vector with filter parameters (layout depends on PeqModel)
 /// * `srate` - Sample rate in Hz
 /// * `peq_model` - PEQ model that defines the filter structure
 ///
 /// # Returns
 /// A Peq structure containing the filters
 pub fn x2peq(x: &[f64], srate: f64, peq_model: PeqModel) -> Peq {
-    let num_filters = x.len() / 3;
+    let num_filters = param_utils::num_filters(x, peq_model);
     let mut peq = Vec::with_capacity(num_filters);
 
     for i in 0..num_filters {
-        let freq = 10f64.powf(x[i * 3]);
-        let q = x[i * 3 + 1];
-        let gain = x[i * 3 + 2];
+        let params = param_utils::get_filter_params(x, i, peq_model);
+        let freq = 10f64.powf(params.freq);
+        let q = params.q;
+        let gain = params.gain;
 
-        let ftype = match peq_model {
-            PeqModel::Pk => BiquadFilterType::Peak,
-            PeqModel::HpPk => {
-                if i == 0 {
-                    BiquadFilterType::HighpassVariableQ
-                } else {
-                    BiquadFilterType::Peak
-                }
-            }
-            PeqModel::HpPkLp => {
-                if i == 0 {
-                    BiquadFilterType::HighpassVariableQ
-                } else if i == num_filters - 1 {
-                    BiquadFilterType::Lowpass
-                } else {
-                    BiquadFilterType::Peak
-                }
-            }
-            PeqModel::FreePkFree | PeqModel::Free => {
-                // For now, treat these as peak filters
-                // TODO: Implement free filter type selection
-                BiquadFilterType::Peak
-            }
-        };
+        let ftype =
+            param_utils::determine_filter_type(i, num_filters, peq_model, params.filter_type);
 
         let filter = Biquad::new(ftype, freq, srate, q, gain);
         peq.push((1.0, filter));
@@ -73,16 +53,40 @@ pub fn x2peq(x: &[f64], srate: f64, peq_model: PeqModel) -> Peq {
 ///
 /// # Arguments
 /// * `peq` - Peq structure containing the filters
+/// * `peq_model` - PEQ model that defines the parameter layout
 ///
 /// # Returns
-/// Parameter vector with triplets [log10(freq), Q, gain] for each filter
-pub fn peq2x(peq: &Peq) -> Vec<f64> {
-    let mut x = Vec::with_capacity(peq.len() * 3);
+/// Parameter vector with appropriate layout for the PEQ model
+pub fn peq2x(peq: &Peq, peq_model: PeqModel) -> Vec<f64> {
+    let ppf = param_utils::params_per_filter(peq_model);
+    let mut x = Vec::with_capacity(peq.len() * ppf);
 
     for (_weight, filter) in peq {
-        x.push(filter.freq.log10());
-        x.push(filter.q);
-        x.push(filter.db_gain);
+        let params = FilterParams {
+            filter_type: if ppf == 4 {
+                Some(param_utils::encode_filter_type(filter.filter_type))
+            } else {
+                None
+            },
+            freq: filter.freq.log10(),
+            q: filter.q,
+            gain: filter.db_gain,
+        };
+
+        // Add parameters based on model
+        match peq_model {
+            PeqModel::Pk | PeqModel::HpPk | PeqModel::HpPkLp => {
+                x.push(params.freq);
+                x.push(params.q);
+                x.push(params.gain);
+            }
+            PeqModel::FreePkFree | PeqModel::Free => {
+                x.push(params.filter_type.unwrap_or(0.0));
+                x.push(params.freq);
+                x.push(params.q);
+                x.push(params.gain);
+            }
+        }
     }
 
     x
@@ -95,7 +99,7 @@ pub fn peq2x(peq: &Peq) -> Vec<f64> {
 ///
 /// # Arguments
 /// * `freqs` - Frequency points for evaluation (Hz)
-/// * `x` - Parameter vector with triplets [log10(freq), Q, gain] for each filter
+/// * `x` - Parameter vector with filter parameters (layout depends on PeqModel)
 /// * `srate` - Sample rate in Hz
 /// * `peq_model` - PEQ model that defines the filter structure
 ///
@@ -121,7 +125,7 @@ pub fn compute_peq_response_from_x(
 /// Build a vector of sorted filter rows from optimization parameters
 ///
 /// # Arguments
-/// * `x` - Slice of optimization parameters laid out as [f0, Q, gain, f0, Q, gain, ...]
+/// * `x` - Slice of optimization parameters (layout depends on PeqModel)
 /// * `peq_model` - PEQ model that defines the filter structure
 ///
 /// # Returns
@@ -131,43 +135,39 @@ pub fn compute_peq_response_from_x(
 /// Converts the flat parameter vector into a vector of FilterRow structs,
 /// sorts them by frequency, and marks filters according to the PEQ model.
 pub fn build_sorted_filters(x: &[f64], peq_model: PeqModel) -> Vec<crate::iir::FilterRow> {
-    let mut rows: Vec<crate::iir::FilterRow> = Vec::with_capacity(x.len() / 3);
-    for i in 0..(x.len() / 3) {
-        let freq = 10f64.powf(x[i * 3]);
-        let q = x[i * 3 + 1];
-        let gain = x[i * 3 + 2];
+    let num_filters = param_utils::num_filters(x, peq_model);
+    let mut rows: Vec<crate::iir::FilterRow> = Vec::with_capacity(num_filters);
+
+    for i in 0..num_filters {
+        let params = param_utils::get_filter_params(x, i, peq_model);
+        let freq = 10f64.powf(params.freq);
+        let q = params.q;
+        let gain = params.gain;
+
+        let ftype =
+            param_utils::determine_filter_type(i, num_filters, peq_model, params.filter_type);
+
         rows.push(crate::iir::FilterRow {
             freq,
             q,
             gain,
-            kind: "PK",
+            kind: ftype.short_name(),
         });
     }
+
     rows.sort_by(|a, b| {
         a.freq
             .partial_cmp(&b.freq)
             .unwrap_or(std::cmp::Ordering::Equal)
     });
 
-    // Mark filters according to the PEQ model for display purposes
-    if !rows.is_empty() {
-        let n = rows.len();
-        match peq_model {
-            PeqModel::HpPk => {
-                rows[0].kind = "HPQ";
-                rows[0].gain = 0.0;
-            }
-            PeqModel::HpPkLp => {
-                rows[0].kind = "HPQ";
-                rows[0].gain = 0.0;
-                if n > 1 {
-                    rows[n - 1].kind = "LP";
-                    rows[n - 1].gain = 0.0;
-                }
-            }
-            _ => {}
+    // For highpass and lowpass filters, set gain to 0 for display
+    for row in &mut rows {
+        if row.kind == "HPQ" || row.kind == "LP" || row.kind == "HP" {
+            row.gain = 0.0;
         }
     }
+
     rows
 }
 

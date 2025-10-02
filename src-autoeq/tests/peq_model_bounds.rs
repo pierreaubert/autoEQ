@@ -162,8 +162,17 @@ fn test_q_bounds_consistency() {
         let (lower, upper) = setup_bounds(&args);
 
         for i in 0..3 {
-            let q_lower_idx = i * 3 + 1;
-            let q_upper_idx = i * 3 + 1;
+            // Calculate Q index based on model (3 vs 4 parameters per filter)
+            let (q_lower_idx, q_upper_idx) = match model {
+                PeqModel::FreePkFree | PeqModel::Free => {
+                    // Free models: [type, freq, Q, gain]
+                    (i * 4 + 2, i * 4 + 2)
+                }
+                _ => {
+                    // Fixed models: [freq, Q, gain]
+                    (i * 3 + 1, i * 3 + 1)
+                }
+            };
 
             // Q bounds should respect the args unless it's a special filter
             if model == PeqModel::HpPk && i == 0 {
@@ -216,7 +225,11 @@ fn test_gain_bounds_for_special_filters() {
         let (lower, upper) = setup_bounds(&args);
 
         for i in 0..num_filters {
-            let gain_idx = i * 3 + 2;
+            // Calculate gain index based on model (3 vs 4 parameters per filter)
+            let gain_idx = match model {
+                PeqModel::FreePkFree | PeqModel::Free => i * 4 + 3, // [type, freq, Q, gain]
+                _ => i * 3 + 2,                                     // [freq, Q, gain]
+            };
             if zero_gain_indices.contains(&i) {
                 assert_eq!(
                     lower[gain_idx], 0.0,

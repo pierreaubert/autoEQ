@@ -15,7 +15,7 @@ pub struct CeilingConstraintData {
     pub peq_model: PeqModel,
 }
 
-/// Inequality constraint: combined response must not exceed max_db when HP+PK is enabled.
+/// Inequality constraint: combined response must not exceed max_db.
 /// Returns fc(x) = max_i (peq_spl[i] - max_db). Feasible when <= 0.
 pub fn constraint_ceiling(
     x: &[f64],
@@ -29,16 +29,15 @@ pub fn constraint_ceiling(
 
 /// Compute ceiling constraint violation from frequency response
 ///
-/// Calculates the maximum excess over the allowed SPL ceiling. Only applies
-/// in HP+PK mode where we need to limit the combined response.
+/// Calculates the maximum excess over the allowed SPL ceiling.
 ///
 /// # Arguments
 /// * `peq_spl` - Frequency response in dB SPL
 /// * `max_db` - Maximum allowed SPL ceiling
-/// * `peq_model` - PEQ model that defines the filter structure
+/// * `peq_model` - PEQ model that defines the filter structure (unused, kept for API compatibility)
 ///
 /// # Returns
-/// Maximum violation amount (0.0 if no violation or not HP+PK mode)
+/// Maximum violation amount (0.0 if no violation)
 pub fn viol_ceiling_from_spl(peq_spl: &Array1<f64>, max_db: f64, _peq_model: PeqModel) -> f64 {
     let mut max_excess = 0.0_f64;
     for &v in peq_spl.iter() {

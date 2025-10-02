@@ -1,5 +1,5 @@
 [package]
-name = "autoeq-ui-tauri"
+name = "autoeq-tauri"
 version = "0.3.51"
 description = "AutoEQ: optimise your speaker or your headset"
 authors = ["pierre@spinorama.org"]
@@ -18,7 +18,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { workspace = true }
 
 [dependencies]
-autoeq = { path = "../../src-autoeq" }
+autoeq = { path = "../src-autoeq" }
 tauri = { workspace = true }
 tauri-plugin-opener = { workspace = true }
 tauri-plugin-dialog = { workspace = true }

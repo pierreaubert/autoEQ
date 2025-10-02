@@ -35,6 +35,8 @@ pub mod optim_mh;
 /// NLOPT-specific optimization code
 #[cfg(not(target_os = "windows"))]
 pub mod optim_nlopt;
+/// Parameter vector utilities for different PEQ models
+pub mod param_utils;
 /// Plotting and visualization functions
 pub mod plot;
 /// Data reading and parsing functions

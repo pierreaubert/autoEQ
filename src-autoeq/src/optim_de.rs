@@ -3,7 +3,6 @@
 use ndarray::Array1;
 use std::sync::Arc;
 
-use super::cli::PeqModel;
 use super::constraints::{
     constraint_ceiling, constraint_min_gain, constraint_spacing, CeilingConstraintData,
     MinGainConstraintData, SpacingConstraintData,
@@ -67,13 +66,14 @@ pub fn setup_de_common(
     penalty_data.penalty_w_spacing = 0.0;
     penalty_data.penalty_w_mingain = 0.0;
 
+    // Calculate number of filters based on PEQ model
+    let params_per_filter = crate::param_utils::params_per_filter(penalty_data.peq_model);
+    let num_filters = bounds.len() / params_per_filter;
+
     // Log setup configuration
     eprintln!(
         "DE Setup: {} filters, pop_size={}, max_iter={}, maxeval={}",
-        bounds.len() / 3,
-        pop_size,
-        max_iter,
-        maxeval
+        num_filters, pop_size, max_iter, maxeval
     );
     eprintln!(
         "  Penalty weights: ceiling={:.1e}, spacing={:.1e}, mingain={:.1e}",
@@ -251,7 +251,8 @@ pub fn optimize_filters_autoeq_with_callback(
     let base_objective_fn = create_de_objective(setup.penalty_data.clone());
 
     // Create smart initialization based on frequency response analysis
-    let num_filters = x.len() / 3;
+    let params_per_filter = crate::param_utils::params_per_filter(cli_args.effective_peq_model());
+    let num_filters = x.len() / params_per_filter;
     let smart_config = SmartInitConfig::default();
 
     // Use the inverted target as the response to analyze for problems
@@ -265,6 +266,7 @@ pub fn optimize_filters_autoeq_with_callback(
         num_filters,
         &setup.bounds,
         &smart_config,
+        cli_args.effective_peq_model(),
     );
 
     eprintln!("📊 Generated {} smart initial guesses", smart_guesses.len());
@@ -373,11 +375,11 @@ pub fn optimize_filters_autoeq_with_callback(
         );
     }
 
-    // Add native nonlinear constraints (always apply, not just in HP+PK mode)
+    // Add native nonlinear constraints
     let mut config = config_builder.build();
 
-    // Ceiling constraint (only applies in HP+PK mode)
-    if setup.penalty_data.peq_model == PeqModel::HpPk && setup.penalty_data.max_db > 0.0 {
+    // Ceiling constraint (applies when max_db is set)
+    if setup.penalty_data.max_db > 0.0 {
         let ceiling_data = CeilingConstraintData {
             freqs: setup.penalty_data.freqs.clone(),
             srate: setup.penalty_data.srate,
@@ -428,6 +430,7 @@ pub fn optimize_filters_autoeq_with_callback(
     if setup.penalty_data.min_spacing_oct > 0.0 {
         let spacing_data = SpacingConstraintData {
             min_spacing_oct: setup.penalty_data.min_spacing_oct,
+            peq_model: setup.penalty_data.peq_model,
         };
 
         // Create nonlinear constraint helper for minimum spacing constraint

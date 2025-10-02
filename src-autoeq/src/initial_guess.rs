@@ -97,6 +97,7 @@ fn find_peaks(data: &Array1<f64>, min_height: f64, min_distance: usize) -> Vec<u
 /// * `num_filters` - Number of filters to optimize
 /// * `bounds` - Parameter bounds for validation
 /// * `config` - Smart initialization configuration
+/// * `peq_model` - PEQ model to determine parameter layout
 ///
 /// # Returns
 /// Vector of initial guess parameter vectors
@@ -106,6 +107,7 @@ pub fn create_smart_initial_guesses(
     num_filters: usize,
     bounds: &[(f64, f64)],
     config: &SmartInitConfig,
+    peq_model: crate::cli::PeqModel,
 ) -> Vec<Vec<f64>> {
     // Smooth the response to reduce noise
     let smoothed = smooth_gaussian(target_response, config.smoothing_sigma);
@@ -149,9 +151,10 @@ pub fn create_smart_initial_guesses(
 
     // Generate initial guesses
     let mut initial_guesses = Vec::new();
+    let params_per_filter = crate::param_utils::params_per_filter(peq_model);
 
     for _guess_idx in 0..config.num_guesses {
-        let mut guess = Vec::with_capacity(num_filters * 3); // [log10(freq), Q, gain] per filter
+        let mut guess = Vec::with_capacity(num_filters * params_per_filter);
         let mut used_problems = problems.clone();
 
         // Fill with critical frequencies if not enough problems found
@@ -194,12 +197,47 @@ pub fn create_smart_initial_guesses(
             let gain_var = problem.magnitude * (1.0 + rng.random_range(-0.2..0.2));
             let q_var = problem.q_factor * (1.0 + rng.random_range(-0.3..0.3));
 
-            // Convert to log10(freq) and constrain to bounds
-            let log_freq = freq_var.log10().max(bounds[i * 3].0).min(bounds[i * 3].1);
-            let q_constrained = q_var.max(bounds[i * 3 + 1].0).min(bounds[i * 3 + 1].1);
-            let gain_constrained = gain_var.max(bounds[i * 3 + 2].0).min(bounds[i * 3 + 2].1);
-
-            guess.extend_from_slice(&[log_freq, q_constrained, gain_constrained]);
+            // Convert to log10(freq) and constrain to bounds based on model
+            match peq_model {
+                crate::cli::PeqModel::Pk
+                | crate::cli::PeqModel::HpPk
+                | crate::cli::PeqModel::HpPkLp => {
+                    // Fixed filter types: [freq, Q, gain]
+                    let base_idx = i * 3;
+                    let log_freq = freq_var
+                        .log10()
+                        .max(bounds[base_idx].0)
+                        .min(bounds[base_idx].1);
+                    let q_constrained = q_var
+                        .max(bounds[base_idx + 1].0)
+                        .min(bounds[base_idx + 1].1);
+                    let gain_constrained = gain_var
+                        .max(bounds[base_idx + 2].0)
+                        .min(bounds[base_idx + 2].1);
+                    guess.extend_from_slice(&[log_freq, q_constrained, gain_constrained]);
+                }
+                crate::cli::PeqModel::FreePkFree | crate::cli::PeqModel::Free => {
+                    // Free filter types: [type, freq, Q, gain]
+                    let base_idx = i * 4;
+                    let filter_type = 0.0; // Default to Peak filter
+                    let log_freq = freq_var
+                        .log10()
+                        .max(bounds[base_idx + 1].0)
+                        .min(bounds[base_idx + 1].1);
+                    let q_constrained = q_var
+                        .max(bounds[base_idx + 2].0)
+                        .min(bounds[base_idx + 2].1);
+                    let gain_constrained = gain_var
+                        .max(bounds[base_idx + 3].0)
+                        .min(bounds[base_idx + 3].1);
+                    guess.extend_from_slice(&[
+                        filter_type,
+                        log_freq,
+                        q_constrained,
+                        gain_constrained,
+                    ]);
+                }
+            }
         }
 
         initial_guesses.push(guess);
@@ -267,6 +305,8 @@ mod tests {
 
     #[test]
     fn test_create_smart_initial_guesses() {
+        use crate::cli::PeqModel;
+
         // Create a simple test case with a peak and dip
         let target_response = Array1::from(vec![0.0, 3.0, 0.0, -2.0, 0.0]);
         let freq_grid = Array1::from(vec![100.0, 200.0, 400.0, 800.0, 1600.0]);
@@ -277,8 +317,14 @@ mod tests {
         ];
         let config = SmartInitConfig::default();
 
-        let guesses =
-            create_smart_initial_guesses(&target_response, &freq_grid, 1, &bounds, &config);
+        let guesses = create_smart_initial_guesses(
+            &target_response,
+            &freq_grid,
+            1,
+            &bounds,
+            &config,
+            PeqModel::Pk,
+        );
 
         assert_eq!(guesses.len(), config.num_guesses);
         for guess in &guesses {

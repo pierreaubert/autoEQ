@@ -1,4 +1,5 @@
 use super::super::cli::PeqModel;
+use crate::param_utils;
 
 /// Data needed by the nonlinear minimum gain constraint callback.
 #[derive(Clone, Copy)]
@@ -27,31 +28,31 @@ pub fn constraint_min_gain(
 /// Allows filter removal (gain = 0) as a valid option.
 ///
 /// # Arguments
-/// * `xs` - Parameter vector with [log10(freq), Q, gain] triplets
+/// * `xs` - Parameter vector (layout depends on PeqModel)
 /// * `peq_model` - PEQ model that defines the filter structure
 /// * `min_db` - Minimum required absolute gain in dB
 ///
 /// # Returns
 /// Worst gain deficiency (0.0 if no violation or disabled)
 pub fn viol_min_gain_from_xs(xs: &[f64], peq_model: PeqModel, min_db: f64) -> f64 {
-    let n = xs.len() / 3;
+    let n = param_utils::num_filters(xs, peq_model);
     if n == 0 {
         return 0.0;
     }
     let mut worst_short = 0.0_f64;
     for i in 0..n {
-        // Skip non-peak filters based on the PEQ model
-        let should_skip = match peq_model {
-            PeqModel::HpPk => i == 0,                 // Skip first filter (highpass)
-            PeqModel::HpPkLp => i == 0 || i == n - 1, // Skip first and last
-            PeqModel::FreePkFree => i == 0 || i == n - 1, // Skip first and last
-            PeqModel::Free => true,                   // Skip all (no constraint)
-            PeqModel::Pk => false,                    // Apply to all
-        };
-        if should_skip {
+        // Skip non-peak filters based on the PEQ model and filter type
+        let params = param_utils::get_filter_params(xs, i, peq_model);
+        let filter_type = param_utils::determine_filter_type(i, n, peq_model, params.filter_type);
+
+        // Skip non-peak filters
+        use crate::iir::BiquadFilterType;
+        let is_peak = matches!(filter_type, BiquadFilterType::Peak);
+        if !is_peak {
             continue;
         }
-        let g_abs = xs[i * 3 + 2].abs();
+
+        let g_abs = params.gain.abs();
         // Allow filter removal (gain = 0) or enforce minimum gain
         let short = if g_abs < 0.1 {
             // Effectively zero

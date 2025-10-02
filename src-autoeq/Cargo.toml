@@ -48,9 +48,9 @@ openblas-src = { version = "0.10", features = ["cblas", "system"] }
 name = "autoeq"
 path = "bin/autoeq.rs"
 
-[[bin]]
+[[bench]]
 name = "benchmark_autoeq_speaker"
-path = "bin/benchmark_autoeq_speaker.rs"
+path = "bench/benchmark_autoeq_speaker.rs"
 
 [[bin]]
 name = "download"

@@ -17,6 +17,6 @@
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "src-tauri", "src/tests/**/*"]
+  "include": ["src-ui/**/*"],
+  "exclude": ["node_modules", "dist", "src-ui/tests/**/*"]
 }

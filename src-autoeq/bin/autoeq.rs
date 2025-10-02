@@ -31,7 +31,9 @@ use tokio::fs;
 
 /// Print frequency spacing diagnostics and PEQ listing
 fn print_freq_spacing(x: &[f64], args: &autoeq::cli::Args, label: &str) {
-    let (sorted_freqs, adj_spacings) = optim::compute_sorted_freqs_and_adjacent_octave_spacings(x);
+    let peq_model = args.effective_peq_model();
+    let (sorted_freqs, adj_spacings) =
+        optim::compute_sorted_freqs_and_adjacent_octave_spacings(x, peq_model);
     let min_adj = adj_spacings.iter().cloned().fold(f64::INFINITY, f64::min);
     let freqs_fmt: Vec<String> = sorted_freqs.iter().map(|f| format!("{:.0}", f)).collect();
     let spacings_fmt: Vec<String> = adj_spacings.iter().map(|s| format!("{:.2}", s)).collect();
@@ -73,29 +75,8 @@ async fn save_peq_to_file(
     loss_type: &autoeq::LossType,
 ) -> Result<(), Box<dyn Error>> {
     // Build the PEQ from the optimized parameters
-    // PEQ is a vector of (weight, Biquad) tuples
-    let mut peq: Vec<(f64, iir::Biquad)> = Vec::new();
-    let num_filters = x.len() / 3;
-
-    for i in 0..num_filters {
-        let freq = 10f64.powf(x[i * 3]);
-        let q = x[i * 3 + 1];
-        let gain = x[i * 3 + 2];
-
-        // Determine filter type based on PEQ model
-        let peq_model = args.effective_peq_model();
-        let filter_type = match peq_model {
-            autoeq::cli::PeqModel::Pk => iir::BiquadFilterType::Peak,
-            autoeq::cli::PeqModel::HpPk if i == 0 => iir::BiquadFilterType::HighpassVariableQ,
-            autoeq::cli::PeqModel::HpPkLp if i == 0 => iir::BiquadFilterType::HighpassVariableQ,
-            autoeq::cli::PeqModel::HpPkLp if i == num_filters - 1 => iir::BiquadFilterType::Lowpass,
-            _ => iir::BiquadFilterType::Peak,
-        };
-
-        // Create biquad filter
-        let biquad = iir::Biquad::new(filter_type, freq, args.sample_rate, q, gain);
-        peq.push((1.0, biquad)); // Weight is always 1.0
-    }
+    let peq_model = args.effective_peq_model();
+    let peq = autoeq::x2peq::x2peq(x, args.sample_rate, peq_model);
 
     // Determine filename based on loss type
     let filename = match loss_type {

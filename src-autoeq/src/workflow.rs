@@ -4,7 +4,7 @@
 //! building target curves, preparing objective data, and running optimization.
 
 use crate::{
-    loss::HeadphoneLossData, loss::SpeakerLossData, optim, optim::ObjectiveData,
+    cli::PeqModel, loss::HeadphoneLossData, loss::SpeakerLossData, optim, optim::ObjectiveData,
     optim_de::optimize_filters_autoeq_with_callback, read, Curve,
 };
 use ndarray::Array1;
@@ -215,11 +215,12 @@ pub fn setup_objective_data(
 pub fn setup_bounds(args: &crate::cli::Args) -> (Vec<f64>, Vec<f64>) {
     use crate::cli::PeqModel;
 
-    let num_params = args.num_filters * 3;
+    let model = args.effective_peq_model();
+    let ppf = crate::param_utils::params_per_filter(model);
+    let num_params = args.num_filters * ppf;
     let mut lower_bounds = Vec::with_capacity(num_params);
     let mut upper_bounds = Vec::with_capacity(num_params);
 
-    let model = args.effective_peq_model();
     let spacing = 1.0; // Overlap factor - allows adjacent filters to overlap
     let gain_lower = -6.0 * args.max_db;
     let q_lower = args.min_q.max(0.1);
@@ -236,26 +237,60 @@ pub fn setup_bounds(args: &crate::cli::Args) -> (Vec<f64>, Vec<f64>) {
 
         // Ensure progressive increase: each filter's lower bound should be >= previous filter's lower bound
         let f_low_adjusted = if i > 0 {
-            f_low.max(lower_bounds[(i - 1) * 3])
+            // Get the frequency lower bound of the previous filter
+            let prev_freq_idx = if ppf == 3 {
+                (i - 1) * 3
+            } else {
+                (i - 1) * 4 + 1
+            };
+            f_low.max(lower_bounds[prev_freq_idx])
         } else {
             f_low
         };
 
         // Ensure upper bound is also progressive (but can overlap)
         let f_high_adjusted = if i > 0 {
-            f_high.max(upper_bounds[(i - 1) * 3])
+            let prev_freq_idx = if ppf == 3 {
+                (i - 1) * 3
+            } else {
+                (i - 1) * 4 + 1
+            };
+            f_high.max(upper_bounds[prev_freq_idx])
         } else {
             f_high
         };
 
-        lower_bounds.extend_from_slice(&[f_low_adjusted, q_lower, gain_lower]);
-        upper_bounds.extend_from_slice(&[f_high_adjusted, args.max_q, args.max_db]);
+        // Add bounds based on model type
+        match model {
+            PeqModel::Pk | PeqModel::HpPk | PeqModel::HpPkLp => {
+                // Fixed filter types: [freq, Q, gain]
+                lower_bounds.extend_from_slice(&[f_low_adjusted, q_lower, gain_lower]);
+                upper_bounds.extend_from_slice(&[f_high_adjusted, args.max_q, args.max_db]);
+            }
+            PeqModel::FreePkFree | PeqModel::Free => {
+                // Free filter types: [type, freq, Q, gain]
+                let (type_low, type_high) = if model == PeqModel::Free
+                    || (model == PeqModel::FreePkFree && (i == 0 || i == args.num_filters - 1))
+                {
+                    crate::param_utils::filter_type_bounds()
+                } else {
+                    (0.0, 0.999) // Peak filter only
+                };
+                lower_bounds.extend_from_slice(&[type_low, f_low_adjusted, q_lower, gain_lower]);
+                upper_bounds.extend_from_slice(&[
+                    type_high,
+                    f_high_adjusted,
+                    args.max_q,
+                    args.max_db,
+                ]);
+            }
+        }
     }
 
     // Apply model-specific constraints
     match model {
         PeqModel::HpPk | PeqModel::HpPkLp => {
-            // First filter is highpass
+            // First filter is highpass - fixed 3-param layout
             lower_bounds[0] = 20.0_f64.max(args.min_freq).log10();
             upper_bounds[0] = 120.0_f64.min(args.min_freq + 20.0).log10();
             lower_bounds[1] = 1.0;
@@ -267,26 +302,34 @@ pub fn setup_bounds(args: &crate::cli::Args) -> (Vec<f64>, Vec<f64>) {
     }
 
     if matches!(model, PeqModel::HpPkLp) && args.num_filters > 1 {
-        // Last filter is lowpass
-        let last_idx = (args.num_filters - 1) * 3;
-        lower_bounds[last_idx] = (args.max_freq - 2000.0).max(5000.0).log10();
-        upper_bounds[last_idx] = args.max_freq.log10();
-        lower_bounds[last_idx + 1] = 1.0;
-        upper_bounds[last_idx + 1] = 1.5;
-        lower_bounds[last_idx + 2] = 0.0;
-        upper_bounds[last_idx + 2] = 0.0;
+        // Last filter is lowpass - fixed 3-param layout
+        let last_idx = (args.num_filters - 1) * ppf;
+        if ppf == 3 {
+            lower_bounds[last_idx] = (args.max_freq - 2000.0).max(5000.0).log10();
+            upper_bounds[last_idx] = args.max_freq.log10();
+            lower_bounds[last_idx + 1] = 1.0;
+            upper_bounds[last_idx + 1] = 1.5;
+            lower_bounds[last_idx + 2] = 0.0;
+            upper_bounds[last_idx + 2] = 0.0;
+        }
     }
 
     // Debug: Display bounds for each filter
     println!("\n📏 Parameter Bounds (Model: {}):", model);
     println!("+-# -|---Freq Range (Hz)---|----Q Range----|---Gain Range (dB)---|--Type--+");
     for i in 0..args.num_filters {
-        let freq_low_hz = 10f64.powf(lower_bounds[i * 3]);
-        let freq_high_hz = 10f64.powf(upper_bounds[i * 3]);
-        let q_low = lower_bounds[i * 3 + 1];
-        let q_high = upper_bounds[i * 3 + 1];
-        let gain_low = lower_bounds[i * 3 + 2];
-        let gain_high = upper_bounds[i * 3 + 2];
+        let offset = i * ppf;
+        let (freq_idx, q_idx, gain_idx) = if ppf == 3 {
+            (offset, offset + 1, offset + 2)
+        } else {
+            (offset + 1, offset + 2, offset + 3)
+        };
+        let freq_low_hz = 10f64.powf(lower_bounds[freq_idx]);
+        let freq_high_hz = 10f64.powf(upper_bounds[freq_idx]);
+        let q_low = lower_bounds[q_idx];
+        let q_high = upper_bounds[q_idx];
+        let gain_low = lower_bounds[gain_idx];
+        let gain_high = upper_bounds[gain_idx];
 
         let filter_type = match model {
             PeqModel::Pk => "PK",
@@ -317,19 +360,44 @@ pub fn setup_bounds(args: &crate::cli::Args) -> (Vec<f64>, Vec<f64>) {
     (lower_bounds, upper_bounds)
 }
 
-/// Build an initial guess vector [f, Q, g] for each filter.
+/// Build an initial guess vector for each filter.
 pub fn initial_guess(
     args: &crate::cli::Args,
     lower_bounds: &[f64],
     upper_bounds: &[f64],
 ) -> Vec<f64> {
+    let model = args.effective_peq_model();
+    let ppf = crate::param_utils::params_per_filter(model);
     let mut x = vec![];
+
     for i in 0..args.num_filters {
-        let freq = lower_bounds[i * 3].min(args.max_freq.log10());
-        let q = (upper_bounds[i * 3 + 1] * lower_bounds[i * 3 + 1]).sqrt();
-        let sign = if i % 2 == 0 { 0.5 } else { -0.5 };
-        let gain = sign * upper_bounds[i * 3 + 2].max(args.min_db);
-        x.extend_from_slice(&[freq, q, gain]);
+        let offset = i * ppf;
+
+        match model {
+            PeqModel::Pk | PeqModel::HpPk | PeqModel::HpPkLp => {
+                // Fixed filter types: [freq, Q, gain]
+                let freq = lower_bounds[offset].min(args.max_freq.log10());
+                let q = (upper_bounds[offset + 1] * lower_bounds[offset + 1]).sqrt();
+                let sign = if i % 2 == 0 { 0.5 } else { -0.5 };
+                let gain = sign * upper_bounds[offset + 2].max(args.min_db);
+                x.extend_from_slice(&[freq, q, gain]);
+            }
+            PeqModel::FreePkFree | PeqModel::Free => {
+                // Free filter types: [type, freq, Q, gain]
+                let filter_type = if model == PeqModel::Free
+                    || (model == PeqModel::FreePkFree && (i == 0 || i == args.num_filters - 1))
+                {
+                    0.0 // Start with Peak filter
+                } else {
+                    0.0 // Peak filter
+                };
+                let freq = lower_bounds[offset + 1].min(args.max_freq.log10());
+                let q = (upper_bounds[offset + 2] * lower_bounds[offset + 2]).sqrt();
+                let sign = if i % 2 == 0 { 0.5 } else { -0.5 };
+                let gain = sign * upper_bounds[offset + 3].max(args.min_db);
+                x.extend_from_slice(&[filter_type, freq, q, gain]);
+            }
+        }
     }
     x
 }
