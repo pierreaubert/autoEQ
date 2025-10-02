@@ -1,8 +1,8 @@
 // Optimization management and progress tracking
 
-import { invoke } from '@tauri-apps/api/core';
-import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-import { OptimizationParams, OptimizationResult, OptimizationStage } from '../types/optimization';
+import { invoke } from '@tauri-apps/api/tauri';
+import { listen, UnlistenFn } from '@tauri-apps/api/event';
+import type { OptimizationParams, OptimizationResult, ProgressData, OptimizationStage, PeqModel } from '../types/optimization';
 import { OPTIMIZATION_DEFAULTS } from './optimization-constants';
 
 // Progress data interface
@@ -282,7 +282,8 @@ export class OptimizationManager {
       smooth: formData.get('smooth') === 'on',
       smooth_n: parseInt(formData.get('smooth_n') as string) || OPTIMIZATION_DEFAULTS.smooth_n,
       loss: formData.get('loss') as string || OPTIMIZATION_DEFAULTS.loss,
-      iir_hp_pk: formData.get('iir_hp_pk') === 'on',
+      peq_model: (formData.get('peq_model') as PeqModel) || 'pk',
+      iir_hp_pk: formData.get('iir_hp_pk') === 'on' || formData.get('peq_model') === 'hp-pk', // For backward compatibility
       tolerance: parseFloat(formData.get('tolerance') as string) || OPTIMIZATION_DEFAULTS.tolerance,
       atolerance: parseFloat(formData.get('abs_tolerance') as string) || OPTIMIZATION_DEFAULTS.abs_tolerance,
     };

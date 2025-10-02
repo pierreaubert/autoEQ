@@ -12,7 +12,8 @@ export interface PlotFiltersParams {
   optimized_params: number[];
   sample_rate: number;
   num_filters: number;
-  iir_hp_pk: boolean;
+  peq_model?: 'pk' | 'hp-pk' | 'hp-pk-lp' | 'free-pk-free' | 'free';
+  iir_hp_pk: boolean;  // Deprecated, kept for backward compatibility
 }
 
 export interface PlotSpinParams {

@@ -285,10 +285,23 @@ ${generateOptions(CURVE_NAME_OPTIONS, 'Listening Window')}
             <label>Max Freq</label>
             <input type="number" id="max_freq" name="max_freq" />
         </div>
+
+        <!-- PEQ Model Selection -->
+        <div class="param-item">
+            <label>PEQ Model</label>
+            <select id="peq_model" name="peq_model">
+                <option value="pk">PK - All Peak Filters</option>
+                <option value="hp-pk">HP+PK - Highpass + Peaks</option>
+                <option value="hp-pk-lp">HP+PK+LP - Highpass + Peaks + Lowpass</option>
+                <option value="free-pk-free">Free+PK+Free - Flexible ends, peaks middle</option>
+                <option value="free">Free - All filters flexible</option>
+            </select>
+        </div>
     </div>
 
-    <div class="checkbox-group">
-        <label><input type="checkbox" id="iir_hp_pk" name="iir_hp_pk" /> Use HP+PK Filters</label>
+    <div class="checkbox-group" style="display: none;">
+        <!-- Hidden: deprecated in favor of PEQ model -->
+        <label><input type="checkbox" id="iir_hp_pk" name="iir_hp_pk" /> Use HP+PK Filters (deprecated)</label>
     </div>
 </div>`;
 }
