@@ -12,11 +12,25 @@ vi.mock('plotly.js-dist-min', () => ({
   purge: vi.fn()
 }));
 
-// Mock Tauri API
+// Mock Tauri API modules
+vi.mock('@tauri-apps/api/tauri', () => ({
+  invoke: vi.fn().mockResolvedValue({})
+}));
+
+vi.mock('@tauri-apps/api/event', () => ({
+  listen: vi.fn().mockResolvedValue(() => {}),
+  once: vi.fn().mockResolvedValue(() => {}),
+  emit: vi.fn().mockResolvedValue(undefined)
+}));
+
+// Mock Tauri API on window for backward compatibility
 Object.defineProperty(window, '__TAURI__', {
   value: {
     core: {
       invoke: vi.fn()
+    },
+    event: {
+      listen: vi.fn().mockResolvedValue(() => {})
     }
   },
   writable: true
