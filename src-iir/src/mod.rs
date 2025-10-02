@@ -479,12 +479,12 @@ pub fn peq_spl(freq: &Array1<f64>, peq: &Peq) -> Array1<f64> {
 /// # Returns
 /// * Preamp gain in dB (negative value to prevent clipping)
 pub fn peq_preamp_gain(peq: &Peq) -> f64 {
-    // Generate logarithmic frequency array from 20Hz to 20kHz with 1000 points
+    // Generate logarithmic frequency array from 20Hz to 20kHz with 200 points
     let freq = Array1::logspace(
         10.0,
         (2.0f64 * 10.0).log10(),
         (2.0f64 * 10000.0).log10(),
-        1000,
+        200,
     );
     let spl = peq_spl(&freq, peq);
 
@@ -510,12 +510,12 @@ pub fn peq_preamp_gain_max(peq: &Peq) -> f64 {
         return 0.0;
     }
 
-    // Generate logarithmic frequency array from 20Hz to 20kHz with 1000 points
+    // Generate logarithmic frequency array from 20Hz to 20kHz with 200 points
     let freq = Array1::logspace(
         10.0,
         (2.0f64 * 10.0).log10(),
         (2.0f64 * 10000.0).log10(),
-        1000,
+        200,
     );
     let spl = peq_spl(&freq, peq);
 

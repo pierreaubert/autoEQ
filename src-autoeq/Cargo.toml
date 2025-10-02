@@ -49,8 +49,8 @@ name = "autoeq"
 path = "bin/autoeq.rs"
 
 [[bin]]
-name = "benchmark"
-path = "bin/benchmark.rs"
+name = "benchmark_autoeq_speaker"
+path = "bin/benchmark_autoeq_speaker.rs"
 
 [[bin]]
 name = "download"

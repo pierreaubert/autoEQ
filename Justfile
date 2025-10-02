@@ -25,6 +25,7 @@ prod-rust:
 	cargo build --release --bin autoeq
 	cargo build --release --bin plot_functions
 	cargo build --release --bin download
+	cargo build --release --bin benchmark_autoeq_speaker
 	cargo build --release --bin benchmark_convergence
 	cargo build --release --bin plot_autoeq_de
 	cargo build --release --bin run_autoeq_de
@@ -44,6 +45,7 @@ dev-rust:
 	cargo build --bin plot_functions
 	cargo build --bin download
 	cargo build --bin benchmark_convergence
+	cargo build --bin benchmark_autoeq_speaker
 	cargo build --bin plot_autoeq_de
 	cargo build --bin run_autoeq_de
 
