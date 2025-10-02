@@ -79,7 +79,22 @@ pub fn build_target_curve(
     input_curve: &Curve,
 ) -> Curve {
     let base_target = if let Some(ref target_path) = args.target {
-        let target_curve = read::read_curve_from_csv(target_path).unwrap();
+        eprintln!(
+            "[RUST DEBUG] Loading target curve from path: {}",
+            target_path.display()
+        );
+        eprintln!(
+            "[RUST DEBUG] Current working directory: {:?}",
+            std::env::current_dir()
+        );
+        let target_curve = read::read_curve_from_csv(target_path).unwrap_or_else(|e| {
+            eprintln!(
+                "[RUST ERROR] Failed to load target curve from '{}': {}",
+                target_path.display(),
+                e
+            );
+            panic!("Failed to load target curve: {}", e);
+        });
         read::normalize_and_interpolate_response(freqs, &target_curve)
     } else {
         match args.curve_name.as_str() {
@@ -145,6 +160,7 @@ pub fn setup_objective_data(
     args: &crate::cli::Args,
     input_curve: &Curve,
     target_curve: &Curve,
+    deviation_curve: &Curve,
     spin_data: &Option<HashMap<String, Curve>>,
 ) -> (ObjectiveData, bool) {
     let use_cea = (matches!(args.measurement.as_deref(), Some(m) if m.eq_ignore_ascii_case("CEA2034"))
@@ -167,7 +183,8 @@ pub fn setup_objective_data(
 
     let objective_data = ObjectiveData {
         freqs: input_curve.freq.clone(),
-        target_error: target_curve.spl.clone(),
+        target: target_curve.spl.clone(),
+        deviation: deviation_curve.spl.clone(), // This is the deviation to be corrected
         srate: args.sample_rate,
         min_spacing_oct: args.min_spacing_oct,
         spacing_weight: args.spacing_weight,
@@ -177,6 +194,12 @@ pub fn setup_objective_data(
         loss_type: args.loss,
         speaker_score_data: speaker_score_data_opt,
         headphone_score_data: headphone_score_data_opt,
+        // Store input curve for headphone loss calculation
+        input_curve: if !use_cea {
+            Some(input_curve.clone())
+        } else {
+            None
+        },
         // Penalties default to zero; configured per algorithm in optimize_filters
         penalty_w_ceiling: 0.0,
         penalty_w_spacing: 0.0,
@@ -194,29 +217,36 @@ pub fn setup_bounds(args: &crate::cli::Args) -> (Vec<f64>, Vec<f64>) {
     let mut lower_bounds = Vec::with_capacity(num_params);
     let mut upper_bounds = Vec::with_capacity(num_params);
 
-    let spacing = 1.0;
+    let spacing = 1.0; // Overlap factor - allows adjacent filters to overlap
     let gain_lower = -6.0 * args.max_db;
     let q_lower = args.min_q.max(0.1);
     let range = (args.max_freq.log10() - args.min_freq.log10()) / (args.num_filters as f64);
+
     for i in 0..args.num_filters {
-        let f = args.min_freq.log10() + (i as f64) * range;
-        let (mut f_low, mut f_high);
-        if i == 0 {
-            f_low = args.min_freq.log10();
-            f_high = (f + spacing * range).min(args.max_freq.log10());
-        } else if i == args.num_filters - 1 {
-            f_low = (f - spacing * range).max(args.min_freq.log10());
-            f_high = args.max_freq.log10();
+        // Center frequency for this filter in log space
+        let f_center = args.min_freq.log10() + (i as f64) * range;
+
+        // Calculate bounds with overlap
+        // Each filter can range from (center - spacing*range) to (center + spacing*range)
+        let f_low = (f_center - spacing * range).max(args.min_freq.log10());
+        let f_high = (f_center + spacing * range).min(args.max_freq.log10());
+
+        // Ensure progressive increase: each filter's lower bound should be >= previous filter's lower bound
+        let f_low_adjusted = if i > 0 {
+            f_low.max(lower_bounds[(i - 1) * 3])
         } else {
-            f_low = (f - spacing * range).max(args.min_freq.log10());
-            f_high = (f + spacing * range).min(args.max_freq.log10());
-        }
-        if i > 0 && f_low == lower_bounds[(i - 1) * 3] {
-            f_low += 20f64.log10();
-            f_high += 20f64.log10();
-        }
-        lower_bounds.extend_from_slice(&[f_low, q_lower, gain_lower]);
-        upper_bounds.extend_from_slice(&[f_high, args.max_q, args.max_db]);
+            f_low
+        };
+
+        // Ensure upper bound is also progressive (but can overlap)
+        let f_high_adjusted = if i > 0 {
+            f_high.max(upper_bounds[(i - 1) * 3])
+        } else {
+            f_high
+        };
+
+        lower_bounds.extend_from_slice(&[f_low_adjusted, q_lower, gain_lower]);
+        upper_bounds.extend_from_slice(&[f_high_adjusted, args.max_q, args.max_db]);
     }
 
     if args.iir_hp_pk {
@@ -227,6 +257,33 @@ pub fn setup_bounds(args: &crate::cli::Args) -> (Vec<f64>, Vec<f64>) {
         lower_bounds[2] = 0.0;
         upper_bounds[2] = 0.0;
     }
+
+    // Debug: Display bounds for each filter
+    println!("\n📐 Parameter Bounds:");
+    println!("+-# -|---Freq Range (Hz)---|----Q Range----|---Gain Range (dB)---|--Type--+");
+    for i in 0..args.num_filters {
+        let freq_low_hz = 10f64.powf(lower_bounds[i * 3]);
+        let freq_high_hz = 10f64.powf(upper_bounds[i * 3]);
+        let q_low = lower_bounds[i * 3 + 1];
+        let q_high = upper_bounds[i * 3 + 1];
+        let gain_low = lower_bounds[i * 3 + 2];
+        let gain_high = upper_bounds[i * 3 + 2];
+
+        let filter_type = if args.iir_hp_pk && i == 0 { "HP" } else { "PK" };
+
+        println!(
+            "| {:2} | {:7.1} - {:7.1} | {:5.2} - {:5.2} | {:+6.2} - {:+6.2} | {:6} |",
+            i + 1,
+            freq_low_hz,
+            freq_high_hz,
+            q_low,
+            q_high,
+            gain_low,
+            gain_high,
+            filter_type
+        );
+    }
+    println!("+----|--------------------|---------------|---------------------|---------+\n");
 
     (lower_bounds, upper_bounds)
 }
@@ -363,6 +420,10 @@ mod tests {
             freq: input_curve.freq.clone(),
             spl: Array1::zeros(input_curve.freq.len()),
         };
+        let deviation = Curve {
+            freq: input_curve.freq.clone(),
+            spl: Array1::zeros(input_curve.freq.len()),
+        };
 
         // Build minimal spin data with required keys
         let mut spin: HashMap<String, Curve> = HashMap::new();
@@ -376,7 +437,8 @@ mod tests {
         }
         let spin_opt = Some(spin);
 
-        let (obj, use_cea) = super::setup_objective_data(&args, &input_curve, &target, &spin_opt);
+        let (obj, use_cea) =
+            super::setup_objective_data(&args, &input_curve, &target, &deviation, &spin_opt);
         assert!(use_cea);
         assert!(obj.speaker_score_data.is_some());
 
@@ -384,12 +446,13 @@ mod tests {
         let mut args2 = args.clone();
         args2.measurement = Some("On Axis".to_string());
         let (obj2, use_cea2) =
-            super::setup_objective_data(&args2, &input_curve, &target, &spin_opt);
+            super::setup_objective_data(&args2, &input_curve, &target, &deviation, &spin_opt);
         assert!(!use_cea2);
         assert!(obj2.speaker_score_data.is_none());
 
         // If spin data missing -> use_cea must be false
-        let (obj3, use_cea3) = super::setup_objective_data(&args, &input_curve, &target, &None);
+        let (obj3, use_cea3) =
+            super::setup_objective_data(&args, &input_curve, &target, &deviation, &None);
         assert!(!use_cea3);
         assert!(obj3.speaker_score_data.is_none());
     }

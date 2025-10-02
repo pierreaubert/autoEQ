@@ -44,6 +44,11 @@ export class UIManager {
   private captureResult: HTMLElement | null = null;
   private captureClearBtn: HTMLButtonElement | null = null;
   private capturePlot: HTMLElement | null = null;
+  private captureDeviceSelect: HTMLSelectElement | null = null;
+  private sweepDurationSelect: HTMLSelectElement | null = null;
+  private outputChannelSelect: HTMLSelectElement | null = null;
+  private captureSampleRateSelect: HTMLSelectElement | null = null;
+  private signalTypeSelect: HTMLSelectElement | null = null;
 
   // State
   private eqEnabled: boolean = true;
@@ -51,12 +56,16 @@ export class UIManager {
   private startX: number = 0;
   private startWidth: number = 0;
 
+  // Callbacks for external interactions
+  private onCaptureComplete?: (frequencies: number[], magnitudes: number[]) => void;
+
   constructor() {
     this.initializeElements();
     this.setupEventListeners();
     this.setupUIInteractions();
     this.setupModalEventListeners();
     this.setupResizer();
+    this.initializeAudioDevices();
   }
 
   private initializeElements(): void {
@@ -140,6 +149,11 @@ export class UIManager {
     this.captureResult = document.getElementById('capture_result') as HTMLElement;
     this.captureClearBtn = document.getElementById('capture_clear') as HTMLButtonElement;
     this.capturePlot = document.getElementById('capture_plot') as HTMLElement;
+    this.captureDeviceSelect = document.getElementById('capture_device') as HTMLSelectElement;
+    this.sweepDurationSelect = document.getElementById('sweep_duration') as HTMLSelectElement;
+    this.outputChannelSelect = document.getElementById('output_channel') as HTMLSelectElement;
+    this.captureSampleRateSelect = document.getElementById('capture_sample_rate') as HTMLSelectElement;
+    this.signalTypeSelect = document.getElementById('signal_type') as HTMLSelectElement;
   }
 
   private setupEventListeners(): void {
@@ -162,6 +176,33 @@ export class UIManager {
     // Clear capture button
     this.captureClearBtn?.addEventListener('click', () => {
       this.clearCaptureResults();
+    });
+
+    // Sweep duration selector
+    this.sweepDurationSelect?.addEventListener('change', () => {
+      console.log('Sweep duration changed to:', this.sweepDurationSelect?.value);
+    });
+
+    // Output channel selector
+    this.outputChannelSelect?.addEventListener('change', () => {
+      console.log('Output channel changed to:', this.outputChannelSelect?.value);
+    });
+
+    // Sample rate selector
+    this.captureSampleRateSelect?.addEventListener('change', () => {
+      console.log('Sample rate changed to:', this.captureSampleRateSelect?.value);
+    });
+
+    // Signal type selector
+    this.signalTypeSelect?.addEventListener('change', () => {
+      const signalType = this.signalTypeSelect?.value;
+      console.log('Signal type changed to:', signalType);
+
+      // Show/hide sweep duration based on signal type
+      const durationContainer = document.getElementById('sweep_duration_container');
+      if (durationContainer) {
+        durationContainer.style.display = signalType === 'sweep' ? 'flex' : 'none';
+      }
     });
 
     // Audio control buttons
@@ -700,18 +741,54 @@ export class UIManager {
       const audioProcessor = new AudioProcessor();
 
       try {
-        this.captureStatusText.textContent = 'Capturing audio (please wait)...';
+        // First enumerate and populate audio devices if needed
+        if (this.captureDeviceSelect && this.captureDeviceSelect.options.length <= 1) {
+          await this.populateAudioDevices(audioProcessor);
+        }
 
-        // Start the capture
-        const result = await audioProcessor.startCapture();
+        // Get selected device
+        const selectedDevice = this.captureDeviceSelect?.value || 'default';
+
+        // Set sweep duration if selected
+        if (this.sweepDurationSelect) {
+          const duration = parseInt(this.sweepDurationSelect.value) || 10;
+          audioProcessor.setSweepDuration(duration);
+        }
+
+        // Set output channel if selected
+        if (this.outputChannelSelect) {
+          const channel = this.outputChannelSelect.value as 'left' | 'right' | 'both' | 'default';
+          audioProcessor.setOutputChannel(channel);
+          console.log('Setting output channel to:', channel);
+        }
+
+        // Set sample rate if selected
+        if (this.captureSampleRateSelect) {
+          const sampleRate = parseInt(this.captureSampleRateSelect.value) || 48000;
+          audioProcessor.setSampleRate(sampleRate);
+          console.log('Setting sample rate to:', sampleRate);
+        }
+
+        // Set signal type if selected
+        if (this.signalTypeSelect) {
+          const signalType = this.signalTypeSelect.value as 'sweep' | 'white' | 'pink';
+          audioProcessor.setSignalType(signalType);
+          console.log('Setting signal type to:', signalType);
+        }
+
+        const signalType = this.signalTypeSelect?.value || 'sweep';
+        this.captureStatusText.textContent = `Playing ${signalType === 'sweep' ? 'frequency sweep' : signalType + ' noise'} and capturing response...`;
+
+        // Start the capture with selected device
+        const result = await audioProcessor.startCapture(selectedDevice);
 
         if (result.success && result.frequencies.length > 0) {
           console.log('Capture successful:', result.frequencies.length, 'points');
 
-          // Store the captured data for optimization
-          const { OptimizationManager } = await import('./optimization-manager');
-          // Note: In a real implementation, you'd get the optimization manager instance from main
-          // For now, we'll just log success
+          // Call the callback to store captured data in the optimization manager
+          if (this.onCaptureComplete) {
+            this.onCaptureComplete(result.frequencies, result.magnitudes);
+          }
 
           this.captureStatusText.textContent = `✅ Captured ${result.frequencies.length} frequency points`;
 
@@ -720,7 +797,7 @@ export class UIManager {
             this.captureResult.style.display = 'block';
           }
 
-          // TODO: Plot the captured data
+          // Plot the captured data
           this.plotCapturedData(result.frequencies, result.magnitudes);
 
         } else {
@@ -760,17 +837,196 @@ export class UIManager {
     }
   }
 
+  private async populateAudioDevices(audioProcessor: any): Promise<void> {
+    if (!this.captureDeviceSelect) return;
+
+    try {
+      const devices = await audioProcessor.enumerateAudioDevices();
+
+      // Clear existing options
+      this.captureDeviceSelect.innerHTML = '';
+
+      // Add default option
+      const defaultOption = document.createElement('option');
+      defaultOption.value = 'default';
+      defaultOption.textContent = 'Default Microphone';
+      this.captureDeviceSelect.appendChild(defaultOption);
+
+      // Add all available devices
+      devices.forEach((device: MediaDeviceInfo) => {
+        const option = document.createElement('option');
+        option.value = device.deviceId;
+        option.textContent = device.label || `Microphone ${device.deviceId.substr(0, 8)}`;
+        this.captureDeviceSelect?.appendChild(option);
+      });
+
+      console.log(`Populated ${devices.length} audio input devices`);
+    } catch (error) {
+      console.error('Error populating audio devices:', error);
+    }
+  }
+
   private plotCapturedData(frequencies: number[], magnitudes: number[]): void {
     console.log('Plotting captured data...');
-    // TODO: Implement plotting using PlotManager
-    // For now, just log the data
-    console.log('Frequencies:', frequencies.slice(0, 10), '...');
-    console.log('Magnitudes:', magnitudes.slice(0, 10), '...');
+
+    if (!this.capturePlot) {
+      console.warn('Capture plot element not found');
+      return;
+    }
+
+    // Clear existing content
+    this.capturePlot.innerHTML = '';
+
+    // Create a canvas for the plot
+    const canvas = document.createElement('canvas');
+    canvas.width = this.capturePlot.offsetWidth || 600;
+    canvas.height = 250;
+    canvas.style.width = '100%';
+    canvas.style.height = '250px';
+    canvas.style.backgroundColor = '#f8f9fa';
+    canvas.style.border = '1px solid #dee2e6';
+    canvas.style.borderRadius = '4px';
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Add canvas to plot container
+    this.capturePlot.appendChild(canvas);
+
+    // Calculate plot dimensions
+    const padding = 50;
+    const plotWidth = canvas.width - 2 * padding;
+    const plotHeight = canvas.height - 2 * padding;
+
+    // Find min/max values for scaling
+    const minMag = Math.min(...magnitudes);
+    const maxMag = Math.max(...magnitudes);
+    const magRange = maxMag - minMag || 1;
+
+    // Draw background
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(padding, padding, plotWidth, plotHeight);
+
+    // Draw grid lines
+    ctx.strokeStyle = '#e0e0e0';
+    ctx.lineWidth = 0.5;
+
+    // Horizontal grid lines
+    for (let i = 0; i <= 5; i++) {
+      const y = padding + (i * plotHeight / 5);
+      ctx.beginPath();
+      ctx.moveTo(padding, y);
+      ctx.lineTo(padding + plotWidth, y);
+      ctx.stroke();
+    }
+
+    // Vertical grid lines (logarithmic)
+    const freqPoints = [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000];
+    freqPoints.forEach(freq => {
+      const x = padding + (Math.log10(freq / 20) / Math.log10(1000)) * plotWidth;
+      ctx.beginPath();
+      ctx.moveTo(x, padding);
+      ctx.lineTo(x, padding + plotHeight);
+      ctx.stroke();
+    });
+
+    // Draw axes
+    ctx.strokeStyle = '#333';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(padding, padding);
+    ctx.lineTo(padding, padding + plotHeight);
+    ctx.lineTo(padding + plotWidth, padding + plotHeight);
+    ctx.stroke();
+
+    // Draw frequency response curve
+    ctx.strokeStyle = '#007bff';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+
+    for (let i = 0; i < frequencies.length; i++) {
+      const x = padding + (Math.log10(frequencies[i] / 20) / Math.log10(1000)) * plotWidth;
+      const y = padding + plotHeight - ((magnitudes[i] - minMag) / magRange) * plotHeight;
+
+      if (i === 0) {
+        ctx.moveTo(x, y);
+      } else {
+        ctx.lineTo(x, y);
+      }
+    }
+
+    ctx.stroke();
+
+    // Draw labels
+    ctx.fillStyle = '#333';
+    ctx.font = '12px sans-serif';
+    ctx.textAlign = 'center';
+
+    // X-axis labels
+    freqPoints.forEach(freq => {
+      const x = padding + (Math.log10(freq / 20) / Math.log10(1000)) * plotWidth;
+      ctx.fillText(freq >= 1000 ? `${freq/1000}k` : `${freq}`, x, canvas.height - 25);
+    });
+
+    // Y-axis labels
+    ctx.textAlign = 'right';
+    for (let i = 0; i <= 5; i++) {
+      const mag = minMag + (1 - i/5) * magRange;
+      const y = padding + (i * plotHeight / 5);
+      ctx.fillText(`${mag.toFixed(1)} dB`, padding - 5, y + 4);
+    }
+
+    // Title
+    ctx.textAlign = 'center';
+    ctx.font = 'bold 14px sans-serif';
+    ctx.fillText('Captured Frequency Response', canvas.width / 2, 20);
+
+    // Axis labels
+    ctx.font = '12px sans-serif';
+    ctx.fillText('Frequency (Hz)', canvas.width / 2, canvas.height - 5);
+
+    // Rotate for Y-axis label
+    ctx.save();
+    ctx.translate(15, canvas.height / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.fillText('Magnitude (dB)', 0, 0);
+    ctx.restore();
+
+    console.log('Capture plot rendered successfully');
+  }
+
+  private async initializeAudioDevices(): Promise<void> {
+    // Populate audio devices on initialization
+    if (this.captureDeviceSelect) {
+      try {
+        const { AudioProcessor } = await import('./audio/audio-processor');
+        const audioProcessor = new AudioProcessor();
+        await this.populateAudioDevices(audioProcessor);
+        audioProcessor.destroy();
+      } catch (error) {
+        console.error('Error initializing audio devices:', error);
+      }
+    }
   }
 
   private clearCaptureResults(): void {
-    // This will be connected to the capture logic
-    console.log('TODO Clear capture results');
+    // Clear the UI
+    if (this.captureResult) {
+      this.captureResult.style.display = 'none';
+    }
+    if (this.capturePlot) {
+      this.capturePlot.innerHTML = '';
+    }
+    if (this.captureStatusText) {
+      this.captureStatusText.textContent = 'Ready to capture';
+    }
+
+    // Clear stored data by notifying with empty arrays
+    if (this.onCaptureComplete) {
+      this.onCaptureComplete([], []);
+    }
+
+    console.log('Capture results cleared');
   }
 
   private onListenClick(): void {
@@ -786,6 +1042,11 @@ export class UIManager {
   private cancelOptimization(): void {
     // This will be connected to the optimization logic
     console.log('TODO: Cancel optimization');
+  }
+
+  // Set callbacks for external interactions
+  setCaptureCompleteCallback(callback: (frequencies: number[], magnitudes: number[]) => void): void {
+    this.onCaptureComplete = callback;
   }
 
   // Getters for accessing UI elements from main application

@@ -259,7 +259,7 @@ export class OptimizationManager {
     }
   }
 
-  extractOptimizationParams(formData: FormData): OptimizationParams {
+  async extractOptimizationParams(formData: FormData): Promise<OptimizationParams> {
     const inputType = formData.get('input_source') as string;
 
     const baseParams: OptimizationParams = {
@@ -303,9 +303,28 @@ export class OptimizationManager {
     } else if (inputType === 'headphone') {
       // Headphone data from file with target curve
       baseParams.curve_path = formData.get('headphone_curve_path') as string;
-      baseParams.curve_name = formData.get('headphone_target') as string || baseParams.curve_name;
+      const headphoneTarget = formData.get('headphone_target') as string;
+
+      // Load target curve data from CSV file
+      if (headphoneTarget) {
+        const targetData = await this.loadHeadphoneTarget(headphoneTarget);
+        if (targetData) {
+          baseParams.target_frequencies = targetData.frequencies;
+          baseParams.target_magnitudes = targetData.magnitudes;
+          console.log('[OPTIMIZATION] Loaded headphone target data:', {
+            target: headphoneTarget,
+            points: targetData.frequencies.length
+          });
+        } else {
+          console.error('[OPTIMIZATION] Failed to load headphone target:', headphoneTarget);
+        }
+      }
+
+      // Keep curve_name for informational purposes
+      baseParams.curve_name = headphoneTarget || baseParams.curve_name;
+
       // Explicitly clear other params
-      baseParams.target_path = undefined;
+      baseParams.target_path = undefined; // Don't use file path anymore
       baseParams.speaker = undefined;
       baseParams.version = undefined;
       baseParams.measurement = undefined;
@@ -359,6 +378,54 @@ export class OptimizationManager {
     });
 
     return baseParams;
+  }
+
+  // Methods to load headphone target curve data
+  private async loadHeadphoneTarget(targetName: string): Promise<{ frequencies: number[], magnitudes: number[] } | null> {
+    try {
+      console.log(`[OPTIMIZATION] Loading headphone target: ${targetName}`);
+
+      // Fetch the CSV file from the public directory
+      const response = await fetch(`/targets/${targetName}.csv`);
+      if (!response.ok) {
+        console.error(`[OPTIMIZATION] Failed to fetch target file: ${response.statusText}`);
+        return null;
+      }
+
+      const csvText = await response.text();
+      const lines = csvText.trim().split('\n');
+
+      const frequencies: number[] = [];
+      const magnitudes: number[] = [];
+
+      // Parse CSV (skip header if present)
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line || line.startsWith('#')) continue; // Skip empty lines and comments
+
+        // Check if this might be a header line
+        if (i === 0 && (line.toLowerCase().includes('freq') || line.toLowerCase().includes('hz'))) {
+          continue; // Skip header
+        }
+
+        const parts = line.split(',').map(p => p.trim());
+        if (parts.length >= 2) {
+          const freq = parseFloat(parts[0]);
+          const mag = parseFloat(parts[1]);
+
+          if (!isNaN(freq) && !isNaN(mag)) {
+            frequencies.push(freq);
+            magnitudes.push(mag);
+          }
+        }
+      }
+
+      console.log(`[OPTIMIZATION] Loaded ${frequencies.length} points from ${targetName}.csv`);
+      return { frequencies, magnitudes };
+    } catch (error) {
+      console.error(`[OPTIMIZATION] Error loading headphone target ${targetName}:`, error);
+      return null;
+    }
   }
 
   // Methods to store captured data from AudioProcessor

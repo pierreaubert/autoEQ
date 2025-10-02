@@ -384,7 +384,7 @@ checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 
 [[package]]
 name = "autoeq"
-version = "0.2.232"
+version = "0.2.234"
 dependencies = [
  "autoeq-cea2034",
  "autoeq-de",
@@ -475,7 +475,7 @@ dependencies = [
 
 [[package]]
 name = "autoeq-ui-tauri"
-version = "0.3.50"
+version = "0.3.51"
 dependencies = [
  "autoeq",
  "blas-src",
@@ -1192,9 +1192,9 @@ dependencies = [
 
 [[package]]
 name = "deflate64"
-version = "0.1.9"
+version = "0.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "da692b8d1080ea3045efaab14434d40468c3d8657e42abddfffca87b428f4c1b"
+checksum = "26bf8fc351c5ed29b5c2f0cbbac1b209b74f60ecd62e675a998df72c49af5204"
 
 [[package]]
 name = "der"

@@ -44,6 +44,7 @@ export class AudioPlayer {
   private isAudioPlaying: boolean = false;
   private isAudioPaused: boolean = false;
   private audioStartTime: number = 0;
+  private audioPauseTime: number = 0;
   private audioAnimationFrame: number | null = null;
   private currentFilterParams: FilterParam[] = [
     { frequency: 100, q: 1.0, gain: 0, enabled: true },
@@ -797,9 +798,17 @@ export class AudioPlayer {
       }
     }
 
-    // Reconnect audio chain if playing to apply/remove EQ
-    if (this.isAudioPlaying && this.audioSource) {
-      this.connectAudioChain();
+    // Apply EQ changes during playback or pause
+    if (this.audioSource) {
+      if (this.isAudioPlaying) {
+        // Audio is actively playing - reconnect chain directly
+        this.connectAudioChain();
+      } else if (this.isAudioPaused) {
+        // Audio is paused - need to restart to rebuild the audio chain
+        // Save current time position before restart
+        const currentTime = this.getCurrentTimeWhilePaused();
+        this.restartFromPosition(currentTime);
+      }
     }
 
     // Recalculate active filters and compensation when toggling
@@ -851,7 +860,10 @@ export class AudioPlayer {
     // Detect color scheme
     const isDarkMode = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
 
-    // Clear canvas
+    // Properly clear the canvas - reset all state
+    ctx.clearRect(0, 0, width, height);
+
+    // Fill background
     ctx.fillStyle = isDarkMode ? 'rgba(0, 0, 0, 0.2)' : 'rgba(255, 255, 255, 0.2)';
     ctx.fillRect(0, 0, width, height);
 
@@ -1029,7 +1041,10 @@ export class AudioPlayer {
     // Detect color scheme
     const isDarkMode = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
 
-    // Clear canvas with theme-appropriate background
+    // Properly clear the canvas first
+    this.spectrumCtx.clearRect(0, 0, width, height);
+
+    // Fill background with theme-appropriate color
     this.spectrumCtx.fillStyle = isDarkMode ? 'rgb(0, 0, 0)' : 'rgb(255, 255, 255)';
     this.spectrumCtx.fillRect(0, 0, width, height);
 
@@ -1075,6 +1090,9 @@ export class AudioPlayer {
 
       // Detect color scheme and set appropriate colors
       const isDarkMode = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+
+      // Properly clear the canvas first
+      this.spectrumCtx.clearRect(0, 0, width, height);
 
       // Set background color based on theme
       this.spectrumCtx.fillStyle = isDarkMode ? 'rgb(0, 0, 0)' : 'rgb(255, 255, 255)';
@@ -1187,6 +1205,74 @@ export class AudioPlayer {
     return this.audioContext.currentTime - this.audioStartTime;
   }
 
+  private getCurrentTimeWhilePaused(): number {
+    // Return the saved pause time when audio is paused
+    if (this.isAudioPaused) {
+      return this.audioPauseTime;
+    }
+    return this.getCurrentTime();
+  }
+
+  private async restartFromPosition(startTime: number): Promise<void> {
+    console.log('Restarting audio from position:', startTime);
+
+    if (!this.audioContext || !this.audioBuffer) {
+      console.error('Cannot restart: missing audio context or buffer');
+      return;
+    }
+
+    // Resume audio context if suspended
+    if (this.audioContext.state === 'suspended') {
+      await this.audioContext.resume();
+    }
+
+    // Stop current source
+    if (this.audioSource) {
+      try {
+        this.audioSource.stop();
+      } catch (error) {
+        // Ignore errors if already stopped
+      }
+      this.audioSource = null;
+    }
+
+    try {
+      // Create new audio source
+      this.audioSource = this.audioContext.createBufferSource();
+      this.audioSource.buffer = this.audioBuffer;
+
+      // Reconnect audio chain with current EQ settings
+      this.connectAudioChain();
+
+      // Start from the saved position
+      this.audioSource.start(0, startTime);
+      this.audioStartTime = this.audioContext.currentTime - startTime;
+      this.isAudioPlaying = false; // Keep it paused
+      this.isAudioPaused = true;
+      this.audioPauseTime = startTime;
+
+      this.audioSource.onended = () => {
+        console.log('Audio playback ended');
+        this.isAudioPlaying = false;
+        this.isAudioPaused = false;
+        this.audioSource = null;
+        this.updatePlaybackUI();
+        if (this.audioAnimationFrame) {
+          cancelAnimationFrame(this.audioAnimationFrame);
+          this.audioAnimationFrame = null;
+        }
+      };
+
+      // Immediately suspend to keep it paused
+      this.audioContext.suspend();
+      this.updatePlaybackUI();
+      console.log('Audio restarted and paused at position:', startTime);
+    } catch (error) {
+      console.error('Error during audio restart:', error);
+      this.callbacks.onError?.('Failed to restart audio: ' + error);
+    }
+  }
+
   private getDuration(): number {
     return this.audioBuffer ? this.audioBuffer.duration : 0;
   }
@@ -1269,11 +1355,13 @@ export class AudioPlayer {
 
   pause(): void {
     if (this.audioContext && this.audioContext.state === 'running') {
+      // Save the current playback time before pausing
+      this.audioPauseTime = this.audioContext.currentTime - this.audioStartTime;
       this.audioContext.suspend();
       this.isAudioPlaying = false;
       this.isAudioPaused = true;
       this.updatePlaybackUI();
-      console.log('Audio playback paused');
+      console.log('Audio playback paused at:', this.audioPauseTime);
     }
   }
 
@@ -1291,6 +1379,7 @@ export class AudioPlayer {
       this.audioContext.resume();
       this.isAudioPlaying = true;
       this.isAudioPaused = false;
+      this.audioPauseTime = 0; // Clear pause time when resuming
       this.updatePlaybackUI();
       console.log('Audio playback resumed');
     }
@@ -1308,6 +1397,7 @@ export class AudioPlayer {
 
     this.isAudioPlaying = false;
     this.isAudioPaused = false;
+    this.audioPauseTime = 0; // Reset pause time when stopping
 
     if (this.audioAnimationFrame) {
       cancelAnimationFrame(this.audioAnimationFrame);

@@ -260,8 +260,10 @@ pub fn find_algorithm_info(name: &str) -> Option<AlgorithmInfo> {
 pub struct ObjectiveData {
     /// Frequency points for evaluation
     pub freqs: Array1<f64>,
+    /// Target spl
+    pub target: Array1<f64>,
     /// Target error values
-    pub target_error: Array1<f64>,
+    pub deviation: Array1<f64>,
     /// Sample rate in Hz
     pub srate: f64,
     #[allow(dead_code)]
@@ -281,6 +283,8 @@ pub struct ObjectiveData {
     pub speaker_score_data: Option<SpeakerLossData>,
     /// Optional score data for HeadphoneScore loss type
     pub headphone_score_data: Option<HeadphoneLossData>,
+    /// Input curve for headphone loss (optional)
+    pub input_curve: Option<Curve>,
     /// Penalty weights used when the optimizer does not support nonlinear constraints
     /// If zero, penalties are disabled and true constraints (if any) are used.
     /// Penalty for ceiling constraint
@@ -353,34 +357,35 @@ pub fn compute_base_fitness(x: &[f64], data: &ObjectiveData) -> f64 {
 
     match data.loss_type {
         LossType::HeadphoneFlat | LossType::SpeakerFlat => {
-            let error = &peq_spl - &data.target_error;
+            let error = &peq_spl - &data.deviation;
             flat_loss(&data.freqs, &error)
         }
         LossType::SpeakerScore => {
             if let Some(ref sd) = data.speaker_score_data {
-                let error = &peq_spl - &data.target_error;
+                let error = &peq_spl - &data.deviation;
                 let s = speaker_score_loss(sd, &data.freqs, &peq_spl);
                 let p = flat_loss(&data.freqs, &error) / 3.0;
-                s + p
+                100.0 - s + p
             } else {
                 eprintln!("Error: speaker score loss requested but score data is missing");
                 process::exit(1);
             }
         }
         LossType::HeadphoneScore => {
-            if let Some(ref hd) = data.headphone_score_data {
-                let error = &peq_spl - &data.target_error;
-                let deviation_curve = Curve {
+            if let Some(ref _hd) = data.headphone_score_data {
+                let error = &peq_spl - &data.deviation;
+
+                // Use headphone_loss on the remaining deviation
+                let error_curve = Curve {
                     freq: data.freqs.clone(),
-                    spl: -error.clone(),
+                    spl: error.clone(),
                 };
-                // Create HeadphoneLossData for headphone loss calculation
-                let s = headphone_loss(&deviation_curve);
+                let s = headphone_loss(&error_curve);
                 // compute flat error
                 let p = flat_loss(&data.freqs, &error);
-                // wants to minimise both
-                println!("Headphone score: s={} p={}", s, p);
-                s + p
+                // wants to maximize the score and improve the flatness
+                // println!("Headphone score: s={} p={}", s, p);
+                1000.0 - s + p
             } else {
                 eprintln!("Error: headphone score loss requested but headphone data is missing");
                 process::exit(1);

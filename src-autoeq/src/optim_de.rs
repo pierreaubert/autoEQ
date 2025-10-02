@@ -254,7 +254,7 @@ pub fn optimize_filters_autoeq_with_callback(
     let smart_config = SmartInitConfig::default();
 
     // Use the inverted target as the response to analyze for problems
-    let target_response = &setup.penalty_data.target_error;
+    let target_response = &setup.penalty_data.deviation;
     let freq_grid = &setup.penalty_data.freqs;
 
     eprintln!("🧠 Generating smart initial guesses based on frequency response analysis...");

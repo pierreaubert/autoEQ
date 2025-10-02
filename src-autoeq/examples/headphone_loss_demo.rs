@@ -103,7 +103,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Print results
     println!("\n{}", "=".repeat(50));
-    println!("Headphone Loss Score: {:.3}", score);
+    println!("Headphone Loss Score: {:.3}", -score);
     println!("{}", "=".repeat(50));
 
     // Generate plots

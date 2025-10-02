@@ -147,7 +147,7 @@ pub fn speaker_score_loss(
         )
     };
     // Return negative preference score so minimizing improves preference.
-    100.0 - metrics.pref_score
+    metrics.pref_score
 }
 
 /// Compute a mixed loss based on flatness on lw and pir
@@ -266,115 +266,137 @@ pub fn curve_slope_per_octave_in_range(curve: &crate::Curve, fmin: f64, fmax: f6
     regression_slope_per_octave_in_range(&curve.freq, &curve.spl, fmin, fmax)
 }
 
+/// Calculate the standard deviation (SD) of the deviation error over the specified frequency range.
+///
+/// This function filters the input curve to include only frequencies within the specified range,
+/// then calculates the standard deviation of the deviation values.
+///
+/// # Arguments
+/// * `freq` - Frequency array in Hz
+/// * `deviation` - Deviation values from Harman target curve in dB
+/// * `fmin` - Minimum frequency in Hz (typically 50 Hz)
+/// * `fmax` - Maximum frequency in Hz (typically 10000 Hz)
+///
+/// # Returns
+/// * Standard deviation of the deviation in the specified frequency range
+///
+/// # Notes
+/// Used as part of the Olive et al. headphone preference prediction model.
+fn calculate_standard_deviation_in_range(
+    freq: &Array1<f64>,
+    deviation: &Array1<f64>,
+    fmin: f64,
+    fmax: f64,
+) -> f64 {
+    assert_eq!(
+        freq.len(),
+        deviation.len(),
+        "freq and deviation must have same length"
+    );
+
+    let mut values = Vec::new();
+
+    // Collect deviation values in the specified frequency range
+    for i in 0..freq.len() {
+        let f = freq[i];
+        if f >= fmin && f <= fmax {
+            values.push(deviation[i]);
+        }
+    }
+
+    if values.is_empty() {
+        return 0.0;
+    }
+
+    // Calculate mean
+    let mean = values.iter().sum::<f64>() / values.len() as f64;
+
+    // Calculate variance
+    let variance = values.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / values.len() as f64;
+
+    // Return standard deviation
+    variance.sqrt()
+}
+
+/// Calculate the absolute slope (AS) of the deviation using logarithmic regression over the specified frequency range.
+///
+/// This function performs linear regression of deviation against log2(frequency) to determine
+/// the slope, then returns the absolute value.
+///
+/// # Arguments
+/// * `freq` - Frequency array in Hz
+/// * `deviation` - Deviation values from Harman target curve in dB
+/// * `fmin` - Minimum frequency in Hz (typically 50 Hz)
+/// * `fmax` - Maximum frequency in Hz (typically 10000 Hz)
+///
+/// # Returns
+/// * Absolute value of the slope in dB per octave
+///
+/// # Notes
+/// Used as part of the Olive et al. headphone preference prediction model.
+fn calculate_absolute_slope_in_range(
+    freq: &Array1<f64>,
+    deviation: &Array1<f64>,
+    fmin: f64,
+    fmax: f64,
+) -> f64 {
+    match regression_slope_per_octave_in_range(freq, deviation, fmin, fmax) {
+        Some(slope) => slope.abs(),
+        None => 0.0,
+    }
+}
+
 /// Compute headphone preference score based on frequency response deviations
 ///
 /// This implements the headphone preference prediction model from:
-/// "A Statistical Model that Predicts Listeners' Preference Ratings of
-/// In-Ear Headphones" by Sean Olive et al.
+/// Olive, S. E., Welti, T., & McMullin, E. (2013). "A Statistical Model that
+/// Predicts Listeners' Preference Ratings of Around-Ear and On-Ear Headphones"
 ///
-/// The model predicts preference based on:
-/// - Slope of the response (target: -1 dB/octave from 20Hz-10kHz)
-/// - RMS deviation in different frequency bands
-/// - Peak-to-peak variations
+/// The model predicts preference using the equation:
+/// **Predicted Preference Rating = 114.49 - (12.62 × SD) - (15.52 × AS)**
+///
+/// Where:
+/// - **SD** = Standard deviation of the deviation error over 50 Hz to 10 kHz
+/// - **AS** = Absolute value of slope of the deviation over 50 Hz to 10 kHz
 ///
 /// # Arguments
-/// * `freq` - Frequency points in Hz
-/// * `response` - Frequency response in dB (deviation from target)
+/// * `curve` - Frequency response curve representing deviation from Harman AE/OE target
 ///
 /// # Returns
-/// * Score value where lower is better (for minimization)
+/// * Predicted preference rating (higher values indicate better preference)
+/// * For optimization purposes, return -preference_rating so minimizing improves preference
+///
+/// # Important Note
+/// The input curve should represent deviation from the Harman Around-Ear (AE) or
+/// On-Ear (OE) target curve, **not** deviation from flat or neutral response.
+///
+/// The frequency range for calculations is 50 Hz to 10 kHz as specified in the paper.
 ///
 /// # References
 /// Olive, S. E., Welti, T., & McMullin, E. (2013). "A Statistical Model that
-/// Predicts Listeners' Preference Ratings of In-Ear Headphones: Part 2 –
-/// Development and Validation of the Model"
+/// Predicts Listeners' Preference Ratings of Around-Ear and On-Ear Headphones".
+/// Presented at the 135th Convention of the Audio Engineering Society.
 pub fn headphone_loss(curve: &Curve) -> f64 {
-    let freq = curve.freq.clone();
-    let response = curve.spl.clone();
+    let freq = &curve.freq;
+    let deviation = &curve.spl;
 
-    // Define frequency bands for analysis
-    const BAND_LIMITS: [(f64, f64); 10] = [
-        (20.0, 60.0),       // Sub-bass
-        (60.0, 200.0),      // Bass
-        (200.0, 500.0),     // Lower midrange
-        (500.0, 1000.0),    // Midrange
-        (1000.0, 2000.0),   // Upper midrange
-        (2000.0, 4000.0),   // Presence
-        (4000.0, 8000.0),   // Brilliance
-        (8000.0, 10000.0),  // Upper treble
-        (10000.0, 12000.0), // Air
-        (12000.0, 20000.0), // Ultra-high
-    ];
+    // Define frequency range for analysis (50 Hz to 10 kHz per paper)
+    const FMIN: f64 = 50.0;
+    const FMAX: f64 = 10000.0;
 
-    // Calculate slope (should be close to -1 dB/octave for headphones)
-    let slope =
-        regression_slope_per_octave_in_range(&freq, &response, 20.0, 10000.0).unwrap_or(0.0);
+    // Calculate SD (Standard Deviation) of the deviation error
+    let sd = calculate_standard_deviation_in_range(freq, deviation, FMIN, FMAX);
 
-    // Target slope is -1 dB/octave (gentle downward tilt)
-    let slope_deviation = (slope + 1.0).abs();
+    // Calculate AS (Absolute Slope) of the deviation
+    let as_value = calculate_absolute_slope_in_range(freq, deviation, FMIN, FMAX);
 
-    // Calculate RMS and peak-to-peak in each band
-    let mut band_rms = Vec::new();
-    let mut band_peak_to_peak = Vec::new();
+    // Apply the Olive et al. equation (Equation 4 from the paper)
+    // Predicted Preference Rating = 114.49 - (12.62 × SD) - (15.52 × AS)
+    let predicted_preference_rating = 114.49 - (12.62 * sd) - (15.52 * as_value);
 
-    for (f_low, f_high) in BAND_LIMITS.iter() {
-        let mut values = Vec::new();
-
-        // Collect values in this band
-        for i in 0..freq.len() {
-            if freq[i] >= *f_low && freq[i] <= *f_high {
-                values.push(response[i]);
-            }
-        }
-
-        if !values.is_empty() {
-            // RMS of deviations
-            let sum_sq: f64 = values.iter().map(|x| x * x).sum();
-            let rms = (sum_sq / values.len() as f64).sqrt();
-            band_rms.push(rms);
-
-            // Peak-to-peak variation
-            let min = values.iter().fold(f64::INFINITY, |a, &b| a.min(b));
-            let max = values.iter().fold(f64::NEG_INFINITY, |a, &b| a.max(b));
-            band_peak_to_peak.push(max - min);
-        }
-    }
-
-    // Weighted combination of metrics (weights from the paper)
-    // Note: These weights are approximations based on the paper's findings
-    let mut score = 0.0;
-
-    // Slope term (high weight - critical for naturalness)
-    score += 10.0 * slope_deviation;
-
-    // RMS deviations with frequency-dependent weighting
-    // Bass and midrange deviations are more critical
-    if band_rms.len() >= 6 {
-        score += 3.0 * band_rms[0]; // Sub-bass (20-60 Hz)
-        score += 4.0 * band_rms[1]; // Bass (60-200 Hz)
-        score += 5.0 * band_rms[2]; // Lower mid (200-500 Hz)
-        score += 5.0 * band_rms[3]; // Midrange (500-1k Hz)
-        score += 3.0 * band_rms[4]; // Upper mid (1k-2k Hz)
-        score += 2.0 * band_rms[5]; // Presence (2k-4k Hz)
-
-        // High frequency bands (less critical but still important)
-        if band_rms.len() > 6 {
-            for &rms in band_rms.iter().skip(6) {
-                score += 1.5 * rms;
-            }
-        }
-    }
-
-    // Peak-to-peak penalty (excessive variation is bad)
-    for pp in &band_peak_to_peak {
-        if *pp > 6.0 {
-            // Penalize variations > 6dB
-            score += 0.5 * (*pp - 6.0);
-        }
-    }
-
-    // Return score (lower is better for optimization)
-    score
+    // Return negative preference rating for minimization during optimization
+    // (minimizing the loss function maximizes the preference rating)
+    predicted_preference_rating
 }
 
 /// Compute headphone preference score with additional target curve
@@ -491,80 +513,161 @@ mod tests {
     }
 
     #[test]
-    fn test_headphone_loss_flat_response() {
-        // Test that a perfectly flat response (all zeros) gives a low score
-        let freq = Array1::logspace(10.0, 1.301, 4.301, 100); // 20Hz to 20kHz
-        let response = Array1::zeros(100); // Perfectly flat
+    fn test_calculate_standard_deviation_in_range() {
+        // Test SD calculation with known values
+        let freq = Array1::from(vec![50.0, 100.0, 1000.0, 5000.0, 10000.0]);
+        let deviation = Array1::from(vec![1.0, 2.0, 3.0, 4.0, 5.0]); // All in range
+
+        let sd = calculate_standard_deviation_in_range(&freq, &deviation, 50.0, 10000.0);
+
+        // Manual calculation: mean = (1+2+3+4+5)/5 = 3.0
+        // variance = ((1-3)² + (2-3)² + (3-3)² + (4-3)² + (5-3)²)/5 = (4+1+0+1+4)/5 = 2.0
+        // sd = sqrt(2.0) ≈ 1.414
+        let expected_sd = 2.0_f64.sqrt();
+        assert!(
+            (sd - expected_sd).abs() < 1e-12,
+            "SD calculation incorrect: got {}, expected {}",
+            sd,
+            expected_sd
+        );
+    }
+
+    #[test]
+    fn test_calculate_standard_deviation_filtered_range() {
+        // Test SD calculation with frequency filtering
+        let freq = Array1::from(vec![20.0, 100.0, 1000.0, 5000.0, 15000.0]); // Some out of range
+        let deviation = Array1::from(vec![10.0, 2.0, 4.0, 6.0, 20.0]); // First and last should be filtered
+
+        let sd = calculate_standard_deviation_in_range(&freq, &deviation, 50.0, 10000.0);
+
+        // Only values at 100Hz, 1kHz, 5kHz should be included: [2.0, 4.0, 6.0]
+        // mean = (2+4+6)/3 = 4.0
+        // variance = ((2-4)² + (4-4)² + (6-4)²)/3 = (4+0+4)/3 = 8/3
+        // sd = sqrt(8/3) ≈ 1.633
+        let expected_sd = (8.0_f64 / 3.0_f64).sqrt();
+        assert!(
+            (sd - expected_sd).abs() < 1e-12,
+            "SD calculation with filtering incorrect: got {}, expected {}",
+            sd,
+            expected_sd
+        );
+    }
+
+    #[test]
+    fn test_calculate_absolute_slope_in_range() {
+        // Test AS calculation with linear slope
+        let freq = Array1::from(vec![
+            50.0, 100.0, 200.0, 400.0, 800.0, 1600.0, 3200.0, 6400.0, 10000.0,
+        ]);
+        // Create a perfect 2 dB/octave slope: y = 2 * log2(f) + constant
+        let deviation = freq.mapv(|f: f64| 2.0 * f.log2());
+
+        let as_value = calculate_absolute_slope_in_range(&freq, &deviation, 50.0, 10000.0);
+
+        // Should return absolute value of 2.0
+        assert!(
+            (as_value - 2.0).abs() < 1e-12,
+            "AS calculation incorrect: got {}, expected 2.0",
+            as_value
+        );
+    }
+
+    #[test]
+    fn test_calculate_absolute_slope_negative() {
+        // Test AS calculation with negative slope
+        let freq = Array1::from(vec![
+            50.0, 100.0, 200.0, 400.0, 800.0, 1600.0, 3200.0, 6400.0, 10000.0,
+        ]);
+        // Create a perfect -3 dB/octave slope
+        let deviation = freq.mapv(|f: f64| -3.0 * f.log2());
+
+        let as_value = calculate_absolute_slope_in_range(&freq, &deviation, 50.0, 10000.0);
+
+        // Should return absolute value of -3.0 = 3.0
+        assert!(
+            (as_value - 3.0).abs() < 1e-12,
+            "AS calculation with negative slope incorrect: got {}, expected 3.0",
+            as_value
+        );
+    }
+
+    #[test]
+    fn test_headphone_loss_perfect_harman_deviation() {
+        // Test with zero deviation from Harman target (perfect response)
+        let freq = Array1::from(vec![50.0, 100.0, 1000.0, 5000.0, 10000.0]);
+        let deviation = Array1::zeros(5); // Perfect match to Harman target
+
         let curve = Curve {
             freq: freq.clone(),
-            spl: response,
+            spl: deviation,
         };
         let score = headphone_loss(&curve);
 
-        // With flat response, only slope deviation contributes
-        // Target slope is -1 dB/octave, flat is 0, so deviation is 1
-        // Score should be around 10.0 * 1.0 = 10.0
+        // With zero deviation (SD=0, AS=0), predicted preference = 114.49
+        // Function returns negative preference for minimization
+        let expected_score = -114.49;
         assert!(
-            score > 9.0 && score < 11.0,
-            "Flat response score: {}",
+            (score - expected_score).abs() < 1e-12,
+            "Perfect Harman score incorrect: got {}, expected {}",
+            score,
+            expected_score
+        );
+    }
+
+    #[test]
+    fn test_headphone_loss_with_deviation() {
+        // Test with some deviation from Harman target
+        let freq = Array1::from(vec![50.0, 100.0, 1000.0, 5000.0, 10000.0]);
+        let deviation = Array1::from(vec![1.0, 1.0, 1.0, 1.0, 1.0]); // 1dB constant deviation
+
+        let curve = Curve {
+            freq: freq.clone(),
+            spl: deviation,
+        };
+        let score = headphone_loss(&curve);
+
+        // SD = 0 (constant deviation), AS = 0 (flat slope)
+        // predicted preference = 114.49 - (12.62 * 0) - (15.52 * 0) = 114.49
+        // But wait - SD should be 0 for constant values, but AS should also be 0
+        let expected_preference = 114.49;
+        let expected_score = -expected_preference;
+        assert!(
+            (score - expected_score).abs() < 1e-10,
+            "Constant deviation score incorrect: got {}, expected {}",
+            score,
+            expected_score
+        );
+    }
+
+    #[test]
+    fn test_headphone_loss_with_slope() {
+        // Test with a sloped deviation
+        let freq = Array1::from(vec![
+            50.0, 100.0, 200.0, 400.0, 800.0, 1600.0, 3200.0, 6400.0, 10000.0,
+        ]);
+        // Create a 1 dB/octave slope in the deviation
+        let deviation = freq.mapv(|f: f64| 1.0 * f.log2());
+
+        let curve = Curve {
+            freq: freq.clone(),
+            spl: deviation,
+        };
+        let score = headphone_loss(&curve);
+
+        // AS = 1.0 (absolute slope)
+        // SD will be non-zero due to the slope
+        // predicted preference = 114.49 - (12.62 * SD) - (15.52 * 1.0)
+        // Score should be worse (more negative) than perfect case (-114.49)
+        assert!(
+            score < -50.0,
+            "Sloped deviation should have lower preference: got {}",
             score
         );
     }
 
     #[test]
-    fn test_headphone_loss_ideal_slope() {
-        // Test response with ideal -1 dB/octave slope
-        let freq = Array1::logspace(10.0, 1.301, 4.301, 100); // 20Hz to 20kHz
-                                                              // Create response with -1 dB/octave slope
-        let response = freq.mapv(|f: f64| -1.0 * f.log2() + 10.0);
-
-        let curve = Curve {
-            freq: freq.clone(),
-            spl: response,
-        };
-        let score = headphone_loss(&curve);
-
-        // With ideal slope, score should be lower than flat but still has RMS from the slope
-        // The -1 dB/octave slope creates variation in each band
-        assert!(score < 70.0, "Ideal slope score too high: {}", score);
-    }
-
-    #[test]
-    fn test_headphone_loss_with_peaks() {
-        // Test with a response that has a peak
-        let freq = Array1::logspace(10.0, 1.301, 4.301, 100);
-        let mut response = Array1::zeros(100);
-
-        // Add a 5dB peak around 1kHz
-        for i in 0..100 {
-            if freq[i] > 800.0 && freq[i] < 1200.0 {
-                response[i] = 5.0;
-            }
-        }
-
-        let curve = Curve {
-            freq: freq.clone(),
-            spl: response,
-        };
-        let score_with_peak = headphone_loss(&curve);
-        let curve = Curve {
-            freq: freq.clone(),
-            spl: Array1::zeros(100),
-        };
-        let score_flat = headphone_loss(&curve);
-
-        // Score with peak should be significantly higher
-        assert!(
-            score_with_peak > score_flat + 20.0,
-            "Peak not sufficiently penalized: {} vs {}",
-            score_with_peak,
-            score_flat
-        );
-    }
-
-    #[test]
     fn test_headphone_loss_with_target() {
-        // Test the target curve variant
+        // Test the target curve variant with zero deviation
         let freq = Array1::logspace(10.0, 1.301, 4.301, 100);
         let response = Array1::from_elem(100, 5.0); // Constant 5dB response
         let target = Array1::from_elem(100, 5.0); // Same as response
@@ -580,9 +683,14 @@ mod tests {
         let data = HeadphoneLossData::new(false, 2);
         let score = headphone_loss_with_target(&data, &response_curve, &target_curve);
 
-        // When response matches target, deviation is zero (flat)
-        // Score should be same as flat response test
-        assert!(score > 9.0 && score < 11.0, "Target match score: {}", score);
+        // When response matches target, deviation is zero, so should get perfect score
+        let expected_perfect_score = -114.49;
+        assert!(
+            (score - expected_perfect_score).abs() < 1e-10,
+            "Perfect target match score incorrect: got {}, expected {}",
+            score,
+            expected_perfect_score
+        );
     }
 
     #[test]

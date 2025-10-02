@@ -86,6 +86,11 @@ struct OptimizationParams {
     // Tolerance parameters
     tolerance: Option<f64>,
     atolerance: Option<f64>,
+    // Captured/Target curve data (alternative to file paths)
+    captured_frequencies: Option<Vec<f64>>,
+    captured_magnitudes: Option<Vec<f64>>,
+    target_frequencies: Option<Vec<f64>>,
+    target_magnitudes: Option<Vec<f64>>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -490,12 +495,28 @@ async fn run_optimization_internal(
 
     // Load input data (following autoeq.rs pattern)
     println!("[RUST DEBUG] Loading input curve...");
-    let (input_curve_raw, spin_data_raw) = autoeq::workflow::load_input_curve(&args)
-        .await
-        .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
-            println!("[RUST DEBUG] Failed to load input curve: {}", e);
-            Box::new(std::io::Error::other(e.to_string()))
-        })?;
+    let (input_curve_raw, spin_data_raw) = if let (Some(captured_freqs), Some(captured_mags)) =
+        (&params.captured_frequencies, &params.captured_magnitudes)
+    {
+        // Use captured audio data
+        println!(
+            "[RUST DEBUG] Using captured audio data with {} points",
+            captured_freqs.len()
+        );
+        let captured_curve = autoeq::Curve {
+            freq: Array1::from_vec(captured_freqs.clone()),
+            spl: Array1::from_vec(captured_mags.clone()),
+        };
+        (captured_curve, None)
+    } else {
+        // Load from file or API
+        autoeq::workflow::load_input_curve(&args).await.map_err(
+            |e| -> Box<dyn std::error::Error + Send + Sync> {
+                println!("[RUST DEBUG] Failed to load input curve: {}", e);
+                Box::new(std::io::Error::other(e.to_string()))
+            },
+        )?
+    };
     println!(
         "[RUST DEBUG] Input curve loaded successfully, {} frequency points",
         input_curve_raw.freq.len()
@@ -510,10 +531,25 @@ async fn run_optimization_internal(
     println!("[RUST DEBUG] Creating standard frequency grid...");
     let standard_freq = autoeq::read::create_log_frequency_grid(200, 20.0, 20000.0);
 
-    // Build/Get target using RAW input curve (before normalization)
-    println!("[RUST DEBUG] Building target curve using raw input...");
-    let target_curve =
-        autoeq::workflow::build_target_curve(&args, &standard_freq, &input_curve_raw);
+    // Build/Get target curve
+    let target_curve = if let (Some(target_freqs), Some(target_mags)) =
+        (&params.target_frequencies, &params.target_magnitudes)
+    {
+        // Use provided target curve data
+        println!(
+            "[RUST DEBUG] Using provided target curve data with {} points",
+            target_freqs.len()
+        );
+        let target_curve_raw = autoeq::Curve {
+            freq: Array1::from_vec(target_freqs.clone()),
+            spl: Array1::from_vec(target_mags.clone()),
+        };
+        autoeq::read::normalize_and_interpolate_response(&standard_freq, &target_curve_raw)
+    } else {
+        // Build target using RAW input curve (before normalization)
+        println!("[RUST DEBUG] Building target curve using raw input...");
+        autoeq::workflow::build_target_curve(&args, &standard_freq, &input_curve_raw)
+    };
 
     // Normalize input curve AFTER building target
     println!("[RUST DEBUG] Normalizing and interpolating input curve...");
@@ -545,8 +581,13 @@ async fn run_optimization_internal(
 
     // Setup objective data
     println!("[RUST DEBUG] Setting up objective data...");
-    let (objective_data, use_cea) =
-        autoeq::workflow::setup_objective_data(&args, &input_curve, &deviation_curve, &spin_data);
+    let (objective_data, use_cea) = autoeq::workflow::setup_objective_data(
+        &args,
+        &input_curve,
+        &target_curve,
+        &deviation_curve,
+        &spin_data,
+    );
     println!(
         "[RUST DEBUG] Objective data setup complete, use_cea: {}",
         use_cea
@@ -563,6 +604,18 @@ async fn run_optimization_internal(
         .await
     {
         pref_score_before = Some(metrics.pref_score);
+    } else if args.loss == LossType::HeadphoneFlat || args.loss == LossType::HeadphoneScore {
+        // Calculate headphone preference score using Olive et al. model
+        println!("[RUST DEBUG] Calculating headphone preference score before optimization");
+        let headphone_data = autoeq::loss::HeadphoneLossData::new(args.smooth, args.smooth_n);
+        let loss_value =
+            autoeq::loss::headphone_loss_with_target(&headphone_data, &input_curve, &target_curve);
+        // Negate the loss value to convert to preference score (higher is better)
+        pref_score_before = Some(-loss_value);
+        println!(
+            "[RUST DEBUG] Headphone preference score before: {:.2}",
+            pref_score_before.unwrap()
+        );
     }
 
     // Check for cancellation before optimization
@@ -646,6 +699,32 @@ async fn run_optimization_internal(
         {
             pref_score_after = Some(metrics.pref_score);
         }
+    } else if args.loss == LossType::HeadphoneFlat || args.loss == LossType::HeadphoneScore {
+        // Calculate headphone preference score after applying EQ
+        println!("[RUST DEBUG] Calculating headphone preference score after optimization");
+        let peq_response = autoeq::iir::compute_peq_response(
+            &input_curve.freq,
+            &filter_params,
+            args.sample_rate,
+            args.iir_hp_pk,
+        );
+        // Create corrected curve by adding PEQ response to input
+        let corrected_curve = autoeq::Curve {
+            freq: input_curve.freq.clone(),
+            spl: &input_curve.spl + &peq_response,
+        };
+        let headphone_data = autoeq::loss::HeadphoneLossData::new(args.smooth, args.smooth_n);
+        let loss_value = autoeq::loss::headphone_loss_with_target(
+            &headphone_data,
+            &corrected_curve,
+            &target_curve,
+        );
+        // Negate the loss value to convert to preference score (higher is better)
+        pref_score_after = Some(-loss_value);
+        println!(
+            "[RUST DEBUG] Headphone preference score after: {:.2}",
+            pref_score_after.unwrap()
+        );
     }
 
     // Generate plot data
@@ -728,10 +807,10 @@ async fn run_optimization_internal(
 
     // Generate spin details data if available
     let mut spin_details = None;
-    if let Some(ref spin) = spin_data {
+    if let Some(spin) = spin_data {
         let mut spin_curves = HashMap::new();
         for (name, curve) in spin {
-            let interpolated = autoeq::read::interpolate(&plot_freqs_array, curve);
+            let interpolated = autoeq::read::interpolate(&plot_freqs_array, &curve);
             spin_curves.insert(name.clone(), interpolated.spl.to_vec());
         }
         spin_details = Some(PlotData {

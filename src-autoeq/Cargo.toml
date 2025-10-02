@@ -1,6 +1,6 @@
 [package]
 name = "autoeq"
-version = "0.2.232"
+version = "0.2.234"
 edition = "2021"
 authors = ["Pierre Aubert <pierre@spinorama.org>"]
 license = "GPL-3.0-or-later"

@@ -33,6 +33,13 @@ export class AudioProcessor {
   private capturing: boolean = false;
   private captureController: AbortController | null = null;
   private captureAnalyser: AnalyserNode | null = null;
+  private oscillator: OscillatorNode | null = null;
+  private noiseSource: AudioBufferSourceNode | null = null;
+  private noiseBuffer: AudioBuffer | null = null;
+  private sweepDuration: number = 10; // seconds
+  private outputChannel: 'left' | 'right' | 'both' | 'default' = 'both';
+  private captureSampleRate: number = 48000;
+  private signalType: 'sweep' | 'white' | 'pink' = 'sweep';
 
   // UI elements for audio status
   private audioStatusElements: {
@@ -57,9 +64,56 @@ export class AudioProcessor {
         this.analyserNode.fftSize = 2048;
         this.analyserNode.smoothingTimeConstant = 0.8;
       }
+
+      // Pre-generate noise buffers
+      this.generateNoiseBuffers();
     } catch (error) {
       console.error('Failed to initialize audio context:', error);
     }
+  }
+
+  private generateNoiseBuffers(): void {
+    if (!this.audioContext) return;
+
+    // We'll generate noise buffers when needed with the correct sample rate
+    // This is just a placeholder for the method
+  }
+
+  private createNoiseSource(type: 'white' | 'pink'): AudioBufferSourceNode {
+    if (!this.audioContext) {
+      throw new Error('Audio context not initialized');
+    }
+
+    const bufferSize = this.audioContext.sampleRate * this.sweepDuration;
+    const buffer = this.audioContext.createBuffer(1, bufferSize, this.audioContext.sampleRate);
+    const output = buffer.getChannelData(0);
+
+    if (type === 'white') {
+      // White noise: random values
+      for (let i = 0; i < bufferSize; i++) {
+        output[i] = Math.random() * 2 - 1;
+      }
+    } else if (type === 'pink') {
+      // Pink noise using Paul Kellet's algorithm
+      let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+      for (let i = 0; i < bufferSize; i++) {
+        const white = Math.random() * 2 - 1;
+        b0 = 0.99886 * b0 + white * 0.0555179;
+        b1 = 0.99332 * b1 + white * 0.0750759;
+        b2 = 0.96900 * b2 + white * 0.1538520;
+        b3 = 0.86650 * b3 + white * 0.3104856;
+        b4 = 0.55000 * b4 + white * 0.5329522;
+        b5 = -0.7616 * b5 - white * 0.0168980;
+        output[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362) * 0.11;
+        b6 = white * 0.115926;
+      }
+    }
+
+    this.noiseSource = this.audioContext.createBufferSource();
+    this.noiseSource.buffer = buffer;
+    this.noiseBuffer = buffer;
+
+    return this.noiseSource;
   }
 
   async loadAudioFile(file: File): Promise<void> {
@@ -280,9 +334,30 @@ export class AudioProcessor {
     }
   }
 
+  // Audio device enumeration
+  async enumerateAudioDevices(): Promise<MediaDeviceInfo[]> {
+    try {
+      // Request permission first
+      await navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+        // Immediately stop the stream after getting permission
+        stream.getTracks().forEach(track => track.stop());
+      });
+
+      // Now enumerate devices
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const audioInputs = devices.filter(device => device.kind === 'audioinput');
+      console.log('Found audio input devices:', audioInputs);
+      return audioInputs;
+    } catch (error) {
+      console.error('Error enumerating audio devices:', error);
+      return [];
+    }
+  }
+
   // Audio capture functionality
-  async startCapture(): Promise<CaptureResult> {
-    console.log('Starting audio capture...');
+  async startCapture(deviceId?: string): Promise<CaptureResult> {
+    console.log('Starting audio capture with device:', deviceId || 'default');
+    console.log('Sample rate:', this.captureSampleRate, 'Signal type:', this.signalType);
 
     if (this.capturing) {
       throw new Error('Capture already in progress');
@@ -295,15 +370,29 @@ export class AudioProcessor {
         return this.simulateCapture();
       }
 
-      // Request microphone access
-      this.mediaStream = await navigator.mediaDevices.getUserMedia({
+      // Recreate audio context with desired sample rate if needed
+      if (!this.audioContext || this.audioContext.sampleRate !== this.captureSampleRate) {
+        if (this.audioContext) {
+          this.audioContext.close();
+        }
+        this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({
+          sampleRate: this.captureSampleRate
+        });
+        console.log('Created audio context with sample rate:', this.audioContext.sampleRate);
+      }
+
+      // Request microphone access with specific device if provided
+      const audioConstraints: MediaStreamConstraints = {
         audio: {
           echoCancellation: false,
           noiseSuppression: false,
           autoGainControl: false,
-          sampleRate: 48000
+          sampleRate: this.captureSampleRate,
+          ...(deviceId && deviceId !== 'default' ? { deviceId: { exact: deviceId } } : {})
         }
-      });
+      };
+
+      this.mediaStream = await navigator.mediaDevices.getUserMedia(audioConstraints);
 
       if (!this.audioContext) {
         throw new Error('Audio context not initialized');
@@ -345,6 +434,24 @@ export class AudioProcessor {
 
     this.capturing = false;
 
+    if (this.oscillator) {
+      try {
+        this.oscillator.stop();
+      } catch (e) {
+        // Already stopped
+      }
+      this.oscillator = null;
+    }
+
+    if (this.noiseSource) {
+      try {
+        this.noiseSource.stop();
+      } catch (e) {
+        // Already stopped
+      }
+      this.noiseSource = null;
+    }
+
     if (this.captureController) {
       this.captureController.abort();
       this.captureController = null;
@@ -371,55 +478,198 @@ export class AudioProcessor {
       throw new Error('Capture not properly initialized');
     }
 
+    console.log(`Starting ${this.signalType} capture...`);
+
+    const duration = this.sweepDuration;
+    let sourceNode: AudioNode;
+
+    if (this.signalType === 'sweep') {
+      // Play frequency sweep and record response
+      const startFreq = 20;
+      const endFreq = Math.min(20000, this.audioContext.sampleRate / 2.1); // Respect Nyquist
+
+      // Create oscillator for sweep
+      this.oscillator = this.audioContext.createOscillator();
+      this.oscillator.type = 'sine';
+
+      // Set up exponential frequency sweep
+      this.oscillator.frequency.setValueAtTime(startFreq, this.audioContext.currentTime);
+      this.oscillator.frequency.exponentialRampToValueAtTime(
+        endFreq,
+        this.audioContext.currentTime + duration
+      );
+
+      sourceNode = this.oscillator;
+    } else {
+      // Generate and play noise
+      sourceNode = this.createNoiseSource(this.signalType);
+    }
+
+    // Connect source to output with reduced volume and channel routing
+    const gainNode = this.audioContext.createGain();
+    gainNode.gain.value = 0.3; // Reduce volume to avoid feedback
+
+    // Configure channel routing based on selection
+    if (this.outputChannel === 'left' || this.outputChannel === 'right' || this.outputChannel === 'both') {
+      // Use a ChannelMergerNode to control which channel gets the signal
+      const merger = this.audioContext.createChannelMerger(2);
+
+      if (this.outputChannel === 'left') {
+        // Connect to left channel only (input 0 of merger)
+        sourceNode.connect(gainNode);
+        gainNode.connect(merger, 0, 0);
+      } else if (this.outputChannel === 'right') {
+        // Connect to right channel only (input 1 of merger)
+        sourceNode.connect(gainNode);
+        gainNode.connect(merger, 0, 1);
+      } else if (this.outputChannel === 'both') {
+        // Connect to both channels
+        const splitter = this.audioContext.createChannelSplitter(2);
+        sourceNode.connect(gainNode);
+        gainNode.connect(splitter);
+        splitter.connect(merger, 0, 0); // left to left
+        splitter.connect(merger, 0, 1); // left to right (mono to stereo)
+      }
+
+      merger.connect(this.audioContext.destination);
+    } else {
+      // Default: connect directly
+      sourceNode.connect(gainNode);
+      gainNode.connect(this.audioContext.destination);
+    }
+
+    // Start the signal
+    if (this.signalType === 'sweep' && this.oscillator) {
+      this.oscillator.start();
+    } else if (this.noiseSource) {
+      this.noiseSource.start();
+    }
+
+    // Collect frequency response data during sweep
+    const frequencyResponses: Float32Array[] = [];
     const bufferLength = this.captureAnalyser.frequencyBinCount;
     const dataArray = new Float32Array(bufferLength);
     const sampleRate = this.audioContext.sampleRate;
-
-    // Collect multiple samples for averaging
-    const numSamples = 50;
-    const samples: Float32Array[] = [];
+    const sampleInterval = 100; // ms between samples
+    const numSamples = Math.floor((duration * 1000) / sampleInterval);
 
     for (let i = 0; i < numSamples; i++) {
       if (this.captureController?.signal.aborted) {
+        this.oscillator?.stop();
         throw new Error('Capture cancelled');
       }
 
+      // Get frequency data
       this.captureAnalyser.getFloatFrequencyData(dataArray);
-      samples.push(new Float32Array(dataArray));
+      frequencyResponses.push(new Float32Array(dataArray));
 
-      // Wait a bit between samples
-      await new Promise(resolve => setTimeout(resolve, 20));
+      // Wait for next sample
+      await new Promise(resolve => setTimeout(resolve, sampleInterval));
     }
 
-    // Average the samples
+    // Stop the signal source
+    if (this.oscillator) {
+      this.oscillator.stop();
+      this.oscillator = null;
+    }
+    if (this.noiseSource) {
+      this.noiseSource.stop();
+      this.noiseSource = null;
+    }
+
+    console.log(`Collected ${frequencyResponses.length} samples`);
+
+    // Average the frequency responses
     const averagedData = new Float32Array(bufferLength);
     for (let i = 0; i < bufferLength; i++) {
       let sum = 0;
-      for (const sample of samples) {
-        sum += sample[i];
+      let count = 0;
+      for (const response of frequencyResponses) {
+        if (!isNaN(response[i]) && isFinite(response[i])) {
+          sum += response[i];
+          count++;
+        }
       }
-      averagedData[i] = sum / samples.length;
+      averagedData[i] = count > 0 ? sum / count : -100; // Default to -100 dB
     }
 
-    // Convert to frequency/magnitude pairs
-    const frequencies: number[] = [];
-    const magnitudes: number[] = [];
+    // Apply 1/24 octave smoothing and resample to 200 points
+    const result = this.smoothAndResample(averagedData, sampleRate);
 
-    for (let i = 1; i < bufferLength; i++) { // Skip DC component
-      const frequency = (i * sampleRate) / (2 * bufferLength);
-      if (frequency >= 20 && frequency <= 20000) { // Audio range
-        frequencies.push(frequency);
-        magnitudes.push(averagedData[i]);
-      }
-    }
-
-    console.log(`Captured ${frequencies.length} frequency points`);
+    console.log(`Processed ${result.frequencies.length} frequency points`);
 
     return {
-      frequencies,
-      magnitudes,
+      frequencies: result.frequencies,
+      magnitudes: result.magnitudes,
       success: true
     };
+  }
+
+  private smoothAndResample(data: Float32Array, sampleRate: number): { frequencies: number[], magnitudes: number[] } {
+    // Create log-spaced frequency array (200 points from 20Hz to 20kHz)
+    const frequencies: number[] = [];
+    const magnitudes: number[] = [];
+    const minFreq = 20;
+    const maxFreq = 20000;
+    const numPoints = 200;
+    const smoothingOctaves = 24; // 1/24 octave smoothing
+
+    const logMin = Math.log10(minFreq);
+    const logMax = Math.log10(maxFreq);
+    const logStep = (logMax - logMin) / (numPoints - 1);
+
+    // Calculate bin frequencies
+    const binCount = data.length;
+    const nyquist = sampleRate / 2;
+    const binFreqs: number[] = [];
+    for (let i = 0; i < binCount; i++) {
+      binFreqs.push((i / binCount) * nyquist);
+    }
+
+    // Generate target frequencies and apply smoothing
+    for (let i = 0; i < numPoints; i++) {
+      const logFreq = logMin + i * logStep;
+      const targetFreq = Math.pow(10, logFreq);
+      frequencies.push(targetFreq);
+
+      // Calculate smoothing window
+      const octaveWidth = 1.0 / smoothingOctaves;
+      const lowerBound = targetFreq * Math.pow(2, -octaveWidth / 2);
+      const upperBound = targetFreq * Math.pow(2, octaveWidth / 2);
+
+      // Average values within the smoothing window
+      let sum = 0;
+      let count = 0;
+
+      for (let j = 0; j < binCount; j++) {
+        if (binFreqs[j] >= lowerBound && binFreqs[j] <= upperBound) {
+          // Convert from dB to linear for averaging
+          const linear = Math.pow(10, data[j] / 20);
+          sum += linear;
+          count++;
+        }
+      }
+
+      if (count > 0) {
+        // Convert average back to dB
+        const avgLinear = sum / count;
+        magnitudes.push(20 * Math.log10(avgLinear));
+      } else {
+        // No data in range, use nearest neighbor
+        let nearestIdx = 0;
+        let minDiff = Math.abs(binFreqs[0] - targetFreq);
+        for (let j = 1; j < binCount; j++) {
+          const diff = Math.abs(binFreqs[j] - targetFreq);
+          if (diff < minDiff) {
+            minDiff = diff;
+            nearestIdx = j;
+          }
+        }
+        magnitudes.push(data[nearestIdx]);
+      }
+    }
+
+    return { frequencies, magnitudes };
   }
 
   private simulateCapture(): CaptureResult {
@@ -452,6 +702,22 @@ export class AudioProcessor {
       magnitudes,
       success: true
     };
+  }
+
+  setSweepDuration(duration: number): void {
+    this.sweepDuration = duration;
+  }
+
+  setOutputChannel(channel: 'left' | 'right' | 'both' | 'default'): void {
+    this.outputChannel = channel;
+  }
+
+  setSampleRate(rate: number): void {
+    this.captureSampleRate = rate;
+  }
+
+  setSignalType(type: 'sweep' | 'white' | 'pink'): void {
+    this.signalType = type;
   }
 
   isCaptureSupported(): boolean {

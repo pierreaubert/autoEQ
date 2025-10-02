@@ -432,8 +432,13 @@ async fn run_one(
             })
             .collect()
     });
-    let (objective_data, use_cea) =
-        setup_objective_data(args, &input_curve_normalized, &deviation_curve, &spin_data);
+    let (objective_data, use_cea) = setup_objective_data(
+        args,
+        &input_curve_normalized,
+        &target_curve,
+        &deviation_curve,
+        &spin_data,
+    );
 
     // Check for shutdown before optimization
     if shutdown.load(Ordering::Relaxed) {
@@ -477,9 +482,16 @@ fn setup_objective_data(
     args: &autoeq::cli::Args,
     input_curve: &autoeq::Curve,
     target_curve: &autoeq::Curve,
+    deviation_curve: &autoeq::Curve,
     spin_data: &Option<HashMap<String, autoeq::Curve>>,
 ) -> (ObjectiveData, bool) {
-    autoeq::workflow::setup_objective_data(args, input_curve, target_curve, spin_data)
+    autoeq::workflow::setup_objective_data(
+        args,
+        input_curve,
+        target_curve,
+        deviation_curve,
+        spin_data,
+    )
 }
 
 async fn perform_optimization(

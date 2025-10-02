@@ -128,6 +128,17 @@ class AutoEQApplication {
       },
     });
 
+    // Connect UI manager capture callback to optimization manager
+    this.uiManager.setCaptureCompleteCallback((frequencies, magnitudes) => {
+      if (frequencies.length > 0 && magnitudes.length > 0) {
+        this.optimizationManager.setCapturedData(frequencies, magnitudes);
+        console.log('[MAIN] Captured data stored in optimization manager:', frequencies.length, 'points');
+      } else {
+        this.optimizationManager.clearCapturedData();
+        console.log('[MAIN] Cleared captured data from optimization manager');
+      }
+    });
+
     // Override UI manager event handlers to connect to application logic
     this.overrideUIEventHandlers();
   }
@@ -260,7 +271,7 @@ class AutoEQApplication {
 
       // Extract optimization parameters
       const params =
-        this.optimizationManager.extractOptimizationParams(formData);
+        await this.optimizationManager.extractOptimizationParams(formData);
 
       console.log("Starting optimization with parameters:", params);
 

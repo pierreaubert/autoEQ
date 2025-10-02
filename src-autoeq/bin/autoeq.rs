@@ -231,20 +231,32 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Load input data
     let (input_curve_raw, spin_data_raw) = autoeq::workflow::load_input_curve(&args).await?;
 
-    // resample everything
-    let standard_freq = read::create_log_frequency_grid(200, 20.0, 20000.0);
+    // Determine if this is headphone or speaker optimization
+    let is_headphone = matches!(
+        args.loss,
+        autoeq::LossType::HeadphoneFlat | autoeq::LossType::HeadphoneScore
+    );
 
-    // Build/Get target
-    let target_curve =
+    // for headphone, 12 points per octave and for speaker 20 points
+    let num_points = if is_headphone { 120 } else { 200 };
+    let standard_freq = read::create_log_frequency_grid(num_points, 20.0, 20000.0);
+
+    // Build/Get target and interpolate it
+    let target_curve_raw =
         autoeq::workflow::build_target_curve(&args, &standard_freq, &input_curve_raw);
+    let target_curve = read::interpolate_log_space(&standard_freq, &target_curve_raw);
 
-    // normalize
+    // Normalize and interpolate input curve
     let input_curve = read::normalize_and_interpolate_response(&standard_freq, &input_curve_raw);
-    let deviation_curve = Curve {
+
+    // Compute and interpolate deviation curve
+    let deviation_curve_raw = Curve {
         freq: target_curve.freq.clone(),
         spl: target_curve.spl.clone() - &input_curve.spl,
     };
+    let deviation_curve = read::interpolate_log_space(&standard_freq, &deviation_curve_raw);
 
+    // Interpolate spinorama data if available
     let spin_data = spin_data_raw.map(|spin_data| {
         spin_data
             .into_iter()
@@ -256,8 +268,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
     });
 
     // Objective data
-    let (objective_data, use_cea) =
-        autoeq::workflow::setup_objective_data(&args, &input_curve, &deviation_curve, &spin_data);
+    let (objective_data, use_cea) = autoeq::workflow::setup_objective_data(
+        &args,
+        &input_curve,
+        &target_curve,
+        &deviation_curve,
+        &spin_data,
+    );
 
     // Metrics before optimisation
     let mut cea2034_metrics_before: Option<score::ScoreMetrics> = None;

@@ -1,11 +1,67 @@
 use ndarray::Array1;
 use plotly::common::{Anchor, Mode};
-use plotly::layout::{Annotation, AxisType, GridPattern, LayoutGrid, RowOrder};
+use plotly::layout::{
+    Annotation, AxisType, GridPattern, LayoutGrid, RowOrder, Shape, ShapeLayer, ShapeLine,
+    ShapeType,
+};
 use plotly::{Layout, Plot, Scatter};
 
 use crate::iir::{Biquad, BiquadFilterType};
 use crate::plot::filter_color::filter_color;
 use crate::plot::ref_lines::make_ref_lines;
+
+/// Create semi-transparent green rectangles to highlight frequency ranges
+/// outside the optimization bounds (min_freq to max_freq)
+fn make_freq_range_shapes(min_freq: f64, max_freq: f64) -> Vec<Shape> {
+    let mut shapes = Vec::new();
+
+    // Y-axis ranges for each subplot
+    let y_ranges = [
+        (-10.0, 10.0), // Subplot 1 (x, y)
+        (-10.0, 10.0), // Subplot 2 (x2, y2)
+        (-5.0, 5.0),   // Subplot 3 (x3, y3)
+        (-10.0, 10.0), // Subplot 4 (x4, y4)
+    ];
+
+    // Axis references for each subplot
+    let axis_refs = [("x", "y"), ("x2", "y2"), ("x3", "y3"), ("x4", "y4")];
+
+    for ((x_ref, y_ref), (y_min, y_max)) in axis_refs.iter().zip(y_ranges.iter()) {
+        // Left rectangle: 20 Hz to min_freq
+        if min_freq > 20.0 {
+            let shape = Shape::new()
+                .shape_type(ShapeType::Rect)
+                .x_ref(x_ref)
+                .y_ref(y_ref)
+                .x0(20.0_f64.log10())
+                .x1(min_freq.log10())
+                .y0(*y_min)
+                .y1(*y_max)
+                .fill_color("rgba(144, 238, 144, 0.3)")
+                .layer(ShapeLayer::Below)
+                .line(ShapeLine::new().width(0.0));
+            shapes.push(shape);
+        }
+
+        // Right rectangle: max_freq to 20 kHz
+        if max_freq < 20000.0 {
+            let shape = Shape::new()
+                .shape_type(ShapeType::Rect)
+                .x_ref(x_ref)
+                .y_ref(y_ref)
+                .x0(max_freq.log10())
+                .x1(20000.0_f64.log10())
+                .y0(*y_min)
+                .y1(*y_max)
+                .fill_color("rgba(144, 238, 144, 0.3)")
+                .layer(ShapeLayer::Below)
+                .line(ShapeLine::new().width(0.0));
+            shapes.push(shape);
+        }
+    }
+
+    shapes
+}
 
 pub fn plot_filters(
     args: &crate::cli::Args,
@@ -248,6 +304,12 @@ pub fn plot_filters(
             .x(0.5)
             .show_arrow(false),
     );
+
+    // Add frequency range shapes to highlight regions outside optimization bounds
+    let freq_shapes = make_freq_range_shapes(args.min_freq, args.max_freq);
+    for shape in freq_shapes {
+        layout.add_shape(shape);
+    }
 
     plot.set_layout(layout);
 

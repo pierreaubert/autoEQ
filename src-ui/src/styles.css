@@ -859,6 +859,55 @@ input[type="checkbox"] {
   gap: var(--spacing-md);
 }
 
+.capture-device-selection,
+.capture-output-selection,
+.capture-sample-rate,
+.capture-signal-type,
+.capture-sweep-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.capture-device-selection label,
+.capture-output-selection label,
+.capture-sample-rate label,
+.capture-signal-type label,
+.capture-sweep-controls label {
+  min-width: 120px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.capture-device-select,
+.output-channel-select,
+.capture-sample-rate-select,
+.signal-type-select,
+.sweep-duration-select {
+  flex: 1;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.refresh-devices-btn {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background: var(--bg-accent);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 16px;
+  transition: all 0.2s;
+}
+
+.refresh-devices-btn:hover {
+  background: var(--primary-color);
+  color: white;
+}
+
 .capture-button {
   width: 100%;
   padding: var(--spacing-md);

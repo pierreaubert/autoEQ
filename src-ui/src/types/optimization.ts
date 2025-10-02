@@ -38,6 +38,9 @@ export interface OptimizationParams {
   // Captured curve data
   captured_frequencies?: number[];
   captured_magnitudes?: number[];
+  // Target curve data (for headphones)
+  target_frequencies?: number[];
+  target_magnitudes?: number[];
 }
 
 export interface PlotData {

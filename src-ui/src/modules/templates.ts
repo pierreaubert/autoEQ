@@ -97,9 +97,10 @@ export function generateDataAcquisition(): string {
         <label class="tab-label" data-tab="speaker" title="Speakers">
             <input type="radio" name="input_source" value="speaker" />
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
-                <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
-                <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+                <rect width="16" height="20" x="4" y="2" rx="2"></rect>
+                <path d="M12 6h.01"></path>
+                <circle cx="12" cy="14" r="4"></circle>
+                <path d="M12 14h.01"></path>
             </svg>
         </label>
         <label class="tab-label" data-tab="headphone" title="Headphones">
@@ -160,6 +161,48 @@ export function generateDataAcquisition(): string {
 
     <div id="capture_inputs" class="tab-content">
         <div class="capture-controls">
+            <div class="capture-device-selection">
+                <label for="capture_device">Microphone:</label>
+                <select id="capture_device" class="capture-device-select">
+                    <option value="">Loading devices...</option>
+                </select>
+                <button type="button" id="refresh_devices" class="refresh-devices-btn" title="Refresh devices">🔄</button>
+            </div>
+            <div class="capture-output-selection">
+                <label for="output_channel">Output Channel:</label>
+                <select id="output_channel" class="output-channel-select">
+                    <option value="both" selected>Both Channels</option>
+                    <option value="left">Left Channel Only</option>
+                    <option value="right">Right Channel Only</option>
+                    <option value="default">System Default</option>
+                </select>
+            </div>
+            <div class="capture-sample-rate">
+                <label for="capture_sample_rate">Sample Rate:</label>
+                <select id="capture_sample_rate" class="capture-sample-rate-select">
+                    <option value="44100">44.1 kHz</option>
+                    <option value="48000" selected>48 kHz</option>
+                    <option value="96000">96 kHz</option>
+                    <option value="192000">192 kHz</option>
+                </select>
+            </div>
+            <div class="capture-signal-type">
+                <label for="signal_type">Signal Type:</label>
+                <select id="signal_type" class="signal-type-select">
+                    <option value="sweep" selected>Frequency Sweep</option>
+                    <option value="white">White Noise</option>
+                    <option value="pink">Pink Noise</option>
+                </select>
+            </div>
+            <div class="capture-sweep-controls" id="sweep_duration_container">
+                <label for="sweep_duration">Duration:</label>
+                <select id="sweep_duration" class="sweep-duration-select">
+                    <option value="5">5 seconds</option>
+                    <option value="10" selected>10 seconds</option>
+                    <option value="15">15 seconds</option>
+                    <option value="20">20 seconds</option>
+                </select>
+            </div>
             <button type="button" id="capture_btn" class="capture-button">🎤 Start Capture</button>
             <div id="capture_status" class="capture-status" style="display: none">
                 <div class="capture-progress">
@@ -169,6 +212,7 @@ export function generateDataAcquisition(): string {
                     </div>
                 </div>
                 <canvas id="capture_waveform" class="capture-waveform" style="display: none"></canvas>
+                <canvas id="capture_spectrum" class="capture-spectrum" style="display: none"></canvas>
             </div>
             <div id="capture_result" class="capture-result" style="display: none">
                 <div class="capture-result-info">

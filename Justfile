@@ -15,12 +15,12 @@ test-ts:
 	cd src-ui && npm run test
 
 # ----------------------------------------------------------------------
-# BUILD
+# PROD
 # ----------------------------------------------------------------------
 
-bin: bin-rust bin-ts
+prod: prod-rust prod-ts
 
-bin-rust:
+prod-rust:
 	cargo build --release --workspace
 	cargo build --release --bin autoeq
 	cargo build --release --bin plot_functions
@@ -29,18 +29,28 @@ bin-rust:
 	cargo build --release --bin plot_autoeq_de
 	cargo build --release --bin run_autoeq_de
 
-bin-ts:
+prod-ts:
 	cd src-ui && npm run tauri build
+
+# ----------------------------------------------------------------------
+# PROD
+# ----------------------------------------------------------------------
 
 dev: dev-rust dev-ts
 
 dev-rust:
 	cargo build --workspace
+	cargo build --bin autoeq
+	cargo build --bin plot_functions
+	cargo build --bin download
+	cargo build --bin benchmark_convergence
+	cargo build --bin plot_autoeq_de
+	cargo build --bin run_autoeq_de
 
 dev-ts:
 	cd src-ui && npm run tauri dev
 
-download: bin-rust
+download:
 	cargo run --bin download
 
 # ----------------------------------------------------------------------
@@ -65,13 +75,13 @@ update-pre-commit:
 
 demo: demo-rust demo-ts
 
-demo-rust: headphone_loss_demo print_functions
+demo-rust: headphone_loss_demo plot_functions
 
 headphone_loss_demo:
 	cargo run --example headphone_loss_demo -- --spl "./data_tests/headphone/asr/bowerwilkins_p7/Bowers & Wilkins P7.csv" --target "./data_tests/targets/harman-over-ear-2018.csv"
 
-print_functions:
-	cargo run --bin print_functions
+plot_functions:
+	cargo run --bin plot_functions
 
 demo-ts:
 	cd src-ui && npm run build:audio-player
