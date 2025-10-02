@@ -99,6 +99,10 @@ pub mod mocks {
             adaptive_weight_cr: None,
             tolerance: Some(1e-2),
             atolerance: Some(1e-3),
+            captured_frequencies: None,
+            captured_magnitudes: None,
+            target_frequencies: None,
+            target_magnitudes: None,
         }
     }
 

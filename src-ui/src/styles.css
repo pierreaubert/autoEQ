@@ -743,18 +743,22 @@ input[type="checkbox"] {
 
 /* Different heights for different plot types to accommodate subplots */
 #filter_vertical_item {
+  width: 800px;
   height: 680px; /* Single plot */
 }
 
 #spin_vertical_item {
+  width: 800px;
   height: 480px; /* Multiple curves on one plot */
 }
 
 #details_vertical_item {
+  width: 800px;
   height: 580px; /* 2x2 subplot grid */
 }
 
 #tonal_vertical_item {
+  width: 800px;
   height: 580px; /* 2x2 subplot grid */
 }
 

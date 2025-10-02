@@ -35,7 +35,21 @@ export class SpinPlot {
           ...plotData.layout,
           autosize: true,
           height: 450,  // Fixed height for consistent display
-          width: 800  // Fixed height for consistent display
+          width: 800,  // Fixed height for consistent display
+          grid: {
+            ...(plotData.layout.grid || {}),
+            rows: 1,
+            columns: 2,
+            pattern: 'independent'
+          },
+          legend: {
+            ...(plotData.layout.legend || {}),
+            orientation: 'h',
+            x: 0.5,
+            xanchor: 'center',
+            y: 1.3,
+            yanchor: 'top'
+          }
         };
 
         Plotly.newPlot(

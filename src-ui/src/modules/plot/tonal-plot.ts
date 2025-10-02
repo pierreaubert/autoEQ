@@ -35,7 +35,21 @@ export class TonalPlot {
           ...plotData.layout,
           autosize: true,
           height: 650,  // Fixed height for consistent display
-          width: 800    // Fixed width for consistent display
+          width: 800,    // Fixed width for consistent display
+          grid: {
+            ...(plotData.layout.grid || {}),
+            rows: 2,
+            columns: 4,
+            pattern: 'independent'
+          },
+          legend: {
+            ...(plotData.layout.legend || {}),
+            orientation: 'h',
+            x: 0.5,
+            xanchor: 'center',
+            y: 1.2,
+            yanchor: 'top'
+          }
         };
 
         Plotly.newPlot(

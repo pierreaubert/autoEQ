@@ -54,6 +54,10 @@ mod tests {
             adaptive_weight_cr: None,
             tolerance: Some(1e-3),
             atolerance: Some(1e-4),
+            captured_frequencies: None,
+            captured_magnitudes: None,
+            target_frequencies: None,
+            target_magnitudes: None,
         }
     }
 

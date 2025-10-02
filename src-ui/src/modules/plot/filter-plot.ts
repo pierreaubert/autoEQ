@@ -35,7 +35,19 @@ export class FilterPlot {
           ...plotData.layout,
           autosize: true,
           height: 650,  // Fixed height for consistent display
-          width: 800  // Fixed height for consistent display
+          width: 800,  // Fixed height for consistent display
+          legend: {
+            ...(plotData.layout.legend || {}),
+            orientation: 'h',
+            x: 0.5,
+            xanchor: 'center',
+            y: 1.3,
+            yanchor: 'top'
+          },
+          margin: {
+            ...(plotData.layout.margin || {}),
+	    top: 80,
+	  }
         };
 
         Plotly.newPlot(
