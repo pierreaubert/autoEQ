@@ -53,7 +53,7 @@ fn print_freq_spacing(x: &[f64], args: &autoeq::cli::Args, label: &str) {
     } else {
         println!("  - Not enough filters to compute spacing.");
     }
-    iir::peq_print_from_x(x, args.iir_hp_pk);
+    iir::peq_print_from_x(x, args.uses_highpass_first());
 }
 
 /// Save PEQ settings to APO format file
@@ -83,7 +83,7 @@ async fn save_peq_to_file(
         let gain = x[i * 3 + 2];
 
         // Determine filter type
-        let filter_type = if args.iir_hp_pk && i == 0 {
+        let filter_type = if args.uses_highpass_first() && i == 0 {
             iir::BiquadFilterType::HighpassVariableQ
         } else {
             iir::BiquadFilterType::Peak
@@ -197,7 +197,7 @@ fn perform_optimization(
                 );
 
                 print_freq_spacing(&x, args, "local");
-                iir::peq_print_from_x(&x, args.iir_hp_pk);
+                iir::peq_print_from_x(&x, args.uses_highpass_first());
             }
             Err((e, final_value)) => {
                 eprintln!("⚠️  Local refinement failed: {:?}", e);
@@ -223,6 +223,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Check if user wants to see strategy list
     if args.strategy_list {
         autoeq::cli::display_strategy_list();
+    }
+
+    // Check if user wants to see PEQ model list
+    if args.peq_model_list {
+        autoeq::cli::display_peq_model_list();
     }
 
     // Validate CLI arguments
@@ -309,7 +314,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 &standard_freq,
                 &x,
                 args.sample_rate,
-                args.iir_hp_pk,
+                args.uses_highpass_first(),
             );
             let input_autoeq = Curve {
                 freq: standard_freq.clone(),
@@ -324,8 +329,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
         autoeq::LossType::SpeakerFlat | autoeq::LossType::SpeakerScore => {
             if use_cea {
                 let freq = &input_curve.freq;
-                let peq_after =
-                    iir::compute_peq_response_from_x(freq, &x, args.sample_rate, args.iir_hp_pk);
+                let peq_after = iir::compute_peq_response_from_x(
+                    freq,
+                    &x,
+                    args.sample_rate,
+                    args.uses_highpass_first(),
+                );
                 let metrics_after = score::compute_cea2034_metrics(
                     freq,
                     spin_data.as_ref().unwrap(),
@@ -399,6 +408,7 @@ mod tests {
 
     #[test]
     fn setup_bounds_hp_pk_mode_overrides_first_triplet() {
+        use autoeq::cli::PeqModel;
         let mut args = Args::parse_from(["autoeq-test"]);
         args.num_filters = 2;
         args.min_freq = 30.0;
@@ -406,7 +416,7 @@ mod tests {
         args.min_q = 0.3;
         args.max_q = 8.0;
         args.max_db = 12.0;
-        args.iir_hp_pk = true;
+        args.peq_model = PeqModel::HpPk;
 
         let (lb, ub) = autoeq::workflow::setup_bounds(&args);
         assert_eq!(lb.len(), args.num_filters * 3);
@@ -433,10 +443,11 @@ mod tests {
 
     #[test]
     fn listening_window_target_profile() {
+        use autoeq::cli::PeqModel;
         let mut args = Args::parse_from(["autoeq-test"]);
         // Ensure we hit the custom target branch and avoid clamping negatives
         args.curve_name = "Listening Window".to_string();
-        args.iir_hp_pk = true;
+        args.peq_model = PeqModel::HpPk;
 
         let freqs = Array1::from_vec(vec![500.0_f64, 1000.0_f64, 20000.0_f64]);
         let spl = Array1::<f64>::zeros(freqs.len());

@@ -478,6 +478,12 @@ async fn run_optimization_internal(
             "headphone-score" => LossType::HeadphoneScore,
             _ => LossType::SpeakerFlat,
         },
+        peq_model: if params.iir_hp_pk {
+            autoeq::cli::PeqModel::HpPk
+        } else {
+            autoeq::cli::PeqModel::Pk
+        },
+        peq_model_list: false,
         iir_hp_pk: params.iir_hp_pk,
         algo_list: false, // UI doesn't need to list algorithms
         tolerance: params.tolerance.unwrap_or(1e-3), // Use provided tolerance or default
@@ -777,7 +783,7 @@ async fn run_optimization_internal(
     for (orig_i, f0, q, gain) in filters.into_iter() {
         use autoeq::iir::{Biquad, BiquadFilterType};
 
-        let ftype = if args.iir_hp_pk && orig_i == 0 {
+        let ftype = if args.uses_highpass_first() && orig_i == 0 {
             BiquadFilterType::Highpass
         } else {
             BiquadFilterType::Peak
@@ -787,7 +793,7 @@ async fn run_optimization_internal(
         let filter_response = filter.np_log_result(&plot_freqs_array);
         combined_response = &combined_response + &filter_response;
 
-        let label = if args.iir_hp_pk && orig_i == 0 {
+        let label = if args.uses_highpass_first() && orig_i == 0 {
             format!("HPQ {} at {:.0}Hz", orig_i + 1, f0)
         } else {
             format!("PK {} at {:.0}Hz", orig_i + 1, f0)
@@ -910,6 +916,12 @@ async fn generate_plot_filters(params: PlotFiltersParams) -> Result<serde_json::
         smooth: true,
         smooth_n: 2,
         loss: LossType::SpeakerFlat,
+        peq_model: if params.iir_hp_pk {
+            autoeq::cli::PeqModel::HpPk
+        } else {
+            autoeq::cli::PeqModel::Pk
+        },
+        peq_model_list: false,
         iir_hp_pk: params.iir_hp_pk,
         algo_list: false,
         tolerance: 1e-3,

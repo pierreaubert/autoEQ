@@ -213,10 +213,13 @@ pub fn setup_objective_data(
 
 /// Build optimization parameter bounds for the optimizer.
 pub fn setup_bounds(args: &crate::cli::Args) -> (Vec<f64>, Vec<f64>) {
+    use crate::cli::PeqModel;
+
     let num_params = args.num_filters * 3;
     let mut lower_bounds = Vec::with_capacity(num_params);
     let mut upper_bounds = Vec::with_capacity(num_params);
 
+    let model = args.effective_peq_model();
     let spacing = 1.0; // Overlap factor - allows adjacent filters to overlap
     let gain_lower = -6.0 * args.max_db;
     let q_lower = args.min_q.max(0.1);
@@ -249,17 +252,33 @@ pub fn setup_bounds(args: &crate::cli::Args) -> (Vec<f64>, Vec<f64>) {
         upper_bounds.extend_from_slice(&[f_high_adjusted, args.max_q, args.max_db]);
     }
 
-    if args.iir_hp_pk {
-        lower_bounds[0] = 20.0_f64.max(args.min_freq).log10();
-        upper_bounds[0] = 120.0_f64.min(args.min_freq + 20.0).log10();
-        lower_bounds[1] = 1.0;
-        upper_bounds[1] = 1.5; // could be tuned as a function of max_db
-        lower_bounds[2] = 0.0;
-        upper_bounds[2] = 0.0;
+    // Apply model-specific constraints
+    match model {
+        PeqModel::HpPk | PeqModel::HpPkLp => {
+            // First filter is highpass
+            lower_bounds[0] = 20.0_f64.max(args.min_freq).log10();
+            upper_bounds[0] = 120.0_f64.min(args.min_freq + 20.0).log10();
+            lower_bounds[1] = 1.0;
+            upper_bounds[1] = 1.5; // could be tuned as a function of max_db
+            lower_bounds[2] = 0.0;
+            upper_bounds[2] = 0.0;
+        }
+        _ => {}
+    }
+
+    if matches!(model, PeqModel::HpPkLp) && args.num_filters > 1 {
+        // Last filter is lowpass
+        let last_idx = (args.num_filters - 1) * 3;
+        lower_bounds[last_idx] = (args.max_freq - 2000.0).max(5000.0).log10();
+        upper_bounds[last_idx] = args.max_freq.log10();
+        lower_bounds[last_idx + 1] = 1.0;
+        upper_bounds[last_idx + 1] = 1.5;
+        lower_bounds[last_idx + 2] = 0.0;
+        upper_bounds[last_idx + 2] = 0.0;
     }
 
     // Debug: Display bounds for each filter
-    println!("\n📐 Parameter Bounds:");
+    println!("\n📏 Parameter Bounds (Model: {}):", model);
     println!("+-# -|---Freq Range (Hz)---|----Q Range----|---Gain Range (dB)---|--Type--+");
     for i in 0..args.num_filters {
         let freq_low_hz = 10f64.powf(lower_bounds[i * 3]);
@@ -269,7 +288,17 @@ pub fn setup_bounds(args: &crate::cli::Args) -> (Vec<f64>, Vec<f64>) {
         let gain_low = lower_bounds[i * 3 + 2];
         let gain_high = upper_bounds[i * 3 + 2];
 
-        let filter_type = if args.iir_hp_pk && i == 0 { "HP" } else { "PK" };
+        let filter_type = match model {
+            PeqModel::Pk => "PK",
+            PeqModel::HpPk if i == 0 => "HP",
+            PeqModel::HpPk => "PK",
+            PeqModel::HpPkLp if i == 0 => "HP",
+            PeqModel::HpPkLp if i == args.num_filters - 1 => "LP",
+            PeqModel::HpPkLp => "PK",
+            PeqModel::FreePkFree if i == 0 || i == args.num_filters - 1 => "FREE",
+            PeqModel::FreePkFree => "PK",
+            PeqModel::Free => "FREE",
+        };
 
         println!(
             "| {:2} | {:7.1} - {:7.1} | {:5.2} - {:5.2} | {:+6.2} - {:+6.2} | {:6} |",

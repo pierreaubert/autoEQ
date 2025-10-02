@@ -19,9 +19,68 @@
 use super::optim::{get_all_algorithms, AlgorithmType};
 use crate::de::Strategy;
 use crate::LossType;
-use clap::Parser;
+use clap::{Parser, ValueEnum};
+use std::fmt;
 use std::path::PathBuf;
 use std::process;
+
+/// PEQ model types that define the structure and constraints of the equalizer
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum PeqModel {
+    /// All filters are peak filters
+    #[value(name = "pk")]
+    Pk,
+    /// First filter is highpass, rest are peak filters
+    #[value(name = "hp-pk")]
+    HpPk,
+    /// First filter is highpass, last is lowpass, rest are peak filters
+    #[value(name = "hp-pk-lp")]
+    HpPkLp,
+    /// First and last filters are free (any type), rest are peak filters
+    #[value(name = "free-pk-free")]
+    FreePkFree,
+    /// All filters are free to be any type
+    #[value(name = "free")]
+    Free,
+}
+
+impl fmt::Display for PeqModel {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            PeqModel::Pk => write!(f, "pk"),
+            PeqModel::HpPk => write!(f, "hp-pk"),
+            PeqModel::HpPkLp => write!(f, "hp-pk-lp"),
+            PeqModel::FreePkFree => write!(f, "free-pk-free"),
+            PeqModel::Free => write!(f, "free"),
+        }
+    }
+}
+
+impl PeqModel {
+    /// Get all available PEQ models
+    pub fn all() -> Vec<Self> {
+        vec![
+            PeqModel::Pk,
+            PeqModel::HpPk,
+            PeqModel::HpPkLp,
+            PeqModel::FreePkFree,
+            PeqModel::Free,
+        ]
+    }
+
+    /// Get a description of the model
+    pub fn description(&self) -> &'static str {
+        match self {
+            PeqModel::Pk => "All filters are peak/bell filters",
+            PeqModel::HpPk => "First filter is highpass, rest are peak filters",
+            PeqModel::HpPkLp => "First filter is highpass, last is lowpass, rest are peak filters",
+            PeqModel::FreePkFree => {
+                "First and last filters can be any type, middle filters are peak"
+            }
+            PeqModel::Free => "All filters can be any type (peak, highpass, lowpass, shelf)",
+        }
+    }
+}
 
 /// Shared CLI arguments for AutoEQ binaries.
 #[derive(Parser, Debug, Clone)]
@@ -130,9 +189,18 @@ pub struct Args {
     #[arg(long, value_enum, default_value_t = LossType::SpeakerFlat)]
     pub loss: LossType,
 
+    /// PEQ model that defines the filter structure
+    #[arg(long, value_enum, default_value_t = PeqModel::Pk)]
+    pub peq_model: PeqModel,
+
+    /// Display list of available PEQ models with descriptions and exit.
+    #[arg(long, default_value_t = false)]
+    pub peq_model_list: bool,
+
     /// If present/true: use a Highpass for the lowest-frequency IIR and do NOT clip the inverted curve.
     /// If false: use all Peak filters and clip the inverted curve on the positive side (current behaviour).
-    #[arg(long, default_value_t = false)]
+    /// DEPRECATED: Use --peq-model hp-pk instead
+    #[arg(long, default_value_t = false, hide = true)]
     pub iir_hp_pk: bool,
 
     /// Display list of available optimization algorithms with descriptions and exit.
@@ -174,6 +242,27 @@ pub struct Args {
     /// Number of threads to use for parallel evaluation (0 = use all available cores)
     #[arg(long, default_value_t = 0)]
     pub parallel_threads: usize,
+}
+
+impl Args {
+    /// Get the effective PEQ model, handling the deprecated iir_hp_pk flag
+    pub fn effective_peq_model(&self) -> PeqModel {
+        if self.iir_hp_pk {
+            // If the deprecated flag is used, override with hp-pk model
+            eprintln!("⚠️  Warning: --iir-hp-pk is deprecated. Use --peq-model hp-pk instead.");
+            PeqModel::HpPk
+        } else {
+            self.peq_model
+        }
+    }
+
+    /// Check if the first filter should be a highpass (for compatibility)
+    pub fn uses_highpass_first(&self) -> bool {
+        matches!(
+            self.effective_peq_model(),
+            PeqModel::HpPk | PeqModel::HpPkLp
+        )
+    }
 }
 
 /// Display available optimization algorithms with descriptions and exit
@@ -617,6 +706,28 @@ pub fn validate_args_or_exit(args: &Args) {
         eprintln!("❌ Validation Error: {}", error);
         process::exit(1);
     }
+}
+
+/// Display available PEQ models with descriptions and exit
+pub fn display_peq_model_list() -> ! {
+    println!("Available PEQ Models");
+    println!("===================");
+    println!();
+    println!("The PEQ model defines the structure and constraints of the equalizer filters.");
+    println!();
+
+    for model in PeqModel::all() {
+        println!("  --peq-model {}", model);
+        println!("    {}", model.description());
+        println!();
+    }
+
+    println!("Examples:");
+    println!("  autoeq --peq-model pk           # All peak filters (default)");
+    println!("  autoeq --peq-model hp-pk        # Highpass + peaks");
+    println!("  autoeq --peq-model hp-pk-lp     # Highpass + peaks + lowpass");
+
+    process::exit(0);
 }
 
 #[cfg(test)]
