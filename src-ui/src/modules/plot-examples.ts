@@ -1,7 +1,13 @@
 // Example usage of AutoEQ plot functions in the frontend
 
-import { AutoEQPlotAPI, PlotUtils, PlotFiltersParams, PlotSpinParams, CurveData } from '../types/plot';
-import * as Plotly from 'plotly.js-dist-min';
+import {
+  AutoEQPlotAPI,
+  PlotUtils,
+  PlotFiltersParams,
+  PlotSpinParams,
+  CurveData,
+} from "../types/plot";
+import * as Plotly from "plotly.js-dist-min";
 
 /**
  * Example: Generate and display filter response plots
@@ -14,7 +20,7 @@ export async function displayFilterPlots(
   optimizedParams: number[],
   sampleRate: number = 48000,
   numFilters: number = 5,
-  iirHpPk: boolean = true
+  iirHpPk: boolean = true,
 ) {
   try {
     // Prepare parameters
@@ -25,7 +31,7 @@ export async function displayFilterPlots(
       optimized_params: optimizedParams,
       sample_rate: sampleRate,
       num_filters: numFilters,
-      iir_hp_pk: iirHpPk
+      iir_hp_pk: iirHpPk,
     };
 
     // Generate plot data from Rust backend
@@ -35,20 +41,25 @@ export async function displayFilterPlots(
     const responsiveLayout = PlotUtils.createResponsiveLayout(800, 600);
     const customLayout = {
       ...responsiveLayout,
-      title: 'Filter Response Analysis',
-      xaxis: { title: 'Frequency (Hz)' },
-      yaxis: { title: 'Magnitude (dB)' }
+      title: "Filter Response Analysis",
+      xaxis: { title: "Frequency (Hz)" },
+      yaxis: { title: "Magnitude (dB)" },
     };
 
     const finalPlotData = PlotUtils.applyUILayout(plotData, customLayout);
     const config = PlotUtils.createDefaultConfig();
 
     // Render the plot
-    await Plotly.newPlot(containerElement, finalPlotData.data, finalPlotData.layout, config);
+    await Plotly.newPlot(
+      containerElement,
+      finalPlotData.data,
+      finalPlotData.layout,
+      config,
+    );
 
-    console.log('Filter plots rendered successfully');
+    console.log("Filter plots rendered successfully");
   } catch (error) {
-    console.error('Error generating filter plots:', error);
+    console.error("Error generating filter plots:", error);
     throw error;
   }
 }
@@ -60,14 +71,14 @@ export async function displaySpinPlots(
   containerElement: HTMLElement,
   cea2034Curves?: { [key: string]: CurveData },
   eqResponse?: number[],
-  frequencies?: number[]
+  frequencies?: number[],
 ) {
   try {
     // Prepare parameters
     const params: PlotSpinParams = {
       cea2034_curves: cea2034Curves,
       eq_response: eqResponse,
-      frequencies: frequencies
+      frequencies: frequencies,
     };
 
     // Generate plot data from Rust backend
@@ -77,20 +88,25 @@ export async function displaySpinPlots(
     const responsiveLayout = PlotUtils.createResponsiveLayout(1000, 700);
     const customLayout = {
       ...responsiveLayout,
-      title: 'CEA2034 Spin Analysis',
-      xaxis: { title: 'Frequency (Hz)', type: 'log' },
-      yaxis: { title: 'SPL (dB)' }
+      title: "CEA2034 Spin Analysis",
+      xaxis: { title: "Frequency (Hz)", type: "log" },
+      yaxis: { title: "SPL (dB)" },
     };
 
     const finalPlotData = PlotUtils.applyUILayout(plotData, customLayout);
     const config = PlotUtils.createDefaultConfig();
 
     // Render the plot
-    await Plotly.newPlot(containerElement, finalPlotData.data, finalPlotData.layout, config);
+    await Plotly.newPlot(
+      containerElement,
+      finalPlotData.data,
+      finalPlotData.layout,
+      config,
+    );
 
-    console.log('Spin plots rendered successfully');
+    console.log("Spin plots rendered successfully");
   } catch (error) {
-    console.error('Error generating spin plots:', error);
+    console.error("Error generating spin plots:", error);
     throw error;
   }
 }
@@ -101,12 +117,12 @@ export async function displaySpinPlots(
 export async function displaySpinDetailsPlots(
   containerElement: HTMLElement,
   cea2034Curves?: { [key: string]: CurveData },
-  eqResponse?: number[]
+  eqResponse?: number[],
 ) {
   try {
     const params: PlotSpinParams = {
       cea2034_curves: cea2034Curves,
-      eq_response: eqResponse
+      eq_response: eqResponse,
     };
 
     const plotData = await AutoEQPlotAPI.generatePlotSpinDetails(params);
@@ -114,18 +130,23 @@ export async function displaySpinDetailsPlots(
     const responsiveLayout = PlotUtils.createResponsiveLayout(1200, 800);
     const customLayout = {
       ...responsiveLayout,
-      title: 'Detailed CEA2034 Analysis',
-      showlegend: true
+      title: "Detailed CEA2034 Analysis",
+      showlegend: true,
     };
 
     const finalPlotData = PlotUtils.applyUILayout(plotData, customLayout);
     const config = PlotUtils.createDefaultConfig();
 
-    await Plotly.newPlot(containerElement, finalPlotData.data, finalPlotData.layout, config);
+    await Plotly.newPlot(
+      containerElement,
+      finalPlotData.data,
+      finalPlotData.layout,
+      config,
+    );
 
-    console.log('Detailed spin plots rendered successfully');
+    console.log("Detailed spin plots rendered successfully");
   } catch (error) {
-    console.error('Error generating detailed spin plots:', error);
+    console.error("Error generating detailed spin plots:", error);
     throw error;
   }
 }
@@ -136,12 +157,12 @@ export async function displaySpinDetailsPlots(
 export async function displayTonalBalancePlots(
   containerElement: HTMLElement,
   cea2034Curves?: { [key: string]: CurveData },
-  eqResponse?: number[]
+  eqResponse?: number[],
 ) {
   try {
     const params: PlotSpinParams = {
       cea2034_curves: cea2034Curves,
-      eq_response: eqResponse
+      eq_response: eqResponse,
     };
 
     const plotData = await AutoEQPlotAPI.generatePlotSpinTonal(params);
@@ -149,19 +170,24 @@ export async function displayTonalBalancePlots(
     const responsiveLayout = PlotUtils.createResponsiveLayout(900, 600);
     const customLayout = {
       ...responsiveLayout,
-      title: 'Tonal Balance Analysis',
-      xaxis: { title: 'Frequency (Hz)', type: 'log' },
-      yaxis: { title: 'Level (dB)' }
+      title: "Tonal Balance Analysis",
+      xaxis: { title: "Frequency (Hz)", type: "log" },
+      yaxis: { title: "Level (dB)" },
     };
 
     const finalPlotData = PlotUtils.applyUILayout(plotData, customLayout);
     const config = PlotUtils.createDefaultConfig();
 
-    await Plotly.newPlot(containerElement, finalPlotData.data, finalPlotData.layout, config);
+    await Plotly.newPlot(
+      containerElement,
+      finalPlotData.data,
+      finalPlotData.layout,
+      config,
+    );
 
-    console.log('Tonal balance plots rendered successfully');
+    console.log("Tonal balance plots rendered successfully");
   } catch (error) {
-    console.error('Error generating tonal balance plots:', error);
+    console.error("Error generating tonal balance plots:", error);
     throw error;
   }
 }
@@ -192,7 +218,7 @@ export function createSampleCurveData(): CurveData {
 export async function displayOptimizationResults(
   filterContainer: HTMLElement,
   spinContainer: HTMLElement,
-  optimizationResult: any // From the existing optimization API
+  optimizationResult: any, // From the existing optimization API
 ) {
   try {
     // Extract data from optimization result
@@ -208,7 +234,7 @@ export async function displayOptimizationResults(
         filter_params,
         48000, // sample rate
         filter_params.length / 3, // num filters (3 params per filter)
-        true // iir_hp_pk
+        true, // iir_hp_pk
       );
     }
 
@@ -217,13 +243,13 @@ export async function displayOptimizationResults(
       await displaySpinPlots(
         spinContainer,
         spin_details.curves,
-        filter_response?.eq_response
+        filter_response?.eq_response,
       );
     }
 
-    console.log('All optimization result plots rendered successfully');
+    console.log("All optimization result plots rendered successfully");
   } catch (error) {
-    console.error('Error displaying optimization results:', error);
+    console.error("Error displaying optimization results:", error);
     throw error;
   }
 }

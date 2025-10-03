@@ -41,6 +41,7 @@ These tests validate the complete optimization pipeline using the real Tauri bac
 To run E2E tests, you need to:
 
 1. **Start Tauri in dev mode** (in one terminal):
+
    ```bash
    npm run tauri dev
    ```
@@ -96,12 +97,14 @@ npm run tauri dev
 ```
 
 **Option 3: Tauri WebDriver (Future)**
+
 ```bash
 # Not yet implemented
 tauri-driver test
 ```
 
 **Option 4: CI with Tauri CLI (Future)**
+
 ```yaml
 - run: cargo tauri test
 ```
@@ -109,6 +112,7 @@ tauri-driver test
 ### Performance
 
 E2E tests take longer than unit tests:
+
 - Each test has 30-second timeout
 - Total suite: ~2-5 minutes
 - Use reduced `maxeval: 500` for faster execution
@@ -137,6 +141,7 @@ To add new test cases:
 3. Use helper functions for validation
 
 Example CSV format:
+
 ```csv
 frequency,spl
 20,70.5
@@ -157,6 +162,7 @@ frequency,spl
 ### Test Isolation
 
 E2E tests:
+
 - Use real backend (not mocked)
 - Read from filesystem fixtures
 - Network access for speaker API tests
@@ -167,6 +173,7 @@ E2E tests:
 ### Enable Verbose Logging
 
 Tests output progress messages:
+
 ```
 ✅ Speaker+CEA2034: Generated 5 filters
    Preference score: 5.42 → 7.18
@@ -178,14 +185,17 @@ Tests output progress messages:
 ### Common Issues
 
 **Test timeout:**
+
 - Increase `maxeval` value reduces test time
 - Check backend is running in dev mode
 
 **File not found:**
+
 - Verify fixture paths are correct
 - Check `FIXTURES_DIR` resolves properly
 
 **Backend errors:**
+
 - Check Rust compilation succeeded
 - Verify Tauri bindings are up to date
 
@@ -193,11 +203,11 @@ Tests output progress messages:
 
 Baseline performance targets:
 
-| Test Case | Target Time | Max Time |
-|-----------|-------------|----------|
-| File (3 filters) | <5s | <10s |
-| Headphone (5 filters) | <8s | <15s |
-| Speaker (5 filters) | <10s | <20s |
+| Test Case             | Target Time | Max Time |
+| --------------------- | ----------- | -------- |
+| File (3 filters)      | <5s         | <10s     |
+| Headphone (5 filters) | <8s         | <15s     |
+| Speaker (5 filters)   | <10s        | <20s     |
 
 ## Future Enhancements
 

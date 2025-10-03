@@ -1,13 +1,13 @@
 // Main PlotManager export - combines all plot modules
 
-import Plotly from 'plotly.js-dist-min';
-import { PlotData } from '../../types';
-import { PlotBase } from './base';
-import { FilterPlot } from './filter-plot';
-import { SpinPlot } from './spin-plot';
-import { DetailsPlot } from './details-plot';
-import { TonalPlot } from './tonal-plot';
-import { ProgressPlot } from './progress-plot';
+import Plotly from "plotly.js-dist-min";
+import { PlotData } from "../../types";
+import { PlotBase } from "./base";
+import { FilterPlot } from "./filter-plot";
+import { SpinPlot } from "./spin-plot";
+import { DetailsPlot } from "./details-plot";
+import { TonalPlot } from "./tonal-plot";
+import { ProgressPlot } from "./progress-plot";
 
 export class PlotManager extends PlotBase {
   private filterPlot: FilterPlot;
@@ -25,7 +25,7 @@ export class PlotManager extends PlotBase {
     detailsPlotElement: HTMLElement | null,
     spinPlotElement: HTMLElement,
     progressGraphElement?: HTMLElement,
-    tonalPlotElement?: HTMLElement
+    tonalPlotElement?: HTMLElement,
   ) {
     super();
 
@@ -45,14 +45,14 @@ export class PlotManager extends PlotBase {
     const allPlotElements = [
       this.filterPlotElement,
       this.detailsPlotElement,
-      this.spinPlotElement
+      this.spinPlotElement,
     ].filter(Boolean); // Filter out null elements
 
     // Also clear progress graph
     this.clearProgressGraph();
 
     try {
-      allPlotElements.forEach(element => {
+      allPlotElements.forEach((element) => {
         if (element) {
           this.clearPlotElement(element);
         }
@@ -61,7 +61,7 @@ export class PlotManager extends PlotBase {
       // Hide spinorama vertical items by default
       this.hideSpinVerticalItems();
     } catch (error) {
-      console.error('Error clearing plots:', error);
+      console.error("Error clearing plots:", error);
     }
   }
 
@@ -90,7 +90,11 @@ export class PlotManager extends PlotBase {
     this.progressPlot.clearProgressGraph();
   }
 
-  addProgressData(iteration: number, fitness: number, convergence: number): void {
+  addProgressData(
+    iteration: number,
+    fitness: number,
+    convergence: number,
+  ): void {
     this.progressPlot.addProgressData(iteration, fitness, convergence);
   }
 

@@ -1,13 +1,15 @@
 // Types for optimization parameters and results
 
-export type PeqModel = 'pk' | 'hp-pk' | 'hp-pk-lp' | 'free-pk-free' | 'free';
+export type PeqModel = "pk" | "hp-pk" | "hp-pk-lp" | "free-pk-free" | "free";
 
 export const PEQ_MODEL_DESCRIPTIONS: Record<PeqModel, string> = {
-  'pk': 'All filters are peak/bell filters',
-  'hp-pk': 'First filter is highpass, rest are peak filters',
-  'hp-pk-lp': 'First filter is highpass, last is lowpass, rest are peak filters',
-  'free-pk-free': 'First and last filters can be any type, middle filters are peak',
-  'free': 'All filters can be any type'
+  pk: "All filters are peak/bell filters",
+  "hp-pk": "First filter is highpass, rest are peak filters",
+  "hp-pk-lp":
+    "First filter is highpass, last is lowpass, rest are peak filters",
+  "free-pk-free":
+    "First and last filters can be any type, middle filters are peak",
+  free: "All filters can be any type",
 };
 
 export interface OptimizationParams {
@@ -35,8 +37,8 @@ export interface OptimizationParams {
   smooth: boolean;
   smooth_n: number;
   loss: string;
-  peq_model?: PeqModel;  // New PEQ model system
-  iir_hp_pk: boolean;    // Deprecated, kept for backward compatibility
+  peq_model?: PeqModel; // New PEQ model system
+  iir_hp_pk: boolean; // Deprecated, kept for backward compatibility
   // DE-specific parameters
   strategy?: string;
   de_f?: number;
@@ -70,8 +72,8 @@ export interface OptimizationResult {
   filter_response?: PlotData;
   spin_details?: PlotData;
   filter_plots?: PlotData;
-  input_curve?: PlotData;      // Original normalized input curve
-  deviation_curve?: PlotData;  // Target - Input (what needs to be corrected)
+  input_curve?: PlotData; // Original normalized input curve
+  deviation_curve?: PlotData; // Target - Input (what needs to be corrected)
 }
 
 export interface ProgressData {

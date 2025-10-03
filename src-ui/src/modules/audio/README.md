@@ -18,21 +18,21 @@ A standalone, reusable audio player component extracted from the AutoEQ applicat
 ### Basic Usage
 
 ```typescript
-import { AudioPlayer } from './modules/audio-player';
+import { AudioPlayer } from "./modules/audio-player";
 
 // Create a basic audio player
 const player = new AudioPlayer(
-  document.getElementById('audio-container'),
+  document.getElementById("audio-container"),
   {
     enableEQ: true,
     enableSpectrum: true,
-    showProgress: true
+    showProgress: true,
   },
   {
-    onPlay: () => console.log('Playing'),
-    onStop: () => console.log('Stopped'),
-    onError: (error) => console.error('Error:', error)
-  }
+    onPlay: () => console.log("Playing"),
+    onStop: () => console.log("Stopped"),
+    onError: (error) => console.error("Error:", error),
+  },
 );
 ```
 
@@ -41,13 +41,13 @@ const player = new AudioPlayer(
 ```html
 <!DOCTYPE html>
 <html>
-<head>
-  <link rel="stylesheet" href="modules/audio-player.css">
-</head>
-<body>
-  <div id="audio-container"></div>
-  <script type="module" src="your-script.js"></script>
-</body>
+  <head>
+    <link rel="stylesheet" href="modules/audio-player.css" />
+  </head>
+  <body>
+    <div id="audio-container"></div>
+    <script type="module" src="your-script.js"></script>
+  </body>
 </html>
 ```
 
@@ -142,7 +142,7 @@ const eqEnabled = player.isEQEnabled();
 player.updateFilterParams([
   { frequency: 100, q: 1, gain: 3 },
   { frequency: 1000, q: 2, gain: -2 },
-  { frequency: 10000, q: 1, gain: 1 }
+  { frequency: 10000, q: 1, gain: 1 },
 ]);
 ```
 
@@ -150,11 +150,11 @@ player.updateFilterParams([
 
 ```typescript
 // Load from URL
-await player.loadAudioFromUrl('/path/to/audio.wav');
+await player.loadAudioFromUrl("/path/to/audio.wav");
 
 // Load from file
-const fileInput = document.getElementById('file-input');
-fileInput.addEventListener('change', async (e) => {
+const fileInput = document.getElementById("file-input");
+fileInput.addEventListener("change", async (e) => {
   const file = e.target.files[0];
   if (file) {
     await player.loadAudioFile(file);
@@ -178,12 +178,12 @@ player.destroy();
 
 ```typescript
 const minimalPlayer = new AudioPlayer(
-  document.getElementById('minimal-player'),
+  document.getElementById("minimal-player"),
   {
     enableEQ: false,
     enableSpectrum: false,
-    compactMode: true
-  }
+    compactMode: true,
+  },
 );
 ```
 
@@ -191,38 +191,35 @@ const minimalPlayer = new AudioPlayer(
 
 ```typescript
 const fullPlayer = new AudioPlayer(
-  document.getElementById('full-player'),
+  document.getElementById("full-player"),
   {
     enableEQ: true,
     enableSpectrum: true,
     showProgress: true,
     showFrequencyLabels: true,
     fftSize: 4096,
-    maxFilters: 20
+    maxFilters: 20,
   },
   {
-    onPlay: () => console.log('Playback started'),
-    onStop: () => console.log('Playback stopped'),
-    onEQToggle: (enabled) => console.log(`EQ ${enabled ? 'on' : 'off'}`),
+    onPlay: () => console.log("Playback started"),
+    onStop: () => console.log("Playback stopped"),
+    onEQToggle: (enabled) => console.log(`EQ ${enabled ? "on" : "off"}`),
     onTrackChange: (track) => console.log(`Track: ${track}`),
-    onError: (error) => console.error(`Player error: ${error}`)
-  }
+    onError: (error) => console.error(`Player error: ${error}`),
+  },
 );
 ```
 
 ### Custom Demo Tracks
 
 ```typescript
-const customPlayer = new AudioPlayer(
-  document.getElementById('custom-player'),
-  {
-    demoTracks: {
-      'my_track_1': '/audio/track1.mp3',
-      'my_track_2': '/audio/track2.wav',
-      'my_track_3': '/audio/track3.flac'
-    }
-  }
-);
+const customPlayer = new AudioPlayer(document.getElementById("custom-player"), {
+  demoTracks: {
+    my_track_1: "/audio/track1.mp3",
+    my_track_2: "/audio/track2.wav",
+    my_track_3: "/audio/track3.flac",
+  },
+});
 ```
 
 ## CSS Customization
@@ -305,10 +302,10 @@ npx serve .
 The audio player can be integrated back into the main AutoEQ application:
 
 ```typescript
-import { AudioPlayer } from './modules/audio-player';
+import { AudioPlayer } from "./modules/audio-player";
 
 // Replace existing audio functionality
-const audioContainer = document.getElementById('audio-controls');
+const audioContainer = document.getElementById("audio-controls");
 const player = new AudioPlayer(audioContainer, config, callbacks);
 
 // Connect to optimization results
@@ -317,7 +314,7 @@ optimizationManager.onComplete((result) => {
     const filters = result.filter_params.map((param, i) => ({
       frequency: param[0],
       q: param[1],
-      gain: param[2]
+      gain: param[2],
     }));
     player.updateFilterParams(filters);
   }
@@ -328,11 +325,13 @@ optimizationManager.onComplete((result) => {
 
 ```typescript
 // Standalone integration
-import { AudioPlayer } from './path/to/audio-player';
+import { AudioPlayer } from "./path/to/audio-player";
 
 const player = new AudioPlayer(
-  document.getElementById('audio-player'),
-  { /* config */ },
+  document.getElementById("audio-player"),
+  {
+    /* config */
+  },
   {
     onTrackChange: (track) => {
       // Update your app's state
@@ -341,8 +340,8 @@ const player = new AudioPlayer(
     onEQToggle: (enabled) => {
       // Sync with your app's EQ state
       syncEQState(enabled);
-    }
-  }
+    },
+  },
 );
 ```
 
@@ -364,9 +363,9 @@ Enable console logging for debugging:
 const player = new AudioPlayer(container, config, {
   ...callbacks,
   onError: (error) => {
-    console.error('AudioPlayer Error:', error);
+    console.error("AudioPlayer Error:", error);
     // Your error handling
-  }
+  },
 });
 ```
 

@@ -116,7 +116,7 @@ fn calculate_similarity_score(target: &str, candidate: &str) -> usize {
     let distance = levenshtein(&target_lower, &candidate_lower);
 
     // Add a small penalty for length differences to prefer similar-length matches
-    let length_diff = (target.len() as isize - candidate.len() as isize).abs() as usize;
+    let length_diff = (target.len() as isize - candidate.len() as isize).unsigned_abs();
     distance + length_diff / 4
 }
 
@@ -130,7 +130,7 @@ fn is_reasonable_match(target: &str, candidate: &str, score: usize) -> bool {
     }
 
     // For longer strings, allow more variation
-    let threshold = (max_length / 3).max(2).min(6);
+    let threshold = (max_length / 3).clamp(2, 6);
     score <= threshold
 }
 

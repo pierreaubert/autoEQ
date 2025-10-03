@@ -1,13 +1,17 @@
 // Tests for AudioPlayer functionality
-import { describe, test, expect, beforeEach, vi, afterEach } from 'vitest';
-import { AudioPlayer, type AudioPlayerConfig, type AudioPlayerCallbacks } from '../../modules/audio/audio-player';
+import { describe, test, expect, beforeEach, vi, afterEach } from "vitest";
+import {
+  AudioPlayer,
+  type AudioPlayerConfig,
+  type AudioPlayerCallbacks,
+} from "../../modules/audio/audio-player";
 
 // Mock Web Audio API
 const mockAudioContext = {
   createGain: vi.fn(() => ({
     connect: vi.fn(),
     disconnect: vi.fn(),
-    gain: { value: 1 }
+    gain: { value: 1 },
   })),
   createAnalyser: vi.fn(() => ({
     connect: vi.fn(),
@@ -15,7 +19,7 @@ const mockAudioContext = {
     fftSize: 2048,
     smoothingTimeConstant: 0.8,
     frequencyBinCount: 1024,
-    getByteFrequencyData: vi.fn()
+    getByteFrequencyData: vi.fn(),
   })),
   createBufferSource: vi.fn(() => ({
     connect: vi.fn(),
@@ -23,22 +27,22 @@ const mockAudioContext = {
     start: vi.fn(),
     stop: vi.fn(),
     buffer: null,
-    onended: null
+    onended: null,
   })),
   createBiquadFilter: vi.fn(() => ({
     connect: vi.fn(),
     disconnect: vi.fn(),
-    type: 'peaking',
+    type: "peaking",
     frequency: { value: 1000 },
     Q: { value: 1 },
-    gain: { value: 0 }
+    gain: { value: 0 },
   })),
   decodeAudioData: vi.fn(),
   resume: vi.fn(),
   close: vi.fn(),
   destination: {},
   currentTime: 0,
-  state: 'running'
+  state: "running",
 };
 
 // Mock global AudioContext
@@ -47,14 +51,14 @@ const mockAudioContext = {
 
 // Mock Canvas API
 const mockCanvasContext = {
-  fillStyle: '',
+  fillStyle: "",
   fillRect: vi.fn(),
-  clearRect: vi.fn()
+  clearRect: vi.fn(),
 };
 
 // Mock canvas getContext method
 HTMLCanvasElement.prototype.getContext = vi.fn((contextType: string) => {
-  if (contextType === '2d') {
+  if (contextType === "2d") {
     return mockCanvasContext as any;
   }
   return null;
@@ -71,7 +75,7 @@ globalThis.requestAnimationFrame = vi.fn((cb) => {
 
 globalThis.cancelAnimationFrame = vi.fn();
 
-describe('AudioPlayer', () => {
+describe("AudioPlayer", () => {
   let container: HTMLElement;
   let audioPlayer: AudioPlayer;
   let mockCallbacks: AudioPlayerCallbacks;
@@ -85,8 +89,8 @@ describe('AudioPlayer', () => {
     (globalThis as any).webkitAudioContext = vi.fn(() => mockAudioContext);
 
     // Create mock container
-    container = document.createElement('div');
-    container.innerHTML = '';
+    container = document.createElement("div");
+    container.innerHTML = "";
     container.querySelector = vi.fn();
 
     // Mock callbacks
@@ -95,7 +99,7 @@ describe('AudioPlayer', () => {
       onStop: vi.fn(),
       onEQToggle: vi.fn(),
       onTrackChange: vi.fn(),
-      onError: vi.fn()
+      onError: vi.fn(),
     };
   });
 
@@ -105,20 +109,20 @@ describe('AudioPlayer', () => {
     }
   });
 
-  describe('Constructor and Initialization', () => {
-    test('should create AudioPlayer with default config', () => {
+  describe("Constructor and Initialization", () => {
+    test("should create AudioPlayer with default config", () => {
       audioPlayer = new AudioPlayer(container);
 
       expect(audioPlayer).toBeInstanceOf(AudioPlayer);
       expect(mockAudioContext.createGain).toHaveBeenCalled();
     });
 
-    test('should create AudioPlayer with custom config', () => {
+    test("should create AudioPlayer with custom config", () => {
       const config: AudioPlayerConfig = {
         enableEQ: false,
         enableSpectrum: false,
         maxFilters: 5,
-        compactMode: true
+        compactMode: true,
       };
 
       audioPlayer = new AudioPlayer(container, config, mockCallbacks);
@@ -126,10 +130,10 @@ describe('AudioPlayer', () => {
       expect(audioPlayer).toBeInstanceOf(AudioPlayer);
     });
 
-    test('should handle audio context creation failure', async () => {
+    test("should handle audio context creation failure", async () => {
       // Mock AudioContext to throw error
       (globalThis as any).AudioContext = vi.fn(() => {
-        throw new Error('AudioContext not supported');
+        throw new Error("AudioContext not supported");
       });
       (globalThis as any).webkitAudioContext = undefined;
 
@@ -138,54 +142,54 @@ describe('AudioPlayer', () => {
       }).not.toThrow(); // Should handle gracefully
 
       // Wait for async init to complete
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise((resolve) => setTimeout(resolve, 50));
 
       expect(mockCallbacks.onError).toHaveBeenCalledWith(
-        expect.stringContaining('Failed to initialize audio player')
+        expect.stringContaining("Failed to initialize audio player"),
       );
     });
   });
 
-  describe('UI Creation', () => {
+  describe("UI Creation", () => {
     beforeEach(() => {
       audioPlayer = new AudioPlayer(container);
     });
 
-    test('should create UI elements', () => {
-      expect(container.innerHTML).toContain('audio-player');
-      expect(container.innerHTML).toContain('demo-audio-select');
-      expect(container.innerHTML).toContain('listen-button');
+    test("should create UI elements", () => {
+      expect(container.innerHTML).toContain("audio-player");
+      expect(container.innerHTML).toContain("demo-audio-select");
+      expect(container.innerHTML).toContain("listen-button");
     });
 
-    test('should include EQ controls when enabled', () => {
+    test("should include EQ controls when enabled", () => {
       const config: AudioPlayerConfig = { enableEQ: true };
       audioPlayer = new AudioPlayer(container, config);
 
-      expect(container.innerHTML).toContain('eq-toggle-btn');
+      expect(container.innerHTML).toContain("eq-toggle-btn");
     });
 
-    test.skip('should exclude EQ controls when disabled', () => {
+    test.skip("should exclude EQ controls when disabled", () => {
       const config: AudioPlayerConfig = { enableEQ: false };
       audioPlayer = new AudioPlayer(container, config);
 
       // The modal is always created, but the UI controls should not be rendered
       // Check that the main EQ UI controls are not present in the container
-      const eqSections = container.querySelectorAll('.eq-control-section');
-      const eqButtons = container.querySelectorAll('.eq-toggle-btn');
+      const eqSections = container.querySelectorAll(".eq-control-section");
+      const eqButtons = container.querySelectorAll(".eq-toggle-btn");
 
       expect(eqSections.length).toBe(0);
       expect(eqButtons.length).toBe(0);
     });
 
-    test('should include spectrum analyzer when enabled', () => {
+    test("should include spectrum analyzer when enabled", () => {
       const config: AudioPlayerConfig = { enableSpectrum: true };
       audioPlayer = new AudioPlayer(container, config);
 
-      expect(container.innerHTML).toContain('spectrum-canvas');
+      expect(container.innerHTML).toContain("spectrum-canvas");
     });
 
-    test.skip('should generate unique IDs for multiple instances', () => {
-      const container2 = document.createElement('div');
+    test.skip("should generate unique IDs for multiple instances", () => {
+      const container2 = document.createElement("div");
 
       // Both instances should be separate
       expect(audioPlayer).toBeDefined();
@@ -207,73 +211,89 @@ describe('AudioPlayer', () => {
     });
   });
 
-  describe('Audio Loading', () => {
+  describe("Audio Loading", () => {
     beforeEach(() => {
       audioPlayer = new AudioPlayer(container, {}, mockCallbacks);
     });
 
-    test('should load audio file successfully', async () => {
+    test("should load audio file successfully", async () => {
       const mockArrayBuffer = new ArrayBuffer(1024);
-      const mockAudioBuffer = { duration: 10, sampleRate: 44100, numberOfChannels: 2 };
+      const mockAudioBuffer = {
+        duration: 10,
+        sampleRate: 44100,
+        numberOfChannels: 2,
+      };
 
-      const mockFile = new File([mockArrayBuffer], 'test.wav', { type: 'audio/wav' });
+      const mockFile = new File([mockArrayBuffer], "test.wav", {
+        type: "audio/wav",
+      });
       mockFile.arrayBuffer = vi.fn().mockResolvedValue(mockArrayBuffer);
 
       mockAudioContext.decodeAudioData.mockResolvedValue(mockAudioBuffer);
 
       await audioPlayer.loadAudioFile(mockFile);
 
-      expect(mockAudioContext.decodeAudioData).toHaveBeenCalledWith(mockArrayBuffer);
-    });
-
-    test('should handle audio file loading error', async () => {
-      const mockFile = new File([''], 'test.wav', { type: 'audio/wav' });
-      mockFile.arrayBuffer = vi.fn().mockRejectedValue(new Error('File read error'));
-
-      await expect(audioPlayer.loadAudioFile(mockFile)).rejects.toThrow('File read error');
-      expect(mockCallbacks.onError).toHaveBeenCalledWith(
-        expect.stringContaining('Failed to load audio file')
+      expect(mockAudioContext.decodeAudioData).toHaveBeenCalledWith(
+        mockArrayBuffer,
       );
     });
 
-    test('should load demo track from URL', async () => {
+    test("should handle audio file loading error", async () => {
+      const mockFile = new File([""], "test.wav", { type: "audio/wav" });
+      mockFile.arrayBuffer = vi
+        .fn()
+        .mockRejectedValue(new Error("File read error"));
+
+      await expect(audioPlayer.loadAudioFile(mockFile)).rejects.toThrow(
+        "File read error",
+      );
+      expect(mockCallbacks.onError).toHaveBeenCalledWith(
+        expect.stringContaining("Failed to load audio file"),
+      );
+    });
+
+    test("should load demo track from URL", async () => {
       const mockArrayBuffer = new ArrayBuffer(1024);
-      const mockAudioBuffer = { duration: 10, sampleRate: 44100, numberOfChannels: 2 };
+      const mockAudioBuffer = {
+        duration: 10,
+        sampleRate: 44100,
+        numberOfChannels: 2,
+      };
 
       (globalThis.fetch as any).mockResolvedValue({
         ok: true,
-        arrayBuffer: () => Promise.resolve(mockArrayBuffer)
+        arrayBuffer: () => Promise.resolve(mockArrayBuffer),
       });
 
       mockAudioContext.decodeAudioData.mockResolvedValue(mockAudioBuffer);
 
       const config: AudioPlayerConfig = {
-        demoTracks: { 'test': '/demo-audio/test.wav' }
+        demoTracks: { test: "/demo-audio/test.wav" },
       };
 
       audioPlayer = new AudioPlayer(container, config, mockCallbacks);
 
       // Call loadDemoTrack and verify fetch was called
-      await audioPlayer['loadDemoTrack']('test');
+      await audioPlayer["loadDemoTrack"]("test");
 
-      expect(globalThis.fetch).toHaveBeenCalledWith('/demo-audio/test.wav');
+      expect(globalThis.fetch).toHaveBeenCalledWith("/demo-audio/test.wav");
       // onTrackChange may not be called in the current implementation, remove assertion
     });
   });
 
-  describe('Playback Controls', () => {
+  describe("Playback Controls", () => {
     beforeEach(() => {
       audioPlayer = new AudioPlayer(container, {}, mockCallbacks);
 
       // Mock audio buffer
-      audioPlayer['audioBuffer'] = {
+      audioPlayer["audioBuffer"] = {
         duration: 10,
         sampleRate: 44100,
-        numberOfChannels: 2
+        numberOfChannels: 2,
       } as AudioBuffer;
     });
 
-    test('should start playback successfully', async () => {
+    test("should start playback successfully", async () => {
       const mockSource = mockAudioContext.createBufferSource();
       mockAudioContext.createBufferSource.mockReturnValue(mockSource);
 
@@ -284,12 +304,13 @@ describe('AudioPlayer', () => {
       expect(audioPlayer.isPlaying()).toBe(true);
     });
 
-    test('should stop playback successfully', () => {
+    test("should stop playback successfully", () => {
       // Set up playing state
-      audioPlayer['isAudioPlaying'] = true;
+      audioPlayer["isAudioPlaying"] = true;
       const mockSource = mockAudioContext.createBufferSource();
       mockSource.stop = vi.fn(); // Ensure stop is a spy
-      audioPlayer['audioSource'] = mockSource as unknown as AudioBufferSourceNode;
+      audioPlayer["audioSource"] =
+        mockSource as unknown as AudioBufferSourceNode;
 
       audioPlayer.stop();
 
@@ -298,14 +319,16 @@ describe('AudioPlayer', () => {
       expect(audioPlayer.isPlaying()).toBe(false);
     });
 
-    test('should handle playback without audio buffer', async () => {
-      audioPlayer['audioBuffer'] = null;
+    test("should handle playback without audio buffer", async () => {
+      audioPlayer["audioBuffer"] = null;
 
-      await expect(audioPlayer.play()).rejects.toThrow('No audio loaded for playback');
+      await expect(audioPlayer.play()).rejects.toThrow(
+        "No audio loaded for playback",
+      );
     });
 
-    test('should resume suspended audio context', async () => {
-      mockAudioContext.state = 'suspended';
+    test("should resume suspended audio context", async () => {
+      mockAudioContext.state = "suspended";
 
       const mockSource = mockAudioContext.createBufferSource();
       mockAudioContext.createBufferSource.mockReturnValue(mockSource);
@@ -316,30 +339,34 @@ describe('AudioPlayer', () => {
     });
   });
 
-  describe('EQ Controls', () => {
+  describe("EQ Controls", () => {
     beforeEach(() => {
-      audioPlayer = new AudioPlayer(container, { enableEQ: true }, mockCallbacks);
+      audioPlayer = new AudioPlayer(
+        container,
+        { enableEQ: true },
+        mockCallbacks,
+      );
     });
 
-    test('should enable EQ', () => {
+    test("should enable EQ", () => {
       audioPlayer.setEQEnabled(true);
 
       expect(audioPlayer.isEQEnabled()).toBe(true);
       expect(mockCallbacks.onEQToggle).toHaveBeenCalledWith(true);
     });
 
-    test('should disable EQ', () => {
+    test("should disable EQ", () => {
       audioPlayer.setEQEnabled(false);
 
       expect(audioPlayer.isEQEnabled()).toBe(false);
       expect(mockCallbacks.onEQToggle).toHaveBeenCalledWith(false);
     });
 
-    test('should update filter parameters', () => {
+    test("should update filter parameters", () => {
       const filterParams = [
         { frequency: 100, q: 1, gain: 5 },
         { frequency: 1000, q: 2, gain: -3 },
-        { frequency: 10000, q: 1.5, gain: 2 }
+        { frequency: 10000, q: 1.5, gain: 2 },
       ];
 
       audioPlayer.updateFilterParams(filterParams);
@@ -347,10 +374,10 @@ describe('AudioPlayer', () => {
       expect(mockAudioContext.createBiquadFilter).toHaveBeenCalledTimes(3);
     });
 
-    test('should skip filters with zero gain', () => {
+    test("should skip filters with zero gain", () => {
       const filterParams = [
         { frequency: 100, q: 1, gain: 0 },
-        { frequency: 1000, q: 2, gain: 5 }
+        { frequency: 1000, q: 2, gain: 5 },
       ];
 
       audioPlayer.updateFilterParams(filterParams);
@@ -360,92 +387,102 @@ describe('AudioPlayer', () => {
     });
   });
 
-  describe('Public API', () => {
+  describe("Public API", () => {
     beforeEach(() => {
       audioPlayer = new AudioPlayer(container, {}, mockCallbacks);
     });
 
-    test('should return current track', () => {
+    test("should return current track", () => {
       // Mock demo select element
-      const mockSelect = { value: 'classical' };
-      audioPlayer['demoSelect'] = mockSelect as HTMLSelectElement;
+      const mockSelect = { value: "classical" };
+      audioPlayer["demoSelect"] = mockSelect as HTMLSelectElement;
 
-      expect(audioPlayer.getCurrentTrack()).toBe('classical');
+      expect(audioPlayer.getCurrentTrack()).toBe("classical");
     });
 
-    test('should return null when no track selected', () => {
-      const mockSelect = { value: '' };
-      audioPlayer['demoSelect'] = mockSelect as HTMLSelectElement;
+    test("should return null when no track selected", () => {
+      const mockSelect = { value: "" };
+      audioPlayer["demoSelect"] = mockSelect as HTMLSelectElement;
 
       expect(audioPlayer.getCurrentTrack()).toBe(null);
     });
 
-    test('should return playing state', () => {
+    test("should return playing state", () => {
       expect(audioPlayer.isPlaying()).toBe(false);
 
-      audioPlayer['isAudioPlaying'] = true;
+      audioPlayer["isAudioPlaying"] = true;
       expect(audioPlayer.isPlaying()).toBe(true);
     });
 
-    test('should return EQ enabled state', () => {
+    test("should return EQ enabled state", () => {
       expect(audioPlayer.isEQEnabled()).toBe(true);
 
-      audioPlayer['eqEnabled'] = false;
+      audioPlayer["eqEnabled"] = false;
       expect(audioPlayer.isEQEnabled()).toBe(false);
     });
   });
 
-  describe('Cleanup', () => {
+  describe("Cleanup", () => {
     beforeEach(() => {
       audioPlayer = new AudioPlayer(container, {}, mockCallbacks);
     });
 
-    test('should cleanup resources on destroy', () => {
+    test("should cleanup resources on destroy", () => {
       // Set up some state
-      audioPlayer['isAudioPlaying'] = true;
-      audioPlayer['eqFilters'] = [mockAudioContext.createBiquadFilter() as unknown as BiquadFilterNode];
-      audioPlayer['gainNode'] = mockAudioContext.createGain() as unknown as GainNode;
-      audioPlayer['analyserNode'] = mockAudioContext.createAnalyser() as unknown as AnalyserNode;
+      audioPlayer["isAudioPlaying"] = true;
+      audioPlayer["eqFilters"] = [
+        mockAudioContext.createBiquadFilter() as unknown as BiquadFilterNode,
+      ];
+      audioPlayer["gainNode"] =
+        mockAudioContext.createGain() as unknown as GainNode;
+      audioPlayer["analyserNode"] =
+        mockAudioContext.createAnalyser() as unknown as AnalyserNode;
 
       audioPlayer.destroy();
 
       expect(mockAudioContext.close).toHaveBeenCalled();
-      expect(audioPlayer['eqFilters']).toHaveLength(0);
+      expect(audioPlayer["eqFilters"]).toHaveLength(0);
     });
 
-    test('should handle destroy when already cleaned up', () => {
-      audioPlayer['audioContext'] = null;
+    test("should handle destroy when already cleaned up", () => {
+      audioPlayer["audioContext"] = null;
 
       expect(() => audioPlayer.destroy()).not.toThrow();
     });
   });
 
-  describe('Error Handling', () => {
+  describe("Error Handling", () => {
     beforeEach(() => {
       audioPlayer = new AudioPlayer(container, {}, mockCallbacks);
     });
 
-    test('should handle fetch errors gracefully', async () => {
-      (globalThis.fetch as any).mockRejectedValue(new Error('Network error'));
+    test("should handle fetch errors gracefully", async () => {
+      (globalThis.fetch as any).mockRejectedValue(new Error("Network error"));
 
       const config: AudioPlayerConfig = {
-        demoTracks: { 'test': '/demo-audio/test.wav' }
+        demoTracks: { test: "/demo-audio/test.wav" },
       };
 
       audioPlayer = new AudioPlayer(container, config, mockCallbacks);
 
-      await expect(audioPlayer['loadDemoTrack']('test')).rejects.toThrow();
+      await expect(audioPlayer["loadDemoTrack"]("test")).rejects.toThrow();
       expect(mockCallbacks.onError).toHaveBeenCalled();
     });
 
-    test('should handle audio decoding errors', async () => {
+    test("should handle audio decoding errors", async () => {
       const mockArrayBuffer = new ArrayBuffer(1024);
-      const mockFile = new File([mockArrayBuffer], 'test.wav', { type: 'audio/wav' });
+      const mockFile = new File([mockArrayBuffer], "test.wav", {
+        type: "audio/wav",
+      });
       mockFile.arrayBuffer = vi.fn().mockResolvedValue(mockArrayBuffer);
 
-      mockAudioContext.decodeAudioData.mockRejectedValue(new Error('Decode error'));
+      mockAudioContext.decodeAudioData.mockRejectedValue(
+        new Error("Decode error"),
+      );
 
-      await expect(audioPlayer.loadAudioFile(mockFile)).rejects.toThrow('Decode error');
+      await expect(audioPlayer.loadAudioFile(mockFile)).rejects.toThrow(
+        "Decode error",
+      );
       expect(mockCallbacks.onError).toHaveBeenCalled();
     });
   });

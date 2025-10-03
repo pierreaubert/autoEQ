@@ -135,7 +135,7 @@ pub fn create_de_callback(
         }
 
         // Show parameter details every 100 iterations
-        if intermediate.iter % 100 == 0 {
+        if intermediate.iter.is_multiple_of(100) {
             let param_summary: Vec<String> = (0..intermediate.x.len() / 3)
                 .map(|i| {
                     let freq = 10f64.powf(intermediate.x[i * 3]);
@@ -207,8 +207,6 @@ pub fn optimize_filters_autoeq(
     upper_bounds: &[f64],
     objective_data: ObjectiveData,
     autoeq_name: &str,
-    population: usize,
-    maxeval: usize,
     cli_args: &crate::cli::Args,
 ) -> Result<(String, f64), (String, f64)> {
     // Create the callback with all the logging and user feedback
@@ -221,8 +219,6 @@ pub fn optimize_filters_autoeq(
         upper_bounds,
         objective_data,
         autoeq_name,
-        population,
-        maxeval,
         cli_args,
         callback,
     )
@@ -235,11 +231,13 @@ pub fn optimize_filters_autoeq_with_callback(
     upper_bounds: &[f64],
     objective_data: ObjectiveData,
     _autoeq_name: &str,
-    population: usize,
-    maxeval: usize,
     cli_args: &crate::cli::Args,
     mut callback: Box<dyn FnMut(&DEIntermediate) -> CallbackAction + Send>,
 ) -> Result<(String, f64), (String, f64)> {
+    // Extract parameters from args
+    let population = cli_args.population;
+    let maxeval = cli_args.maxeval;
+
     // Reuse same setup as standard AutoEQ DE
     let setup = setup_de_common(
         lower_bounds,
@@ -414,7 +412,7 @@ pub fn optimize_filters_autoeq_with_callback(
         let min_gain_constraint = NonlinearConstraintHelper {
             fun: Arc::new(move |x: &Array1<f64>| {
                 let mut result = Array1::zeros(1);
-                let mut data = min_gain_data.clone();
+                let mut data = min_gain_data;
                 result[0] = constraint_min_gain(x.as_slice().unwrap(), None, &mut data);
                 result
             }),
@@ -437,7 +435,7 @@ pub fn optimize_filters_autoeq_with_callback(
         let spacing_constraint = NonlinearConstraintHelper {
             fun: Arc::new(move |x: &Array1<f64>| {
                 let mut result = Array1::zeros(1);
-                let mut data = spacing_data.clone();
+                let mut data = spacing_data;
                 result[0] = constraint_spacing(x.as_slice().unwrap(), None, &mut data);
                 result
             }),

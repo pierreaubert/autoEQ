@@ -376,7 +376,7 @@ fn determine_dimension(args: &Cli, metadata: Option<&FunctionMetadata>) -> usize
                 return preferred;
             }
         }
-        if meta.bounds.len() > 0 {
+        if !meta.bounds.is_empty() {
             return meta.bounds.len();
         }
     }

@@ -92,7 +92,7 @@ pub fn create_regression_trace(
 ) -> plotly::Scatter<f64, f64> {
     let mut trace = plotly::Scatter::new(freqs.to_vec(), values.to_vec())
         .mode(plotly::common::Mode::Lines)
-        .name(name.to_string())
+        .name(name)
         .line(
             plotly::common::Line::new()
                 .color(color.to_string())

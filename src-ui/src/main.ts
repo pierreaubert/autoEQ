@@ -1,6 +1,15 @@
 // Refactored main application - streamlined and modular
 
-import { UIManager, PlotManager, OptimizationManager, APIManager, AudioPlayer, FilterParam, LayoutManager, generateAppHTML } from "./modules";
+import {
+  UIManager,
+  PlotManager,
+  OptimizationManager,
+  APIManager,
+  AudioPlayer,
+  FilterParam,
+  LayoutManager,
+  generateAppHTML,
+} from "./modules";
 import { OptimizationParams, OptimizationResult } from "./types";
 import { AutoEQPlotAPI, PlotFiltersParams, PlotSpinParams } from "./types";
 
@@ -23,45 +32,62 @@ class AutoEQApplication {
     this.apiManager = new APIManager();
 
     // Initialize AudioPlayer
-    const audioControlsContainer = document.querySelector('.audio-testing-controls') as HTMLElement;
+    const audioControlsContainer = document.querySelector(
+      ".audio-testing-controls",
+    ) as HTMLElement;
     if (audioControlsContainer) {
-        // Clear the old controls and let the AudioPlayer component build its own UI
-        audioControlsContainer.innerHTML = '';
-        // Add the fixed positioning class
-        audioControlsContainer.classList.add('audio-bar-fixed');
+      // Clear the old controls and let the AudioPlayer component build its own UI
+      audioControlsContainer.innerHTML = "";
+      // Add the fixed positioning class
+      audioControlsContainer.classList.add("audio-bar-fixed");
 
-        this.audioPlayer = new AudioPlayer(
-            audioControlsContainer,
-          {
-	    enableEQ: true,
-	    enableSpectrum: true,
-            showProgress: true,
-            showFrequencyLabels: true,
-            maxFilters: 11
-	  },
-          {
-            onEQToggle: (enabled) => this.setEQEnabled(enabled),
-            onError: (error) => this.uiManager.showError(error),
-          }
-        );
+      this.audioPlayer = new AudioPlayer(
+        audioControlsContainer,
+        {
+          enableEQ: true,
+          enableSpectrum: true,
+          showProgress: true,
+          showFrequencyLabels: true,
+          maxFilters: 11,
+        },
+        {
+          onEQToggle: (enabled) => this.setEQEnabled(enabled),
+          onError: (error) => this.uiManager.showError(error),
+        },
+      );
     } else {
-        console.error("Audio controls container (.audio-testing-controls) not found!");
+      console.error(
+        "Audio controls container (.audio-testing-controls) not found!",
+      );
     }
 
     // Initialize plot manager with DOM elements
     const progressGraphElement = document.getElementById("progress_graph");
     const tonalPlotElement = document.getElementById("tonal_plot");
-    console.log("[INIT DEBUG] Progress graph element found:", !!progressGraphElement);
+    console.log(
+      "[INIT DEBUG] Progress graph element found:",
+      !!progressGraphElement,
+    );
     console.log("[INIT DEBUG] Tonal plot element found:", !!tonalPlotElement);
 
     // Debug plot element availability
-    const filterPlotElement = document.getElementById("filter_plot") as HTMLElement;
+    const filterPlotElement = document.getElementById(
+      "filter_plot",
+    ) as HTMLElement;
     const spinPlotElement = document.getElementById("spin_plot") as HTMLElement;
-    const detailsPlotElement = document.getElementById("details_plot") as HTMLElement;
+    const detailsPlotElement = document.getElementById(
+      "details_plot",
+    ) as HTMLElement;
     console.log("[INIT DEBUG] Filter plot element found:", !!filterPlotElement);
     console.log("[INIT DEBUG] Spin plot element found:", !!spinPlotElement);
-    console.log("[INIT DEBUG] Details plot element found:", !!detailsPlotElement);
-    console.log("[INIT DEBUG] Progress graph element found:", !!progressGraphElement);
+    console.log(
+      "[INIT DEBUG] Details plot element found:",
+      !!detailsPlotElement,
+    );
+    console.log(
+      "[INIT DEBUG] Progress graph element found:",
+      !!progressGraphElement,
+    );
     console.log("[INIT DEBUG] Tonal plot element found:", !!tonalPlotElement);
 
     this.plotManager = new PlotManager(
@@ -69,7 +95,7 @@ class AutoEQApplication {
       detailsPlotElement, // CEA2034 details plot
       spinPlotElement,
       progressGraphElement as HTMLElement,
-      tonalPlotElement as HTMLElement
+      tonalPlotElement as HTMLElement,
     );
 
     // Initialize optimization manager
@@ -89,9 +115,9 @@ class AutoEQApplication {
   }
 
   private injectHTML(): void {
-    const appElement = document.getElementById('app');
+    const appElement = document.getElementById("app");
     if (!appElement) {
-      throw new Error('Application container element not found');
+      throw new Error("Application container element not found");
     }
     appElement.innerHTML = generateAppHTML();
     console.log("HTML content dynamically generated and injected");
@@ -110,19 +136,31 @@ class AutoEQApplication {
         this.handleOptimizationError(error);
       },
       onProgressDataUpdate: (iteration, fitness, convergence) => {
-        console.log(`[MAIN DEBUG] 🎯 Progress data received: iteration=${iteration}, fitness=${fitness}, convergence=${convergence}`);
+        console.log(
+          `[MAIN DEBUG] 🎯 Progress data received: iteration=${iteration}, fitness=${fitness}, convergence=${convergence}`,
+        );
 
         // Update progress graph with new data
         this.plotManager.addProgressData(iteration, fitness, convergence);
 
         // Update elapsed time display
-        this.uiManager.updateProgress('Optimization', `Iteration ${iteration}`, `Fitness: ${fitness.toFixed(4)}`, 0);
+        this.uiManager.updateProgress(
+          "Optimization",
+          `Iteration ${iteration}`,
+          `Fitness: ${fitness.toFixed(4)}`,
+          0,
+        );
 
         // Update graph every 5 iterations or for early iterations
         if (iteration <= 5 || iteration % 5 === 0) {
-          console.log(`[MAIN DEBUG] 📊 Updating progress graph at iteration ${iteration}`);
-          this.plotManager.updateProgressGraph().catch(error => {
-            console.error('[MAIN DEBUG] ❌ Error updating progress graph:', error);
+          console.log(
+            `[MAIN DEBUG] 📊 Updating progress graph at iteration ${iteration}`,
+          );
+          this.plotManager.updateProgressGraph().catch((error) => {
+            console.error(
+              "[MAIN DEBUG] ❌ Error updating progress graph:",
+              error,
+            );
           });
         }
       },
@@ -132,10 +170,14 @@ class AutoEQApplication {
     this.uiManager.setCaptureCompleteCallback((frequencies, magnitudes) => {
       if (frequencies.length > 0 && magnitudes.length > 0) {
         this.optimizationManager.setCapturedData(frequencies, magnitudes);
-        console.log('[MAIN] Captured data stored in optimization manager:', frequencies.length, 'points');
+        console.log(
+          "[MAIN] Captured data stored in optimization manager:",
+          frequencies.length,
+          "points",
+        );
       } else {
         this.optimizationManager.clearCapturedData();
-        console.log('[MAIN] Cleared captured data from optimization manager');
+        console.log("[MAIN] Cleared captured data from optimization manager");
       }
     });
 
@@ -156,8 +198,8 @@ class AutoEQApplication {
     });
 
     optimizeBtn.addEventListener("click", (e) => {
-        e.preventDefault();
-        this.runOptimization();
+      e.preventDefault();
+      this.runOptimization();
     });
 
     if (cancelBtn) {
@@ -307,21 +349,39 @@ class AutoEQApplication {
       has_deviation_curve: !!result.deviation_curve,
       has_spin_details: !!result.spin_details,
       preference_score_before: result.preference_score_before,
-      preference_score_after: result.preference_score_after
+      preference_score_after: result.preference_score_after,
     });
 
     // Debug: Log curve data availability
     if (result.filter_response) {
-      console.log("filter_response frequencies length:", result.filter_response.frequencies?.length);
-      console.log("filter_response curves:", Object.keys(result.filter_response.curves || {}));
+      console.log(
+        "filter_response frequencies length:",
+        result.filter_response.frequencies?.length,
+      );
+      console.log(
+        "filter_response curves:",
+        Object.keys(result.filter_response.curves || {}),
+      );
     }
     if (result.input_curve) {
-      console.log("input_curve frequencies length:", result.input_curve.frequencies?.length);
-      console.log("input_curve curves:", Object.keys(result.input_curve.curves || {}));
+      console.log(
+        "input_curve frequencies length:",
+        result.input_curve.frequencies?.length,
+      );
+      console.log(
+        "input_curve curves:",
+        Object.keys(result.input_curve.curves || {}),
+      );
     }
     if (result.deviation_curve) {
-      console.log("deviation_curve frequencies length:", result.deviation_curve.frequencies?.length);
-      console.log("deviation_curve curves:", Object.keys(result.deviation_curve.curves || {}));
+      console.log(
+        "deviation_curve frequencies length:",
+        result.deviation_curve.frequencies?.length,
+      );
+      console.log(
+        "deviation_curve curves:",
+        Object.keys(result.deviation_curve.curves || {}),
+      );
     }
 
     try {
@@ -340,15 +400,15 @@ class AutoEQApplication {
       if (result.filter_params) {
         const filterParams: FilterParam[] = [];
         for (let i = 0; i < result.filter_params.length; i += 3) {
-            // Convert frequency from log space to linear space
-            const logFreq = result.filter_params[i];
-            const linearFreq = Math.pow(10, logFreq);
-            filterParams.push({
-                frequency: linearFreq,
-                q: result.filter_params[i+1],
-                gain: result.filter_params[i+2],
-                enabled: true
-            });
+          // Convert frequency from log space to linear space
+          const logFreq = result.filter_params[i];
+          const linearFreq = Math.pow(10, logFreq);
+          filterParams.push({
+            frequency: linearFreq,
+            q: result.filter_params[i + 1],
+            gain: result.filter_params[i + 2],
+            enabled: true,
+          });
         }
         this.audioPlayer?.updateFilterParams(filterParams);
         this.audioPlayer?.setEQEnabled(true);
@@ -392,7 +452,6 @@ class AutoEQApplication {
     console.log(`[MAIN] EQ state changed to: ${enabled}`);
   }
 
-
   private handleOptimizationError(error: string): void {
     console.error("Optimization error:", error);
     this.uiManager.showError(error);
@@ -402,7 +461,9 @@ class AutoEQApplication {
     this.uiManager.showCloseButton();
   }
 
-  private async generateOptimizationPlots(result: OptimizationResult): Promise<void> {
+  private async generateOptimizationPlots(
+    result: OptimizationResult,
+  ): Promise<void> {
     console.log("Generating optimization plots using Tauri backend...");
     console.log("Result has filter_response:", !!result.filter_response);
     console.log("Result has filter_plots:", !!result.filter_plots);
@@ -417,7 +478,11 @@ class AutoEQApplication {
         console.log("Filter params count:", result.filter_params.length / 3);
 
         // Verify we have all required curves (backend always provides these)
-        if (!result.filter_response || !result.input_curve || !result.deviation_curve) {
+        if (
+          !result.filter_response ||
+          !result.input_curve ||
+          !result.deviation_curve
+        ) {
           console.error("MISSING REQUIRED CURVES FROM BACKEND!");
           console.error("  filter_response:", !!result.filter_response);
           console.error("  input_curve:", !!result.input_curve);
@@ -443,21 +508,23 @@ class AutoEQApplication {
         const plotParams: PlotFiltersParams = {
           input_curve: {
             freq: frequencies,
-            spl: inputCurve
+            spl: inputCurve,
           },
           target_curve: {
             freq: frequencies,
-            spl: targetResponse
+            spl: targetResponse,
           },
           deviation_curve: {
             freq: frequencies,
-            spl: deviationCurve
+            spl: deviationCurve,
           },
           optimized_params: result.filter_params,
           sample_rate: 48000, // Use default or get from form
           num_filters: result.filter_params.length / 3,
-          peq_model: (document.getElementById('peq_model') as HTMLSelectElement)?.value as any || 'pk',
-          iir_hp_pk: false  // Deprecated
+          peq_model:
+            ((document.getElementById("peq_model") as HTMLSelectElement)
+              ?.value as any) || "pk",
+          iir_hp_pk: false, // Deprecated
         };
 
         console.log("Calling backend to generate 4-subplot filter plot...");
@@ -479,25 +546,29 @@ class AutoEQApplication {
           // Convert curves data to CurveData format
           const cea2034_curves: { [key: string]: any } = {};
           if (result.spin_details.curves) {
-            Object.keys(result.spin_details.curves).forEach(key => {
+            Object.keys(result.spin_details.curves).forEach((key) => {
               const curveArray = result.spin_details!.curves[key];
-              if (Array.isArray(curveArray) && result.spin_details!.frequencies) {
+              if (
+                Array.isArray(curveArray) &&
+                result.spin_details!.frequencies
+              ) {
                 cea2034_curves[key] = {
                   freq: result.spin_details!.frequencies,
-                  spl: curveArray
+                  spl: curveArray,
                 };
               }
             });
           }
 
           // Extract EQ response for the spin plots
-          const eq_response = result.filter_response?.curves["EQ Response"] || [];
+          const eq_response =
+            result.filter_response?.curves["EQ Response"] || [];
 
           // Generate plots as Plotly JSON from backend
           const spinParams: PlotSpinParams = {
             cea2034_curves,
             eq_response, // Add eq_response to show "with EQ" traces
-            frequencies: result.spin_details.frequencies
+            frequencies: result.spin_details.frequencies,
           };
 
           console.log("Generating spin plot (Plotly JSON) with eq_response...");
@@ -508,19 +579,20 @@ class AutoEQApplication {
           this.plotManager.updateSpinPlot(spinPlot);
 
           console.log("Generating spin details plot (Plotly JSON)...");
-          const detailsPlot = await AutoEQPlotAPI.generatePlotSpinDetails(spinParams);
+          const detailsPlot =
+            await AutoEQPlotAPI.generatePlotSpinDetails(spinParams);
           console.log("Generated spin details plot:", detailsPlot);
 
           // Update details plot with Plotly JSON
           await this.plotManager.generateDetailsPlot(detailsPlot);
 
           console.log("Generating tonal balance plot (Plotly JSON)...");
-          const tonalPlot = await AutoEQPlotAPI.generatePlotSpinTonal(spinParams);
+          const tonalPlot =
+            await AutoEQPlotAPI.generatePlotSpinTonal(spinParams);
           console.log("Generated tonal balance plot:", tonalPlot);
 
           // Update tonal plot with Plotly JSON
           this.plotManager.updateTonalPlot(tonalPlot);
-
         } catch (plotError) {
           console.error("Error generating spinorama plots:", plotError);
         }
@@ -549,8 +621,6 @@ class AutoEQApplication {
       );
     }
   }
-
-
 
   // Cleanup method
   destroy(): void {

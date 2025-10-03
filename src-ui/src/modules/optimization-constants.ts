@@ -45,8 +45,8 @@ export interface OptimizationDefaults {
   loss: string;
 
   // Filter Type
-  iir_hp_pk: boolean;  // Deprecated, kept for backward compatibility
-  peq_model: string;   // New PEQ model system
+  iir_hp_pk: boolean; // Deprecated, kept for backward compatibility
+  peq_model: string; // New PEQ model system
 
   // Curve Selection
   curve_name: string;
@@ -112,14 +112,14 @@ export const OPTIMIZATION_DEFAULTS: OptimizationDefaults = {
   max_freq: 16000,
 
   // Algorithm Parameters
-  algo: 'autoeq:de',
+  algo: "autoeq:de",
   population: 30,
   maxeval: 20000,
 
   // DE-specific Parameters
   de_f: 0.8,
   de_cr: 0.9,
-  strategy: 'currenttobest1bin',
+  strategy: "currenttobest1bin",
 
   // Adaptive Parameters
   adaptive_weight_f: 0.8,
@@ -135,24 +135,24 @@ export const OPTIMIZATION_DEFAULTS: OptimizationDefaults = {
 
   // Refinement Parameters
   refine: false,
-  local_algo: 'cobyla',
+  local_algo: "cobyla",
 
   // Smoothing Parameters
   smooth: true,
   smooth_n: 1,
 
   // Loss Function
-  loss: 'speaker-flat',
+  loss: "speaker-flat",
 
   // Filter Type
-  iir_hp_pk: false,  // Deprecated
-  peq_model: 'pk',  // Default to all peak filters
+  iir_hp_pk: false, // Deprecated
+  peq_model: "pk", // Default to all peak filters
 
   // Curve Selection
-  curve_name: 'Listening Window',
+  curve_name: "Listening Window",
 
   // Input Source
-  input_source: 'file'
+  input_source: "file",
 };
 
 // Minimum and maximum limits for parameters
@@ -175,7 +175,7 @@ export const OPTIMIZATION_LIMITS: OptimizationLimits = {
   spacing_weight: { min: 0.0, max: 1000.0 },
   tolerance: { min: 1e-15, max: 1.0 },
   abs_tolerance: { min: 1e-15, max: 1.0 },
-  smooth_n: { min: 1, max: 24 }
+  smooth_n: { min: 1, max: 24 },
 };
 
 // Step sizes for input controls
@@ -198,94 +198,94 @@ export const OPTIMIZATION_STEPS: OptimizationSteps = {
   spacing_weight: 1,
   tolerance: 1e-12,
   abs_tolerance: 1e-15,
-  smooth_n: 1
+  smooth_n: 1,
 };
 
 // Algorithm options
 export const ALGORITHM_OPTIONS = {
-  'autoeq:de': 'Auto DE (Recommended)',
-  'nlopt:isres': 'NLOPT ISRES',
-  'nlopt:ags': 'NLOPT AGS',
-  'nlopt:origdirect': 'NLOPT Original DIRECT',
-  'nlopt:crs2lm': 'NLOPT CRS2 LM',
-  'nlopt:direct': 'NLOPT DIRECT',
-  'nlopt:directl': 'NLOPT DIRECT-L',
-  'nlopt:gmlsl': 'NLOPT GMLSL',
-  'nlopt:gmlsllds': 'NLOPT GMLSL LDS',
-  'nlopt:stogo': 'NLOPT StoGO',
-  'nlopt:stogorand': 'NLOPT StoGO Rand',
-  'nlopt:cobyla': 'NLOPT COBYLA',
-  'nlopt:bobyqa': 'NLOPT BOBYQA',
-  'nlopt:neldermead': 'NLOPT Nelder-Mead',
-  'nlopt:sbplx': 'NLOPT Subplex',
-  'nlopt:slsqp': 'NLOPT SLSQP',
-  'mh:de': 'MH Differential Evolution',
-  'mh:pso': 'MH Particle Swarm',
-  'mh:rga': 'MH Genetic Algorithm',
-  'mh:tlbo': 'MH TLBO',
-  'mh:firefly': 'MH Firefly'
+  "autoeq:de": "Auto DE (Recommended)",
+  "nlopt:isres": "NLOPT ISRES",
+  "nlopt:ags": "NLOPT AGS",
+  "nlopt:origdirect": "NLOPT Original DIRECT",
+  "nlopt:crs2lm": "NLOPT CRS2 LM",
+  "nlopt:direct": "NLOPT DIRECT",
+  "nlopt:directl": "NLOPT DIRECT-L",
+  "nlopt:gmlsl": "NLOPT GMLSL",
+  "nlopt:gmlsllds": "NLOPT GMLSL LDS",
+  "nlopt:stogo": "NLOPT StoGO",
+  "nlopt:stogorand": "NLOPT StoGO Rand",
+  "nlopt:cobyla": "NLOPT COBYLA",
+  "nlopt:bobyqa": "NLOPT BOBYQA",
+  "nlopt:neldermead": "NLOPT Nelder-Mead",
+  "nlopt:sbplx": "NLOPT Subplex",
+  "nlopt:slsqp": "NLOPT SLSQP",
+  "mh:de": "MH Differential Evolution",
+  "mh:pso": "MH Particle Swarm",
+  "mh:rga": "MH Genetic Algorithm",
+  "mh:tlbo": "MH TLBO",
+  "mh:firefly": "MH Firefly",
 };
 
 // DE Strategy options
 export const DE_STRATEGY_OPTIONS = {
-  'currenttobest1bin': 'Current-to-Best/1/Bin (Recommended)',
-  'rand1bin': 'Rand/1/Bin',
-  'best1bin': 'Best/1/Bin',
-  'rand2bin': 'Rand/2/Bin',
-  'best2bin': 'Best/2/Bin',
-  'randtobest1bin': 'Rand-to-Best/1/Bin',
-  'rand1exp': 'Rand/1/Exp',
-  'best1exp': 'Best/1/Exp',
-  'rand2exp': 'Rand/2/Exp',
-  'best2exp': 'Best/2/Exp',
-  'currenttobest1exp': 'Current-to-Best/1/Exp',
-  'randtobest1exp': 'Rand-to-Best/1/Exp',
-  'adaptivebin': 'Adaptive/Bin (Experimental)',
-  'adaptiveexp': 'Adaptive/Exp (Experimental)'
+  currenttobest1bin: "Current-to-Best/1/Bin (Recommended)",
+  rand1bin: "Rand/1/Bin",
+  best1bin: "Best/1/Bin",
+  rand2bin: "Rand/2/Bin",
+  best2bin: "Best/2/Bin",
+  randtobest1bin: "Rand-to-Best/1/Bin",
+  rand1exp: "Rand/1/Exp",
+  best1exp: "Best/1/Exp",
+  rand2exp: "Rand/2/Exp",
+  best2exp: "Best/2/Exp",
+  currenttobest1exp: "Current-to-Best/1/Exp",
+  randtobest1exp: "Rand-to-Best/1/Exp",
+  adaptivebin: "Adaptive/Bin (Experimental)",
+  adaptiveexp: "Adaptive/Exp (Experimental)",
 };
 
 // Loss function options
 export const LOSS_OPTIONS = {
-  'speaker-flat': 'Speaker Flat',
-  'speaker-score': 'Speaker Score',
-  'headphone-flat': 'Headphone Flat',
-  'headphone-score': 'Headphone Score'
+  "speaker-flat": "Speaker Flat",
+  "speaker-score": "Speaker Score",
+  "headphone-flat": "Headphone Flat",
+  "headphone-score": "Headphone Score",
 };
 
 // Speaker-specific loss options
 export const SPEAKER_LOSS_OPTIONS = {
-  'speaker-flat': 'Speaker Flat',
-  'speaker-score': 'Speaker Score'
+  "speaker-flat": "Speaker Flat",
+  "speaker-score": "Speaker Score",
 };
 
 // Headphone-specific loss options
 export const HEADPHONE_LOSS_OPTIONS = {
-  'headphone-flat': 'Headphone Flat',
-  'headphone-score': 'Headphone Score'
+  "headphone-flat": "Headphone Flat",
+  "headphone-score": "Headphone Score",
 };
 
 // Curve name options
 export const CURVE_NAME_OPTIONS = {
-  'Listening Window': 'Listening Window',
-  'On Axis': 'On Axis',
-  'Early Reflections': 'Early Reflections',
-  'Sound Power': 'Sound Power',
-  'Estimated In-Room Response': 'Estimated In-Room Response'
+  "Listening Window": "Listening Window",
+  "On Axis": "On Axis",
+  "Early Reflections": "Early Reflections",
+  "Sound Power": "Sound Power",
+  "Estimated In-Room Response": "Estimated In-Room Response",
 };
 
 // Local algorithm options
 export const LOCAL_ALGO_OPTIONS = {
-  'cobyla': 'COBYLA',
-  'bobyqa': 'BOBYQA',
-  'newuoa': 'NEWUOA'
+  cobyla: "COBYLA",
+  bobyqa: "BOBYQA",
+  newuoa: "NEWUOA",
 };
 
 // Warning thresholds
 export const WARNING_THRESHOLDS = {
   population: {
     yellow: 3000,
-    red: 30000
-  }
+    red: 30000,
+  },
 };
 
 // Helper function to get default value for a parameter
@@ -294,11 +294,15 @@ export function getDefaultValue(paramName: keyof OptimizationDefaults): any {
 }
 
 // Helper function to get limits for a parameter
-export function getLimits(paramName: keyof OptimizationLimits): { min: number; max: number } | undefined {
+export function getLimits(
+  paramName: keyof OptimizationLimits,
+): { min: number; max: number } | undefined {
   return OPTIMIZATION_LIMITS[paramName];
 }
 
 // Helper function to get step size for a parameter
-export function getStepSize(paramName: keyof OptimizationSteps): number | undefined {
+export function getStepSize(
+  paramName: keyof OptimizationSteps,
+): number | undefined {
   return OPTIMIZATION_STEPS[paramName];
 }

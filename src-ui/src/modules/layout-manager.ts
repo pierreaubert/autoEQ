@@ -9,20 +9,20 @@ export class LayoutManager {
   }
 
   private initialize(): void {
-    this.plotsGridElement = document.querySelector('.plots-vertical');
+    this.plotsGridElement = document.querySelector(".plots-vertical");
     if (!this.plotsGridElement) {
-      console.warn('[LAYOUT] Plots vertical element not found');
+      console.warn("[LAYOUT] Plots vertical element not found");
       return;
     }
 
     // Add resize listener
-    window.addEventListener('resize', this.handleResize.bind(this));
+    window.addEventListener("resize", this.handleResize.bind(this));
 
     // Initial calculation
     this.calculateLayout();
 
     this.isInitialized = true;
-    console.log('[LAYOUT] Layout manager initialized for vertical layout');
+    console.log("[LAYOUT] Layout manager initialized for vertical layout");
   }
 
   private handleResize = (): void => {
@@ -36,7 +36,7 @@ export class LayoutManager {
   public calculateLayout(): void {
     if (!this.plotsGridElement) return;
 
-    const rightPanel = document.getElementById('right_panel');
+    const rightPanel = document.getElementById("right_panel");
     if (!rightPanel) return;
 
     // Get available dimensions
@@ -48,8 +48,14 @@ export class LayoutManager {
     const availableHeight = rightPanelRect.height - 120; // Account for scores display, headers and other elements
 
     // Update CSS custom properties for dynamic sizing
-    document.documentElement.style.setProperty('--plots-vertical-width', `${availableWidth}px`);
-    document.documentElement.style.setProperty('--plots-vertical-height', `${availableHeight}px`);
+    document.documentElement.style.setProperty(
+      "--plots-vertical-width",
+      `${availableWidth}px`,
+    );
+    document.documentElement.style.setProperty(
+      "--plots-vertical-height",
+      `${availableHeight}px`,
+    );
 
     // Calculate individual plot dimensions for 3 vertically stacked graphs
     const isMobile = window.innerWidth <= 768;
@@ -58,27 +64,42 @@ export class LayoutManager {
     if (isMobile) {
       // 3 vertically stacked graphs on mobile
       const plotHeight = Math.max(120, (availableHeight - 30) / 3); // 30px for gaps between 3 graphs
-      document.documentElement.style.setProperty('--plot-vertical-height', `${plotHeight}px`);
+      document.documentElement.style.setProperty(
+        "--plot-vertical-height",
+        `${plotHeight}px`,
+      );
     } else if (isTablet) {
       // 3 vertically stacked graphs on tablet
       const plotHeight = Math.max(150, (availableHeight - 30) / 3); // 30px for gaps between 3 graphs
-      document.documentElement.style.setProperty('--plot-vertical-height', `${plotHeight}px`);
+      document.documentElement.style.setProperty(
+        "--plot-vertical-height",
+        `${plotHeight}px`,
+      );
     } else {
       // 3 vertically stacked graphs on desktop
       const plotHeight = Math.max(200, (availableHeight - 30) / 3); // 30px for gaps between 3 graphs
-      document.documentElement.style.setProperty('--plot-vertical-height', `${plotHeight}px`);
+      document.documentElement.style.setProperty(
+        "--plot-vertical-height",
+        `${plotHeight}px`,
+      );
     }
 
-    console.log(`[LAYOUT] Updated vertical layout: ${availableWidth}x${availableHeight}, 3 graphs, mobile: ${isMobile}, tablet: ${isTablet}`);
+    console.log(
+      `[LAYOUT] Updated vertical layout: ${availableWidth}x${availableHeight}, 3 graphs, mobile: ${isMobile}, tablet: ${isTablet}`,
+    );
   }
 
   public resizePlots(): void {
     if (!this.isInitialized) return;
 
     // Force Plotly plots to resize
-    const plotContainers = document.querySelectorAll('.plot-vertical-container.has-plot');
-    plotContainers.forEach(container => {
-      const plotlyDiv = container.querySelector('.js-plotly-plot') as HTMLElement;
+    const plotContainers = document.querySelectorAll(
+      ".plot-vertical-container.has-plot",
+    );
+    plotContainers.forEach((container) => {
+      const plotlyDiv = container.querySelector(
+        ".js-plotly-plot",
+      ) as HTMLElement;
       if (plotlyDiv && (window as any).Plotly) {
         try {
           (window as any).Plotly.Plots.resize(plotlyDiv);
@@ -97,7 +118,7 @@ export class LayoutManager {
   }
 
   public destroy(): void {
-    window.removeEventListener('resize', this.handleResize);
+    window.removeEventListener("resize", this.handleResize);
     clearTimeout((this as any).resizeTimeout);
     this.isInitialized = false;
   }

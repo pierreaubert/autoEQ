@@ -5,17 +5,14 @@ export type {
   PlotData,
   OptimizationResult,
   ProgressData,
-  OptimizationStage
-} from './optimization';
+  OptimizationStage,
+} from "./optimization";
 
 export type {
   CurveData,
   PlotFiltersParams,
   PlotSpinParams,
-  PlotlyData
-} from './plot';
+  PlotlyData,
+} from "./plot";
 
-export {
-  AutoEQPlotAPI,
-  PlotUtils
-} from './plot';
+export { AutoEQPlotAPI, PlotUtils } from "./plot";

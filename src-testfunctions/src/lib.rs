@@ -1077,7 +1077,7 @@ pub fn get_function_metadata() -> HashMap<String, FunctionMetadata> {
         FunctionMetadata {
             name: "qing".to_string(),
             bounds: vec![(-500.0, 500.0); 2],
-            global_minima: vec![(vec![1.41421356, 2.0], 0.0)],
+            global_minima: vec![(vec![std::f64::consts::SQRT_2, 2.0], 0.0)],
             inequality_constraints: vec![],
             equality_constraints: vec![],
             description: "Qing function".to_string(),
@@ -1703,7 +1703,12 @@ mod tests {
                     assert!(
                         error <= test_tolerance,
                         "Function {} failed: at {:?}, expected {:.10}, got {:.10}, error {:.2e} > tolerance {:.2e}",
-                        func_name, minimum_location, expected_value, actual_value, error, test_tolerance
+                        func_name,
+                        minimum_location,
+                        expected_value,
+                        actual_value,
+                        error,
+                        test_tolerance
                     );
 
                     println!("  ✓ {} passed with error {:.2e}", func_name, error);

@@ -1,7 +1,7 @@
 // Base plot functionality and visibility management
 
-import Plotly from 'plotly.js-dist-min';
-import { PlotData } from '../../types';
+import Plotly from "plotly.js-dist-min";
+import { PlotData } from "../../types";
 
 export class PlotBase {
   // Plot data caching
@@ -9,22 +9,30 @@ export class PlotBase {
   protected lastSpinDetails: PlotData | null = null;
 
   showSpinVerticalItems(): void {
-    const verticalItems = ['spin_vertical_item', 'details_vertical_item', 'tonal_vertical_item'];
-    verticalItems.forEach(id => {
+    const verticalItems = [
+      "spin_vertical_item",
+      "details_vertical_item",
+      "tonal_vertical_item",
+    ];
+    verticalItems.forEach((id) => {
       const element = document.getElementById(id);
       if (element) {
-        element.style.display = 'flex';
+        element.style.display = "flex";
         console.log(`[VERTICAL DEBUG] Showed vertical item: ${id}`);
       }
     });
   }
 
   hideSpinVerticalItems(): void {
-    const verticalItems = ['spin_vertical_item', 'details_vertical_item', 'tonal_vertical_item'];
-    verticalItems.forEach(id => {
+    const verticalItems = [
+      "spin_vertical_item",
+      "details_vertical_item",
+      "tonal_vertical_item",
+    ];
+    verticalItems.forEach((id) => {
       const element = document.getElementById(id);
       if (element) {
-        element.style.display = 'none';
+        element.style.display = "none";
         console.log(`[VERTICAL DEBUG] Hid vertical item: ${id}`);
       }
     });
@@ -33,17 +41,19 @@ export class PlotBase {
   showPlotContainer(plotId: string): void {
     // For compatibility with existing code, but now we manage at vertical item level
     const verticalItemMap: { [key: string]: string } = {
-      'spin_plot': 'spin_vertical_item',
-      'details_plot': 'details_vertical_item',
-      'tonal_plot': 'tonal_vertical_item'
+      spin_plot: "spin_vertical_item",
+      details_plot: "details_vertical_item",
+      tonal_plot: "tonal_vertical_item",
     };
 
     const verticalItemId = verticalItemMap[plotId];
     if (verticalItemId) {
       const element = document.getElementById(verticalItemId);
       if (element) {
-        element.style.display = 'flex';
-        console.log(`[VERTICAL DEBUG] Showed plot container: ${plotId} via vertical item ${verticalItemId}`);
+        element.style.display = "flex";
+        console.log(
+          `[VERTICAL DEBUG] Showed plot container: ${plotId} via vertical item ${verticalItemId}`,
+        );
       }
     }
   }
@@ -51,31 +61,40 @@ export class PlotBase {
   hidePlotContainer(plotId: string): void {
     // For compatibility with existing code, but now we manage at vertical item level
     const verticalItemMap: { [key: string]: string } = {
-      'spin_plot': 'spin_vertical_item',
-      'details_plot': 'details_vertical_item',
-      'tonal_plot': 'tonal_vertical_item'
+      spin_plot: "spin_vertical_item",
+      details_plot: "details_vertical_item",
+      tonal_plot: "tonal_vertical_item",
     };
 
     const verticalItemId = verticalItemMap[plotId];
     if (verticalItemId) {
       const element = document.getElementById(verticalItemId);
       if (element) {
-        element.style.display = 'none';
-        console.log(`[VERTICAL DEBUG] Hid plot container: ${plotId} via vertical item ${verticalItemId}`);
+        element.style.display = "none";
+        console.log(
+          `[VERTICAL DEBUG] Hid plot container: ${plotId} via vertical item ${verticalItemId}`,
+        );
       }
     }
   }
 
   configureVerticalVisibility(hasSpinData: boolean): void {
-    console.log('[VERTICAL DEBUG] Configuring vertical visibility, hasSpinData:', hasSpinData);
+    console.log(
+      "[VERTICAL DEBUG] Configuring vertical visibility, hasSpinData:",
+      hasSpinData,
+    );
 
     if (hasSpinData) {
       // Speaker-based: show all 3 graphs (Filter Response + 2 spinorama graphs)
-      console.log('[VERTICAL DEBUG] Showing all graphs for speaker-based optimization');
+      console.log(
+        "[VERTICAL DEBUG] Showing all graphs for speaker-based optimization",
+      );
       this.showSpinVerticalItems();
     } else {
       // Curve+target: only show Filter Response graph
-      console.log('[VERTICAL DEBUG] Showing only Filter Response for curve+target optimization');
+      console.log(
+        "[VERTICAL DEBUG] Showing only Filter Response for curve+target optimization",
+      );
       this.hideSpinVerticalItems();
     }
   }
@@ -113,8 +132,9 @@ export class PlotBase {
       } catch (e) {
         // Element may not have been plotted yet
       }
-      element.innerHTML = '<div class="plot-placeholder">No data to display</div>';
-      element.classList.remove('has-plot');
+      element.innerHTML =
+        '<div class="plot-placeholder">No data to display</div>';
+      element.classList.remove("has-plot");
     }
   }
 }

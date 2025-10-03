@@ -482,10 +482,7 @@ pub fn compute_fitness_penalties(
 /// * `lower_bounds` - Lower bounds for each parameter
 /// * `upper_bounds` - Upper bounds for each parameter
 /// * `objective_data` - Data structure containing optimization parameters
-/// * `algo` - Optimization algorithm name (e.g., "isres", "cobyla")
-/// * `population` - Population size for population-based algorithms
-/// * `maxeval` - Maximum number of function evaluations
-/// * `cli_args` - CLI arguments containing DE parameters (tolerance, strategy, etc.)
+/// * `cli_args` - CLI arguments containing algorithm, population, maxeval, and other parameters
 ///
 /// # Returns
 /// * Result containing (status, optimal value) or (error, value)
@@ -498,11 +495,43 @@ pub fn optimize_filters(
     lower_bounds: &[f64],
     upper_bounds: &[f64],
     objective_data: ObjectiveData,
-    algo: &str,
-    population: usize,
-    maxeval: usize,
     cli_args: &crate::cli::Args,
 ) -> Result<(String, f64), (String, f64)> {
+    optimize_filters_with_algo_override(
+        x,
+        lower_bounds,
+        upper_bounds,
+        objective_data,
+        cli_args,
+        None,
+    )
+}
+
+/// Optimize filter parameters with optional algorithm override
+///
+/// # Arguments
+/// * `x` - Initial parameter vector to optimize (modified in place)
+/// * `lower_bounds` - Lower bounds for each parameter
+/// * `upper_bounds` - Upper bounds for each parameter
+/// * `objective_data` - Data structure containing optimization parameters
+/// * `cli_args` - CLI arguments containing algorithm, population, maxeval, and other parameters
+/// * `algo_override` - Optional algorithm override (e.g., for local refinement)
+///
+/// # Returns
+/// * Result containing (status, optimal value) or (error, value)
+pub fn optimize_filters_with_algo_override(
+    x: &mut [f64],
+    lower_bounds: &[f64],
+    upper_bounds: &[f64],
+    objective_data: ObjectiveData,
+    cli_args: &crate::cli::Args,
+    algo_override: Option<&str>,
+) -> Result<(String, f64), (String, f64)> {
+    // Extract parameters from args
+    let algo = algo_override.unwrap_or(&cli_args.algo);
+    let population = cli_args.population;
+    let maxeval = cli_args.maxeval;
+
     // Parse algorithm and dispatch to appropriate function
     match parse_algorithm_name(algo) {
         #[cfg(not(target_os = "windows"))]
@@ -530,8 +559,6 @@ pub fn optimize_filters(
             upper_bounds,
             objective_data,
             &autoeq_name,
-            population,
-            maxeval,
             cli_args,
         ),
         None => Err((format!("Unknown algorithm: {}", algo), f64::INFINITY)),

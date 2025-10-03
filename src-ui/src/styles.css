@@ -1,4 +1,4 @@
-@import './modules/audio/audio-player.css';
+@import "./modules/audio/audio-player.css";
 
 :root {
   --bg-primary: #f8f9fa;
@@ -16,8 +16,8 @@
   --warning-color: #ffc107;
   --danger-color: #dc3545;
   --info-color: #17a2b8;
-  --shadow-sm: 0 1px 3px rgba(0,0,0,0.1);
-  --shadow-md: 0 2px 8px rgba(0,0,0,0.15);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.1);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.15);
   --radius: 6px;
   --spacing-xs: 4px;
   --spacing-sm: 8px;
@@ -53,7 +53,8 @@
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   font-size: 13px;
   line-height: 1.4;
   color: var(--text-primary);
@@ -191,8 +192,6 @@ body {
   background: var(--button-primary-hover);
 }
 
-
-
 /* Fixed Audio Controls at Bottom */
 .audio-bar-fixed {
   position: fixed;
@@ -283,7 +282,6 @@ body {
   padding: var(--spacing-md);
   margin-bottom: 0;
 }
-
 
 /* Conditional Parameters */
 .global-algo-param {
@@ -532,7 +530,7 @@ body {
 .param-grid .param-item:nth-child(14)::after,
 .param-grid .param-item:nth-child(18)::after,
 .param-grid .param-item:nth-child(22)::after {
-  content: '';
+  content: "";
   display: block;
   height: var(--spacing-sm);
   grid-column: 1 / -1;
@@ -608,7 +606,6 @@ input[type="checkbox"] {
   height: 16px;
   accent-color: var(--button-primary);
 }
-
 
 /* Right Panel */
 .status-section {
@@ -845,7 +842,7 @@ input[type="checkbox"] {
 }
 
 .error-message {
-  font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
+  font-family: "SF Mono", "Monaco", "Inconsolata", monospace;
   font-size: 12px;
   color: var(--text-primary);
   background: var(--bg-accent);
@@ -941,8 +938,13 @@ input[type="checkbox"] {
 }
 
 @keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.7; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
 }
 
 .capture-status {
@@ -1138,13 +1140,23 @@ input[type="checkbox"] {
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes slideIn {
-  from { transform: translateY(-20px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
+  from {
+    transform: translateY(-20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
 
 .modal-content {
@@ -1232,7 +1244,7 @@ input[type="checkbox"] {
 }
 
 .elapsed-time {
-  font-family: 'Courier New', monospace;
+  font-family: "Courier New", monospace;
   font-weight: 600;
   color: var(--button-primary);
   font-size: 16px;
@@ -1390,7 +1402,9 @@ input[type="checkbox"] {
   cursor: help;
   font-size: 14px;
   opacity: 0.7;
-  transition: opacity 0.2s, color 0.2s;
+  transition:
+    opacity 0.2s,
+    color 0.2s;
   position: relative;
 }
 
@@ -1421,7 +1435,7 @@ input[type="checkbox"] {
 }
 
 .help-tooltip[title]:hover::before {
-  content: '';
+  content: "";
   position: absolute;
   bottom: 100%;
   left: 50%;

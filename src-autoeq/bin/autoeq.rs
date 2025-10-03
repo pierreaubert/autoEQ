@@ -26,7 +26,7 @@ use autoeq::Curve;
 use autoeq_env::DATA_GENERATED;
 use clap::Parser;
 use std::error::Error;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tokio::fs;
 
 /// Print frequency spacing diagnostics and PEQ listing
@@ -71,7 +71,7 @@ fn print_freq_spacing(x: &[f64], args: &autoeq::cli::Args, label: &str) {
 async fn save_peq_to_file(
     args: &autoeq::cli::Args,
     x: &[f64],
-    output_path: &PathBuf,
+    output_path: &Path,
     loss_type: &autoeq::LossType,
 ) -> Result<(), Box<dyn Error>> {
     // Build the PEQ from the optimized parameters
@@ -140,9 +140,6 @@ fn perform_optimization(
         &lower_bounds,
         &upper_bounds,
         objective_data.clone(),
-        &args.algo,
-        args.population,
-        args.maxeval,
         args,
     );
 
@@ -163,15 +160,13 @@ fn perform_optimization(
     };
 
     if args.refine {
-        let result = optim::optimize_filters(
+        let result = optim::optimize_filters_with_algo_override(
             &mut x,
             &lower_bounds,
             &upper_bounds,
             objective_data.clone(),
-            &args.local_algo,
-            args.population,
-            args.maxeval,
             args,
+            Some(&args.local_algo),
         );
         match result {
             Ok((local_status, local_val)) => {
@@ -327,22 +322,22 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 .await?;
                 if let Some(before) = cea2034_metrics_before {
                     println!(
-			"✅  Pre-Optimization CEA2034 Score: pref={:.3} | nbd_on={:.3} nbd_pir={:.3} lfx={:.0}Hz sm_pir={:.3}",
-			before.pref_score,
-			before.nbd_on,
-			before.nbd_pir,
-			10f64.powf(before.lfx),
-			before.sm_pir
-		    );
+                        "✅  Pre-Optimization CEA2034 Score: pref={:.3} | nbd_on={:.3} nbd_pir={:.3} lfx={:.0}Hz sm_pir={:.3}",
+                        before.pref_score,
+                        before.nbd_on,
+                        before.nbd_pir,
+                        10f64.powf(before.lfx),
+                        before.sm_pir
+                    );
                 }
                 println!(
-		    "✅ Post-Optimization CEA2034 Score: pref={:.3} | nbd_on={:.3} nbd_pir={:.3} lfx={:.0}hz sm_pir={:.3}",
-		    metrics_after.pref_score,
-		    metrics_after.nbd_on,
-		    metrics_after.nbd_pir,
-		    10f64.powf(metrics_after.lfx),
-		    metrics_after.sm_pir
-		);
+                    "✅ Post-Optimization CEA2034 Score: pref={:.3} | nbd_on={:.3} nbd_pir={:.3} lfx={:.0}hz sm_pir={:.3}",
+                    metrics_after.pref_score,
+                    metrics_after.nbd_on,
+                    metrics_after.nbd_pir,
+                    10f64.powf(metrics_after.lfx),
+                    metrics_after.sm_pir
+                );
             }
         }
     }

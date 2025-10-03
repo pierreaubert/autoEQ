@@ -37,9 +37,9 @@ export class AudioProcessor {
   private noiseSource: AudioBufferSourceNode | null = null;
   private noiseBuffer: AudioBuffer | null = null;
   private sweepDuration: number = 10; // seconds
-  private outputChannel: 'left' | 'right' | 'both' | 'default' = 'both';
+  private outputChannel: "left" | "right" | "both" | "default" = "both";
   private captureSampleRate: number = 48000;
-  private signalType: 'sweep' | 'white' | 'pink' = 'sweep';
+  private signalType: "sweep" | "white" | "pink" = "sweep";
 
   // UI elements for audio status
   private audioStatusElements: {
@@ -56,7 +56,8 @@ export class AudioProcessor {
 
   private setupAudioContext(): void {
     try {
-      this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      this.audioContext = new (window.AudioContext ||
+        (window as any).webkitAudioContext)();
       this.gainNode = this.audioContext.createGain();
       this.analyserNode = this.audioContext.createAnalyser();
 
@@ -68,7 +69,7 @@ export class AudioProcessor {
       // Pre-generate noise buffers
       this.generateNoiseBuffers();
     } catch (error) {
-      console.error('Failed to initialize audio context:', error);
+      console.error("Failed to initialize audio context:", error);
     }
   }
 
@@ -79,31 +80,41 @@ export class AudioProcessor {
     // This is just a placeholder for the method
   }
 
-  private createNoiseSource(type: 'white' | 'pink'): AudioBufferSourceNode {
+  private createNoiseSource(type: "white" | "pink"): AudioBufferSourceNode {
     if (!this.audioContext) {
-      throw new Error('Audio context not initialized');
+      throw new Error("Audio context not initialized");
     }
 
     const bufferSize = this.audioContext.sampleRate * this.sweepDuration;
-    const buffer = this.audioContext.createBuffer(1, bufferSize, this.audioContext.sampleRate);
+    const buffer = this.audioContext.createBuffer(
+      1,
+      bufferSize,
+      this.audioContext.sampleRate,
+    );
     const output = buffer.getChannelData(0);
 
-    if (type === 'white') {
+    if (type === "white") {
       // White noise: random values
       for (let i = 0; i < bufferSize; i++) {
         output[i] = Math.random() * 2 - 1;
       }
-    } else if (type === 'pink') {
+    } else if (type === "pink") {
       // Pink noise using Paul Kellet's algorithm
-      let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+      let b0 = 0,
+        b1 = 0,
+        b2 = 0,
+        b3 = 0,
+        b4 = 0,
+        b5 = 0,
+        b6 = 0;
       for (let i = 0; i < bufferSize; i++) {
         const white = Math.random() * 2 - 1;
         b0 = 0.99886 * b0 + white * 0.0555179;
         b1 = 0.99332 * b1 + white * 0.0750759;
-        b2 = 0.96900 * b2 + white * 0.1538520;
-        b3 = 0.86650 * b3 + white * 0.3104856;
-        b4 = 0.55000 * b4 + white * 0.5329522;
-        b5 = -0.7616 * b5 - white * 0.0168980;
+        b2 = 0.969 * b2 + white * 0.153852;
+        b3 = 0.8665 * b3 + white * 0.3104856;
+        b4 = 0.55 * b4 + white * 0.5329522;
+        b5 = -0.7616 * b5 - white * 0.016898;
         output[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362) * 0.11;
         b6 = white * 0.115926;
       }
@@ -118,49 +129,51 @@ export class AudioProcessor {
 
   async loadAudioFile(file: File): Promise<void> {
     if (!this.audioContext) {
-      throw new Error('Audio context not initialized');
+      throw new Error("Audio context not initialized");
     }
 
     try {
       const arrayBuffer = await file.arrayBuffer();
       this.audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
-      console.log('Audio file loaded successfully');
+      console.log("Audio file loaded successfully");
 
       // Update audio status elements if available
       this.updateAudioStatus();
     } catch (error) {
-      console.error('Error loading audio file:', error);
+      console.error("Error loading audio file:", error);
       throw error;
     }
   }
 
   async loadAudioFromUrl(url: string): Promise<void> {
     if (!this.audioContext) {
-      throw new Error('Audio context not initialized');
+      throw new Error("Audio context not initialized");
     }
 
     try {
-      console.log('Loading audio from URL:', url);
+      console.log("Loading audio from URL:", url);
       const response = await fetch(url);
 
       if (!response.ok) {
-        throw new Error(`Failed to fetch audio: ${response.status} ${response.statusText}`);
+        throw new Error(
+          `Failed to fetch audio: ${response.status} ${response.statusText}`,
+        );
       }
 
       const arrayBuffer = await response.arrayBuffer();
-      console.log('Audio data fetched, decoding...');
+      console.log("Audio data fetched, decoding...");
 
       this.audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
-      console.log('Audio loaded from URL successfully:', {
+      console.log("Audio loaded from URL successfully:", {
         duration: this.audioBuffer.duration,
         sampleRate: this.audioBuffer.sampleRate,
-        channels: this.audioBuffer.numberOfChannels
+        channels: this.audioBuffer.numberOfChannels,
       });
 
       // Update audio status elements if available
       this.updateAudioStatus();
     } catch (error) {
-      console.error('Error loading audio from URL:', error);
+      console.error("Error loading audio from URL:", error);
       throw error;
     }
   }
@@ -174,7 +187,7 @@ export class AudioProcessor {
     if (!this.audioContext || !this.gainNode) return;
 
     // Clear existing filters
-    this.eqFilters.forEach(filter => filter.disconnect());
+    this.eqFilters.forEach((filter) => filter.disconnect());
     this.eqFilters = [];
 
     // Create new filters from parameters
@@ -184,9 +197,10 @@ export class AudioProcessor {
         const q = this.currentFilterParams[i + 1];
         const gain = this.currentFilterParams[i + 2];
 
-        if (Math.abs(gain) > 0.1) { // Only create filter if gain is significant
+        if (Math.abs(gain) > 0.1) {
+          // Only create filter if gain is significant
           const filter = this.audioContext.createBiquadFilter();
-          filter.type = 'peaking';
+          filter.type = "peaking";
           filter.frequency.value = freq;
           filter.Q.value = q;
           filter.gain.value = gain;
@@ -200,15 +214,19 @@ export class AudioProcessor {
 
   private connectAudioChain(): void {
     if (!this.audioSource || !this.gainNode || !this.audioContext) {
-      console.error('Cannot connect audio chain - missing components:', {
+      console.error("Cannot connect audio chain - missing components:", {
         audioSource: !!this.audioSource,
         gainNode: !!this.gainNode,
-        audioContext: !!this.audioContext
+        audioContext: !!this.audioContext,
       });
       return;
     }
 
-    console.log('Connecting audio chain with', this.eqFilters.length, 'EQ filters');
+    console.log(
+      "Connecting audio chain with",
+      this.eqFilters.length,
+      "EQ filters",
+    );
     let currentNode: AudioNode = this.audioSource;
 
     // Connect EQ filters in series
@@ -219,18 +237,21 @@ export class AudioProcessor {
     });
 
     // Connect to gain and analyzer
-    console.log('Connecting to gain node and destination');
+    console.log("Connecting to gain node and destination");
     currentNode.connect(this.gainNode);
     if (this.analyserNode) {
       this.gainNode.connect(this.analyserNode);
       this.analyserNode.connect(this.audioContext.destination);
-      console.log('Audio chain connected: source -> EQ filters -> gain -> analyser -> destination');
+      console.log(
+        "Audio chain connected: source -> EQ filters -> gain -> analyser -> destination",
+      );
     } else {
       this.gainNode.connect(this.audioContext.destination);
-      console.log('Audio chain connected: source -> EQ filters -> gain -> destination');
+      console.log(
+        "Audio chain connected: source -> EQ filters -> gain -> destination",
+      );
     }
   }
-
 
   setEQEnabled(enabled: boolean): void {
     this.eqEnabled = enabled;
@@ -241,7 +262,7 @@ export class AudioProcessor {
       this.setupEQFilters();
     } else {
       // Disconnect all EQ filters but keep the audio chain connected
-      this.eqFilters.forEach(filter => filter.disconnect());
+      this.eqFilters.forEach((filter) => filter.disconnect());
       this.eqFilters = [];
 
       // Reconnect audio chain without EQ filters
@@ -250,7 +271,7 @@ export class AudioProcessor {
       }
     }
 
-    console.log(`EQ ${enabled ? 'enabled' : 'disabled'}`);
+    console.log(`EQ ${enabled ? "enabled" : "disabled"}`);
     this.updateAudioStatus();
   }
 
@@ -273,7 +294,7 @@ export class AudioProcessor {
 
   setupSpectrumAnalyzer(canvas: HTMLCanvasElement): void {
     this.spectrumCanvas = canvas;
-    this.spectrumCtx = canvas.getContext('2d');
+    this.spectrumCtx = canvas.getContext("2d");
     this.calculateFrequencyBinRanges();
   }
 
@@ -288,7 +309,7 @@ export class AudioProcessor {
       const freq = (i * nyquist) / binCount;
       this.frequencyBinRanges.push({
         start: freq,
-        end: ((i + 1) * nyquist) / binCount
+        end: ((i + 1) * nyquist) / binCount,
       });
     }
   }
@@ -299,14 +320,15 @@ export class AudioProcessor {
     const dataArray = new Uint8Array(this.analyserNode.frequencyBinCount);
 
     const draw = () => {
-      if (!this.analyserNode || !this.spectrumCanvas || !this.spectrumCtx) return;
+      if (!this.analyserNode || !this.spectrumCanvas || !this.spectrumCtx)
+        return;
 
       this.analyserNode.getByteFrequencyData(dataArray);
 
       const width = this.spectrumCanvas.width;
       const height = this.spectrumCanvas.height;
 
-      this.spectrumCtx.fillStyle = 'rgb(0, 0, 0)';
+      this.spectrumCtx.fillStyle = "rgb(0, 0, 0)";
       this.spectrumCtx.fillRect(0, 0, width, height);
 
       const barWidth = width / dataArray.length;
@@ -338,47 +360,63 @@ export class AudioProcessor {
   async enumerateAudioDevices(): Promise<MediaDeviceInfo[]> {
     try {
       // Request permission first
-      await navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
-        // Immediately stop the stream after getting permission
-        stream.getTracks().forEach(track => track.stop());
-      });
+      await navigator.mediaDevices
+        .getUserMedia({ audio: true })
+        .then((stream) => {
+          // Immediately stop the stream after getting permission
+          stream.getTracks().forEach((track) => track.stop());
+        });
 
       // Now enumerate devices
       const devices = await navigator.mediaDevices.enumerateDevices();
-      const audioInputs = devices.filter(device => device.kind === 'audioinput');
-      console.log('Found audio input devices:', audioInputs);
+      const audioInputs = devices.filter(
+        (device) => device.kind === "audioinput",
+      );
+      console.log("Found audio input devices:", audioInputs);
       return audioInputs;
     } catch (error) {
-      console.error('Error enumerating audio devices:', error);
+      console.error("Error enumerating audio devices:", error);
       return [];
     }
   }
 
   // Audio capture functionality
   async startCapture(deviceId?: string): Promise<CaptureResult> {
-    console.log('Starting audio capture with device:', deviceId || 'default');
-    console.log('Sample rate:', this.captureSampleRate, 'Signal type:', this.signalType);
+    console.log("Starting audio capture with device:", deviceId || "default");
+    console.log(
+      "Sample rate:",
+      this.captureSampleRate,
+      "Signal type:",
+      this.signalType,
+    );
 
     if (this.capturing) {
-      throw new Error('Capture already in progress');
+      throw new Error("Capture already in progress");
     }
 
     try {
       // Check if capture is supported
       if (!this.isCaptureSupported()) {
-        console.warn('Microphone capture not supported, using simulated data');
+        console.warn("Microphone capture not supported, using simulated data");
         return this.simulateCapture();
       }
 
       // Recreate audio context with desired sample rate if needed
-      if (!this.audioContext || this.audioContext.sampleRate !== this.captureSampleRate) {
+      if (
+        !this.audioContext ||
+        this.audioContext.sampleRate !== this.captureSampleRate
+      ) {
         if (this.audioContext) {
           this.audioContext.close();
         }
-        this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({
-          sampleRate: this.captureSampleRate
+        this.audioContext = new (window.AudioContext ||
+          (window as any).webkitAudioContext)({
+          sampleRate: this.captureSampleRate,
         });
-        console.log('Created audio context with sample rate:', this.audioContext.sampleRate);
+        console.log(
+          "Created audio context with sample rate:",
+          this.audioContext.sampleRate,
+        );
       }
 
       // Request microphone access with specific device if provided
@@ -388,18 +426,23 @@ export class AudioProcessor {
           noiseSuppression: false,
           autoGainControl: false,
           sampleRate: this.captureSampleRate,
-          ...(deviceId && deviceId !== 'default' ? { deviceId: { exact: deviceId } } : {})
-        }
+          ...(deviceId && deviceId !== "default"
+            ? { deviceId: { exact: deviceId } }
+            : {}),
+        },
       };
 
-      this.mediaStream = await navigator.mediaDevices.getUserMedia(audioConstraints);
+      this.mediaStream =
+        await navigator.mediaDevices.getUserMedia(audioConstraints);
 
       if (!this.audioContext) {
-        throw new Error('Audio context not initialized');
+        throw new Error("Audio context not initialized");
       }
 
       // Create media stream source
-      this.mediaStreamSource = this.audioContext.createMediaStreamSource(this.mediaStream);
+      this.mediaStreamSource = this.audioContext.createMediaStreamSource(
+        this.mediaStream,
+      );
 
       // Create analyzer for capture
       this.captureAnalyser = this.audioContext.createAnalyser();
@@ -416,21 +459,20 @@ export class AudioProcessor {
       const result = await this.performCaptureMeasurement();
 
       return result;
-
     } catch (error) {
-      console.error('Error during audio capture:', error);
+      console.error("Error during audio capture:", error);
       this.stopCapture();
       return {
         frequencies: [],
         magnitudes: [],
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown capture error'
+        error: error instanceof Error ? error.message : "Unknown capture error",
       };
     }
   }
 
   stopCapture(): void {
-    console.log('Stopping audio capture...');
+    console.log("Stopping audio capture...");
 
     this.capturing = false;
 
@@ -468,14 +510,14 @@ export class AudioProcessor {
     }
 
     if (this.mediaStream) {
-      this.mediaStream.getTracks().forEach(track => track.stop());
+      this.mediaStream.getTracks().forEach((track) => track.stop());
       this.mediaStream = null;
     }
   }
 
   private async performCaptureMeasurement(): Promise<CaptureResult> {
     if (!this.captureAnalyser || !this.audioContext) {
-      throw new Error('Capture not properly initialized');
+      throw new Error("Capture not properly initialized");
     }
 
     console.log(`Starting ${this.signalType} capture...`);
@@ -483,20 +525,23 @@ export class AudioProcessor {
     const duration = this.sweepDuration;
     let sourceNode: AudioNode;
 
-    if (this.signalType === 'sweep') {
+    if (this.signalType === "sweep") {
       // Play frequency sweep and record response
       const startFreq = 20;
       const endFreq = Math.min(20000, this.audioContext.sampleRate / 2.1); // Respect Nyquist
 
       // Create oscillator for sweep
       this.oscillator = this.audioContext.createOscillator();
-      this.oscillator.type = 'sine';
+      this.oscillator.type = "sine";
 
       // Set up exponential frequency sweep
-      this.oscillator.frequency.setValueAtTime(startFreq, this.audioContext.currentTime);
+      this.oscillator.frequency.setValueAtTime(
+        startFreq,
+        this.audioContext.currentTime,
+      );
       this.oscillator.frequency.exponentialRampToValueAtTime(
         endFreq,
-        this.audioContext.currentTime + duration
+        this.audioContext.currentTime + duration,
       );
 
       sourceNode = this.oscillator;
@@ -510,19 +555,23 @@ export class AudioProcessor {
     gainNode.gain.value = 0.3; // Reduce volume to avoid feedback
 
     // Configure channel routing based on selection
-    if (this.outputChannel === 'left' || this.outputChannel === 'right' || this.outputChannel === 'both') {
+    if (
+      this.outputChannel === "left" ||
+      this.outputChannel === "right" ||
+      this.outputChannel === "both"
+    ) {
       // Use a ChannelMergerNode to control which channel gets the signal
       const merger = this.audioContext.createChannelMerger(2);
 
-      if (this.outputChannel === 'left') {
+      if (this.outputChannel === "left") {
         // Connect to left channel only (input 0 of merger)
         sourceNode.connect(gainNode);
         gainNode.connect(merger, 0, 0);
-      } else if (this.outputChannel === 'right') {
+      } else if (this.outputChannel === "right") {
         // Connect to right channel only (input 1 of merger)
         sourceNode.connect(gainNode);
         gainNode.connect(merger, 0, 1);
-      } else if (this.outputChannel === 'both') {
+      } else if (this.outputChannel === "both") {
         // Connect to both channels
         const splitter = this.audioContext.createChannelSplitter(2);
         sourceNode.connect(gainNode);
@@ -539,7 +588,7 @@ export class AudioProcessor {
     }
 
     // Start the signal
-    if (this.signalType === 'sweep' && this.oscillator) {
+    if (this.signalType === "sweep" && this.oscillator) {
       this.oscillator.start();
     } else if (this.noiseSource) {
       this.noiseSource.start();
@@ -556,7 +605,7 @@ export class AudioProcessor {
     for (let i = 0; i < numSamples; i++) {
       if (this.captureController?.signal.aborted) {
         this.oscillator?.stop();
-        throw new Error('Capture cancelled');
+        throw new Error("Capture cancelled");
       }
 
       // Get frequency data
@@ -564,7 +613,7 @@ export class AudioProcessor {
       frequencyResponses.push(new Float32Array(dataArray));
 
       // Wait for next sample
-      await new Promise(resolve => setTimeout(resolve, sampleInterval));
+      await new Promise((resolve) => setTimeout(resolve, sampleInterval));
     }
 
     // Stop the signal source
@@ -601,11 +650,14 @@ export class AudioProcessor {
     return {
       frequencies: result.frequencies,
       magnitudes: result.magnitudes,
-      success: true
+      success: true,
     };
   }
 
-  private smoothAndResample(data: Float32Array, sampleRate: number): { frequencies: number[], magnitudes: number[] } {
+  private smoothAndResample(
+    data: Float32Array,
+    sampleRate: number,
+  ): { frequencies: number[]; magnitudes: number[] } {
     // Create log-spaced frequency array (200 points from 20Hz to 20kHz)
     const frequencies: number[] = [];
     const magnitudes: number[] = [];
@@ -673,7 +725,7 @@ export class AudioProcessor {
   }
 
   private simulateCapture(): CaptureResult {
-    console.log('Simulating audio capture...');
+    console.log("Simulating audio capture...");
 
     // Generate simulated frequency response data
     const frequencies: number[] = [];
@@ -700,7 +752,7 @@ export class AudioProcessor {
     return {
       frequencies,
       magnitudes,
-      success: true
+      success: true,
     };
   }
 
@@ -708,7 +760,7 @@ export class AudioProcessor {
     this.sweepDuration = duration;
   }
 
-  setOutputChannel(channel: 'left' | 'right' | 'both' | 'default'): void {
+  setOutputChannel(channel: "left" | "right" | "both" | "default"): void {
     this.outputChannel = channel;
   }
 
@@ -716,7 +768,7 @@ export class AudioProcessor {
     this.captureSampleRate = rate;
   }
 
-  setSignalType(type: 'sweep' | 'white' | 'pink'): void {
+  setSignalType(type: "sweep" | "white" | "pink"): void {
     this.signalType = type;
   }
 
@@ -738,9 +790,11 @@ export class AudioProcessor {
 
   private updateAudioStatus(): void {
     if (this.audioStatusElements.statusText) {
-      const status = this.isAudioPlaying ?
-        (this.eqEnabled ? 'Playing (EQ On)' : 'Playing (EQ Off)') :
-        'Stopped';
+      const status = this.isAudioPlaying
+        ? this.eqEnabled
+          ? "Playing (EQ On)"
+          : "Playing (EQ Off)"
+        : "Stopped";
       this.audioStatusElements.statusText.textContent = status;
     }
 
@@ -766,7 +820,8 @@ export class AudioProcessor {
       const duration = this.getDuration();
 
       if (this.audioStatusElements.position) {
-        this.audioStatusElements.position.textContent = this.formatTime(currentTime);
+        this.audioStatusElements.position.textContent =
+          this.formatTime(currentTime);
       }
 
       if (this.audioStatusElements.progressFill && duration > 0) {
@@ -783,28 +838,28 @@ export class AudioProcessor {
   private formatTime(seconds: number): string {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
   }
 
   // Enhanced play method with status updates
   async play(): Promise<void> {
-    console.log('Play method called');
+    console.log("Play method called");
 
     if (!this.audioContext) {
-      throw new Error('Audio context not initialized');
+      throw new Error("Audio context not initialized");
     }
 
     if (!this.audioBuffer) {
-      throw new Error('No audio loaded for playback');
+      throw new Error("No audio loaded for playback");
     }
 
-    console.log('Audio context state:', this.audioContext.state);
+    console.log("Audio context state:", this.audioContext.state);
 
     // Resume audio context if suspended (required by browser autoplay policies)
-    if (this.audioContext.state === 'suspended') {
-      console.log('Resuming suspended audio context...');
+    if (this.audioContext.state === "suspended") {
+      console.log("Resuming suspended audio context...");
       await this.audioContext.resume();
-      console.log('Audio context resumed, new state:', this.audioContext.state);
+      console.log("Audio context resumed, new state:", this.audioContext.state);
     }
 
     this.stop(); // Stop any currently playing audio
@@ -813,16 +868,16 @@ export class AudioProcessor {
       this.audioSource = this.audioContext.createBufferSource();
       this.audioSource.buffer = this.audioBuffer;
 
-      console.log('Audio source created, connecting audio chain...');
+      console.log("Audio source created, connecting audio chain...");
       this.connectAudioChain();
 
-      console.log('Starting audio playback...');
+      console.log("Starting audio playback...");
       this.audioSource.start();
       this.audioStartTime = this.audioContext.currentTime;
       this.isAudioPlaying = true;
 
       this.audioSource.onended = () => {
-        console.log('Audio playback ended');
+        console.log("Audio playback ended");
         this.isAudioPlaying = false;
         this.audioSource = null;
         this.updateAudioStatus();
@@ -833,9 +888,9 @@ export class AudioProcessor {
       };
 
       this.updateAudioStatus();
-      console.log('Audio playback started successfully');
+      console.log("Audio playback started successfully");
     } catch (error) {
-      console.error('Error during audio playback:', error);
+      console.error("Error during audio playback:", error);
       throw error;
     }
   }
@@ -859,7 +914,7 @@ export class AudioProcessor {
     }
 
     this.updateAudioStatus();
-    console.log('Audio playback stopped');
+    console.log("Audio playback stopped");
   }
 
   destroy(): void {
@@ -867,7 +922,7 @@ export class AudioProcessor {
     this.stopCapture();
     this.stopSpectrumAnalysis();
 
-    this.eqFilters.forEach(filter => filter.disconnect());
+    this.eqFilters.forEach((filter) => filter.disconnect());
     this.eqFilters = [];
 
     if (this.gainNode) {
@@ -878,7 +933,7 @@ export class AudioProcessor {
       this.analyserNode.disconnect();
     }
 
-    if (this.audioContext && this.audioContext.state !== 'closed') {
+    if (this.audioContext && this.audioContext.state !== "closed") {
       this.audioContext.close();
     }
 

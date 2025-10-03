@@ -62,9 +62,15 @@ mod tests {
                 1e-6 // Absolute tolerance for small non-zero values
             };
 
-            assert!(error <= tolerance,
+            assert!(
+                error <= tolerance,
                 "Function value at global minimum {:?} should be {}, got {}, error: {} (tolerance: {})",
-                minimum_coords, expected_value, actual_value, error, tolerance);
+                minimum_coords,
+                expected_value,
+                actual_value,
+                error,
+                tolerance
+            );
         }
 
         // Test 3: Basic function properties

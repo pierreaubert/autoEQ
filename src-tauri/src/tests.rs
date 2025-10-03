@@ -47,7 +47,6 @@ mod tests {
             smooth_n: 2,
             loss: "speaker-flat".to_string(),
             peq_model: Some("pk".to_string()),
-            iir_hp_pk: false,
             strategy: None,
             de_f: None,
             de_cr: None,
@@ -258,7 +257,6 @@ mod tests {
             sample_rate: 48000.0,
             num_filters: 2,
             peq_model: Some("pk".to_string()),
-            iir_hp_pk: Some(false),
         };
 
         let result = generate_plot_filters(params).await;

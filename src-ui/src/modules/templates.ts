@@ -7,17 +7,20 @@ import {
   LOSS_OPTIONS,
   CURVE_NAME_OPTIONS,
   LOCAL_ALGO_OPTIONS,
-  WARNING_THRESHOLDS
-} from './optimization-constants';
+  WARNING_THRESHOLDS,
+} from "./optimization-constants";
 
 // Helper function to generate option elements from a record of options
-function generateOptions(options: Record<string, string>, defaultValue?: string): string {
+function generateOptions(
+  options: Record<string, string>,
+  defaultValue?: string,
+): string {
   return Object.entries(options)
     .map(([value, label]) => {
-      const selected = defaultValue === value ? ' selected' : '';
+      const selected = defaultValue === value ? " selected" : "";
       return `                <option value="${value}"${selected}>${label}</option>`;
     })
-    .join('\n');
+    .join("\n");
 }
 
 // Helper function to group algorithms by category
@@ -28,34 +31,42 @@ function generateAlgorithmOptions(): string {
   const metaheuristics: string[] = [];
 
   Object.entries(ALGORITHM_OPTIONS).forEach(([value, label]) => {
-    if (value.startsWith('autoeq:')) {
-      autoEQ.push(`                    <option value="${value}">${label}</option>`);
-    } else if (value.startsWith('nlopt:')) {
+    if (value.startsWith("autoeq:")) {
+      autoEQ.push(
+        `                    <option value="${value}">${label}</option>`,
+      );
+    } else if (value.startsWith("nlopt:")) {
       // Determine if it's global or local based on the algorithm name
-      const localAlgos = ['cobyla', 'bobyqa', 'neldermead', 'sbplx', 'slsqp'];
-      const algoName = value.split(':')[1];
+      const localAlgos = ["cobyla", "bobyqa", "neldermead", "sbplx", "slsqp"];
+      const algoName = value.split(":")[1];
       if (localAlgos.includes(algoName)) {
-        nloptLocal.push(`                    <option value="${value}">${label}</option>`);
+        nloptLocal.push(
+          `                    <option value="${value}">${label}</option>`,
+        );
       } else {
-        nloptGlobal.push(`                    <option value="${value}">${label}</option>`);
+        nloptGlobal.push(
+          `                    <option value="${value}">${label}</option>`,
+        );
       }
-    } else if (value.startsWith('mh:')) {
-      metaheuristics.push(`                    <option value="${value}">${label}</option>`);
+    } else if (value.startsWith("mh:")) {
+      metaheuristics.push(
+        `                    <option value="${value}">${label}</option>`,
+      );
     }
   });
 
   return `
                 <optgroup label="AutoEQ Algorithms">
-${autoEQ.join('\n')}
+${autoEQ.join("\n")}
                 </optgroup>
                 <optgroup label="NLOPT Global Optimizers">
-${nloptGlobal.join('\n')}
+${nloptGlobal.join("\n")}
                 </optgroup>
                 <optgroup label="NLOPT Local Optimizers">
-${nloptLocal.join('\n')}
+${nloptLocal.join("\n")}
                 </optgroup>
                 <optgroup label="Metaheuristics">
-${metaheuristics.join('\n')}
+${metaheuristics.join("\n")}
                 </optgroup>`;
 }
 
@@ -63,11 +74,11 @@ ${metaheuristics.join('\n')}
 function generateStrategyOptions(): string {
   return Object.entries(DE_STRATEGY_OPTIONS)
     .map(([value, label]) => {
-      const recommended = value === 'currenttobest1bin' ? ' (Recommended)' : '';
-      const selected = value === 'currenttobest1bin' ? ' selected' : '';
+      const recommended = value === "currenttobest1bin" ? " (Recommended)" : "";
+      const selected = value === "currenttobest1bin" ? " selected" : "";
       return `                <option value="${value}"${selected}>${label}${recommended}</option>`;
     })
-    .join('\n');
+    .join("\n");
 }
 
 // Generate Head section
@@ -236,7 +247,7 @@ export function generateEQDesign(): string {
         <div class="param-item">
             <label>Loss</label>
             <select id="loss" name="loss">
-${generateOptions(LOSS_OPTIONS, 'speaker-flat')}
+${generateOptions(LOSS_OPTIONS, "speaker-flat")}
             </select>
         </div>
         <div class="param-item">
@@ -252,7 +263,7 @@ ${generateOptions(LOSS_OPTIONS, 'speaker-flat')}
         <div class="param-item">
             <label>Curve</label>
             <select id="curve_name" name="curve_name">
-${generateOptions(CURVE_NAME_OPTIONS, 'Listening Window')}
+${generateOptions(CURVE_NAME_OPTIONS, "Listening Window")}
             </select>
         </div>
 
@@ -446,7 +457,7 @@ export function generateOptimizationFineTuning(): string {
           name="local_algo"
           disabled
         >
-	  ${generateOptions(LOCAL_ALGO_OPTIONS, 'cobyla')}
+	  ${generateOptions(LOCAL_ALGO_OPTIONS, "cobyla")}
         </select>
       </div>
     </div>

@@ -615,7 +615,7 @@ pub fn peq_format_apo(comment: &str, peq: &Peq) -> String {
 /// # Returns
 /// * Vector of Q values for each biquad section
 pub fn peq_butterworth_q(order: usize) -> Vec<f64> {
-    let odd = (order % 2) > 0;
+    let odd = !order.is_multiple_of(2);
     let mut q_values = Vec::new();
 
     for i in 0..order / 2 {
@@ -685,7 +685,7 @@ pub fn peq_linkwitzriley_q(order: usize) -> Vec<f64> {
     let q_bw = peq_butterworth_q(order / 2);
     let mut q_values = Vec::new();
 
-    if order % 4 > 0 {
+    if !order.is_multiple_of(4) {
         // Odd number of pairs
         q_values.extend_from_slice(&q_bw[..q_bw.len() - 1]);
         q_values.extend_from_slice(&q_bw[..q_bw.len() - 1]);

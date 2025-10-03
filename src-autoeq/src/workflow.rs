@@ -384,13 +384,7 @@ pub fn initial_guess(
             }
             PeqModel::FreePkFree | PeqModel::Free => {
                 // Free filter types: [type, freq, Q, gain]
-                let filter_type = if model == PeqModel::Free
-                    || (model == PeqModel::FreePkFree && (i == 0 || i == args.num_filters - 1))
-                {
-                    0.0 // Start with Peak filter
-                } else {
-                    0.0 // Peak filter
-                };
+                let filter_type = 0.0;
                 let freq = lower_bounds[offset + 1].min(args.max_freq.log10());
                 let q = (upper_bounds[offset + 2] * lower_bounds[offset + 2]).sqrt();
                 let sign = if i % 2 == 0 { 0.5 } else { -0.5 };
@@ -430,8 +424,6 @@ pub fn perform_optimization_with_callback(
         &upper_bounds,
         objective_data.clone(),
         &args.algo,
-        args.population,
-        args.maxeval,
         args,
         callback,
     );
@@ -444,15 +436,13 @@ pub fn perform_optimization_with_callback(
     };
 
     if args.refine {
-        let local_result = optim::optimize_filters(
+        let local_result = optim::optimize_filters_with_algo_override(
             &mut x,
             &lower_bounds,
             &upper_bounds,
             objective_data.clone(),
-            &args.local_algo,
-            args.population,
-            args.maxeval,
             args,
+            Some(&args.local_algo),
         );
         match local_result {
             Ok((_local_status, _local_val)) => {}

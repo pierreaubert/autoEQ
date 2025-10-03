@@ -1,30 +1,30 @@
 // Tests for AutoEQ plot functions
 // Note: These tests use Vitest testing framework
 
-import { describe, test, expect, beforeEach, vi } from 'vitest';
+import { describe, test, expect, beforeEach, vi } from "vitest";
 import {
   AutoEQPlotAPI,
   PlotUtils,
   PlotFiltersParams,
   PlotSpinParams,
   CurveData,
-  PlotlyData
-} from '../types/plot';
+  PlotlyData,
+} from "../types/plot";
 import {
   displayFilterPlots,
   displaySpinPlots,
   displaySpinDetailsPlots,
   displayTonalBalancePlots,
   createSampleCurveData,
-  displayOptimizationResults
-} from '../modules/plot-examples';
+  displayOptimizationResults,
+} from "../modules/plot-examples";
 
 // Mock Plotly for testing
 const mockPlotly = {
   newPlot: vi.fn().mockResolvedValue(undefined),
   Plots: {
-    resize: vi.fn()
-  }
+    resize: vi.fn(),
+  },
 };
 
 // Mock Tauri invoke function
@@ -32,23 +32,23 @@ const mockTauriInvoke = vi.fn();
 (globalThis as any).window = {
   __TAURI__: {
     core: {
-      invoke: mockTauriInvoke
-    }
-  }
+      invoke: mockTauriInvoke,
+    },
+  },
 };
 
 // Mock DOM elements
 const createMockElement = () => ({
-  innerHTML: '',
-  style: { display: 'block', padding: '0' },
+  innerHTML: "",
+  style: { display: "block", padding: "0" },
   classList: { add: vi.fn(), remove: vi.fn() },
   offsetWidth: 800,
-  offsetHeight: 600
+  offsetHeight: 600,
 });
 
-describe('PlotUtils', () => {
-  describe('createResponsiveLayout', () => {
-    test('should create responsive layout with default values', () => {
+describe("PlotUtils", () => {
+  describe("createResponsiveLayout", () => {
+    test("should create responsive layout with default values", () => {
       const layout = PlotUtils.createResponsiveLayout();
 
       expect(layout).toEqual({
@@ -58,12 +58,12 @@ describe('PlotUtils', () => {
           l: 50,
           r: 50,
           t: 50,
-          b: 50
-        }
+          b: 50,
+        },
       });
     });
 
-    test('should create responsive layout with custom dimensions', () => {
+    test("should create responsive layout with custom dimensions", () => {
       const layout = PlotUtils.createResponsiveLayout(800, 600);
 
       expect(layout).toEqual({
@@ -75,44 +75,44 @@ describe('PlotUtils', () => {
           l: 50,
           r: 50,
           t: 50,
-          b: 50
-        }
+          b: 50,
+        },
       });
     });
   });
 
-  describe('createDefaultConfig', () => {
-    test('should create default Plotly config', () => {
+  describe("createDefaultConfig", () => {
+    test("should create default Plotly config", () => {
       const config = PlotUtils.createDefaultConfig();
 
       expect(config).toEqual({
         displayModeBar: true,
-        modeBarButtonsToRemove: ['pan2d', 'lasso2d'],
+        modeBarButtonsToRemove: ["pan2d", "lasso2d"],
         displaylogo: false,
         toImageButtonOptions: {
-          format: 'png',
-          filename: 'autoeq_plot',
+          format: "png",
+          filename: "autoeq_plot",
           height: 600,
           width: 800,
-          scale: 2
-        }
+          scale: 2,
+        },
       });
     });
   });
 
-  describe('applyUILayout', () => {
-    test('should merge custom layout with plot data layout', () => {
+  describe("applyUILayout", () => {
+    test("should merge custom layout with plot data layout", () => {
       const plotData: PlotlyData = {
         data: [],
         layout: {
-          title: 'Original Title',
-          xaxis: { title: 'X' }
-        }
+          title: "Original Title",
+          xaxis: { title: "X" },
+        },
       };
 
       const customLayout = {
-        title: 'Custom Title',
-        yaxis: { title: 'Y' }
+        title: "Custom Title",
+        yaxis: { title: "Y" },
       };
 
       const result = PlotUtils.applyUILayout(plotData, customLayout);
@@ -120,25 +120,25 @@ describe('PlotUtils', () => {
       expect(result).toEqual({
         data: [],
         layout: {
-          title: 'Custom Title',
-          xaxis: { title: 'X' },
-          yaxis: { title: 'Y' }
-        }
+          title: "Custom Title",
+          xaxis: { title: "X" },
+          yaxis: { title: "Y" },
+        },
       });
     });
   });
 });
 
-describe('AutoEQPlotAPI', () => {
+describe("AutoEQPlotAPI", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  describe('generatePlotFilters', () => {
-    test('should call Tauri invoke with correct parameters', async () => {
+  describe("generatePlotFilters", () => {
+    test("should call Tauri invoke with correct parameters", async () => {
       const mockResponse: PlotlyData = {
         data: [{ x: [1, 2, 3], y: [1, 2, 3] }],
-        layout: { title: 'Test Plot' }
+        layout: { title: "Test Plot" },
       };
 
       mockTauriInvoke.mockResolvedValue(mockResponse);
@@ -150,96 +150,105 @@ describe('AutoEQPlotAPI', () => {
         optimized_params: [100, 1, 3],
         sample_rate: 48000,
         num_filters: 1,
-        iir_hp_pk: true
+        iir_hp_pk: true,
       };
 
       const result = await AutoEQPlotAPI.generatePlotFilters(params);
 
-      expect(mockTauriInvoke).toHaveBeenCalledWith('generate_plot_filters', { params });
+      expect(mockTauriInvoke).toHaveBeenCalledWith("generate_plot_filters", {
+        params,
+      });
       expect(result).toEqual(mockResponse);
     });
   });
 
-  describe('generatePlotSpin', () => {
-    test('should call Tauri invoke with correct parameters', async () => {
+  describe("generatePlotSpin", () => {
+    test("should call Tauri invoke with correct parameters", async () => {
       const mockResponse: PlotlyData = {
         data: [{ x: [1, 2, 3], y: [1, 2, 3] }],
-        layout: { title: 'Spin Plot' }
+        layout: { title: "Spin Plot" },
       };
 
       mockTauriInvoke.mockResolvedValue(mockResponse);
 
       const params: PlotSpinParams = {
         cea2034_curves: {
-          'Listening Window': { freq: [1, 2, 3], spl: [1, 2, 3] }
-        }
+          "Listening Window": { freq: [1, 2, 3], spl: [1, 2, 3] },
+        },
       };
 
       const result = await AutoEQPlotAPI.generatePlotSpin(params);
 
-      expect(mockTauriInvoke).toHaveBeenCalledWith('generate_plot_spin', { params });
+      expect(mockTauriInvoke).toHaveBeenCalledWith("generate_plot_spin", {
+        params,
+      });
       expect(result).toEqual(mockResponse);
     });
   });
 
-  describe('generatePlotSpinDetails', () => {
-    test('should call Tauri invoke with correct parameters', async () => {
+  describe("generatePlotSpinDetails", () => {
+    test("should call Tauri invoke with correct parameters", async () => {
       const mockResponse: PlotlyData = {
         data: [{ x: [1, 2, 3], y: [1, 2, 3] }],
-        layout: { title: 'Detailed Spin Plot' }
+        layout: { title: "Detailed Spin Plot" },
       };
 
       mockTauriInvoke.mockResolvedValue(mockResponse);
 
       const params: PlotSpinParams = {
         cea2034_curves: {
-          'Listening Window': { freq: [1, 2, 3], spl: [1, 2, 3] }
-        }
+          "Listening Window": { freq: [1, 2, 3], spl: [1, 2, 3] },
+        },
       };
 
       const result = await AutoEQPlotAPI.generatePlotSpinDetails(params);
 
-      expect(mockTauriInvoke).toHaveBeenCalledWith('generate_plot_spin_details', { params });
+      expect(mockTauriInvoke).toHaveBeenCalledWith(
+        "generate_plot_spin_details",
+        { params },
+      );
       expect(result).toEqual(mockResponse);
     });
   });
 
-  describe('generatePlotSpinTonal', () => {
-    test('should call Tauri invoke with correct parameters', async () => {
+  describe("generatePlotSpinTonal", () => {
+    test("should call Tauri invoke with correct parameters", async () => {
       const mockResponse: PlotlyData = {
         data: [{ x: [1, 2, 3], y: [1, 2, 3] }],
-        layout: { title: 'Tonal Balance Plot' }
+        layout: { title: "Tonal Balance Plot" },
       };
 
       mockTauriInvoke.mockResolvedValue(mockResponse);
 
       const params: PlotSpinParams = {
         cea2034_curves: {
-          'Listening Window': { freq: [1, 2, 3], spl: [1, 2, 3] }
-        }
+          "Listening Window": { freq: [1, 2, 3], spl: [1, 2, 3] },
+        },
       };
 
       const result = await AutoEQPlotAPI.generatePlotSpinTonal(params);
 
-      expect(mockTauriInvoke).toHaveBeenCalledWith('generate_plot_spin_tonal', { params });
+      expect(mockTauriInvoke).toHaveBeenCalledWith("generate_plot_spin_tonal", {
+        params,
+      });
       expect(result).toEqual(mockResponse);
     });
   });
 });
 
-describe('Plot Examples', () => {
+describe("Plot Examples", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // Mock Plotly module
-    vi.doMock('plotly.js-dist-min', () => mockPlotly);
+    vi.doMock("plotly.js-dist-min", () => mockPlotly);
   });
 
-  describe('createSampleCurveData', () => {
-    test('should create valid curve data', () => {
+  describe("createSampleCurveData", () => {
+    test("should create valid curve data", () => {
       const curveData = createSampleCurveData();
 
-      expect(curveData).toHaveProperty('freq');
-      expect(curveData).toHaveProperty('spl');
+      expect(curveData).toHaveProperty("freq");
+      expect(curveData).toHaveProperty("spl");
       expect(curveData.freq).toHaveLength(101);
       expect(curveData.spl).toHaveLength(101);
       expect(curveData.freq[0]).toBe(20);
@@ -247,12 +256,12 @@ describe('Plot Examples', () => {
     });
   });
 
-  describe('displayFilterPlots', () => {
-    test('should render filter plots successfully', async () => {
+  describe("displayFilterPlots", () => {
+    test("should render filter plots successfully", async () => {
       const mockElement = createMockElement();
       const mockPlotData: PlotlyData = {
         data: [{ x: [1, 2, 3], y: [1, 2, 3] }],
-        layout: { title: 'Test' }
+        layout: { title: "Test" },
       };
 
       mockTauriInvoke.mockResolvedValue(mockPlotData);
@@ -270,79 +279,79 @@ describe('Plot Examples', () => {
           inputCurve,
           targetCurve,
           deviationCurve,
-          optimizedParams
-        )
+          optimizedParams,
+        ),
       ).resolves.not.toThrow();
     });
   });
 
-  describe('displaySpinPlots', () => {
-    test('should render spin plots successfully', async () => {
+  describe("displaySpinPlots", () => {
+    test("should render spin plots successfully", async () => {
       const mockElement = createMockElement();
       const mockPlotData: PlotlyData = {
         data: [{ x: [1, 2, 3], y: [1, 2, 3] }],
-        layout: { title: 'Test' }
+        layout: { title: "Test" },
       };
 
       mockTauriInvoke.mockResolvedValue(mockPlotData);
 
       const cea2034Curves = {
-        'Listening Window': createSampleCurveData()
+        "Listening Window": createSampleCurveData(),
       };
 
       await expect(
-        displaySpinPlots(mockElement as any, cea2034Curves)
+        displaySpinPlots(mockElement as any, cea2034Curves),
       ).resolves.not.toThrow();
     });
   });
 
-  describe('displaySpinDetailsPlots', () => {
-    test('should render detailed spin plots successfully', async () => {
+  describe("displaySpinDetailsPlots", () => {
+    test("should render detailed spin plots successfully", async () => {
       const mockElement = createMockElement();
       const mockPlotData: PlotlyData = {
         data: [{ x: [1, 2, 3], y: [1, 2, 3] }],
-        layout: { title: 'Test' }
+        layout: { title: "Test" },
       };
 
       mockTauriInvoke.mockResolvedValue(mockPlotData);
 
       const cea2034Curves = {
-        'Listening Window': createSampleCurveData()
+        "Listening Window": createSampleCurveData(),
       };
 
       await expect(
-        displaySpinDetailsPlots(mockElement as any, cea2034Curves)
+        displaySpinDetailsPlots(mockElement as any, cea2034Curves),
       ).resolves.not.toThrow();
     });
   });
 
-  describe('displayTonalBalancePlots', () => {
-    test('should render tonal balance plots successfully', async () => {
+  describe("displayTonalBalancePlots", () => {
+    test("should render tonal balance plots successfully", async () => {
       const mockElement = createMockElement();
       const mockPlotData: PlotlyData = {
         data: [{ x: [1, 2, 3], y: [1, 2, 3] }],
-        layout: { title: 'Test' }
+        layout: { title: "Test" },
       };
 
       mockTauriInvoke.mockResolvedValue(mockPlotData);
 
       const cea2034Curves = {
-        'Listening Window': createSampleCurveData()
+        "Listening Window": createSampleCurveData(),
       };
 
       await expect(
-        displayTonalBalancePlots(mockElement as any, cea2034Curves)
+        displayTonalBalancePlots(mockElement as any, cea2034Curves),
       ).resolves.not.toThrow();
     });
   });
 
-  describe('displayOptimizationResults', () => {
-    test('should handle optimization results with filter response', async () => {
+  describe("displayOptimizationResults", () => {
+    test("should handle optimization results with filter response", async () => {
       const mockFilterElement = createMockElement();
       const mockSpinElement = createMockElement();
       const mockPlotData: PlotlyData = {
         data: [{ x: [1, 2, 3], y: [1, 2, 3] }],
-        layout: { title: 'Test' }
+        layout: { title: "Test" },
       };
 
       mockTauriInvoke.mockResolvedValue(mockPlotData);
@@ -353,25 +362,25 @@ describe('Plot Examples', () => {
           input_curve: createSampleCurveData(),
           target_curve: createSampleCurveData(),
           deviation_curve: createSampleCurveData(),
-          eq_response: [1, 2, 3]
+          eq_response: [1, 2, 3],
         },
         spin_details: {
           curves: {
-            'Listening Window': createSampleCurveData()
-          }
-        }
+            "Listening Window": createSampleCurveData(),
+          },
+        },
       };
 
       await expect(
         displayOptimizationResults(
           mockFilterElement as any,
           mockSpinElement as any,
-          optimizationResult
-        )
+          optimizationResult,
+        ),
       ).resolves.not.toThrow();
     });
 
-    test('should handle optimization results without filter response', async () => {
+    test("should handle optimization results without filter response", async () => {
       const mockFilterElement = createMockElement();
       const mockSpinElement = createMockElement();
 
@@ -381,31 +390,31 @@ describe('Plot Examples', () => {
         displayOptimizationResults(
           mockFilterElement as any,
           mockSpinElement as any,
-          optimizationResult
-        )
+          optimizationResult,
+        ),
       ).resolves.not.toThrow();
     });
   });
 });
 
-describe('Integration Tests', () => {
-  test('should work with real-world optimization result structure', async () => {
+describe("Integration Tests", () => {
+  test("should work with real-world optimization result structure", async () => {
     const mockElement = createMockElement();
     const mockPlotData: PlotlyData = {
       data: [
         {
           x: [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000],
           y: [0, 1, 2, 1, 0, -1, -2, -1, 0, 1],
-          type: 'scatter',
-          mode: 'lines',
-          name: 'Input Curve'
-        }
+          type: "scatter",
+          mode: "lines",
+          name: "Input Curve",
+        },
       ],
       layout: {
-        title: 'Filter Response',
-        xaxis: { title: 'Frequency (Hz)', type: 'log' },
-        yaxis: { title: 'Magnitude (dB)' }
-      }
+        title: "Filter Response",
+        xaxis: { title: "Frequency (Hz)", type: "log" },
+        yaxis: { title: "Magnitude (dB)" },
+      },
     };
 
     mockTauriInvoke.mockResolvedValue(mockPlotData);
@@ -419,16 +428,18 @@ describe('Integration Tests', () => {
       filter_response: {
         frequencies: [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000],
         curves: {
-          'Input': [0, 1, 2, 1, 0, -1, -2, -1, 0, 1],
-          'Target': [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-          'EQ Response': [0, 0.5, 1, 0.5, 0, -0.5, -1, -0.5, 0, 0.5]
-        }
-      }
+          Input: [0, 1, 2, 1, 0, -1, -2, -1, 0, 1],
+          Target: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+          "EQ Response": [0, 0.5, 1, 0.5, 0, -0.5, -1, -0.5, 0, 0.5],
+        },
+      },
     };
 
     // Test that the structure can be processed without errors
     expect(realWorldResult.success).toBe(true);
     expect(realWorldResult.filter_params).toHaveLength(9); // 3 filters * 3 params each
-    expect(realWorldResult.preference_score_after).toBeGreaterThan(realWorldResult.preference_score_before);
+    expect(realWorldResult.preference_score_after).toBeGreaterThan(
+      realWorldResult.preference_score_before,
+    );
   });
 });

@@ -23,8 +23,8 @@ pub fn constraint_ceiling(
     data: &mut CeilingConstraintData,
 ) -> f64 {
     let peq_spl = x2spl(&data.freqs, x, data.srate, data.peq_model);
-    let viol = viol_ceiling_from_spl(&peq_spl, data.max_db, data.peq_model);
-    viol
+
+    viol_ceiling_from_spl(&peq_spl, data.max_db, data.peq_model)
 }
 
 /// Compute ceiling constraint violation from frequency response

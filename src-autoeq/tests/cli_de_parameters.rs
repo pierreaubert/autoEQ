@@ -89,9 +89,6 @@ fn test_tolerance_parameter_affects_optimization() {
         &lower_bounds,
         &upper_bounds,
         objective_data.clone(),
-        &args_high_tol.algo,
-        args_high_tol.population,
-        args_high_tol.maxeval,
         &args_high_tol,
     );
 
@@ -100,9 +97,6 @@ fn test_tolerance_parameter_affects_optimization() {
         &lower_bounds,
         &upper_bounds,
         objective_data,
-        &args_low_tol.algo,
-        args_low_tol.population,
-        args_low_tol.maxeval,
         &args_low_tol,
     );
 
@@ -153,16 +147,7 @@ fn test_strategy_parameter_affects_optimization() {
         let (lower_bounds, upper_bounds) = setup_bounds(&args);
         let mut x = initial_guess(&args, &lower_bounds, &upper_bounds);
 
-        let result = optimize_filters(
-            &mut x,
-            &lower_bounds,
-            &upper_bounds,
-            objective_data,
-            &args.algo,
-            args.population,
-            args.maxeval, // Use the reduced evaluation count
-            &args,
-        );
+        let result = optimize_filters(&mut x, &lower_bounds, &upper_bounds, objective_data, &args);
 
         assert!(
             result.is_ok(),
@@ -197,16 +182,7 @@ fn test_recombination_parameter_affects_optimization() {
         let (lower_bounds, upper_bounds) = setup_bounds(&args);
         let mut x = initial_guess(&args, &lower_bounds, &upper_bounds);
 
-        let result = optimize_filters(
-            &mut x,
-            &lower_bounds,
-            &upper_bounds,
-            objective_data,
-            &args.algo,
-            args.population,
-            args.maxeval,
-            &args,
-        );
+        let result = optimize_filters(&mut x, &lower_bounds, &upper_bounds, objective_data, &args);
 
         assert!(
             result.is_ok(),
@@ -244,16 +220,7 @@ fn test_adaptive_strategy_with_weights() {
     let (lower_bounds, upper_bounds) = setup_bounds(&args);
     let mut x = initial_guess(&args, &lower_bounds, &upper_bounds);
 
-    let result = optimize_filters(
-        &mut x,
-        &lower_bounds,
-        &upper_bounds,
-        objective_data,
-        &args.algo,
-        args.population,
-        args.maxeval, // Use the reduced evaluation count
-        &args,
-    );
+    let result = optimize_filters(&mut x, &lower_bounds, &upper_bounds, objective_data, &args);
 
     assert!(
         result.is_ok(),

@@ -392,11 +392,10 @@ pub fn headphone_loss(curve: &Curve) -> f64 {
 
     // Apply the Olive et al. equation (Equation 4 from the paper)
     // Predicted Preference Rating = 114.49 - (12.62 × SD) - (15.52 × AS)
-    let predicted_preference_rating = 114.49 - (12.62 * sd) - (15.52 * as_value);
 
     // Return negative preference rating for minimization during optimization
     // (minimizing the loss function maximizes the preference rating)
-    predicted_preference_rating
+    114.49 - (12.62 * sd) - (15.52 * as_value)
 }
 
 /// Compute headphone preference score with additional target curve

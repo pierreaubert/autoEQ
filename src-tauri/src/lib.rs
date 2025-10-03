@@ -30,6 +30,12 @@ impl Clone for CancellationState {
     }
 }
 
+impl Default for CancellationState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CancellationState {
     pub fn new() -> Self {
         Self {
@@ -77,7 +83,6 @@ struct OptimizationParams {
     smooth_n: usize,
     loss: String,              // "flat", "score", or "mixed"
     peq_model: Option<String>, // New PEQ model system: "pk", "hp-pk", "hp-pk-lp", etc.
-    iir_hp_pk: bool,           // Deprecated, kept for backward compatibility
     // DE-specific parameters
     strategy: Option<String>,
     de_f: Option<f64>,
@@ -133,7 +138,6 @@ struct PlotFiltersParams {
     sample_rate: f64,
     num_filters: usize,
     peq_model: Option<String>, // "pk", "hp-pk", etc.
-    iir_hp_pk: Option<bool>,   // Deprecated
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -923,14 +927,7 @@ async fn generate_plot_filters(params: PlotFiltersParams) -> Result<serde_json::
             Some("hp-pk-lp") => autoeq::cli::PeqModel::HpPkLp,
             Some("free-pk-free") => autoeq::cli::PeqModel::FreePkFree,
             Some("free") => autoeq::cli::PeqModel::Free,
-            Some("pk") | _ => {
-                // Fallback: if iir_hp_pk is set (deprecated), use HpPk
-                if params.iir_hp_pk.unwrap_or(false) {
-                    autoeq::cli::PeqModel::HpPk
-                } else {
-                    autoeq::cli::PeqModel::Pk
-                }
-            }
+            Some("pk") | _ => autoeq::cli::PeqModel::Pk,
         },
         peq_model_list: false,
         algo_list: false,

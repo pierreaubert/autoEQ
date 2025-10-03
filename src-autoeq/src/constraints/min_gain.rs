@@ -17,8 +17,7 @@ pub fn constraint_min_gain(
     _grad: Option<&mut [f64]>,
     data: &mut MinGainConstraintData,
 ) -> f64 {
-    let viol = viol_min_gain_from_xs(x, data.peq_model, data.min_db);
-    viol
+    viol_min_gain_from_xs(x, data.peq_model, data.min_db)
 }
 
 /// Compute minimum gain constraint violation from parameter vector
