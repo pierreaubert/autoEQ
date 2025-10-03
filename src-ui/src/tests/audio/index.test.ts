@@ -40,7 +40,8 @@ describe('Audio Module Exports', () => {
     const filterParam: FilterParam = {
       frequency: 1000,
       q: 1,
-      gain: 0
+      gain: 0,
+      enabled: true
     };
 
     const captureResult: CaptureResult = {

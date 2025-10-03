@@ -3,14 +3,14 @@ import { defineConfig } from 'vitest/config'
 export default defineConfig({
   test: {
     environment: 'jsdom',
-    setupFiles: ['./src-ui/test-setup.ts'],
+    setupFiles: ['./src-ui/src/tests/test-setup.ts'],
     globals: true,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
       exclude: [
         'node_modules/',
-        'src-ui/test-setup.ts',
+        'src-ui/src/tests/test-setup.ts',
         'src-ui/**/*.d.ts',
         'src-ui/**/*.config.*',
         'dist/'

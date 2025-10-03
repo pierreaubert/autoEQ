@@ -289,7 +289,7 @@ describe('AudioPlayer', () => {
       audioPlayer['isAudioPlaying'] = true;
       const mockSource = mockAudioContext.createBufferSource();
       mockSource.stop = vi.fn(); // Ensure stop is a spy
-      audioPlayer['audioSource'] = mockSource;
+      audioPlayer['audioSource'] = mockSource as unknown as AudioBufferSourceNode;
 
       audioPlayer.stop();
 
@@ -403,9 +403,9 @@ describe('AudioPlayer', () => {
     test('should cleanup resources on destroy', () => {
       // Set up some state
       audioPlayer['isAudioPlaying'] = true;
-      audioPlayer['eqFilters'] = [mockAudioContext.createBiquadFilter()];
-      audioPlayer['gainNode'] = mockAudioContext.createGain();
-      audioPlayer['analyserNode'] = mockAudioContext.createAnalyser();
+      audioPlayer['eqFilters'] = [mockAudioContext.createBiquadFilter() as unknown as BiquadFilterNode];
+      audioPlayer['gainNode'] = mockAudioContext.createGain() as unknown as GainNode;
+      audioPlayer['analyserNode'] = mockAudioContext.createAnalyser() as unknown as AnalyserNode;
 
       audioPlayer.destroy();
 

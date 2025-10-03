@@ -37,7 +37,7 @@ openblas-src = { version = "0.10", features = ["cblas", "system"] }
 name = "plot_autoeq_de"
 path = "bin/plot_autoeq_de.rs"
 
-[[bench]]
+[[bin]]
 name = "benchmark_convergence"
 path = "bench/benchmark_convergence.rs"
 

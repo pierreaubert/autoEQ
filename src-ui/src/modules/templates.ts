@@ -313,206 +313,156 @@ export function generateOptimizationFineTuning(): string {
 
   return `<!-- Optimization Fine Tuning -->
 <div class="section-group">
-    <h3>Optimization Fine Tuning</h3>
-    <div class="param-grid">
-        <!-- Algorithm -->
-        <div class="param-item">
-            <label>Algorithm</label>
-            <select id="algo" name="algo">${generateAlgorithmOptions()}
-            </select>
-        </div>
+  <h3>Optimization Fine Tuning</h3>
 
-        <!-- DE Strategy Parameters (conditional) -->
-        <div
-            class="param-item de-param"
-            id="strategy_param"
-            style="display: none"
-        >
-            <label>Strategy</label>
-            <select id="strategy" name="strategy">
-${generateStrategyOptions()}
-            </select>
-        </div>
-
-        <!-- Global Algorithm Parameters -->
-        <div class="param-item global_algo_param">
-            <label>Population</label>
-            <input
-                type="number"
-                id="population"
-                name="population"
-            />
-            <div
-                class="param-warning"
-                id="population_warning_yellow"
-                style="
-                    display: none;
-                    color: #ffc107;
-                    font-size: 0.8em;
-                    margin-top: 2px;
-                "
-            >
-                ⚠️ Values above ${yellowThreshold} may be slow
-            </div>
-            <div
-                class="param-warning"
-                id="population_warning_red"
-                style="
-                    display: none;
-                    color: #dc3545;
-                    font-size: 0.8em;
-                    margin-top: 2px;
-                "
-            >
-                🚨 Values above ${redThreshold} will be very slow
-                and may cause issues
-            </div>
-        </div>
-        <div class="param-item global_algo_param">
-            <label>Max Eval</label>
-            <input
-                type="number"
-                id="maxeval"
-                name="maxeval"
-            />
-        </div>
-
-        <!-- DE Parameters for mutation and recombination -->
-        <div
-            class="param-item de-param"
-            id="mutation_param"
-        >
-            <label>F/Mutation</label>
-            <input
-                type="number"
-                id="de_f"
-                name="de_f"
-            />
-        </div>
-        <div
-            class="param-item de-param"
-            id="recombination_param"
-        >
-            <label>CR/Recombination</label>
-            <input
-                type="number"
-                id="de_cr"
-                name="de_cr"
-            />
-        </div>
-
-        <!-- Spacing Parameters -->
-        <div class="param-item">
-            <label>Min Spacing</label>
-            <input
-                type="number"
-                id="min_spacing_oct"
-                name="min_spacing_oct"
-            />
-        </div>
-        <div class="param-item">
-            <label>Spacing Weight</label>
-            <input
-                type="number"
-                id="spacing_weight"
-                name="spacing_weight"
-            />
-        </div>
-
-        <!-- Tolerance Parameters -->
-        <div class="param-item">
-            <label>Tolerance</label>
-            <input
-                type="number"
-                id="tolerance"
-                name="tolerance"
-            />
-        </div>
-        <div class="param-item">
-            <label>Abs Tolerance</label>
-            <input
-                type="number"
-                id="abs_tolerance"
-                name="abs_tolerance"
-            />
-        </div>
-
-        <!-- Adaptive Weight F (conditional) -->
-        <div
-            class="param-item adaptive-param"
-            id="adaptive_weight_f_param"
-            style="display: none"
-        >
-            <label>Adaptive F</label>
-            <input
-                type="number"
-                id="adaptive_weight_f"
-                name="adaptive_weight_f"
-            />
-        </div>
-
-        <!-- Adaptive Weight CR (conditional) -->
-        <div
-            class="param-item adaptive-param"
-            id="adaptive_weight_cr_param"
-            style="display: none"
-        >
-            <label>Adaptive CR</label>
-            <input
-                type="number"
-                id="adaptive_weight_cr"
-                name="adaptive_weight_cr"
-            />
-        </div>
+  <div class="param-grid">
+    <div class="param-item">
+      <label>Algorithm</label>
+      <select id="algo" name="algo">${generateAlgorithmOptions()}</select>
     </div>
+  </div>
 
-    <div class="param-group-section">
-        <div class="param-group-header">Refinement</div>
-        <div class="inline-params">
-            <div class="inline-item checkbox-item">
-                <label class="checkbox-label"
-                    ><input
-                        type="checkbox"
-                        id="refine"
-                        name="refine"
-                    />Enable</label
-                >
-            </div>
-            <div class="inline-item flex-grow">
-                <label>Local Optimiser</label>
-                <select
-                    id="local_algo"
-                    name="local_algo"
-                    disabled
-                >
-${generateOptions(LOCAL_ALGO_OPTIONS, 'cobyla')}
-                </select>
-            </div>
-        </div>
+  <div class="param-group-section">
+    <div class="inline-params">
+      <div class="param-item global_algo_param">
+	<label>Population</label>
+	<input type="number" id="population" name="population"/>
+	<div class="param-warning"
+	     id="population_warning_yellow"
+	     style="display: none; color: #ffc107; font-size: 0.8em; margin-top: 2px;">
+	  ⚠️ Values above ${yellowThreshold} may be slow
+	</div>
+	<div class="param-warning"
+	     id="population_warning_red"
+	     style="display: none; color: #dc3545; font-size: 0.8em; margin-top: 2px;">
+	  🚨 Values above ${redThreshold} will be very slow and may cause issues
+	</div>
+      </div>
+      <div class="param-item global_algo_param">
+	<label>Max Eval</label>
+	<input type="number" id="maxeval" name="maxeval"/>
+      </div>
     </div>
+  </div>
 
-    <div class="param-group-section">
-        <div class="param-group-header">Smoothing</div>
-        <div class="inline-params">
-            <div class="inline-item checkbox-item">
-                <label class="checkbox-label"
-                    ><input
-                        type="checkbox"
-                        id="smooth"
-                        name="smooth"
-                    />Enable</label
-                >
-            </div>
-            <div class="inline-item">
-                <label>Smooth N</label>
-                <input
-                    type="number"
-                    id="smooth_n"
-                    name="smooth_n"
-                />
-            </div>
-        </div>
+  <div class="param-group-section">
+    <div class="inline-params">
+      <div class="param-item de-param"  id="strategy_param">
+	<label>Strategy</label>
+	  <select id="strategy" name="strategy">${generateStrategyOptions()}</select>
+      </div>
+      <div class="param-item de-param" id="mutation_param">
+        <label>F</label>
+        <input type="number" id="de_f" name="de_f" />
+      </div>
+      <div class="param-item de-param" id="recombination_param">
+        <label>CR</label>
+        <input type="number" id="de_cr" name="de_cr"/>
+      </div>
+      <div
+	class="param-item adaptive-param"
+	id="adaptive_weight_f_param"
+	style="display: none"
+      >
+	<label>Adaptive F</label>
+	<input
+          type="number"
+          id="adaptive_weight_f"
+          name="adaptive_weight_f"
+	/>
+      </div>
+      <div
+	class="param-item adaptive-param"
+	id="adaptive_weight_cr_param"
+	style="display: none"
+      >
+	<label>Adaptive CR</label>
+	<input
+          type="number"
+          id="adaptive_weight_cr"
+          name="adaptive_weight_cr"
+	/>
+      </div>
     </div>
+  </div>
+
+  <div class="param-group-section">
+    <div class="inline-params">
+      <div class="param-item">
+	<label>Min Spacing</label>
+	<input
+          type="number"
+          id="min_spacing_oct"
+          name="min_spacing_oct"
+	/>
+      </div>
+      <div class="param-item">
+	<label>Spacing Weight</label>
+	<input
+          type="number"
+          id="spacing_weight"
+          name="spacing_weight"
+	/>
+      </div>
+    </div>
+  </div>
+
+  <div class="param-group-section">
+    <div class="inline-params">
+      <div class="param-item">
+	<label>Tolerance</label>
+	<input
+          type="number"
+          id="tolerance"
+          name="tolerance"
+	/>
+      </div>
+      <div class="param-item">
+	<label>Abs Tolerance</label>
+	<input
+          type="number"
+          id="abs_tolerance"
+          name="abs_tolerance"
+	/>
+      </div>
+    </div>
+  </div>
+
+  <div class="param-group-section">
+    <div class="inline-params">
+      <div class="inline-item checkbox-item">
+        <label class="checkbox-label"
+        ><input
+           type="checkbox"
+           id="refine"
+           name="refine"
+         />Enable</label
+                 >
+      </div>
+      <div class="inline-item flex-grow">
+        <label>Local Optimiser</label>
+        <select
+          id="local_algo"
+          name="local_algo"
+          disabled
+        >
+	  ${generateOptions(LOCAL_ALGO_OPTIONS, 'cobyla')}
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="param-group-section">
+    <div class="inline-params">
+      <div class="inline-item checkbox-item">
+          <label class="checkbox-label"><input type="checkbox" id="smooth" name="smooth" />Enable</label>
+      </div>
+      <div class="inline-item">
+          <label>Smooth 1/N octave</label>
+        <input type="number" id="smooth_n" name="smooth_n"/>
+      </div>
+    </div>
+  </div>
 </div>`;
 }
 

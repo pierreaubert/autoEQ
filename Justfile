@@ -37,10 +37,12 @@ prod-ts:
 # BENCH
 # ----------------------------------------------------------------------
 
-bench: bench-rust
+bench: bench-convergence bench-autoeq-speaker
 
-bench-rust:
+bench-convergence:
 	cargo run --release --bin benchmark_convergence
+
+bench-autoeq-speaker:
 	cargo run --release --bin benchmark_autoeq_speaker
 
 # ----------------------------------------------------------------------
