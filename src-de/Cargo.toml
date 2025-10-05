@@ -16,8 +16,8 @@ csv = { workspace = true }
 clap = { workspace = true }
 plotly = { workspace = true }
 plotly_static = { workspace = true }
-autoeq-testfunctions = { path = "../src-testfunctions" }
-autoeq-env = { path = "../src-env" }
+autoeq-testfunctions = { version="0.2", path = "../src-testfunctions" }
+autoeq-env = { version="0.2", path = "../src-env" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
