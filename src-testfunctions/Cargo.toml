@@ -11,7 +11,7 @@ repository = "https://github.com/pierreaubert/autoeq"
 ndarray = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 plotly = { workspace = true }
-autoeq-env = { path = "../src-env" }
+autoeq-env = { version = "0.2.2", path = "../src-env"}
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 regex = "1.10"
