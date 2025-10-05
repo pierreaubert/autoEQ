@@ -1,4 +1,4 @@
-use autoeq_de::{differential_evolution, DEConfig, Mutation, ParallelConfig, Strategy};
+use autoeq_de::{DEConfig, Mutation, ParallelConfig, Strategy, differential_evolution};
 use ndarray::Array1;
 use std::time::Instant;
 

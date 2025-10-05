@@ -11,7 +11,7 @@ use std::io::Write;
 use autoeq_env::get_data_generated_dir;
 
 // Import the test functions and metadata
-use autoeq_testfunctions::{functions, get_function_metadata, FunctionMetadata};
+use autoeq_testfunctions::{FunctionMetadata, functions, get_function_metadata};
 
 type TestFunction = fn(&Array1<f64>) -> f64;
 
@@ -152,7 +152,10 @@ fn main() {
                 if meta.bounds.len() >= 2 {
                     (meta.bounds[0], meta.bounds[1])
                 } else {
-                    eprintln!("  Warning: Function '{}' metadata has insufficient bounds, using CLI bounds", name);
+                    eprintln!(
+                        "  Warning: Function '{}' metadata has insufficient bounds, using CLI bounds",
+                        name
+                    );
                     (x_bounds, y_bounds)
                 }
             } else {

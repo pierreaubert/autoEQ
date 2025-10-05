@@ -432,6 +432,91 @@ async fn run_optimization(
     }
 }
 
+/// Helper function to run metaheuristics optimization with progress callbacks
+fn run_mh_optimization_with_callback(
+    args: &AutoEQArgs,
+    objective_data: &autoeq::optim::ObjectiveData,
+    app_handle: AppHandle,
+    cancellation_state: Arc<CancellationState>,
+) -> Result<Vec<f64>, Box<dyn std::error::Error + Send + Sync>> {
+    use autoeq::optim::AlgorithmCategory;
+    use autoeq::optim::parse_algorithm_name;
+    use autoeq::optim_mh::{MHIntermediate, optimize_filters_mh_with_callback};
+    use autoeq::workflow::{initial_guess, setup_bounds};
+
+    let (lower_bounds, upper_bounds) = setup_bounds(args);
+    let mut x = initial_guess(args, &lower_bounds, &upper_bounds);
+
+    // Parse algorithm name to extract MH algorithm type
+    let algo_name = if let Some(AlgorithmCategory::Metaheuristics(mh_name)) =
+        parse_algorithm_name(&args.algo)
+    {
+        mh_name
+    } else {
+        return Err(format!("Invalid metaheuristics algorithm: {}", args.algo).into());
+    };
+
+    let mut progress_count = 0;
+    let callback = Box::new(move |intermediate: &MHIntermediate| {
+        // Check for cancellation
+        if cancellation_state.is_cancelled() {
+            println!(
+                "[RUST DEBUG] MH optimization cancelled during iteration {}",
+                intermediate.iter
+            );
+            return autoeq::de::CallbackAction::Stop;
+        }
+
+        progress_count += 1;
+        if progress_count % 5 == 0 || progress_count <= 5 {
+            println!(
+                "[RUST DEBUG] MH Progress update #{}: iter={}, fitness={:.6}",
+                progress_count, intermediate.iter, intermediate.fun
+            );
+        }
+
+        // Emit progress update to frontend
+        // Note: MHIntermediate doesn't have convergence, so we use 0.0 as a placeholder
+        let emit_result = app_handle.emit(
+            "progress_update",
+            ProgressUpdate {
+                iteration: intermediate.iter,
+                fitness: intermediate.fun,
+                params: intermediate.x.to_vec(),
+                convergence: 0.0, // MH doesn't provide convergence info
+            },
+        );
+
+        if let Err(e) = emit_result {
+            println!("[RUST DEBUG] Failed to emit MH progress update: {}", e);
+        } else if progress_count % 25 == 0 {
+            println!(
+                "[RUST DEBUG] MH Progress event emitted successfully (count: {})",
+                progress_count
+            );
+        }
+
+        autoeq::de::CallbackAction::Continue
+    });
+
+    // Run metaheuristics optimization with callback
+    let result = optimize_filters_mh_with_callback(
+        &mut x,
+        &lower_bounds,
+        &upper_bounds,
+        objective_data.clone(),
+        &algo_name,
+        args.population,
+        args.maxeval,
+        callback,
+    );
+
+    match result {
+        Ok((_status, _val)) => Ok(x),
+        Err((e, _final_value)) => Err(Box::new(std::io::Error::other(e))),
+    }
+}
+
 async fn run_optimization_internal(
     params: OptimizationParams,
     app_handle: AppHandle,
@@ -636,55 +721,79 @@ async fn run_optimization_internal(
         return Err("Optimization cancelled before starting".into());
     }
 
-    // Run optimization with progress reporting for autoeq:de
+    // Run optimization with progress reporting
     println!(
         "[RUST DEBUG] Starting optimization with algorithm: {}",
         args.algo
     );
-    let filter_params = if args.algo == "autoeq:de" {
-        println!("[RUST DEBUG] Using DE algorithm with progress reporting");
+
+    // Determine if algorithm supports callbacks
+    let supports_callbacks = args.algo == "autoeq:de" || args.algo.starts_with("mh:");
+
+    let filter_params = if supports_callbacks {
+        println!(
+            "[RUST DEBUG] Using algorithm with progress reporting: {}",
+            args.algo
+        );
         let mut progress_count = 0;
         let cancellation_state_clone = Arc::clone(&cancellation_state);
-        autoeq::workflow::perform_optimization_with_callback(
-            &args,
-            &objective_data,
-            Box::new(move |intermediate| {
-                // Check for cancellation in callback
-                if cancellation_state_clone.is_cancelled() {
-                    println!("[RUST DEBUG] Optimization cancelled during iteration {}", intermediate.iter);
-                    return autoeq::de::CallbackAction::Stop;
-                }
-                progress_count += 1;
-                if progress_count % 10 == 0 || progress_count <= 5 {
-                    println!("[RUST DEBUG] Progress update #{}: iter={}, fitness={:.6}, convergence={:.4}",
-                             progress_count, intermediate.iter, intermediate.fun, intermediate.convergence);
-                }
-                let emit_result = app_handle.emit(
-                    "progress_update",
-                    ProgressUpdate {
-                        iteration: intermediate.iter,
-                        fitness: intermediate.fun,
-                        params: intermediate.x.to_vec(),
-                        convergence: intermediate.convergence,
-                    },
-                );
-                if let Err(e) = emit_result {
-                    println!("[RUST DEBUG] Failed to emit progress update: {}", e);
-                } else if progress_count % 50 == 0 {
-                    println!("[RUST DEBUG] Progress event emitted successfully (count: {})", progress_count);
-                }
-                autoeq::de::CallbackAction::Continue
-            }),
-        )
-        .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
-            println!("[RUST DEBUG] DE optimization failed: {}", e);
-            Box::new(std::io::Error::other(e.to_string()))
-        })?
+        let app_handle_clone = app_handle.clone();
+
+        if args.algo == "autoeq:de" {
+            // Use DE-specific callback
+            autoeq::workflow::perform_optimization_with_callback(
+                &args,
+                &objective_data,
+                Box::new(move |intermediate| {
+                    // Check for cancellation in callback
+                    if cancellation_state_clone.is_cancelled() {
+                        println!("[RUST DEBUG] Optimization cancelled during iteration {}", intermediate.iter);
+                        return autoeq::de::CallbackAction::Stop;
+                    }
+                    progress_count += 1;
+                    if progress_count % 10 == 0 || progress_count <= 5 {
+                        println!("[RUST DEBUG] Progress update #{}: iter={}, fitness={:.6}, convergence={:.4}",
+                                 progress_count, intermediate.iter, intermediate.fun, intermediate.convergence);
+                    }
+                    let emit_result = app_handle_clone.emit(
+                        "progress_update",
+                        ProgressUpdate {
+                            iteration: intermediate.iter,
+                            fitness: intermediate.fun,
+                            params: intermediate.x.to_vec(),
+                            convergence: intermediate.convergence,
+                        },
+                    );
+                    if let Err(e) = emit_result {
+                        println!("[RUST DEBUG] Failed to emit progress update: {}", e);
+                    } else if progress_count % 50 == 0 {
+                        println!("[RUST DEBUG] Progress event emitted successfully (count: {})", progress_count);
+                    }
+                    autoeq::de::CallbackAction::Continue
+                }),
+            )
+            .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
+                println!("[RUST DEBUG] DE optimization failed: {}", e);
+                Box::new(std::io::Error::other(e.to_string()))
+            })?
+        } else {
+            // Use metaheuristics-specific optimization path
+            println!("[RUST DEBUG] Using metaheuristics algorithm with progress reporting");
+            run_mh_optimization_with_callback(
+                &args,
+                &objective_data,
+                app_handle_clone,
+                cancellation_state_clone,
+            )?
+        }
     } else {
-        println!("[RUST DEBUG] Using non-DE algorithm: {}", args.algo);
+        println!(
+            "[RUST DEBUG] Using algorithm without progress reporting: {}",
+            args.algo
+        );
         autoeq::workflow::perform_optimization(&args, &objective_data).map_err(
             |e| -> Box<dyn std::error::Error + Send + Sync> {
-                println!("[RUST DEBUG] Non-DE optimization failed: {}", e);
+                println!("[RUST DEBUG] Optimization failed: {}", e);
                 Box::new(std::io::Error::other(e.to_string()))
             },
         )?

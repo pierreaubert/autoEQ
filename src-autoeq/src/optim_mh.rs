@@ -1,6 +1,7 @@
 // Metaheuristics-specific optimization code
 
-use super::optim::{compute_fitness_penalties, ObjectiveData};
+use super::optim::{ObjectiveData, compute_fitness_penalties};
+use ndarray::Array1;
 
 #[allow(unused_imports)]
 use metaheuristics_nature as mh;
@@ -9,11 +10,34 @@ use mh::methods::{De as MhDe, Fa as MhFa, Pso as MhPso, Rga as MhRga, Tlbo as Mh
 #[allow(unused_imports)]
 use mh::{Bounded as MhBounded, Fitness as MhFitness, ObjFunc as MhObjFunc, Solver as MhSolver};
 
+/// Information passed to callback after each generation
+/// Similar to DEIntermediate but for metaheuristics optimizers
+pub struct MHIntermediate {
+    pub x: Array1<f64>,
+    pub fun: f64,
+    pub iter: usize,
+}
+
+/// Callback action - shared with DE module for consistency
+pub use crate::de::CallbackAction;
+
 // ---------------- Metaheuristics objective and utilities ----------------
+use std::sync::{Arc, Mutex};
+
 #[derive(Clone)]
 pub struct MHObjective {
     pub data: ObjectiveData,
     pub bounds: Vec<[f64; 2]>,
+    /// Optional callback state for tracking progress
+    pub callback_state: Option<Arc<Mutex<CallbackState>>>,
+}
+
+/// State tracked across fitness evaluations for callback reporting
+pub struct CallbackState {
+    pub best_fitness: f64,
+    pub best_params: Vec<f64>,
+    pub eval_count: usize,
+    pub last_report_eval: usize,
 }
 
 impl MhBounded for MHObjective {
@@ -27,8 +51,72 @@ impl MhObjFunc for MHObjective {
     fn fitness(&self, xs: &[f64]) -> Self::Ys {
         // Create mutable copy of data for compute_fitness_penalties
         let mut data_copy = self.data.clone();
-        compute_fitness_penalties(xs, None, &mut data_copy)
+        let fitness_val = compute_fitness_penalties(xs, None, &mut data_copy);
+
+        // Update callback state if present
+        if let Some(ref state_arc) = self.callback_state {
+            if let Ok(mut state) = state_arc.lock() {
+                state.eval_count += 1;
+
+                // Track best solution
+                if fitness_val < state.best_fitness {
+                    state.best_fitness = fitness_val;
+                    state.best_params = xs.to_vec();
+                }
+            }
+        }
+
+        fitness_val
     }
+}
+
+/// Create a default callback for metaheuristics that prints progress
+pub fn create_mh_callback(
+    algo_name: &str,
+) -> Box<dyn FnMut(&MHIntermediate) -> CallbackAction + Send> {
+    let name = algo_name.to_string();
+    let mut last_fitness = f64::INFINITY;
+    let mut stall_count = 0;
+
+    Box::new(move |intermediate: &MHIntermediate| -> CallbackAction {
+        // Check for progress
+        let improvement = if intermediate.fun < last_fitness {
+            let delta = last_fitness - intermediate.fun;
+            last_fitness = intermediate.fun;
+            stall_count = 0;
+            format!("(-{:.2e})", delta)
+        } else {
+            stall_count += 1;
+            if stall_count >= 50 {
+                format!("(STALL:{})", stall_count)
+            } else {
+                "(--) ".to_string()
+            }
+        };
+
+        // Print when stalling or periodically
+        if stall_count == 1 || stall_count % 25 == 0 || intermediate.iter % 10 == 0 {
+            eprintln!(
+                "{} iter {:4}  fitness={:.6e} {}",
+                name, intermediate.iter, intermediate.fun, improvement
+            );
+        }
+
+        // Show parameter details every 50 iterations
+        if intermediate.iter > 0 && intermediate.iter % 50 == 0 {
+            let param_summary: Vec<String> = (0..intermediate.x.len() / 3)
+                .map(|i| {
+                    let freq = 10f64.powf(intermediate.x[i * 3]);
+                    let q = intermediate.x[i * 3 + 1];
+                    let gain = intermediate.x[i * 3 + 2];
+                    format!("[f{:.0}Hz Q{:.2} G{:.2}dB]", freq, q, gain)
+                })
+                .collect();
+            eprintln!("  --> Best params: {}", param_summary.join(" "));
+        }
+
+        CallbackAction::Continue
+    })
 }
 
 /// Optimize filter parameters using metaheuristics algorithms
@@ -40,6 +128,33 @@ pub fn optimize_filters_mh(
     mh_name: &str,
     population: usize,
     maxeval: usize,
+) -> Result<(String, f64), (String, f64)> {
+    // Create default callback for terminal output
+    let callback = create_mh_callback(&format!("mh::{}", mh_name));
+
+    // Delegate to callback version
+    optimize_filters_mh_with_callback(
+        x,
+        lower_bounds,
+        upper_bounds,
+        objective_data,
+        mh_name,
+        population,
+        maxeval,
+        callback,
+    )
+}
+
+/// Optimize filter parameters using metaheuristics algorithms with callback support
+pub fn optimize_filters_mh_with_callback(
+    x: &mut [f64],
+    lower_bounds: &[f64],
+    upper_bounds: &[f64],
+    objective_data: ObjectiveData,
+    mh_name: &str,
+    population: usize,
+    maxeval: usize,
+    mut callback: Box<dyn FnMut(&MHIntermediate) -> CallbackAction + Send>,
 ) -> Result<(String, f64), (String, f64)> {
     let num_params = x.len();
 
@@ -57,10 +172,22 @@ pub fn optimize_filters_mh(
     penalty_data.penalty_w_spacing = objective_data.spacing_weight.max(0.0) * 1e3;
     penalty_data.penalty_w_mingain = 1e3;
 
+    // Create callback state
+    let callback_state = Arc::new(Mutex::new(CallbackState {
+        best_fitness: f64::INFINITY,
+        best_params: vec![],
+        eval_count: 0,
+        last_report_eval: 0,
+    }));
+
+    // Clone for the task closure
+    let callback_state_task = Arc::clone(&callback_state);
+
     // Simple objective function wrapper for metaheuristics
     let mh_obj = MHObjective {
         data: penalty_data,
         bounds,
+        callback_state: Some(Arc::clone(&callback_state)),
     };
 
     // Choose algorithm configuration
@@ -78,15 +205,42 @@ pub fn optimize_filters_mh(
     let pop = population.max(1);
     let gens = (maxeval.max(pop)).div_ceil(pop); // ceil(maxeval/pop)
 
-    // Avoid accessing ctx.gen directly (reserved identifier in Rust 2024).
-    // Instead, count down generations via the task FnMut closure.
-    let mut left = gens as i64;
+    // Track iteration count
+    let mut current_iter = 0_usize;
+    let report_interval = 100; // Report every N evaluations
+
     let solver = builder
         .seed(0)
         .pop_num(pop)
-        .task(move |_| {
-            left -= 1;
-            left <= 0
+        .task(move |_ctx| {
+            current_iter += 1;
+
+            // Report progress periodically
+            if let Ok(mut state) = callback_state_task.lock() {
+                let evals_since_last = state.eval_count.saturating_sub(state.last_report_eval);
+
+                if evals_since_last >= report_interval {
+                    // Create intermediate state for callback
+                    let x_array = Array1::from(state.best_params.clone());
+                    let intermediate = MHIntermediate {
+                        x: x_array,
+                        fun: state.best_fitness,
+                        iter: current_iter,
+                    };
+
+                    // Call the callback
+                    let action = callback(&intermediate);
+                    state.last_report_eval = state.eval_count;
+
+                    // Check if user wants to stop
+                    if matches!(action, CallbackAction::Stop) {
+                        return true; // Signal to stop optimization
+                    }
+                }
+            }
+
+            // Continue until max generations
+            current_iter >= gens
         })
         .solve();
 

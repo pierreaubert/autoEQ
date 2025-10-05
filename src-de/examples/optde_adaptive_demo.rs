@@ -1,4 +1,4 @@
-use autoeq_de::{differential_evolution, AdaptiveConfig, DEConfigBuilder, Mutation, Strategy};
+use autoeq_de::{AdaptiveConfig, DEConfigBuilder, Mutation, Strategy, differential_evolution};
 use autoeq_testfunctions::{ackley, quadratic, rosenbrock};
 use ndarray::Array1;
 

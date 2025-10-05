@@ -15,6 +15,7 @@
 //! You should have received a copy of the GNU General Public License
 //! along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+use autoeq::Curve;
 use autoeq::cea2034 as score;
 use autoeq::iir;
 use autoeq::loss;
@@ -22,7 +23,6 @@ use autoeq::optim;
 use autoeq::optim::ObjectiveData;
 use autoeq::plot;
 use autoeq::read;
-use autoeq::Curve;
 use autoeq_env::DATA_GENERATED;
 use clap::Parser;
 use std::error::Error;

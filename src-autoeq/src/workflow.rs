@@ -4,8 +4,8 @@
 //! building target curves, preparing objective data, and running optimization.
 
 use crate::{
-    cli::PeqModel, loss::HeadphoneLossData, loss::SpeakerLossData, optim, optim::ObjectiveData,
-    optim_de::optimize_filters_autoeq_with_callback, read, Curve,
+    Curve, cli::PeqModel, loss::HeadphoneLossData, loss::SpeakerLossData, optim,
+    optim::ObjectiveData, optim_de::optimize_filters_autoeq_with_callback, read,
 };
 use ndarray::Array1;
 use std::{collections::HashMap, error::Error};

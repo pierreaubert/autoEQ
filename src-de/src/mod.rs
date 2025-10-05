@@ -711,9 +711,9 @@ where
         use mutant_best1::mutant_best1;
         use mutant_best2::mutant_best2;
         use mutant_current_to_best1::mutant_current_to_best1;
+        use mutant_rand_to_best1::mutant_rand_to_best1;
         use mutant_rand1::mutant_rand1;
         use mutant_rand2::mutant_rand2;
-        use mutant_rand_to_best1::mutant_rand_to_best1;
         use parallel_eval::evaluate_trials_parallel;
         use std::sync::Arc;
 
@@ -1252,10 +1252,10 @@ where
                 eprintln!(
                     "TIMING iter {:4}: build={:.3} ms, eval={:.3} ms, select={:.3} ms, total={:.3} ms",
                     iter,
-                    t_build.as_secs_f64()*1e3,
-                    t_eval.as_secs_f64()*1e3,
-                    t_select.as_secs_f64()*1e3,
-                    iter_dur.as_secs_f64()*1e3,
+                    t_build.as_secs_f64() * 1e3,
+                    t_eval.as_secs_f64() * 1e3,
+                    t_select.as_secs_f64() * 1e3,
+                    iter_dur.as_secs_f64() * 1e3,
                 );
             }
 

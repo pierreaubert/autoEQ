@@ -329,7 +329,7 @@ mod tests {
         assert_eq!(guesses.len(), config.num_guesses);
         for guess in &guesses {
             assert_eq!(guess.len(), 3); // 1 filter × 3 params
-                                        // Check bounds
+            // Check bounds
             assert!(guess[0] >= bounds[0].0 && guess[0] <= bounds[0].1);
             assert!(guess[1] >= bounds[1].0 && guess[1] <= bounds[1].1);
             assert!(guess[2] >= bounds[2].0 && guess[2] <= bounds[2].1);

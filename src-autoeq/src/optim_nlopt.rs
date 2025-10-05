@@ -1,10 +1,10 @@
 // NLOPT-specific optimization code
 
 use super::constraints::{
-    constraint_ceiling, constraint_min_gain, CeilingConstraintData, MinGainConstraintData,
+    CeilingConstraintData, MinGainConstraintData, constraint_ceiling, constraint_min_gain,
 };
-use super::optim::compute_fitness_penalties;
 use super::optim::ObjectiveData;
+use super::optim::compute_fitness_penalties;
 use nlopt::{Algorithm, Nlopt, Target};
 
 /// Optimize filter parameters using NLOPT algorithms

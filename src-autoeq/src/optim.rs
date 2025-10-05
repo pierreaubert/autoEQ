@@ -18,7 +18,7 @@
 use super::cli::PeqModel;
 use super::constraints::{viol_ceiling_from_spl, viol_min_gain_from_xs, viol_spacing_from_xs};
 use super::loss::{
-    flat_loss, headphone_loss, speaker_score_loss, HeadphoneLossData, LossType, SpeakerLossData,
+    HeadphoneLossData, LossType, SpeakerLossData, flat_loss, headphone_loss, speaker_score_loss,
 };
 use super::optim_de::optimize_filters_autoeq;
 use super::optim_mh::optimize_filters_mh;

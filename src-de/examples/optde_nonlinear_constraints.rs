@@ -1,5 +1,5 @@
 use autoeq_de::{
-    differential_evolution, Crossover, DEConfigBuilder, NonlinearConstraintHelper, Strategy,
+    Crossover, DEConfigBuilder, NonlinearConstraintHelper, Strategy, differential_evolution,
 };
 use ndarray::Array1;
 use std::str::FromStr;

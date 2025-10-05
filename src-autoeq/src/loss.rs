@@ -16,9 +16,9 @@
 //! You should have received a copy of the GNU General Public License
 //! along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+use crate::Curve;
 use crate::cea2034 as score;
 use crate::read;
-use crate::Curve;
 use clap::ValueEnum;
 use ndarray::Array1;
 use std::collections::HashMap;
@@ -435,8 +435,8 @@ pub fn headphone_loss_with_target(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ndarray::array;
     use ndarray::Array1;
+    use ndarray::array;
     use std::collections::HashMap;
 
     #[test]

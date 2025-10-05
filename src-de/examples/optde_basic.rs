@@ -1,5 +1,5 @@
 use autoeq_de::{
-    differential_evolution, CallbackAction, Crossover, DEConfig, Mutation, PolishConfig, Strategy,
+    CallbackAction, Crossover, DEConfig, Mutation, PolishConfig, Strategy, differential_evolution,
 };
 use ndarray::Array1;
 use std::sync::Arc;

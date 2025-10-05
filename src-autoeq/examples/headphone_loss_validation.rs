@@ -3,8 +3,8 @@
 //! This tool helps verify that the headphone_loss function properly implements
 //! the Olive/Harman preference prediction model for in-ear headphones.
 
-use autoeq::loss::headphone_loss;
 use autoeq::Curve;
+use autoeq::loss::headphone_loss;
 use ndarray::Array1;
 
 fn main() {

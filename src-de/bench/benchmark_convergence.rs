@@ -1,4 +1,4 @@
-use autoeq_de::{run_recorded_differential_evolution, DEConfigBuilder, Strategy};
+use autoeq_de::{DEConfigBuilder, Strategy, run_recorded_differential_evolution};
 use autoeq_testfunctions::*;
 use clap::{Arg, Command};
 use ndarray::Array1;

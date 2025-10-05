@@ -10,7 +10,9 @@ use std::path::PathBuf;
 /// Error type for environment variable issues
 #[derive(Debug, thiserror::Error)]
 pub enum EnvError {
-    #[error("AUTOEQ_DIR environment variable is not set. Please set it to the AutoEQ project root directory (e.g., export AUTOEQ_DIR=/path/to/autoeq)")]
+    #[error(
+        "AUTOEQ_DIR environment variable is not set. Please set it to the AutoEQ project root directory (e.g., export AUTOEQ_DIR=/path/to/autoeq)"
+    )]
     AutoeqDirNotSet,
 
     #[error("AUTOEQ_DIR points to a non-existent directory: {0}")]

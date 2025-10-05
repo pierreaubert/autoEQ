@@ -1,7 +1,7 @@
 [package]
 name = "autoeq"
-version = "0.2.235"
-edition = "2021"
+version = "0.2.236"
+edition = "2024"
 authors = ["Pierre Aubert <pierre@spinorama.org>"]
 license = "GPL-3.0-or-later"
 description = "Automatic equalization for speakers and headphones"

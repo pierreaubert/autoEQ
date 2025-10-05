@@ -3,8 +3,8 @@
 #[cfg(test)]
 mod tests {
     use crate::{
-        differential_evolution, run_recorded_differential_evolution, DEConfig, DEConfigBuilder,
-        Mutation, Strategy,
+        DEConfig, DEConfigBuilder, Mutation, Strategy, differential_evolution,
+        run_recorded_differential_evolution,
     };
     use autoeq_testfunctions::{get_function_bounds_2d, get_function_bounds_vec, rosenbrock};
 

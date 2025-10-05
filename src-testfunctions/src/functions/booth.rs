@@ -16,7 +16,7 @@ mod tests {
 
     #[test]
     fn test_booth_known_properties() {
-        use crate::{get_function_metadata, FunctionMetadata};
+        use crate::{FunctionMetadata, get_function_metadata};
         use ndarray::Array1;
 
         // Get metadata for this function

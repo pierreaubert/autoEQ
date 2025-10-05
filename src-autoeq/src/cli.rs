@@ -16,9 +16,9 @@
 //! You should have received a copy of the GNU General Public License
 //! along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-use super::optim::{get_all_algorithms, AlgorithmType};
-use crate::de::Strategy;
+use super::optim::{AlgorithmType, get_all_algorithms};
 use crate::LossType;
+use crate::de::Strategy;
 use clap::{Parser, ValueEnum};
 use std::fmt;
 use std::path::PathBuf;
@@ -337,7 +337,9 @@ pub fn display_algorithm_list() -> ! {
                 }
 
                 let description = match algo.name {
-                    "nlopt:cobyla" => " | Constrained Optimization BY Linear Approximations (recommended for local)",
+                    "nlopt:cobyla" => {
+                        " | Constrained Optimization BY Linear Approximations (recommended for local)"
+                    }
                     "nlopt:bobyqa" => " | Bound Optimization BY Quadratic Approximation",
                     "nlopt:neldermead" => " | Nelder-Mead simplex algorithm",
                     "nlopt:sbplx" => " | Subplex (variant of Nelder-Mead)",
@@ -546,7 +548,9 @@ pub fn display_strategy_list() -> ! {
     println!("  # Use recommended default strategy:");
     println!("  autoeq --algo autoeq:de --strategy currenttobest1bin --curve input.csv\n");
     println!("  # Use adaptive strategy with custom weights:");
-    println!("  autoeq --algo autoeq:de --strategy adaptivebin --adaptive-weight-f 0.8 --adaptive-weight-cr 0.7\n");
+    println!(
+        "  autoeq --algo autoeq:de --strategy adaptivebin --adaptive-weight-f 0.8 --adaptive-weight-cr 0.7\n"
+    );
     println!("  # Use classic exploration strategy:");
     println!("  autoeq --algo autoeq:de --strategy rand1bin --curve input.csv\n");
 
@@ -846,9 +850,11 @@ mod tests {
         args.num_filters = 0;
         let result = validate_args(&args);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .contains("Number of filters must be > 0"));
+        assert!(
+            result
+                .unwrap_err()
+                .contains("Number of filters must be > 0")
+        );
     }
 
     #[test]
@@ -913,9 +919,11 @@ mod tests {
         args.atolerance = -0.1;
         let result = validate_args(&args);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .contains("Absolute tolerance must be >= 0"));
+        assert!(
+            result
+                .unwrap_err()
+                .contains("Absolute tolerance must be >= 0")
+        );
     }
 
     #[test]
@@ -926,32 +934,40 @@ mod tests {
         args.adaptive_weight_f = -0.1;
         let result = validate_args(&args);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .contains("Adaptive weight for F must be between 0.0 and 1.0"));
+        assert!(
+            result
+                .unwrap_err()
+                .contains("Adaptive weight for F must be between 0.0 and 1.0")
+        );
 
         args.adaptive_weight_f = 1.1;
         let result = validate_args(&args);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .contains("Adaptive weight for F must be between 0.0 and 1.0"));
+        assert!(
+            result
+                .unwrap_err()
+                .contains("Adaptive weight for F must be between 0.0 and 1.0")
+        );
 
         // Reset and test adaptive_weight_cr out of bounds
         args.adaptive_weight_f = 0.5;
         args.adaptive_weight_cr = -0.1;
         let result = validate_args(&args);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .contains("Adaptive weight for CR must be between 0.0 and 1.0"));
+        assert!(
+            result
+                .unwrap_err()
+                .contains("Adaptive weight for CR must be between 0.0 and 1.0")
+        );
 
         args.adaptive_weight_cr = 1.1;
         let result = validate_args(&args);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .contains("Adaptive weight for CR must be between 0.0 and 1.0"));
+        assert!(
+            result
+                .unwrap_err()
+                .contains("Adaptive weight for CR must be between 0.0 and 1.0")
+        );
     }
 
     #[test]

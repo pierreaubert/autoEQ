@@ -1,5 +1,5 @@
-use plotly::common::Mode;
 use plotly::Scatter;
+use plotly::common::Mode;
 
 // Create two horizontal reference lines at y=1 and y=-1 spanning x=100..10000 for a given subplot axes
 pub fn make_ref_lines(x_axis: &str, y_axis: &str) -> Vec<Scatter<f64, f64>> {

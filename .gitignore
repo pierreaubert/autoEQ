@@ -4,6 +4,7 @@
 data_cached
 data_generated
 /dist
+/coverage
 autoeq_*.html
 autoeq_*.png
 *.csv

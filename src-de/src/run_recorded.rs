@@ -1,7 +1,7 @@
 //! Recording wrapper for differential evolution for testing purposes
 
 use crate::recorder::OptimizationRecorder;
-use crate::{differential_evolution, DEConfig, DEReport};
+use crate::{DEConfig, DEReport, differential_evolution};
 use autoeq_env::get_records_dir;
 use ndarray::Array1;
 

@@ -1,9 +1,9 @@
 use clap::Parser;
 use ndarray::Array1;
 use plotly::{
+    Layout, Plot, Scatter,
     common::{ColorScale, ColorScalePalette, Marker, Mode, Title},
     contour::Contour,
-    Layout, Plot, Scatter,
 };
 use std::fs;
 use std::path::Path;
@@ -12,7 +12,7 @@ use std::path::Path;
 use autoeq_env::{get_data_generated_dir, get_records_dir};
 
 // Import the test functions and metadata
-use autoeq_testfunctions::{get_function_metadata, FunctionMetadata};
+use autoeq_testfunctions::{FunctionMetadata, get_function_metadata};
 
 // Import shared function registry
 use autoeq_de::function_registry::TestFunction;
@@ -537,7 +537,10 @@ fn main() {
                     (meta.bounds[0], meta.bounds[1])
                 } else {
                     // Fallback to CLI bounds if metadata doesn't have enough dimensions
-                    eprintln!("  Warning: Function '{}' metadata has insufficient bounds, using CLI bounds", name);
+                    eprintln!(
+                        "  Warning: Function '{}' metadata has insufficient bounds, using CLI bounds",
+                        name
+                    );
                     (x_bounds, y_bounds)
                 }
             } else {

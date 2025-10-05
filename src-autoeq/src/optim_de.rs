@@ -4,15 +4,15 @@ use ndarray::Array1;
 use std::sync::Arc;
 
 use super::constraints::{
-    constraint_ceiling, constraint_min_gain, constraint_spacing, CeilingConstraintData,
-    MinGainConstraintData, SpacingConstraintData,
+    CeilingConstraintData, MinGainConstraintData, SpacingConstraintData, constraint_ceiling,
+    constraint_min_gain, constraint_spacing,
 };
 use super::init_sobol::init_sobol;
-use super::initial_guess::{create_smart_initial_guesses, SmartInitConfig};
-use super::optim::{compute_fitness_penalties, ObjectiveData};
+use super::initial_guess::{SmartInitConfig, create_smart_initial_guesses};
+use super::optim::{ObjectiveData, compute_fitness_penalties};
 use crate::de::{
-    differential_evolution, CallbackAction, DEConfigBuilder, DEIntermediate, DEReport, Init,
-    Mutation, NonlinearConstraintHelper, ParallelConfig, Strategy,
+    CallbackAction, DEConfigBuilder, DEIntermediate, DEReport, Init, Mutation,
+    NonlinearConstraintHelper, ParallelConfig, Strategy, differential_evolution,
 };
 
 /// Common setup for DE-based optimization

@@ -1,3 +1,8 @@
+# ----------------------------------------------------------------------
+# How to install Just?
+#     cargo install just
+# ----------------------------------------------------------------------
+
 default:
     just --list
 
@@ -8,7 +13,7 @@ default:
 test: test-rust test-ts
 
 test-rust:
-	cargo check
+	cargo check --all-targets
 	cargo test --lib
 
 test-ts:
@@ -130,3 +135,30 @@ cross-linux-x86 :
 cross-win-x86-gnu :
       echo "This is not working well yet from macos!"
       cd src-ui/src-tauri && cross build --release --target x86_64-pc-windows-gnu
+
+# ----------------------------------------------------------------------
+# Install macos
+# ----------------------------------------------------------------------
+
+install-cross:
+	rustup target add x86_64-apple-ios
+
+install-macos:
+	# need rustup first
+	# need xcode
+	xcode-select --install
+	# need brew
+	brew install chromedriver
+	xattr -d com.apple.quarantine $(which chromedriver)
+	brew install npm
+	# optimisation
+	brew install nlopt cmake
+
+install-macos: install-ios
+	# more stuff
+	rustup target add aarch64-apple-ios           # For physical iPad devices
+	rustup target add aarch64-apple-ios-sim       # For ARM64 iPad simulator
+	# app UI
+	brew install cocoapods
+	# need npm
+	npm run tauri ios init

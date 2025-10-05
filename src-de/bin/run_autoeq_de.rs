@@ -1,9 +1,9 @@
 use autoeq_de::{
+    CallbackAction, Crossover, DEConfigBuilder, Init, Mutation, ParallelConfig, Strategy,
     differential_evolution,
     function_registry::{FunctionRegistry, TestFunction},
-    CallbackAction, Crossover, DEConfigBuilder, Init, Mutation, ParallelConfig, Strategy,
 };
-use autoeq_testfunctions::{get_function_metadata, FunctionMetadata};
+use autoeq_testfunctions::{FunctionMetadata, get_function_metadata};
 use clap::{Parser, ValueEnum};
 use ndarray::Array1;
 use std::fmt::Write as FmtWrite;

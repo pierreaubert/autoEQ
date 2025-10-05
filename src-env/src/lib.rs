@@ -10,5 +10,5 @@ pub mod env_utils;
 // Re-export commonly used items
 pub use constants::{DATA_CACHED, DATA_GENERATED};
 pub use env_utils::{
-    check_autoeq_env, get_autoeq_dir, get_data_generated_dir, get_records_dir, EnvError,
+    EnvError, check_autoeq_env, get_autoeq_dir, get_data_generated_dir, get_records_dir,
 };

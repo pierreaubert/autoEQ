@@ -1,6 +1,8 @@
 # AutoEQ Cross-Platform Build Guide
 
 This guide explains how to build AutoEQ binaries for macOS, Linux, and Windows platforms.
+It is for developper only. The [README](README.md) contains a simpler way to install the software.
+If you are not a developper, use the app which is available on GitHub.
 
 ## Quick Start
 
@@ -27,6 +29,7 @@ This will create a `dist/` directory with binaries for all supported platforms.
 ## Supported Platforms
 
 ### CLI Tools
+
 - ✅ **macOS ARM64** (Apple Silicon) - `aarch64-apple-darwin`
 - ✅ **macOS Intel** - `x86_64-apple-darwin`
 - 🐳 **Linux x86_64** - `x86_64-unknown-linux-gnu` (requires Docker)
@@ -34,6 +37,7 @@ This will create a `dist/` directory with binaries for all supported platforms.
 - 🐳 **Windows x86_64** - `x86_64-pc-windows-gnu` (requires Docker)
 
 ### Desktop App (Tauri)
+
 - ✅ **macOS** - Intel and Apple Silicon
 - 🔧 **Linux** - x86_64 (needs UI fixes)
 - 🔧 **Windows** - x86_64 (needs UI fixes)
@@ -60,11 +64,13 @@ cargo install cross --git https://github.com/cross-rs/cross
 ### 3. Build CLI Tools
 
 #### Native Build (Current Platform)
+
 ```bash
 cargo build --release
 ```
 
 #### macOS Cross-Compilation
+
 ```bash
 # Intel macOS
 cargo build --release --target x86_64-apple-darwin
@@ -74,6 +80,7 @@ cargo build --release --target aarch64-apple-darwin
 ```
 
 #### Linux/Windows (with Docker)
+
 ```bash
 # Linux x86_64
 cross build --release --target x86_64-unknown-linux-gnu
@@ -103,6 +110,7 @@ npm run tauri build -- --target aarch64-apple-darwin
 ## GitHub Actions (Automated Builds)
 
 The repository includes a GitHub Actions workflow (`.github/workflows/build.yml`) that automatically builds binaries for all platforms on:
+
 - Push to main/master branch
 - Pull requests
 - Git tags (creates releases)
@@ -130,33 +138,40 @@ dist/
 ## Binary Information
 
 ### CLI Tools
+
 - **autoeq**: Main EQ optimization tool
 - **download**: Fetch speaker data from Spinorama.org
 - **benchmark**: Performance testing across speaker database
 
 ### File Sizes (Approximate)
+
 - **autoeq**: ~17-18 MB (includes NLOPT optimization libraries)
 - **download**: ~3.8 MB
 - **benchmark**: ~5.1 MB
 
 ### Dependencies
+
 All binaries are statically linked with no external dependencies required.
 
 ## Troubleshooting
 
 ### Docker Issues
+
 - Ensure Docker is running: `docker ps`
 - Update cross tool: `cargo install cross --git https://github.com/cross-rs/cross --force`
 
 ### macOS Builds
+
 - May require Xcode Command Line Tools: `xcode-select --install`
 - Ensure both Intel and ARM targets are installed
 
 ### Windows MinGW Issues
+
 - Cross-compilation may require additional MinGW toolchain setup
 - Consider using GitHub Actions for Windows builds
 
 ### UI Build Issues
+
 - Ensure Node.js 18+ is installed
 - Run `npm install` in the `ui/` directory
 - TypeScript errors need to be fixed in the UI code
@@ -178,6 +193,7 @@ file dist/aarch64-apple-darwin/autoeq
 ## Distribution
 
 The build script creates compressed archives:
+
 - `autoeq-{target}.tar.gz` for Unix platforms
 - `autoeq-{target}.zip` for Windows
 

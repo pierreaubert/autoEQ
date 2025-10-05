@@ -3,11 +3,11 @@
 //! These tests verify that the new CLI parameters actually change
 //! the behavior of the differential evolution algorithm.
 
+use autoeq::LossType;
 use autoeq::cli::{Args, PeqModel};
 use autoeq::de::Strategy;
 use autoeq::optim::optimize_filters;
 use autoeq::workflow::{initial_guess, setup_bounds};
-use autoeq::LossType;
 use clap::Parser;
 use ndarray::Array1;
 use std::str::FromStr;

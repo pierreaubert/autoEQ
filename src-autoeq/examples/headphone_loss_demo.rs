@@ -3,12 +3,12 @@
 //! Usage:
 //!   cargo run --example headphone_loss_demo -- --spl <file> [--target <file>]
 
+use autoeq::Curve;
 use autoeq::loss::headphone_loss;
 use autoeq::read::{
     create_log_frequency_grid, normalize_and_interpolate_response, read_curve_from_csv,
     smooth_one_over_n_octave,
 };
-use autoeq::Curve;
 
 use clap::Parser;
 use plotly::common::Mode;
@@ -59,7 +59,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         input_curve_raw.freq[0],
         input_curve_raw.freq[input_curve_raw.freq.len() - 1],
         input_curve_raw.spl.fold(f64::INFINITY, |a, &b| a.min(b)),
-        input_curve_raw.spl.fold(f64::NEG_INFINITY, |a, &b| a.max(b)),
+        input_curve_raw
+            .spl
+            .fold(f64::NEG_INFINITY, |a, &b| a.max(b)),
     );
 
     let input_curve = normalize_and_interpolate_response(&freqs, &input_curve_raw);

@@ -8,11 +8,11 @@ use serde_json::Value;
 use tokio::fs;
 use urlencoding;
 
+use crate::Curve;
 use crate::cea2034 as score;
 use crate::read::directory::{measurement_filename, sanitize_dir_name};
 use crate::read::interpolate::interpolate;
 use crate::read::plot::{normalize_plotly_json_from_str, normalize_plotly_value_with_suggestions};
-use crate::Curve;
 use autoeq_env::DATA_CACHED;
 
 /// Fetch a frequency response curve from the spinorama API

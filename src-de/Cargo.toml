@@ -1,7 +1,7 @@
 [package]
 name = "autoeq-de"
 version = "0.2.45"
-edition = "2021"
+edition = "2024"
 authors = ["Pierre Aubert <pierre@spinorama.org>"]
 license = "GPL-3.0-or-later"
 description = "Differential Evolution optimizer and evaluation tools for AutoEQ"

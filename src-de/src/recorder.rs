@@ -1,6 +1,6 @@
 use crate::{CallbackAction, DEIntermediate};
 use ndarray::Array1;
-use std::fs::{create_dir_all, File};
+use std::fs::{File, create_dir_all};
 use std::io::{BufWriter, Write};
 use std::sync::{Arc, Mutex};
 
@@ -316,7 +316,7 @@ impl OptimizationRecorder {
 #[cfg(test)]
 mod tests {
     use crate::{
-        recorder::OptimizationRecorder, run_recorded_differential_evolution, DEConfigBuilder,
+        DEConfigBuilder, recorder::OptimizationRecorder, run_recorded_differential_evolution,
     };
     use autoeq_testfunctions::quadratic;
     use ndarray::Array1;

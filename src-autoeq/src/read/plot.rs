@@ -1,6 +1,6 @@
 use crate::read::plot;
 use crate::read::speaker_suggestions::{
-    fetch_available_speakers, find_similar_speakers, format_speaker_not_found_error, ApiError,
+    ApiError, fetch_available_speakers, find_similar_speakers, format_speaker_not_found_error,
 };
 use serde_json::Value;
 use std::error::Error;
