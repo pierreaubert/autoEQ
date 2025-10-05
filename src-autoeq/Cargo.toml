@@ -26,10 +26,10 @@ tokio = { workspace = true }
 urlencoding = { workspace = true }
 
 # AutoEQ crates
-autoeq-iir = { path = "../src-iir" }
-autoeq-de = { path = "../src-de" }
-autoeq-cea2034 = { path = "../src-cea2034" }
-autoeq-env = { path = "../src-env" }
+autoeq-iir = { version="0.2", path = "../src-iir" }
+autoeq-de = { version="0.2", path = "../src-de" }
+autoeq-cea2034 = { version="0.2", path = "../src-cea2034" }
+autoeq-env = { version="0.2", path = "../src-env" }
 
 # Unix-only dependencies for CLI
 [target.'cfg(not(target_os = "windows"))'.dependencies]
