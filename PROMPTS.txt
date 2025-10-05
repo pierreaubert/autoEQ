@@ -1,7 +1,0 @@
-In the UI, when we are capturing data via a microphone:
-- save all captured audio data to a file in $AUTO_EQ/room/CHANNEL-DATE-HOUR-MINUTE-SECOND.wav
-- also generate a .csv file with freq, spl, phase with 200 freq points
-
-For each records, make them available in the UI in the Curve select.
-
------------------------------------------

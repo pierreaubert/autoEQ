@@ -186,6 +186,7 @@ checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 name = "autoeq"
 version = "0.2.237"
 dependencies = [
+ "accelerate-src",
  "autoeq-cea2034",
  "autoeq-de",
  "autoeq-env",
@@ -225,6 +226,7 @@ dependencies = [
 name = "autoeq-de"
 version = "0.2.46"
 dependencies = [
+ "accelerate-src",
  "autoeq-env",
  "autoeq-testfunctions",
  "blas-src",

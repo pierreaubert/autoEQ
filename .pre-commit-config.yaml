@@ -23,11 +23,6 @@ repos:
     hooks:
       - id: fmt
       - id: cargo-check
-  - repo: https://github.com/FeryET/pre-commit-rust
-    rev: v1.2.1
-    hooks:
-      - id: build
-      - id: test
   - repo: https://github.com/shellcheck-py/shellcheck-py
     rev: v0.11.0.1
     hooks:

@@ -39,6 +39,7 @@ signal-hook-tokio = { workspace = true }
 # External BLAS - platform-specific
 [target.'cfg(target_os = "macos")'.dependencies]
 blas-src = { version = "0.12.1", features = ["accelerate"] }
+accelerate-src = "0.3"
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]
 blas-src = { version = "0.12.1", features = ["openblas"] }
