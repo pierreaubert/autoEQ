@@ -1,6 +1,6 @@
 [package]
 name = "autoeq"
-version = "0.2.238"
+version = "0.2.239"
 edition = "2024"
 authors = ["Pierre Aubert <pierre@spinorama.org>"]
 license = "GPL-3.0-or-later"
@@ -51,11 +51,11 @@ path = "bin/autoeq.rs"
 
 [[bin]]
 name = "benchmark_autoeq_speaker"
-path = "bench/benchmark_autoeq_speaker.rs"
+path = "bench/autoeq_benchmark_speaker.rs"
 
 [[bin]]
 name = "download"
-path = "bin/download.rs"
+path = "bin/autoeq_download_speaker.rs"
 
 [lib]
 name = "autoeq"

@@ -86,7 +86,7 @@ plot_functions:
 # EXAMPLES
 # ----------------------------------------------------------------------
 
-examples : examples-iir examples-de
+examples : examples-iir examples-de examples-autoeq examples-testfunctions
 
 examples-iir :
         cargo run --release --example format_demo
@@ -98,6 +98,12 @@ examples-de :
         cargo run --release --example optde_linear_constraints
         cargo run --release --example optde_nonlinear_constraints
         cargo run --release --example optde_parallel
+
+examples-autoeq:
+	cargo run --release --example headphone_loss_validation
+
+examples-testfunctions:
+	cargo run --release --example test_hartman_4d
 
 # ----------------------------------------------------------------------
 # CROSS
@@ -124,8 +130,21 @@ install-macos:
 	# need rustup first
 	# need xcode
 	xcode-select --install
-	# need brew
+
 	brew install chromedriver
 	xattr -d com.apple.quarantine $(which chromedriver)
 	# optimisation
 	brew install nlopt cmake
+
+# ----------------------------------------------------------------------
+# publish
+# ----------------------------------------------------------------------
+
+publish:
+        cargo publish
+
+# ----------------------------------------------------------------------
+# QA
+# ----------------------------------------------------------------------
+qa:
+        cargo run --bin autoeq --release -- --speaker="Ascilab F6B" --version asr --measurement CEA2034 --algo autoeq:de --loss speaker-score -n 7 --min-freq=30 --max-q=6
