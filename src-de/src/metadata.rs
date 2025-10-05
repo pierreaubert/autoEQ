@@ -58,37 +58,38 @@ mod tests {
             .recombination(0.9)
             .build();
 
-        // Set up temporary directory for testing
-        let temp_dir = tempfile::tempdir().expect("Failed to create temporary directory");
-        let temp_path = temp_dir.path();
-        std::env::set_var("AUTOEQ_DIR", temp_path.to_str().unwrap());
-
+        // Run the recorded optimization (requires AUTOEQ_DIR to be set)
         let result =
             run_recorded_differential_evolution("rosenbrock_metadata", rosenbrock, &bounds, config);
 
-        assert!(result.is_ok());
-        let (report, _csv_path) = result.unwrap();
-        assert!(report.fun < 1e-3);
+        match result {
+            Ok((report, _csv_path)) => {
+                assert!(report.fun < 1e-3);
 
-        // Check that solution is close to expected optimum (1, 1)
-        assert!(
-            report.x[0] > 0.9 && report.x[0] < 1.1,
-            "x[0] not close to 1: {}",
-            report.x[0]
-        );
-        assert!(
-            report.x[1] > 0.9 && report.x[1] < 1.1,
-            "x[1] not close to 1: {}",
-            report.x[1]
-        );
+                // Check that solution is close to expected optimum (1, 1)
+                assert!(
+                    report.x[0] > 0.9 && report.x[0] < 1.1,
+                    "x[0] not close to 1: {}",
+                    report.x[0]
+                );
+                assert!(
+                    report.x[1] > 0.9 && report.x[1] < 1.1,
+                    "x[1] not close to 1: {}",
+                    report.x[1]
+                );
 
-        // Clean up
-        std::env::remove_var("AUTOEQ_DIR");
-
-        println!("Used bounds: {:?}", bounds);
-        println!(
-            "Found solution: ({:.4}, {:.4}) with f = {:.6}",
-            report.x[0], report.x[1], report.fun
-        );
+                println!("Used bounds: {:?}", bounds);
+                println!(
+                    "Found solution: ({:.4}, {:.4}) with f = {:.6}",
+                    report.x[0], report.x[1], report.fun
+                );
+            }
+            Err(e) => {
+                panic!(
+                    "Test requires AUTOEQ_DIR to be set. Error: {}\nPlease run: export AUTOEQ_DIR=/path/to/autoeq",
+                    e
+                );
+            }
+        }
     }
 }

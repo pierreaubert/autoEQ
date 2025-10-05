@@ -351,11 +351,6 @@ mod tests {
 
     #[test]
     fn test_recorded_optimization() {
-        // Set up temporary directory for testing
-        let temp_dir = tempfile::tempdir().expect("Failed to create temporary directory");
-        let temp_path = temp_dir.path();
-        std::env::set_var("AUTOEQ_DIR", temp_path.to_str().unwrap());
-
         // Test recording with simple quadratic function
         let bounds = vec![(-5.0, 5.0), (-5.0, 5.0)];
         let config = DEConfigBuilder::new()
@@ -366,30 +361,37 @@ mod tests {
 
         let result = run_recorded_differential_evolution("quadratic", quadratic, &bounds, config);
 
-        assert!(result.is_ok());
-        let (_de_report, csv_path) = result.unwrap();
+        match result {
+            Ok((_de_report, csv_path)) => {
+                // Check that CSV file was created
+                assert!(std::path::Path::new(&csv_path).exists());
+                println!("CSV saved to: {}", csv_path);
 
-        // Check that CSV file was created
-        assert!(std::path::Path::new(&csv_path).exists());
-        println!("CSV saved to: {}", csv_path);
+                // Read and verify CSV content
+                let csv_content = std::fs::read_to_string(&csv_path).expect("Failed to read CSV");
+                let lines: Vec<&str> = csv_content.trim().split('\n').collect();
 
-        // Read and verify CSV content
-        let csv_content = std::fs::read_to_string(&csv_path).expect("Failed to read CSV");
-        let lines: Vec<&str> = csv_content.trim().split('\n').collect();
+                // Should have header plus at least a few iterations
+                assert!(lines.len() > 1, "CSV should have header plus data rows");
 
-        // Should have header plus at least a few iterations
-        assert!(lines.len() > 1, "CSV should have header plus data rows");
+                // Check header format
+                let header = lines[0];
+                assert!(
+                    header
+                        .starts_with("eval_id,generation,x0,x1,f_value,best_so_far,is_improvement")
+                );
 
-        // Check header format
-        let header = lines[0];
-        assert!(header.starts_with("eval_id,generation,x0,x1,f_value,best_so_far,is_improvement"));
-
-        println!(
-            "Recording test passed - {} iterations recorded",
-            lines.len() - 1
-        );
-
-        // Clean up
-        std::env::remove_var("AUTOEQ_DIR");
+                println!(
+                    "Recording test passed - {} iterations recorded",
+                    lines.len() - 1
+                );
+            }
+            Err(e) => {
+                panic!(
+                    "Test requires AUTOEQ_DIR to be set. Error: {}\nPlease run: export AUTOEQ_DIR=/path/to/autoeq",
+                    e
+                );
+            }
+        }
     }
 }

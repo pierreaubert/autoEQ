@@ -1,7 +1,13 @@
 //! CLI tool for computing headphone loss from frequency response files
 //!
+//! This tool computes the headphone preference loss score based on the model from
+//! 'A Statistical Model that Predicts Listeners' Preference Ratings of In-Ear Headphones'
+//! by Sean Olive et al. Lower scores indicate better predicted preference.
+//!
+//! Output plots are automatically saved to $AUTOEQ_DIR/data_generated/headphone_loss_plots.html
+//!
 //! Usage:
-//!   cargo run --example headphone_loss_demo -- --spl <file> [--target <file>]
+//!   cargo run --example headphone_loss_demo -- --spl <file> --target <file> [--smooth] [--smooth-n <n>]
 
 use autoeq::Curve;
 use autoeq::loss::headphone_loss;
@@ -9,6 +15,7 @@ use autoeq::read::{
     create_log_frequency_grid, normalize_and_interpolate_response, read_curve_from_csv,
     smooth_one_over_n_octave,
 };
+use autoeq_env::get_data_generated_dir;
 
 use clap::Parser;
 use plotly::common::Mode;
@@ -30,10 +37,6 @@ struct Args {
     /// Path to target frequency response file (CSV or text with freq,spl columns)
     #[arg(long)]
     target: PathBuf,
-
-    /// Optional path to save plots
-    #[arg(long, default_value = "headphone_loss_plots.html")]
-    output: PathBuf,
 
     /// Enable smoothing (regularization) of the inverted target curve
     #[arg(long, default_value_t = true)]
@@ -108,13 +111,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Headphone Loss Score: {:.3}", -score);
     println!("{}", "=".repeat(50));
 
+    // Get data_generated directory and create output path
+    let data_generated_dir = get_data_generated_dir()
+        .map_err(|e| format!("Failed to get data_generated directory: {}", e))?;
+    let output_path = data_generated_dir.join("headphone_loss_plots.html");
+
     // Generate plots
     generate_plots(
         &input_curve,
         &target_curve,
         &deviation,
         &smooth_deviation,
-        &args.output,
+        &output_path,
     )?;
 
     Ok(())

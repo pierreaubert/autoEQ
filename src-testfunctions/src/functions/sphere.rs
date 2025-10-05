@@ -3,7 +3,7 @@
 use ndarray::Array1;
 
 /// Basic sphere function for testing
-/// f(x) = sum(x[i]^2)
+/// f(x) = sum(x\[i\]^2)
 /// Same as quadratic, but kept separate for clarity in different test contexts
 pub fn sphere(x: &Array1<f64>) -> f64 {
     x.iter().map(|&v| v * v).sum()

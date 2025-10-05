@@ -60,11 +60,6 @@ mod tests {
 
     #[test]
     fn test_run_recorded_basic() {
-        // Set up temporary directory for testing
-        let temp_dir = tempfile::tempdir().expect("Failed to create temporary directory");
-        let temp_path = temp_dir.path();
-        std::env::set_var("AUTOEQ_DIR", temp_path.to_str().unwrap());
-
         // Simple quadratic function for testing
         let quadratic = |x: &Array1<f64>| -> f64 { x.iter().map(|&xi| xi * xi).sum() };
 
@@ -78,20 +73,25 @@ mod tests {
         let result =
             run_recorded_differential_evolution("test_quadratic", quadratic, &bounds, config);
 
-        assert!(result.is_ok());
-        let (report, csv_path) = result.unwrap();
+        match result {
+            Ok((report, csv_path)) => {
+                // Should find minimum near origin
+                println!("Result: f = {:.6e}, x = {:?}", report.fun, report.x);
+                assert!(report.fun < 1e-3, "Function value too high: {}", report.fun);
+                for &xi in report.x.iter() {
+                    assert!(xi.abs() < 1e-1, "Variable too far from 0: {}", xi);
+                }
 
-        // Should find minimum near origin
-        println!("Result: f = {:.6e}, x = {:?}", report.fun, report.x);
-        assert!(report.fun < 1e-3, "Function value too high: {}", report.fun);
-        for &xi in report.x.iter() {
-            assert!(xi.abs() < 1e-1, "Variable too far from 0: {}", xi);
+                // CSV file should be created
+                println!("CSV saved to: {}", csv_path);
+            }
+            Err(e) => {
+                println!(
+                    "Test requires AUTOEQ_DIR to be set. Error: {}\nPlease run: export AUTOEQ_DIR=/Users/pierrre/src.local/autoeq",
+                    e
+                );
+                panic!("Test requires AUTOEQ_DIR to be set.");
+            }
         }
-
-        // CSV file should be created
-        println!("CSV saved to: {}", csv_path);
-
-        // Clean up
-        std::env::remove_var("AUTOEQ_DIR");
     }
 }

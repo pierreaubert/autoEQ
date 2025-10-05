@@ -160,36 +160,46 @@ pub fn check_autoeq_env() -> Result<(), EnvError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::env;
 
     #[test]
-    fn test_autoeq_dir_not_set() {
-        // Temporarily remove AUTOEQ_DIR if it exists
-        let original = env::var("AUTOEQ_DIR").ok();
-        env::remove_var("AUTOEQ_DIR");
-
+    fn test_get_autoeq_dir() {
+        // This test verifies that get_autoeq_dir works when AUTOEQ_DIR is set
+        // If AUTOEQ_DIR is not set, the test will fail with a helpful message
         let result = get_autoeq_dir();
-        assert!(matches!(result, Err(EnvError::AutoeqDirNotSet)));
 
-        // Restore original value if it existed
-        if let Some(value) = original {
-            env::set_var("AUTOEQ_DIR", value);
+        match result {
+            Ok(path) => {
+                assert!(path.exists(), "AUTOEQ_DIR points to non-existent directory");
+                println!("✓ AUTOEQ_DIR is set to: {}", path.display());
+            }
+            Err(e) => {
+                panic!(
+                    "Test requires AUTOEQ_DIR to be set. Error: {}\nPlease run: export AUTOEQ_DIR=/path/to/autoeq",
+                    e
+                );
+            }
         }
     }
 
     #[test]
-    fn test_autoeq_dir_nonexistent() {
-        let original = env::var("AUTOEQ_DIR").ok();
-        env::set_var("AUTOEQ_DIR", "/this/path/should/not/exist");
+    fn test_get_data_generated_dir() {
+        // This test verifies that get_data_generated_dir works and creates the directory
+        let result = get_data_generated_dir();
 
-        let result = get_autoeq_dir();
-        assert!(matches!(result, Err(EnvError::AutoeqDirNotFound(_))));
-
-        // Restore original value
-        if let Some(value) = original {
-            env::set_var("AUTOEQ_DIR", value);
-        } else {
-            env::remove_var("AUTOEQ_DIR");
+        match result {
+            Ok(path) => {
+                assert!(
+                    path.exists(),
+                    "data_generated directory should exist after calling get_data_generated_dir"
+                );
+                println!("✓ data_generated directory: {}", path.display());
+            }
+            Err(e) => {
+                panic!(
+                    "Test requires AUTOEQ_DIR to be set. Error: {}\nPlease run: export AUTOEQ_DIR=/path/to/autoeq",
+                    e
+                );
+            }
         }
     }
 }

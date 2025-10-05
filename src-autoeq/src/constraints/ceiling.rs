@@ -16,7 +16,7 @@ pub struct CeilingConstraintData {
 }
 
 /// Inequality constraint: combined response must not exceed max_db.
-/// Returns fc(x) = max_i (peq_spl[i] - max_db). Feasible when <= 0.
+/// Returns fc(x) = max_i (peq_spl\[i\] - max_db). Feasible when <= 0.
 pub fn constraint_ceiling(
     x: &[f64],
     _grad: Option<&mut [f64]>,

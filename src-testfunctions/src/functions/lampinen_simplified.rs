@@ -3,7 +3,7 @@
 use ndarray::Array1;
 
 /// Simplified Lampinen test problem (unconstrained version)
-/// f(x) = sum(5*x[i]) - sum(x[i]^2) for i in 0..4, - sum(x[j]) for j in 4..
+/// f(x) = sum(5*x\[i\]) - sum(x\[i\]^2) for i in 0..4, - sum(x\[j\]) for j in 4..
 pub fn lampinen_simplified(x: &Array1<f64>) -> f64 {
     let mut sum = 0.0;
 

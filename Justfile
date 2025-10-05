@@ -77,10 +77,10 @@ update-pre-commit:
 demo: headphone_loss_demo plot_functions
 
 headphone_loss_demo:
-	cargo run --example headphone_loss_demo -- --spl "./data_tests/headphone/asr/bowerwilkins_p7/Bowers & Wilkins P7.csv" --target "./data_tests/targets/harman-over-ear-2018.csv"
+	cargo run --release --example headphone_loss_demo -- --spl "./data_tests/headphone/asr/bowerwilkins_p7/Bowers & Wilkins P7.csv" --target "./data_tests/targets/harman-over-ear-2018.csv"
 
 plot_functions:
-	cargo run --bin plot_functions
+	cargo run --release --bin plot_functions
 
 # ----------------------------------------------------------------------
 # EXAMPLES
@@ -89,15 +89,15 @@ plot_functions:
 examples : examples-iir examples-de
 
 examples-iir :
-        cargo run --example format_demo
-        cargo run --example readme_example
+        cargo run --release --example format_demo
+        cargo run --release --example readme_example
 
 examples-de :
-        cargo run --example optde_basic
-        cargo run --example optde_adaptive_demo
-        cargo run --example optde_linear_constraints
-        cargo run --example optde_nonlinear_constraints
-        cargo run --example optde_parallel
+        cargo run --release --example optde_basic
+        cargo run --release --example optde_adaptive_demo
+        cargo run --release --example optde_linear_constraints
+        cargo run --release --example optde_nonlinear_constraints
+        cargo run --release --example optde_parallel
 
 # ----------------------------------------------------------------------
 # CROSS
