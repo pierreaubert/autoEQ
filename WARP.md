@@ -19,6 +19,7 @@ The project uses a workspace structure with specialized crates:
 - **src-ui**: Tauri desktop application with TypeScript/Vite frontend
 
 ### Data Flow
+
 1. Input: Speaker/headphone frequency response curves (CSV or API)
 2. Processing: Optimization algorithms find optimal IIR filter parameters
 3. Output: PEQ filters, plots (HTML/PNG), and performance metrics
@@ -26,6 +27,7 @@ The project uses a workspace structure with specialized crates:
 ## Common Development Commands
 
 ### Building
+
 ```bash
 # Build everything in release mode
 cargo build --release
@@ -39,6 +41,7 @@ chmod +x ./scripts/build-cross.sh
 ```
 
 ### Testing
+
 ```bash
 # Run all tests (requires AUTOEQ_DIR environment variable)
 export AUTOEQ_DIR=/Users/pierrre/src.local/autoeq
@@ -49,6 +52,7 @@ cargo test --package src-iir --release
 ```
 
 ### Linting and Formatting
+
 ```bash
 # Format code
 cargo fmt
@@ -58,6 +62,7 @@ cargo clippy
 ```
 
 ### Running the CLI Tools
+
 ```bash
 # Basic optimization with spinorama.org data
 cargo run --bin autoeq --release -- --speaker="KEF R3" --version=asr --measurement=CEA2034 --algo cobyla
@@ -73,6 +78,7 @@ cargo run --bin benchmark --release -- --algo cobyla
 ```
 
 ### UI Development
+
 ```bash
 cd src-ui
 
@@ -94,17 +100,21 @@ npm test
 The system supports multiple optimization strategies:
 
 **Global algorithms with constraints:**
+
 - ISRES, AGS, ORIGDIRECT
 
 **Global with bounds:**
+
 - DE (Differential Evolution with adaptive strategies)
 - PSO, STOGO, GMLSL
 
 **Local optimization:**
+
 - cobyla (recommended for speed)
 - neldermead
 
 **DE-specific strategies (--strategy flag):**
+
 - currenttobest1bin (default, recommended)
 - best1bin, rand1bin (classic)
 - adaptivebin, adaptiveexp (experimental)
@@ -122,17 +132,22 @@ The system supports multiple optimization strategies:
 ## Project-Specific Rules
 
 ### Version Management
+
 Before committing, increase the version number in:
+
 1. The relevant Cargo.toml file (patch position: e.g., 0.3.24 → 0.3.25)
 2. The top-level Cargo.toml file (always increase)
 
 ### Data Directory Exclusions
+
 When indexing the codebase, skip:
+
 - data/measurements
 - data/picture
 - data/eq
 
 ### File Restrictions
+
 The meta.js file should not be modified (edited later, causes linter complaints).
 
 ## Dependencies and Requirements
@@ -145,6 +160,7 @@ The meta.js file should not be modified (edited later, causes linter complaints)
 ## API Integration
 
 The project integrates with spinorama.org API:
+
 - `/v1/speakers` - List all speakers
 - `/v1/speakers/{speaker}/versions` - Get speaker versions
 - `/v1/speakers/{speaker}/versions/{version}/measurements` - Get measurements

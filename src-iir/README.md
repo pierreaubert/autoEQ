@@ -24,6 +24,7 @@ This crate provides IIR (Infinite Impulse Response) filter implementations for a
 ## Filter Types
 
 ### Biquad Filter Types
+
 - `BiquadFilterType::Lowpass`: Low-pass filter
 - `BiquadFilterType::Highpass`: High-pass filter
 - `BiquadFilterType::HighpassVariableQ`: High-pass filter with variable Q
@@ -111,6 +112,7 @@ print!("LR HP has {} sections", hp_filter.len());
 ## PEQ Functions Reference
 
 ### Core PEQ Operations
+
 - `peq_spl(freq, peq)`: Calculate SPL response across frequencies
 - `peq_equal(left, right)`: Compare two PEQs for equality
 - `peq_preamp_gain(peq)`: Calculate recommended preamp gain
@@ -118,6 +120,7 @@ print!("LR HP has {} sections", hp_filter.len());
 - `peq_format_apo(comment, peq)`: Export PEQ to EqualizerAPO format
 
 ### Filter Design Functions
+
 - `peq_butterworth_q(order)`: Calculate Q values for Butterworth filters
 - `peq_butterworth_lowpass(order, freq, srate)`: Create Butterworth lowpass filter
 - `peq_butterworth_highpass(order, freq, srate)`: Create Butterworth highpass filter
@@ -126,6 +129,7 @@ print!("LR HP has {} sections", hp_filter.len());
 - `peq_linkwitzriley_highpass(order, freq, srate)`: Create Linkwitz-Riley highpass filter
 
 ### Utility Functions
+
 - `bw2q(bw)`: Convert bandwidth in octaves to Q factor
 - `q2bw(q)`: Convert Q factor to bandwidth in octaves
 
@@ -185,17 +189,21 @@ fn main() {
 ## Key Concepts
 
 ### PEQ Type
+
 The `Peq` type is defined as `Vec<(f64, Biquad)>` where:
+
 - The `f64` is the weight/amplitude multiplier for each filter
 - The `Biquad` is the individual filter definition
 - This allows for flexible filter chaining and weighting
 
 ### Filter Order vs. Sections
+
 - **Butterworth filters**: An Nth-order filter uses N/2 biquad sections (rounded up)
 - **Linkwitz-Riley filters**: Special case of Butterworth designed for crossovers
 - Higher orders provide steeper rolloff but more computational cost
 
 ### Q Factor Guidelines
+
 - **Q < 0.5**: Wide, gentle curves
 - **Q = 0.707**: Butterworth response (maximally flat)
 - **Q = 1.0**: Good compromise for most applications
@@ -205,11 +213,13 @@ The `Peq` type is defined as `Vec<(f64, Biquad)>` where:
 ## Integration
 
 This crate is part of the AutoEQ ecosystem and is designed to work with:
+
 - `autoeq-de`: Differential Evolution optimizer
 - `autoeq-cea2034`: CEA2034 scoring algorithms
 - `autoeq`: Main AutoEQ application
 
 The PEQ functions are particularly useful for:
+
 - Automatic speaker/headphone equalization
 - Room correction systems
 - Audio mastering and mixing

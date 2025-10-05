@@ -14,12 +14,14 @@ This crate provides a pure Rust implementation of Differential Evolution (DE) gl
 ## Optimization Strategies
 
 ### Mutation Strategies
+
 - `DE/rand/1`: `x_trial = x_r1 + F * (x_r2 - x_r3)`
 - `DE/best/1`: `x_trial = x_best + F * (x_r1 - x_r2)`
 - `DE/current-to-best/1`: Combines current and best vectors
 - `DE/rand/2`: Uses five random vectors for mutation
 
 ### Crossover Strategies
+
 - **Binomial**: Random parameter-wise crossover
 - **Exponential**: Sequential parameter crossover
 
@@ -48,6 +50,7 @@ println!("Best fitness: {}", result.fx);
 ## Constraint Support
 
 ### Linear Constraints
+
 ```rust
 use autoeq_de::LinearConstraint;
 
@@ -59,6 +62,7 @@ let constraint = LinearConstraint::new(
 ```
 
 ### Nonlinear Constraints
+
 ```rust
 let nonlinear_constraint = |x: &[f64]| -> f64 {
     x[0].powi(2) + x[1].powi(2) - 1.0 // circle constraint
@@ -80,6 +84,7 @@ cargo run --bin plot_functions -- --csv-dir traces/ --show-traces
 ## Integration
 
 This crate is part of the AutoEQ ecosystem:
+
 - Used by `autoeq` for filter parameter optimization
 - Integrates with `autoeq-testfunctions` for validation
 - Works with `autoeq-iir` for audio filter optimization
@@ -87,6 +92,7 @@ This crate is part of the AutoEQ ecosystem:
 ## Examples
 
 The crate includes several example programs demonstrating different DE capabilities:
+
 - `basic_de`: Simple unconstrained optimization
 - `linear_constraints`: Linear constraint handling
 - `nonlinear_constraints`: Complex constraint optimization

@@ -1,8 +1,9 @@
 # AutoEQ Cross-Platform Build Guide
 
-This guide explains how to build AutoEQ binaries for macOS, Linux, and Windows platforms.
-It is for developper only. The [README](README.md) contains a simpler way to install the software.
-If you are not a developper, use the app which is available on GitHub.
+This guide explains how to build AutoEQ CLI tools for macOS, Linux, and Windows platforms.
+It is for developers only. The [README](README.md) contains a simpler way to install the software.
+
+**Note:** For the desktop application build instructions, see [autoeq-app](https://github.com/pierreaubert/autoeq-app).
 
 ## Quick Start
 
@@ -10,7 +11,6 @@ If you are not a developper, use the app which is available on GitHub.
 
 1. **Rust toolchain** (install via [rustup.rs](https://rustup.rs/))
 2. **Docker** (for Linux/Windows cross-compilation)
-3. **Node.js 18+** (for Tauri desktop app)
 
 ### CLI Tools (Simple Method)
 
@@ -33,14 +33,8 @@ This will create a `dist/` directory with binaries for all supported platforms.
 - ✅ **macOS ARM64** (Apple Silicon) - `aarch64-apple-darwin`
 - ✅ **macOS Intel** - `x86_64-apple-darwin`
 - 🐳 **Linux x86_64** - `x86_64-unknown-linux-gnu` (requires Docker)
-- 🐳 **Linux ARM64** - `aarch64-unknown-linux-gnu` (requires Docker)
+- ✅ **Linux ARM64** - `aarch64-unknown-linux-gnu` (requires Docker)
 - 🐳 **Windows x86_64** - `x86_64-pc-windows-gnu` (requires Docker)
-
-### Desktop App (Tauri)
-
-- ✅ **macOS** - Intel and Apple Silicon
-- 🔧 **Linux** - x86_64 (needs UI fixes)
-- 🔧 **Windows** - x86_64 (needs UI fixes)
 
 ## Manual Build Instructions
 
@@ -90,21 +84,6 @@ cross build --release --target aarch64-unknown-linux-gnu
 
 # Windows x86_64
 cross build --release --target x86_64-pc-windows-gnu
-```
-
-### 4. Build Desktop App
-
-```bash
-cd ui
-
-# Install dependencies
-npm install
-
-# Build for current platform
-npm run tauri build
-
-# Build for specific target (macOS)
-npm run tauri build -- --target aarch64-apple-darwin
 ```
 
 ## GitHub Actions (Automated Builds)
@@ -170,11 +149,6 @@ All binaries are statically linked with no external dependencies required.
 - Cross-compilation may require additional MinGW toolchain setup
 - Consider using GitHub Actions for Windows builds
 
-### UI Build Issues
-
-- Ensure Node.js 18+ is installed
-- Run `npm install` in the `ui/` directory
-- TypeScript errors need to be fixed in the UI code
 
 ## Testing Binaries
 

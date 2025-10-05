@@ -21,14 +21,18 @@ src/
 ## 📊 Function Categories
 
 ### 🎯 **Unimodal Functions** (Single Global Optimum)
+
 Perfect for testing **convergence speed** and **precision**:
+
 - `sphere`, `rosenbrock`, `powell`, `dixons_price`
 - `zakharov`, `booth`, `matyas`, `sum_squares`
 - `elliptic`, `cigar`, `tablet`, `discus` (ill-conditioned)
 - `ridge`, `sharp_ridge`, `brown`, `exponential`
 
 ### 🌄 **Multimodal Functions** (Multiple Local Minima)
+
 Test **global search** and **exploration** capabilities:
+
 - `ackley`, `rastrigin`, `griewank`, `schwefel`
 - `hartman_3d`, `hartman_4d`, `hartman_6d`
 - `michalewicz`, `alpine_n1`, `alpine_n2`
@@ -36,14 +40,18 @@ Test **global search** and **exploration** capabilities:
 - `eggholder`, `holder_table`, `cross_in_tray`
 
 ### 🔒 **Constrained Functions**
+
 For **constrained optimization** algorithms:
+
 - `keanes_bump_objective` with constraints
 - `rosenbrock_disk_constraint`
 - `binh_korn_*` with multiple constraints
 - `mishras_bird_*` functions
 
 ### 🔄 **Composite & Modern Functions**
+
 **Hybrid** and **recent competition** functions:
+
 - `expanded_griewank_rosenbrock`
 - `xin_she_yang_n1`, `xin_she_yang_n2`, etc.
 - `happycat`, `katsuura`, `vincent`
@@ -52,6 +60,7 @@ For **constrained optimization** algorithms:
 ## 🚀 Usage Examples
 
 ### Basic Function Evaluation
+
 ```rust
 use ndarray::Array1;
 use autoeq_testfunctions::*;
@@ -66,6 +75,7 @@ let result = rosenbrock(&x); // Returns 0.0 (global minimum)
 ```
 
 ### Function Metadata and Bounds
+
 ```rust
 // Get all function metadata
 let metadata = get_function_metadata();
@@ -80,6 +90,7 @@ let bounds_2d = get_function_bounds_2d("sphere", (-5.0, 5.0));
 ```
 
 ### Working with Different Categories
+
 ```rust
 // Unimodal functions (good for convergence testing)
 let result1 = elliptic(&x);    // Ill-conditioned
@@ -97,18 +108,21 @@ let result6 = katsuura(&x);    // Fractal-like landscape
 ## 🎯 Function Properties
 
 ### **Difficulty Levels**
+
 - **Easy**: `sphere`, `booth`, `matyas` - Good for initial testing
 - **Medium**: `rosenbrock`, `ackley`, `griewank` - Standard benchmarks
 - **Hard**: `schwefel`, `eggholder`, `katsuura` - Challenging landscapes
 - **Extreme**: `holder_table`, `cross_in_tray` - Very difficult optimization
 
 ### **Dimensionality Support**
+
 - **1D**: `gramacy_lee_2012`, `forrester_2008`
 - **2D Fixed**: `branin`, `goldstein_price`, `six_hump_camel`
 - **N-Dimensional**: `sphere`, `rosenbrock`, `ackley`, `rastrigin`
 - **High-D Specific**: `elliptic`, `bent_cigar`, `katsuura`
 
 ### **Special Properties**
+
 - **Ill-conditioned**: `elliptic`, `cigar`, `tablet`, `discus`
 - **Separable**: `sphere`, `sum_squares`, `alpine_n1`
 - **Non-separable**: `rosenbrock`, `ackley`, `griewank`
@@ -118,6 +132,7 @@ let result6 = katsuura(&x);    // Fractal-like landscape
 ## 📈 Benchmarking Guide
 
 ### **Algorithm Testing Workflow**
+
 1. **Start Simple**: Test on `sphere` and `rosenbrock`
 2. **Add Multimodality**: Try `ackley` and `rastrigin`
 3. **Test Scalability**: Use N-dimensional functions
@@ -125,6 +140,7 @@ let result6 = katsuura(&x);    // Fractal-like landscape
 5. **Constraints**: `keanes_bump_*` for constrained algorithms
 
 ### **Performance Metrics**
+
 - **Convergence Speed**: Unimodal functions
 - **Global Search**: Multimodal functions
 - **Precision**: Functions with known exact minima
@@ -134,6 +150,7 @@ let result6 = katsuura(&x);    // Fractal-like landscape
 ## 🏆 Function Coverage
 
 ### **SFU Virtual Library**: ~100% Coverage
+
 - ✅ **Many Local Minima**: Complete (16/16)
 - ✅ **Bowl-Shaped**: Complete (7/7)
 - ✅ **Plate-Shaped**: Complete (5/5)
@@ -142,6 +159,7 @@ let result6 = katsuura(&x);    // Fractal-like landscape
 - ✅ **Other**: Complete (21/21)
 
 ### **Modern Benchmarks**: Extensive
+
 - ✅ CEC competition functions
 - ✅ Recent research functions (2008-2024)
 - ✅ Specialized functions (GP, metamodeling)

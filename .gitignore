@@ -3,7 +3,6 @@
 /data
 data_cached
 data_generated
-/dist
 /coverage
 autoeq_*.html
 autoeq_*.png
@@ -18,20 +17,10 @@ src/unused.rs
 TAGS
 ETAGS
 CTAGS
+
 # Logs
 logs
 *.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
-
-/node_modules
-/dist
-/dist-audio-player
-dist-ssr
-*.local
 
 # Editor directories and files
 .vscode/*

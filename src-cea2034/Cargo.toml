@@ -1,6 +1,6 @@
 [package]
 name = "autoeq-cea2034"
-version = "0.2.187"
+version = "0.2.188"
 edition = "2024"
 authors = ["Pierre Aubert <pierre@spinorama.org>"]
 license = "GPL-3.0-or-later"

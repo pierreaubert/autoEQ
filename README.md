@@ -1,9 +1,12 @@
 <!-- markdownlint-disable-file MD013 -->
+
 # AutoEQ : an automatic eq for your speaker or headset
 
 ## Introduction
 
-The software can find the best EQ for you based on your measurements. There are extensive options to configure the optimiser. You can use a graphical version of the optimiser or a command line version.
+The software can find the best EQ for you based on your measurements. There are extensive options to configure the optimiser via the command line.
+
+**Note:** A graphical desktop application is available in a separate repository: [autoeq-app](https://github.com/pierreaubert/autoeq-app)
 
 ## Setting up a build developement
 
@@ -22,8 +25,6 @@ cargo install just
 #### MacOS
 
 Install [brew](https://brew.sh/) first.
-
-### Typescript
 
 ## Using just
 

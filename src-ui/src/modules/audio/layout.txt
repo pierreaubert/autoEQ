@@ -1,3 +1,0 @@
-[Demo Track (label)]     [Audio Ready • --:-- • --:--]                       [Spectrum Analyzer]      [EQ: On ⚙️ Off]
-[Select dropdown...]     [Progress bar]
-                         [▶ Listen Button] [▶ Pause Button][▶ Stop Button]

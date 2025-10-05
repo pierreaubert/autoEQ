@@ -5,8 +5,7 @@ members = [
     "src-de",
     "src-cea2034",
     "src-testfunctions",
-    "src-env",
-    "src-tauri"
+    "src-env"
 ]
 resolver = "2"
 

@@ -2,10 +2,10 @@ name: Build and Release
 
 on:
   push:
-    branches: [ main, master ]
-    tags: [ 'v*' ]
+    branches: [main, master]
+    tags: ["v*"]
   pull_request:
-    branches: [ main, master ]
+    branches: [main, master]
 
 env:
   CARGO_TERM_COLOR: always
@@ -45,165 +45,89 @@ jobs:
             cross: false
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Setup Rust
-      uses: dtolnay/rust-toolchain@stable
-      with:
-        targets: ${{ matrix.target }}
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
 
-    - name: Install cross (Linux ARM64 only)
-      if: matrix.cross
-      run: cargo install cross --git https://github.com/cross-rs/cross
+      - name: Install cross (Linux ARM64 only)
+        if: matrix.cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
 
-    - name: Setup Linux dependencies (Ubuntu)
-      if: matrix.os == 'ubuntu-latest'
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y build-essential pkg-config libssl-dev
+      - name: Setup Linux dependencies (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config libssl-dev
 
-    - name: Cache cargo registry
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.cargo/registry
-          ~/.cargo/git
-          target
-        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-    - name: Build CLI binaries
-      run: |
-        if [ "${{ matrix.cross }}" = "true" ]; then
-          cross build --release --target ${{ matrix.target }}
-        else
-          cargo build --release --target ${{ matrix.target }}
-        fi
-      shell: bash
+      - name: Build CLI binaries
+        run: |
+          if [ "${{ matrix.cross }}" = "true" ]; then
+            cross build --release --target ${{ matrix.target }}
+          else
+            cargo build --release --target ${{ matrix.target }}
+          fi
+        shell: bash
 
-    - name: Create distribution directory
-      run: |
-        mkdir -p dist/${{ matrix.name }}
-        cp target/${{ matrix.target }}/release/autoeq* dist/${{ matrix.name }}/
-        cp target/${{ matrix.target }}/release/download* dist/${{ matrix.name }}/
-        cp target/${{ matrix.target }}/release/benchmark* dist/${{ matrix.name }}/
-        echo "AutoEQ CLI tools for ${{ matrix.target }}" > dist/${{ matrix.name }}/README.txt
-        echo "Built on: $(date)" >> dist/${{ matrix.name }}/README.txt
-        echo "Binaries: autoeq, download, benchmark" >> dist/${{ matrix.name }}/README.txt
-      shell: bash
+      - name: Create distribution directory
+        run: |
+          mkdir -p dist/${{ matrix.name }}
+          cp target/${{ matrix.target }}/release/autoeq* dist/${{ matrix.name }}/
+          cp target/${{ matrix.target }}/release/download* dist/${{ matrix.name }}/
+          cp target/${{ matrix.target }}/release/benchmark* dist/${{ matrix.name }}/
+          echo "AutoEQ CLI tools for ${{ matrix.target }}" > dist/${{ matrix.name }}/README.txt
+          echo "Built on: $(date)" >> dist/${{ matrix.name }}/README.txt
+          echo "Binaries: autoeq, download, benchmark" >> dist/${{ matrix.name }}/README.txt
+        shell: bash
 
-    - name: Create archive
-      run: |
-        cd dist
-        if [ "${{ matrix.os }}" = "windows-latest" ]; then
-          7z a ${{ matrix.name }}.zip ${{ matrix.name }}
-        else
-          tar -czf ${{ matrix.name }}.tar.gz ${{ matrix.name }}
-        fi
-      shell: bash
+      - name: Create archive
+        run: |
+          cd dist
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            7z a ${{ matrix.name }}.zip ${{ matrix.name }}
+          else
+            tar -czf ${{ matrix.name }}.tar.gz ${{ matrix.name }}
+          fi
+        shell: bash
 
-    - name: Upload artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: ${{ matrix.name }}
-        path: |
-          dist/${{ matrix.name }}.tar.gz
-          dist/${{ matrix.name }}.zip
-        if-no-files-found: ignore
-
-  build-ui:
-    name: Build Tauri App ${{ matrix.target }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - target: x86_64-apple-darwin
-            os: macos-latest
-            name: autoeq-ui-macos-intel
-          - target: aarch64-apple-darwin
-            os: macos-latest
-            name: autoeq-ui-macos-arm64
-          - target: x86_64-unknown-linux-gnu
-            os: ubuntu-latest
-            name: autoeq-ui-linux-x86_64
-          - target: x86_64-pc-windows-msvc
-            os: windows-latest
-            name: autoeq-ui-windows-x86_64
-
-    steps:
-    - uses: actions/checkout@v4
-
-    - name: Setup Rust
-      uses: dtolnay/rust-toolchain@stable
-      with:
-        targets: ${{ matrix.target }}
-
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '18'
-
-    - name: Setup Linux dependencies
-      if: matrix.os == 'ubuntu-latest'
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y build-essential curl wget file libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
-
-    - name: Cache cargo registry
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.cargo/registry
-          ~/.cargo/git
-          ui/src-tauri/target
-        key: ${{ runner.os }}-tauri-cargo-${{ hashFiles('**/Cargo.lock') }}
-
-    - name: Cache node modules
-      uses: actions/cache@v4
-      with:
-        path: ui/node_modules
-        key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
-
-    - name: Install UI dependencies
-      run: |
-        cd ui
-        npm ci
-
-    - name: Build Tauri App
-      run: |
-        cd ui
-        npm run tauri build -- --target ${{ matrix.target }}
-
-    - name: Upload Tauri artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: ${{ matrix.name }}
-        path: |
-          ui/src-tauri/target/${{ matrix.target }}/release/bundle/
-        if-no-files-found: ignore
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: |
+            dist/${{ matrix.name }}.tar.gz
+            dist/${{ matrix.name }}.zip
+          if-no-files-found: ignore
 
   release:
     name: Create Release
     runs-on: ubuntu-latest
-    needs: [build, build-ui]
+    needs: [build]
     if: startsWith(github.ref, 'refs/tags/v')
 
     steps:
-    - name: Download all artifacts
-      uses: actions/download-artifact@v4
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
 
-    - name: Create Release
-      uses: softprops/action-gh-release@v2
-      with:
-        files: |
-          **/*.tar.gz
-          **/*.zip
-          **/*.dmg
-          **/*.deb
-          **/*.AppImage
-          **/*.msi
-        draft: false
-        prerelease: false
-        generate_release_notes: true
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            **/*.tar.gz
+            **/*.zip
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

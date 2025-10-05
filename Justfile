@@ -10,22 +10,15 @@ default:
 # TEST
 # ----------------------------------------------------------------------
 
-test: test-rust test-ts
-
-test-rust:
+test:
 	cargo check --all-targets
 	cargo test --lib
-
-test-ts:
-	cd src-ui && npm run test
 
 # ----------------------------------------------------------------------
 # PROD
 # ----------------------------------------------------------------------
 
-prod: prod-rust prod-ts
-
-prod-rust:
+prod:
 	cargo build --release --workspace
 	cargo build --release --bin autoeq
 	cargo build --release --bin plot_functions
@@ -34,9 +27,6 @@ prod-rust:
 	cargo build --release --bin benchmark_convergence
 	cargo build --release --bin plot_autoeq_de
 	cargo build --release --bin run_autoeq_de
-
-prod-ts:
-	cd src-ui && npm run tauri build
 
 # ----------------------------------------------------------------------
 # BENCH
@@ -54,9 +44,7 @@ bench-autoeq-speaker:
 # PROD
 # ----------------------------------------------------------------------
 
-dev: dev-rust dev-ts
-
-dev-rust:
+dev:
 	cargo build --workspace
 	cargo build --bin autoeq
 	cargo build --bin plot_functions
@@ -66,9 +54,6 @@ dev-rust:
 	cargo build --bin plot_autoeq_de
 	cargo build --bin run_autoeq_de
 
-dev-ts:
-	cd src-ui && npm run tauri dev
-
 download:
 	cargo run --bin download
 
@@ -76,14 +61,11 @@ download:
 # UPDATE
 # ----------------------------------------------------------------------
 
-update: update-rust update-ts update-pre-commit
+update: update-rust update-pre-commit
 
 update-rust:
 	rustup update
 	cargo update
-
-update-ts:
-	cd src-ui && npm run tauri update && npm run upgrade
 
 update-pre-commit:
 	pre-commit autoupdate
@@ -92,18 +74,13 @@ update-pre-commit:
 # DEMO
 # ----------------------------------------------------------------------
 
-demo: demo-rust demo-ts
-
-demo-rust: headphone_loss_demo plot_functions
+demo: headphone_loss_demo plot_functions
 
 headphone_loss_demo:
 	cargo run --example headphone_loss_demo -- --spl "./data_tests/headphone/asr/bowerwilkins_p7/Bowers & Wilkins P7.csv" --target "./data_tests/targets/harman-over-ear-2018.csv"
 
 plot_functions:
 	cargo run --bin plot_functions
-
-demo-ts:
-	cd src-ui && npm run build:audio-player
 
 # ----------------------------------------------------------------------
 # EXAMPLES
@@ -130,11 +107,11 @@ cross : cross-linux-x86
 
 cross-linux-x86 :
       echo "This can take minutes!"
-      cd src-ui/src-tauri && cross build --release --target x86_64-unknown-linux-gnu
+      cross build --release --target x86_64-unknown-linux-gnu
 
 cross-win-x86-gnu :
       echo "This is not working well yet from macos!"
-      cd src-ui/src-tauri && cross build --release --target x86_64-pc-windows-gnu
+      cross build --release --target x86_64-pc-windows-gnu
 
 # ----------------------------------------------------------------------
 # Install macos
@@ -150,15 +127,5 @@ install-macos:
 	# need brew
 	brew install chromedriver
 	xattr -d com.apple.quarantine $(which chromedriver)
-	brew install npm
 	# optimisation
 	brew install nlopt cmake
-
-install-macos: install-ios
-	# more stuff
-	rustup target add aarch64-apple-ios           # For physical iPad devices
-	rustup target add aarch64-apple-ios-sim       # For ARM64 iPad simulator
-	# app UI
-	brew install cocoapods
-	# need npm
-	npm run tauri ios init

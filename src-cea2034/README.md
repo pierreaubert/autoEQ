@@ -41,20 +41,24 @@ println!("PIR Score: {:.2}", metrics.pir_score);
 ## Scoring Components
 
 ### Listening Window (LW) Score
+
 - Flatness and smoothness of the listening window response
 - Deviation from target curve
 - Frequency-weighted penalties
 
 ### Predicted In-Room (PIR) Score
+
 - Computed from listening window, early reflections, and sound power
 - Represents typical in-room response
 - Critical for overall preference rating
 
 ### Bass Extension
+
 - Low-frequency response evaluation
 - Extension and smoothness below 100 Hz
 
 ### Directivity Analysis
+
 - Consistency of off-axis response
 - Smoothness of directivity index
 - Early reflection characteristics
@@ -85,6 +89,7 @@ let pir = compute_pir_from_lw_er_sp(&lw_curve, &er_curve, &sp_curve);
 ## Integration
 
 This crate is part of the AutoEQ ecosystem:
+
 - Used by `autoeq` for optimization target scoring
 - Provides objective functions for `autoeq-de` optimization
 - Integrates with measurement data from Spinorama.org API
@@ -92,6 +97,7 @@ This crate is part of the AutoEQ ecosystem:
 ## Research Background
 
 Based on published research:
+
 - Olive, S. E., & Toole, F. E. (1989). "The detection of reflections in typical rooms"
 - Olive, S. E. (2004). "A method for training listeners and selecting program material"
 - Harman International patent applications on preference scoring algorithms

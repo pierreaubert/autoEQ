@@ -9,6 +9,7 @@ This document describes the implementation of the audio capture feature for Auto
 ### Frontend (TypeScript/JavaScript)
 
 #### 1. AudioProcessor Module (`src-ui/src/modules/audio/audio-processor.ts`)
+
 - Enhanced with frequency sweep generation and capture functionality
 - **Key methods:**
   - `startCapture()`: Initiates audio capture with microphone permission
@@ -22,22 +23,26 @@ This document describes the implementation of the audio capture feature for Auto
   - Logarithmic resampling to 200 points for optimization
 
 #### 2. UI Manager (`src-ui/src/modules/ui-manager.ts`)
+
 - Handles capture UI interactions
 - Added callback system to connect captured data to optimization manager
 - Manages sweep duration selector and capture status display
 
 #### 3. Optimization Manager (`src-ui/src/modules/optimization-manager.ts`)
+
 - Stores captured frequency and magnitude data
 - Methods: `setCapturedData()`, `clearCapturedData()`, `hasCapturedData()`
 - Passes captured data to backend when input source is "capture"
 
 #### 4. Main Application (`src-ui/src/main.ts`)
+
 - Wires together UI callbacks and data flow
 - Connects capture completion to optimization manager data storage
 
 ### Backend (Rust)
 
 #### 1. Tauri Command Handler (`src-ui/src-tauri/src/lib.rs`)
+
 - Extended `OptimizationParams` struct with:
   - `captured_frequencies: Option<Vec<f64>>`
   - `captured_magnitudes: Option<Vec<f64>>`
@@ -47,7 +52,9 @@ This document describes the implementation of the audio capture feature for Auto
 ### UI Template Updates
 
 #### Capture Tab Content (`src-ui/src/modules/templates.ts`)
+
 The Capture tab includes:
+
 - Microphone device selector (populated dynamically)
 - Output channel selector (Left, Right, Both, System Default)
 - Sample rate selector (44.1kHz, 48kHz, 96kHz, 192kHz)
@@ -76,6 +83,7 @@ The Capture tab includes:
 ## Technical Details
 
 ### Test Signals
+
 - **Frequency Sweep**:
   - Type: Exponential (logarithmic) sweep
   - Range: 20 Hz to Nyquist frequency (depends on sample rate)
@@ -90,12 +98,14 @@ The Capture tab includes:
 - **Output Channels**: User-selectable (Left only, Right only, Both channels, System default)
 
 ### FFT Analysis
+
 - **FFT Size**: 8192 samples
 - **Sample Rate**: User-selectable (44.1, 48, 96, 192 kHz)
 - **Smoothing Time Constant**: 0.1
 - **Sampling Interval**: 100ms
 
 ### Data Processing
+
 - **Smoothing**: 1/24 octave bandwidth
 - **Output Points**: 200 logarithmically-spaced frequencies
 - **Magnitude Units**: Decibels (dB)
@@ -127,12 +137,14 @@ The Capture tab includes:
 ## Fixes Applied
 
 ### Issue 1: Audio Device Selection Not Working
+
 - **Problem**: Device dropdown was not populated
 - **Solution**: Added `enumerateAudioDevices()` method to AudioProcessor
 - **Implementation**: Devices are enumerated on UI initialization and when capture starts
 - **Result**: Users can now select from available microphones
 
 ### Issue 2: Capture Plot Not Visible
+
 - **Problem**: Plot container was blank after capture
 - **Solution**: Implemented canvas-based plotting in `plotCapturedData()`
 - **Features**:
@@ -143,6 +155,7 @@ The Capture tab includes:
 - **Result**: Frequency response is now clearly visible after capture
 
 ### Enhancement: Output Channel Selection
+
 - **Feature**: Added output channel selector for sweep playback
 - **Options**:
   - Both Channels (default) - plays sweep on both L/R channels
@@ -153,6 +166,7 @@ The Capture tab includes:
 - **Use Case**: Allows measuring individual speakers in a stereo setup
 
 ### Enhancement: Sample Rate Selection
+
 - **Feature**: Configurable sample rate for capture
 - **Options**: 44.1 kHz, 48 kHz, 96 kHz, 192 kHz
 - **Benefits**:
@@ -162,6 +176,7 @@ The Capture tab includes:
 - **Implementation**: Creates new AudioContext with selected sample rate
 
 ### Enhancement: Signal Type Selection
+
 - **Feature**: Choice of test signal
 - **Options**:
   - Frequency Sweep: Most accurate, deterministic
