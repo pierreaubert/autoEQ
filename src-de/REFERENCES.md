@@ -23,8 +23,7 @@
             Harris, Charles R. and Archibald, Anne M. and
             Ribeiro, Ant{\^o}nio H. and Pedregosa, Fabian and
             {van Mulbregt}, Paul and {SciPy 1.0 Contributors}},
-  title   = {{{SciPy} 1.0: Fundamental Algorithms for Scientific
-            Computing in Python}},
+  title   = {{{SciPy} 1.0: Fundamental Algorithms for Scientific Computing in Python}},
   journal = {Nature Methods},
   year    = {2020},
   volume  = {17},

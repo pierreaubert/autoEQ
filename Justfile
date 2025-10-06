@@ -140,6 +140,10 @@ install-macos:
 	# optimisation
 	brew install nlopt cmake
 
+install-macos-doc:
+	brew install chruby ruby-install
+	gem install jekyll
+
 # ----------------------------------------------------------------------
 # Install macos
 # ----------------------------------------------------------------------
