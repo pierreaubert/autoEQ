@@ -1,26 +1,14 @@
+<!-- markdownlint-disable-file MD013 -->
+
 # Optimization Test Functions Library
 
 A comprehensive collection of **56+ test functions** for optimization algorithm benchmarking and validation, organized into logical modules for easy navigation and maintenance.
 
-## 🏗️ Architecture
+## Function Categories
 
-The library is organized into modular components:
+[Plots per function](./docs/interactive_plots.html)
 
-```
-src/
-├── lib.rs                    # Main library with utilities and metadata
-└── functions/
-    ├── mod.rs               # Module exports and organization
-    ├── unimodal.rs         # Single global optimum functions
-    ├── multimodal.rs       # Multiple local minima functions
-    ├── constrained.rs      # Functions with constraints
-    ├── composite.rs        # Hybrid and composite functions
-    └── modern.rs           # Recent CEC and research functions
-```
-
-## 📊 Function Categories
-
-### 🎯 **Unimodal Functions** (Single Global Optimum)
+### **Unimodal Functions** (Single Global Optimum)
 
 Perfect for testing **convergence speed** and **precision**:
 
@@ -29,7 +17,7 @@ Perfect for testing **convergence speed** and **precision**:
 - `elliptic`, `cigar`, `tablet`, `discus` (ill-conditioned)
 - `ridge`, `sharp_ridge`, `brown`, `exponential`
 
-### 🌄 **Multimodal Functions** (Multiple Local Minima)
+### **Multimodal Functions** (Multiple Local Minima)
 
 Test **global search** and **exploration** capabilities:
 
@@ -39,7 +27,7 @@ Test **global search** and **exploration** capabilities:
 - `branin`, `goldstein_price`, `six_hump_camel`
 - `eggholder`, `holder_table`, `cross_in_tray`
 
-### 🔒 **Constrained Functions**
+### **Constrained Functions**
 
 For **constrained optimization** algorithms:
 
@@ -48,7 +36,7 @@ For **constrained optimization** algorithms:
 - `binh_korn_*` with multiple constraints
 - `mishras_bird_*` functions
 
-### 🔄 **Composite & Modern Functions**
+### **Composite & Modern Functions**
 
 **Hybrid** and **recent competition** functions:
 
@@ -57,7 +45,7 @@ For **constrained optimization** algorithms:
 - `happycat`, `katsuura`, `vincent`
 - `gramacy_lee_2012`, `forrester_2008`
 
-## 🚀 Usage Examples
+## Usage Examples
 
 ### Basic Function Evaluation
 
@@ -105,7 +93,7 @@ let result5 = happycat(&x);    // Recent CEC function
 let result6 = katsuura(&x);    // Fractal-like landscape
 ```
 
-## 🎯 Function Properties
+## Function Properties
 
 ### **Difficulty Levels**
 
@@ -129,7 +117,7 @@ let result6 = katsuura(&x);    // Fractal-like landscape
 - **Discontinuous**: `step`, `de_jong_step2`
 - **Constrained**: `keanes_bump_*`, `binh_korn_*`
 
-## 📈 Benchmarking Guide
+## Benchmarking Guide
 
 ### **Algorithm Testing Workflow**
 
@@ -147,25 +135,7 @@ let result6 = katsuura(&x);    // Fractal-like landscape
 - **Robustness**: Ill-conditioned and noisy functions
 - **Scalability**: High-dimensional variants
 
-## 🏆 Function Coverage
-
-### **SFU Virtual Library**: ~100% Coverage
-
-- ✅ **Many Local Minima**: Complete (16/16)
-- ✅ **Bowl-Shaped**: Complete (7/7)
-- ✅ **Plate-Shaped**: Complete (5/5)
-- ✅ **Valley-Shaped**: Complete (4/4)
-- ✅ **Steep Ridges/Drops**: Complete (3/3)
-- ✅ **Other**: Complete (21/21)
-
-### **Modern Benchmarks**: Extensive
-
-- ✅ CEC competition functions
-- ✅ Recent research functions (2008-2024)
-- ✅ Specialized functions (GP, metamodeling)
-- ✅ Hybrid/composite functions
-
-## 🔧 Build & Test
+## Build & Test
 
 ```bash
 # Build the library
@@ -184,10 +154,14 @@ cargo clippy
 cargo fmt
 ```
 
----
+## 🏗️ Architecture
 
-**Total Functions**: 56+
-**Categories**: 5 organized modules
-**Quality**: Production-ready with verified implementations
-**Coverage**: Complete SFU + modern benchmarks
-**Performance**: Optimized for speed and numerical stability
+The library is organized into modular components:
+
+```text
+src/
+├── lib.rs                    # Main library with utilities and metadata
+└── functions/
+    ├── mod.rs               # Module exports and organization
+    └── *.rs                 # 1 file per function
+```

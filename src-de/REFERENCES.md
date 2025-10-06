@@ -1,8 +1,10 @@
+<!-- markdownlint-disable-file MD013 -->
+
 # References
 
-- https://en.wikipedia.org/wiki/Differential_evolution
-- https://www.sfu.ca/~ssurjano/optimization.html
-- https://ch.mathworks.com/matlabcentral/fileexchange/23147-test-functions-for-global-optimization-algorithms
+- [https://en.wikipedia.org/wiki/Differential_evolution]
+- [https://www.sfu.ca/~ssurjano/optimization.html]
+- [https://ch.mathworks.com/matlabcentral/fileexchange/23147-test-functions-for-global-optimization-algorithms]
 
 ## Scipy
 
@@ -36,17 +38,17 @@
 
 ```bibtex
 @article{BILAL2020103479,
-	title = {Differential Evolution: A review of more than two decades of research},
-	journal = {Engineering Applications of Artificial Intelligence},
-	volume = {90},
-	pages = {103479},
-	year = {2020},
-	issn = {0952-1976},
-	doi = {https://doi.org/10.1016/j.engappai.2020.103479},
-	url = {https://www.sciencedirect.com/science/article/pii/S095219762030004X},
-	author = { Bilal and Millie Pant and Hira Zaheer and Laura Garcia-Hernandez and Ajith Abraham},
-	keywords = {Meta-heuristics, Differential evolution, Mutation, Crossover, Selection},
-	abstract = {Since its inception in 1995, Differential Evolution (DE) has emerged as one of the most frequently used algorithms for solving complex optimization problems. Its flexibility and versatility have prompted several customized variants of DE for solving a variety of real life and test problems. The present study, surveys the near 25 years of existence of DE. In this extensive survey, 283 research articles have been covered and the journey of DE is shown through its basic aspects like population generation, mutation schemes, crossover schemes, variation in parameters and hybridized variants along with various successful applications of DE. This study also provides some key bibliometric indicators like highly cited papers having citations more than 500, publication trend since 1996, journal citations etc. The main aim of the present document is to serve as an extended summary of 25 years of existence of DE, intended for dissemination to interested parties. It is expected that the present survey would generate interest among the new users towards the philosophy of DE and would also guide the experience researchers.}
+    title = {Differential Evolution: A review of more than two decades of research},
+    journal = {Engineering Applications of Artificial Intelligence},
+    volume = {90},
+    pages = {103479},
+    year = {2020},
+    issn = {0952-1976},
+    doi = {https://doi.org/10.1016/j.engappai.2020.103479},
+    url = {https://www.sciencedirect.com/science/article/pii/S095219762030004X},
+    author = { Bilal and Millie Pant and Hira Zaheer and Laura Garcia-Hernandez and Ajith Abraham},
+    keywords = {Meta-heuristics, Differential evolution, Mutation, Crossover, Selection},
+    abstract = {Since its inception in 1995, Differential Evolution (DE) has emerged as one of the most frequently used algorithms for solving complex optimization problems. Its flexibility and versatility have prompted several customized variants of DE for solving a variety of real life and test problems. The present study, surveys the near 25 years of existence of DE. In this extensive survey, 283 research articles have been covered and the journey of DE is shown through its basic aspects like population generation, mutation schemes, crossover schemes, variation in parameters and hybridized variants along with various successful applications of DE. This study also provides some key bibliometric indicators like highly cited papers having citations more than 500, publication trend since 1996, journal citations etc. The main aim of the present document is to serve as an extended summary of 25 years of existence of DE, intended for dissemination to interested parties. It is expected that the present survey would generate interest among the new users towards the philosophy of DE and would also guide the experience researchers.}
 }
 ```
 

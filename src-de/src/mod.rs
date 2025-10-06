@@ -1,18 +1,5 @@
-//! Differential Evolution (DE) global optimizer in pure Rust using ndarray
-//!
-//! This is a pragmatic, dependency-light implementation inspired by
-//! SciPy's `scipy.optimize.differential_evolution`.
-//!
-//! Supported features:
-//! - Box constraints (lower/upper bounds)
-//! - Common strategies: best1bin, rand1bin, rand2bin, currenttobest1bin, best2bin
-//! - Binomial crossover
-//! - Mutation as a fixed factor or dithering in a range [min,max)
-//! - Initialization: Latin Hypercube Sampling (LHS) or random uniform
-//! - Optional initial guess `x0` overriding the best member after init
-//! - Convergence by std(pop_f) <= atol + tol * |mean(pop_f)|
-//! - Optional integrality mask to round decision variables to nearest integer
-
+#![doc = include_str!("../README.md")]
+#![doc = include_str!("../REFERENCES.md")]
 #![allow(missing_docs)]
 use std::fmt;
 use std::str::FromStr;

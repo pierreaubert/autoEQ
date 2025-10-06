@@ -1,3 +1,5 @@
+<!-- markdownlint-disable-file MD013 -->
+
 # AutoEQ CEA2034 Scoring
 
 This crate implements CEA2034-based preference scoring algorithms for loudspeaker measurements, based on research by Harman, Olive, and others.
@@ -19,6 +21,11 @@ The CEA2034 standard defines a set of measurements for evaluating loudspeaker pe
 - **Early Reflections**: Floor, ceiling, front/rear wall, and side wall reflections
 - **Sound Power**: Total acoustic power output
 - **Directivity Index (DI)**: Ratio of on-axis to sound power
+
+## Two examples of CEA2034 / Spinorama
+
+![Example 1 of Spinorama](https://www.spinorama.org/speakers/Audiovector%20M1%20Super/Misc/misc-ageve/CEA2034.webp)
+![Example 2 of Spinorama](https://www.spinorama.org/speakers/MoFi%20SourcePoint%20V10%20Master%20Edition/ErinsAudioCorner/eac/CEA2034.webp)
 
 ## Preference Score Algorithm
 

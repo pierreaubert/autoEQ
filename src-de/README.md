@@ -1,3 +1,5 @@
+<!-- markdownlint-disable-file MD013 -->
+
 # AutoEQ Differential Evolution
 
 This crate provides a pure Rust implementation of Differential Evolution (DE) global optimization algorithm with advanced features.
@@ -97,12 +99,7 @@ The crate includes several example programs demonstrating different DE capabilit
 - `linear_constraints`: Linear constraint handling
 - `nonlinear_constraints`: Complex constraint optimization
 
-## References
-
-- https://en.wikipedia.org/wiki/Differential_evolution
-- https://www.sfu.ca/~ssurjano/optimization.html
-- https://ch.mathworks.com/matlabcentral/fileexchange/23147-test-functions-for-global-optimization-algorithms
-- github.com/autode/autoeq
+## [References](./REFERENCES.md)
 
 ## License
 

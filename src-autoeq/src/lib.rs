@@ -1,12 +1,4 @@
-//! AutoEQ - Automatic Equalization for Speakers and Headphones
-//!
-//! This crate provides automatic equalization functionality using measurement data
-//! from Spinorama.org. It integrates multiple specialized crates:
-//!
-//! - `autoeq_iir`: IIR filter implementations
-//! - `autoeq_de`: Differential Evolution optimizer
-//! - `autoeq_cea2034`: CEA2034 preference scoring
-//! - `autoeq_testfunctions`: Optimization test functions
+#![doc = include_str!("../README.md")]
 
 // Re-export external crate functionality
 pub use autoeq_cea2034 as cea2034;

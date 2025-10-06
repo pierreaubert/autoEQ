@@ -1,29 +1,5 @@
-//! Optimization test functions library
-//!
-//! This library provides a comprehensive collection of test functions for optimization
-//! algorithm benchmarking and validation. Functions are organized by category:
-//!
-//! - **Unimodal**: Single global optimum functions (sphere, rosenbrock, etc.)
-//! - **Multimodal**: Multiple local minima functions (ackley, rastrigin, etc.)
-//! - **Constrained**: Functions with constraints (keanes bump, binh-korn, etc.)
-//! - **Composite**: Hybrid functions combining multiple characteristics
-//! - **Modern**: Recent benchmark functions from CEC competitions and research
-//!
-//! # Example
-//!
-//! ```rust
-//! use ndarray::Array1;
-//! use autoeq_testfunctions::*;
-//!
-//! let x = Array1::from_vec(vec![0.0, 0.0]);
-//! let result = sphere(&x);
-//! assert_eq!(result, 0.0);
-//!
-//! // Get function metadata
-//! let metadata = get_function_metadata();
-//! let bounds = get_function_bounds("sphere");
-//! ```
-
+#![doc = include_str!("../README.md")]
+#![doc = include_str!("../REFERENCES.md")]
 #![allow(unused)]
 
 use ndarray::{Array1, Array2};
