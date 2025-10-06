@@ -1,3 +1,5 @@
+<!-- markdownlint-disable-file MD013 -->
+
 # AutoEQ Cross-Platform Build Guide
 
 This guide explains how to build AutoEQ CLI tools for macOS, Linux, and Windows platforms.
@@ -12,7 +14,7 @@ It is for developers only. The [README](README.md) contains a simpler way to ins
 1. **Rust toolchain** (install via [rustup.rs](https://rustup.rs/))
 2. **Docker** (for Linux/Windows cross-compilation)
 
-### CLI Tools (Simple Method)
+### Lucky try
 
 Use the provided build script:
 
@@ -38,7 +40,7 @@ This will create a `dist/` directory with binaries for all supported platforms.
 
 ## Manual Build Instructions
 
-### 1. Install Rust Targets
+### Install Rust Targets
 
 ```bash
 # Install cross-compilation targets
@@ -47,7 +49,7 @@ rustup target add x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu
 rustup target add x86_64-pc-windows-gnu
 ```
 
-### 2. Install Cross-Compilation Tools
+### Install Cross-Compilation Tools
 
 For Linux/Windows builds, install the `cross` tool:
 
@@ -55,7 +57,7 @@ For Linux/Windows builds, install the `cross` tool:
 cargo install cross --git https://github.com/cross-rs/cross
 ```
 
-### 3. Build CLI Tools
+### Build CLI Tools
 
 #### Native Build (Current Platform)
 
@@ -98,7 +100,7 @@ The repository includes a GitHub Actions workflow (`.github/workflows/build.yml`
 
 After building, you'll find binaries in:
 
-```
+```text
 dist/
 ├── aarch64-apple-darwin/          # macOS Apple Silicon
 │   ├── autoeq                     # Main CLI tool
@@ -113,24 +115,6 @@ dist/
     ├── download.exe
     └── benchmark.exe
 ```
-
-## Binary Information
-
-### CLI Tools
-
-- **autoeq**: Main EQ optimization tool
-- **download**: Fetch speaker data from Spinorama.org
-- **benchmark**: Performance testing across speaker database
-
-### File Sizes (Approximate)
-
-- **autoeq**: ~17-18 MB (includes NLOPT optimization libraries)
-- **download**: ~3.8 MB
-- **benchmark**: ~5.1 MB
-
-### Dependencies
-
-All binaries are statically linked with no external dependencies required.
 
 ## Troubleshooting
 
@@ -148,7 +132,6 @@ All binaries are statically linked with no external dependencies required.
 
 - Cross-compilation may require additional MinGW toolchain setup
 - Consider using GitHub Actions for Windows builds
-
 
 ## Testing Binaries
 
