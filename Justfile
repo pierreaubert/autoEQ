@@ -147,7 +147,7 @@ install-macos:
 install-linux-arm:
 	sudo apt install \
 	     gcc g++ cmake \
-	     nlopt \
+	     libnlopt-dev \
 	     rustup \
 	     just \
 	     libopenblas64-dev libopenblas64-0-pthread \
@@ -168,6 +168,7 @@ publish:
 # ----------------------------------------------------------------------
 # QA
 # ----------------------------------------------------------------------
+
 qa: prod-autoeq qa-ascilab-6b qa-jbl-m2-flat qa-jbl-m2-score
 
 qa-ascilab-6b:
