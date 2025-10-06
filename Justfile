@@ -18,15 +18,19 @@ test:
 # PROD
 # ----------------------------------------------------------------------
 
-prod:
-	cargo build --release --workspace
-	cargo build --release --bin autoeq
+prod: prod-workspace prod-autoeq
 	cargo build --release --bin plot_functions
 	cargo build --release --bin download
 	cargo build --release --bin benchmark_autoeq_speaker
 	cargo build --release --bin benchmark_convergence
 	cargo build --release --bin plot_autoeq_de
 	cargo build --release --bin run_autoeq_de
+
+prod-workspace:
+	cargo build --release --workspace
+
+prod-autoeq:
+	cargo build --release --bin autoeq
 
 # ----------------------------------------------------------------------
 # BENCH
@@ -137,6 +141,13 @@ install-macos:
 	brew install nlopt cmake
 
 # ----------------------------------------------------------------------
+# Install macos
+# ----------------------------------------------------------------------
+
+install-linux:
+	sudo apt install cmake nlopt cargo just
+
+# ----------------------------------------------------------------------
 # publish
 # ----------------------------------------------------------------------
 
@@ -146,5 +157,16 @@ publish:
 # ----------------------------------------------------------------------
 # QA
 # ----------------------------------------------------------------------
-qa:
-        cargo run --bin autoeq --release -- --speaker="Ascilab F6B" --version asr --measurement CEA2034 --algo autoeq:de --loss speaker-score -n 7 --min-freq=30 --max-q=6
+qa: prod-autoeq qa-ascilab-6b qa-jbl-m2-flat qa-jbl-m2-score
+
+qa-ascilab-6b:
+        ./target/release/autoeq --speaker="Ascilab F6B" --version asr --measurement CEA2034 --algo autoeq:de --loss speaker-score -n 7 --min-freq=30 --max-q=6 --qa | ./scripts/qa_check.sh
+
+qa-jbl-m2-flat:
+        ./target/release/autoeq --speaker="JBL M2" --version eac --measurement CEA2034 --algo autoeq:de --loss speaker-flat -n 7 --min-freq=20 --max-q=6 --peq-model hp-pk --qa | ./scripts/qa_check.sh
+
+qa-jbl-m2-score:
+        ./target/release/autoeq --speaker="JBL M2" --version eac --measurement CEA2034 --algo autoeq:de --loss speaker-score -n 7 --min-freq=20 --max-q=6 --peq-model hp-pk --qa | ./scripts/qa_check.sh
+
+qa-beyerdynamic-dt1990pro:
+	./target/release/autoeq -n 4 --curve ./data_tests/headphone/asr/beyerdynamic_dt1990pro/Beyerdynamic\ DT1990\ Pro\ Headphone\ Frequency\ Response\ Measurement.csv --target ./data_tests/targets/harman-over-ear-2018.csv --loss headphone-score  --qa | ./scripts/qa_check.sh

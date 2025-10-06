@@ -314,48 +314,50 @@ pub fn setup_bounds(args: &crate::cli::Args) -> (Vec<f64>, Vec<f64>) {
         }
     }
 
-    // Debug: Display bounds for each filter
-    println!("\n📏 Parameter Bounds (Model: {}):", model);
-    println!("+-# -|---Freq Range (Hz)---|----Q Range----|---Gain Range (dB)---|--Type--+");
-    for i in 0..args.num_filters {
-        let offset = i * ppf;
-        let (freq_idx, q_idx, gain_idx) = if ppf == 3 {
-            (offset, offset + 1, offset + 2)
-        } else {
-            (offset + 1, offset + 2, offset + 3)
-        };
-        let freq_low_hz = 10f64.powf(lower_bounds[freq_idx]);
-        let freq_high_hz = 10f64.powf(upper_bounds[freq_idx]);
-        let q_low = lower_bounds[q_idx];
-        let q_high = upper_bounds[q_idx];
-        let gain_low = lower_bounds[gain_idx];
-        let gain_high = upper_bounds[gain_idx];
+    // Debug: Display bounds for each filter (unless in QA mode)
+    if !args.qa {
+        println!("\n📏 Parameter Bounds (Model: {}):", model);
+        println!("+-# -|---Freq Range (Hz)---|----Q Range----|---Gain Range (dB)---|--Type--+");
+        for i in 0..args.num_filters {
+            let offset = i * ppf;
+            let (freq_idx, q_idx, gain_idx) = if ppf == 3 {
+                (offset, offset + 1, offset + 2)
+            } else {
+                (offset + 1, offset + 2, offset + 3)
+            };
+            let freq_low_hz = 10f64.powf(lower_bounds[freq_idx]);
+            let freq_high_hz = 10f64.powf(upper_bounds[freq_idx]);
+            let q_low = lower_bounds[q_idx];
+            let q_high = upper_bounds[q_idx];
+            let gain_low = lower_bounds[gain_idx];
+            let gain_high = upper_bounds[gain_idx];
 
-        let filter_type = match model {
-            PeqModel::Pk => "PK",
-            PeqModel::HpPk if i == 0 => "HP",
-            PeqModel::HpPk => "PK",
-            PeqModel::HpPkLp if i == 0 => "HP",
-            PeqModel::HpPkLp if i == args.num_filters - 1 => "LP",
-            PeqModel::HpPkLp => "PK",
-            PeqModel::FreePkFree if i == 0 || i == args.num_filters - 1 => "??",
-            PeqModel::FreePkFree => "PK",
-            PeqModel::Free => "??",
-        };
+            let filter_type = match model {
+                PeqModel::Pk => "PK",
+                PeqModel::HpPk if i == 0 => "HP",
+                PeqModel::HpPk => "PK",
+                PeqModel::HpPkLp if i == 0 => "HP",
+                PeqModel::HpPkLp if i == args.num_filters - 1 => "LP",
+                PeqModel::HpPkLp => "PK",
+                PeqModel::FreePkFree if i == 0 || i == args.num_filters - 1 => "??",
+                PeqModel::FreePkFree => "PK",
+                PeqModel::Free => "??",
+            };
 
-        println!(
-            "| {:2} | {:7.1} - {:7.1} | {:5.2} - {:5.2} | {:+6.2} - {:+6.2} | {:6} |",
-            i + 1,
-            freq_low_hz,
-            freq_high_hz,
-            q_low,
-            q_high,
-            gain_low,
-            gain_high,
-            filter_type
-        );
+            println!(
+                "| {:2} | {:7.1} - {:7.1} | {:5.2} - {:5.2} | {:+6.2} - {:+6.2} | {:6} |",
+                i + 1,
+                freq_low_hz,
+                freq_high_hz,
+                q_low,
+                q_high,
+                gain_low,
+                gain_high,
+                filter_type
+            );
+        }
+        println!("+----|--------------------|---------------|---------------------|---------+\n");
     }
-    println!("+----|--------------------|---------------|---------------------|---------+\n");
 
     (lower_bounds, upper_bounds)
 }

@@ -184,7 +184,7 @@ checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 
 [[package]]
 name = "autoeq"
-version = "0.2.239"
+version = "0.2.240"
 dependencies = [
  "accelerate-src",
  "autoeq-cea2034",
@@ -215,7 +215,7 @@ dependencies = [
 
 [[package]]
 name = "autoeq-cea2034"
-version = "0.2.188"
+version = "0.2.189"
 dependencies = [
  "ndarray",
  "serde",

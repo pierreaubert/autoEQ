@@ -29,6 +29,32 @@ use std::error::Error;
 use std::path::{Path, PathBuf};
 use tokio::fs;
 
+/// Conditional println macro that only prints when not in QA mode
+macro_rules! qa_println {
+    ($args:expr, $($arg:tt)*) => {
+        if !$args.qa {
+            println!($($arg)*);
+        }
+    };
+}
+
+/// Conditional eprintln macro that only prints when not in QA mode
+macro_rules! qa_eprintln {
+    ($args:expr, $($arg:tt)*) => {
+        if !$args.qa {
+            eprintln!($($arg)*);
+        }
+    };
+}
+
+/// Check if spacing constraints are met
+fn check_spacing_constraints(x: &[f64], args: &autoeq::cli::Args) -> bool {
+    let peq_model = args.effective_peq_model();
+    let (_, adj_spacings) = optim::compute_sorted_freqs_and_adjacent_octave_spacings(x, peq_model);
+    let min_adj = adj_spacings.iter().cloned().fold(f64::INFINITY, f64::min);
+    min_adj >= args.min_spacing_oct && min_adj.is_finite()
+}
+
 /// Print frequency spacing diagnostics and PEQ listing
 fn print_freq_spacing(x: &[f64], args: &autoeq::cli::Args, label: &str) {
     let peq_model = args.effective_peq_model();
@@ -107,14 +133,18 @@ async fn save_peq_to_file(
 
     // Write the APO file
     fs::write(&file_path, apo_content).await?;
-    println!("🕶 PEQ settings saved to: {}", file_path.display());
+    qa_println!(args, "🕶 PEQ settings saved to: {}", file_path.display());
 
     // Save RME TotalMix format (.xml)
     let rme_filename = filename.replace(".txt", ".xml");
     let rme_path = parent_dir.join(&rme_filename);
     let rme_content = iir::peq_format_rme(&peq);
     fs::write(&rme_path, rme_content).await?;
-    println!("🎚  RME TotalMix preset saved to: {}", rme_path.display());
+    qa_println!(
+        args,
+        "🎚  RME TotalMix preset saved to: {}",
+        rme_path.display()
+    );
 
     // Save Apple AUNBandEQ format (.aupreset)
     let aupreset_filename = filename.replace(".txt", ".aupreset");
@@ -122,18 +152,39 @@ async fn save_peq_to_file(
     let preset_name = format!("AutoEQ {}", args.speaker.as_deref().unwrap_or("Unknown"));
     let aupreset_content = iir::peq_format_aupreset(&peq, &preset_name);
     fs::write(&aupreset_path, aupreset_content).await?;
-    println!("🍎 Apple AUpreset saved to: {}", aupreset_path.display());
+    qa_println!(
+        args,
+        "🍎 Apple AUpreset saved to: {}",
+        aupreset_path.display()
+    );
 
     Ok(())
+}
+
+/// Struct to hold optimization results including convergence status
+struct OptimizationResult {
+    params: Vec<f64>,
+    converged: bool,
+    pre_objective: Option<f64>,
+    post_objective: Option<f64>,
 }
 
 fn perform_optimization(
     args: &autoeq::cli::Args,
     objective_data: &ObjectiveData,
-) -> Result<Vec<f64>, Box<dyn Error>> {
+) -> Result<OptimizationResult, Box<dyn Error>> {
     let (lower_bounds, upper_bounds) = autoeq::workflow::setup_bounds(args);
-
     let mut x = autoeq::workflow::initial_guess(args, &lower_bounds, &upper_bounds);
+
+    // Calculate pre-optimization objective value
+    let pre_objective = {
+        let mut data_copy = objective_data.clone();
+        Some(autoeq::optim::compute_fitness_penalties(
+            &x,
+            None,
+            &mut data_copy,
+        ))
+    };
 
     let result = optim::optimize_filters(
         &mut x,
@@ -143,18 +194,26 @@ fn perform_optimization(
         args,
     );
 
+    let mut converged: bool;
+    let mut post_objective = None;
+
     match result {
         Ok((status, val)) => {
-            println!(
+            qa_println!(
+                args,
                 "✅ Global optimization completed with status: {}. Objective function value: {:.6}",
-                status, val
+                status,
+                val
             );
-
-            print_freq_spacing(&x, args, "global");
+            converged = true;
+            post_objective = Some(val);
+            if !args.qa {
+                print_freq_spacing(&x, args, "global");
+            }
         }
         Err((e, final_value)) => {
-            eprintln!("\n❌ Optimization failed: {:?}", e);
-            eprintln!("   - Final Mean Squared Error: {:.6}", final_value);
+            qa_eprintln!(args, "❌ Optimization failed: {:?}", e);
+            qa_eprintln!(args, "   - Final Mean Squared Error: {:.6}", final_value);
             return Err(std::io::Error::other(e).into());
         }
     };
@@ -170,23 +229,35 @@ fn perform_optimization(
         );
         match result {
             Ok((local_status, local_val)) => {
-                println!(
+                qa_println!(
+                    args,
                     "✅ Running local refinement with {}... completed {} objective {:.6}",
-                    args.local_algo, local_status, local_val
+                    args.local_algo,
+                    local_status,
+                    local_val
                 );
-
-                print_freq_spacing(&x, args, "local");
-                autoeq::x2peq::peq_print_from_x(&x, args.effective_peq_model());
+                // Update convergence status based on local refinement
+                converged = true;
+                post_objective = Some(local_val);
+                if !args.qa {
+                    print_freq_spacing(&x, args, "local");
+                    autoeq::x2peq::peq_print_from_x(&x, args.effective_peq_model());
+                }
             }
             Err((e, final_value)) => {
-                eprintln!("⚠️  Local refinement failed: {:?}", e);
-                eprintln!("   - Final Mean Squared Error: {:.6}", final_value);
+                qa_eprintln!(args, "⚠️  Local refinement failed: {:?}", e);
+                qa_eprintln!(args, "   - Final Mean Squared Error: {:.6}", final_value);
                 return Err(std::io::Error::other(e).into());
             }
         }
     };
 
-    Ok(x)
+    Ok(OptimizationResult {
+        params: x,
+        converged: converged,
+        pre_objective: pre_objective,
+        post_objective: post_objective,
+    })
 }
 
 /// A command-line tool to find optimal IIR filters to match a frequency curve.
@@ -281,17 +352,22 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     // Optimize
-    println!("🚀 Starting optimization...");
-    let x = perform_optimization(&args, &objective_data)?;
+    qa_println!(args, "🚀 Starting optimization...");
+    let opt_result = perform_optimization(&args, &objective_data)?;
+
+    // Variables to store pre/post scores for QA summary
+    let mut pre_score: Option<f64> = None;
+    let mut post_score: Option<f64> = None;
 
     match objective_data.loss_type {
         autoeq::LossType::HeadphoneFlat | autoeq::LossType::HeadphoneScore => {
             if let Some(before) = headphone_metrics_before {
-                println!("✅  Pre-Optimization Headphone Score: {:.3}", before);
+                pre_score = Some(before);
+                qa_println!(args, "✅  Pre-Optimization Headphone Score: {:.3}", before);
             }
             let peq_after = autoeq::x2peq::compute_peq_response_from_x(
                 &standard_freq,
-                &x,
+                &opt_result.params,
                 args.sample_rate,
                 args.effective_peq_model(),
             );
@@ -300,7 +376,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 spl: &input_curve.spl + peq_after,
             };
             let headphone_metrics_after = loss::headphone_loss(&input_autoeq);
-            println!(
+            post_score = Some(headphone_metrics_after);
+            qa_println!(
+                args,
                 "✅ Post-Optimization Headphone Score: {:.3}",
                 headphone_metrics_after
             );
@@ -310,7 +388,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 let freq = &input_curve.freq;
                 let peq_after = autoeq::x2peq::compute_peq_response_from_x(
                     freq,
-                    &x,
+                    &opt_result.params,
                     args.sample_rate,
                     args.effective_peq_model(),
                 );
@@ -321,7 +399,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 )
                 .await?;
                 if let Some(before) = cea2034_metrics_before {
-                    println!(
+                    pre_score = Some(before.pref_score);
+                    qa_println!(
+                        args,
                         "✅  Pre-Optimization CEA2034 Score: pref={:.3} | nbd_on={:.3} nbd_pir={:.3} lfx={:.0}Hz sm_pir={:.3}",
                         before.pref_score,
                         before.nbd_on,
@@ -330,7 +410,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         before.sm_pir
                     );
                 }
-                println!(
+                post_score = Some(metrics_after.pref_score);
+                qa_println!(
+                    args,
                     "✅ Post-Optimization CEA2034 Score: pref={:.3} | nbd_on={:.3} nbd_pir={:.3} lfx={:.0}hz sm_pir={:.3}",
                     metrics_after.pref_score,
                     metrics_after.nbd_on,
@@ -342,7 +424,39 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    // Plot and report
+    // Check spacing constraints
+    let spacing_ok = check_spacing_constraints(&opt_result.params, &args);
+
+    // Output QA summary if in QA mode
+    if args.qa {
+        let converge_str = if opt_result.converged {
+            "true"
+        } else {
+            "false"
+        };
+        let spacing_str = if spacing_ok { "ok" } else { "ko" };
+
+        // Use scores if available, otherwise use objective function values
+        let (pre_str, post_str) = if pre_score.is_some() && post_score.is_some() {
+            (
+                format!("{:.3}", pre_score.unwrap()),
+                format!("{:.3}", post_score.unwrap()),
+            )
+        } else {
+            // Fall back to objective function values
+            let pre_obj = opt_result.pre_objective.unwrap_or(f64::NAN);
+            let post_obj = opt_result.post_objective.unwrap_or(f64::NAN);
+            (format!("{:.6}", pre_obj), format!("{:.6}", post_obj))
+        };
+
+        println!(
+            "Converge: {} | Spacing: {} | Pre: {} | Post: {}",
+            converge_str, spacing_str, pre_str, post_str
+        );
+        return Ok(());
+    }
+
+    // Normal mode: plot and report
     let output_path = args.output.clone().unwrap_or_else(|| {
         let mut path = PathBuf::from(DATA_GENERATED);
         path.push("autoeq");
@@ -356,10 +470,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
         path
     });
 
-    println!("📊 Generating plots: {}", output_path.display());
+    qa_println!(args, "📊 Generating plots: {}", output_path.display());
     if let Err(e) = plot::plot_results(
         &args,
-        &x,
+        &opt_result.params,
         &input_curve,
         &target_curve,
         &deviation_curve,
@@ -368,13 +482,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
     )
     .await
     {
-        eprintln!("⚠️ Warning: Failed to generate plots: {}", e);
+        qa_eprintln!(args, "⚠️ Warning: Failed to generate plots: {}", e);
     } else {
-        println!("✅ Plots generated successfully");
+        qa_println!(args, "✅ Plots generated successfully");
     }
 
     // Save PEQ settings to APO format file
-    save_peq_to_file(&args, &x, &output_path, &objective_data.loss_type).await?;
+    save_peq_to_file(
+        &args,
+        &opt_result.params,
+        &output_path,
+        &objective_data.loss_type,
+    )
+    .await?;
 
     Ok(())
 }

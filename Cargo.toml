@@ -43,4 +43,3 @@ rayon = "1.10"
 plotly = { version = "0.13", features = ["static_export_default"] }
 plotly_static = { version = "0.1", features = ["chromedriver", "webdriver_download"] }
 build_html = "2.7.0"
-

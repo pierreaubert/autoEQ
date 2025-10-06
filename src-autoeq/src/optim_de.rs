@@ -39,6 +39,7 @@ pub struct DESetup {
 /// * `objective_data` - Base objective configuration
 /// * `population` - Requested population size
 /// * `maxeval` - Maximum function evaluations
+/// * `qa_mode` - Whether to suppress debug output
 ///
 /// # Returns
 /// Configured DESetup with all common parameters
@@ -48,6 +49,7 @@ pub fn setup_de_common(
     objective_data: ObjectiveData,
     population: usize,
     maxeval: usize,
+    qa_mode: bool,
 ) -> DESetup {
     // Convert bounds format for optde
     let bounds: Vec<(f64, f64)> = lower_bounds
@@ -70,21 +72,23 @@ pub fn setup_de_common(
     let params_per_filter = crate::param_utils::params_per_filter(penalty_data.peq_model);
     let num_filters = bounds.len() / params_per_filter;
 
-    // Log setup configuration
-    eprintln!(
-        "DE Setup: {} filters, pop_size={}, max_iter={}, maxeval={}",
-        num_filters, pop_size, max_iter, maxeval
-    );
-    eprintln!(
-        "  Penalty weights: ceiling={:.1e}, spacing={:.1e}, mingain={:.1e}",
-        penalty_data.penalty_w_ceiling,
-        penalty_data.penalty_w_spacing,
-        penalty_data.penalty_w_mingain
-    );
-    eprintln!(
-        "  Constraints: max_db={:.1}, min_spacing={:.3} oct, min_db={:.1}",
-        penalty_data.max_db, penalty_data.min_spacing_oct, penalty_data.min_db
-    );
+    // Log setup configuration (unless in QA mode)
+    if !qa_mode {
+        eprintln!(
+            "DE Setup: {} filters, pop_size={}, max_iter={}, maxeval={}",
+            num_filters, pop_size, max_iter, maxeval
+        );
+        eprintln!(
+            "  Penalty weights: ceiling={:.1e}, spacing={:.1e}, mingain={:.1e}",
+            penalty_data.penalty_w_ceiling,
+            penalty_data.penalty_w_spacing,
+            penalty_data.penalty_w_mingain
+        );
+        eprintln!(
+            "  Constraints: max_db={:.1}, min_spacing={:.3} oct, min_db={:.1}",
+            penalty_data.max_db, penalty_data.min_spacing_oct, penalty_data.min_db
+        );
+    }
 
     DESetup {
         bounds,
@@ -100,11 +104,13 @@ pub fn setup_de_common(
 ///
 /// # Arguments
 /// * `algo_name` - Algorithm name to display in progress messages
+/// * `qa_mode` - Whether to suppress all output
 ///
 /// # Returns
 /// Boxed callback function for DE optimization
 pub fn create_de_callback(
     algo_name: &str,
+    qa_mode: bool,
 ) -> Box<dyn FnMut(&DEIntermediate) -> CallbackAction + Send> {
     let name = algo_name.to_string();
     let mut last_fitness = f64::INFINITY;
@@ -126,16 +132,16 @@ pub fn create_de_callback(
             }
         };
 
-        // print when stalling
-        if stall_count == 1 || stall_count % 25 == 0 {
+        // print when stalling (unless in QA mode)
+        if !qa_mode && (stall_count == 1 || stall_count % 25 == 0) {
             eprintln!(
                 "{} iter {:4}  fitness={:.6e} {} conv={:.3e}",
                 name, intermediate.iter, intermediate.fun, improvement, intermediate.convergence
             );
         }
 
-        // Show parameter details every 100 iterations
-        if intermediate.iter.is_multiple_of(100) {
+        // Show parameter details every 100 iterations (unless in QA mode)
+        if !qa_mode && intermediate.iter.is_multiple_of(100) {
             let param_summary: Vec<String> = (0..intermediate.x.len() / 3)
                 .map(|i| {
                     let freq = 10f64.powf(intermediate.x[i * 3]);
@@ -210,7 +216,7 @@ pub fn optimize_filters_autoeq(
     cli_args: &crate::cli::Args,
 ) -> Result<(String, f64), (String, f64)> {
     // Create the callback with all the logging and user feedback
-    let callback = create_de_callback("autoeq::DE");
+    let callback = create_de_callback("autoeq::DE", cli_args.qa);
 
     // Delegate to the callback-based version
     optimize_filters_autoeq_with_callback(
@@ -245,6 +251,7 @@ pub fn optimize_filters_autoeq_with_callback(
         objective_data.clone(),
         population,
         maxeval,
+        cli_args.qa,
     );
     let base_objective_fn = create_de_objective(setup.penalty_data.clone());
 
@@ -257,7 +264,9 @@ pub fn optimize_filters_autoeq_with_callback(
     let target_response = &setup.penalty_data.deviation;
     let freq_grid = &setup.penalty_data.freqs;
 
-    eprintln!("🧠 Generating smart initial guesses based on frequency response analysis...");
+    if !cli_args.qa {
+        eprintln!("🧠 Generating smart initial guesses based on frequency response analysis...");
+    }
     let smart_guesses = create_smart_initial_guesses(
         target_response,
         freq_grid,
@@ -267,7 +276,9 @@ pub fn optimize_filters_autoeq_with_callback(
         cli_args.effective_peq_model(),
     );
 
-    eprintln!("📊 Generated {} smart initial guesses", smart_guesses.len());
+    if !cli_args.qa {
+        eprintln!("📊 Generated {} smart initial guesses", smart_guesses.len());
+    }
 
     // Generate Sobol quasi-random population for better space coverage
     let sobol_samples = init_sobol(
@@ -276,10 +287,12 @@ pub fn optimize_filters_autoeq_with_callback(
         &setup.bounds,
     );
 
-    eprintln!(
-        "🎯 Generated {} Sobol quasi-random samples",
-        sobol_samples.len()
-    );
+    if !cli_args.qa {
+        eprintln!(
+            "🎯 Generated {} Sobol quasi-random samples",
+            sobol_samples.len()
+        );
+    }
 
     // Use the best smart guess as initial x0, fall back to Sobol initialization
     let best_initial_guess = if !smart_guesses.is_empty() {
@@ -293,15 +306,19 @@ pub fn optimize_filters_autoeq_with_callback(
         Array1::from(x.to_vec())
     };
 
-    eprintln!("🚀 Using smart initial guess with Sobol population initialization");
+    if !cli_args.qa {
+        eprintln!("🚀 Using smart initial guess with Sobol population initialization");
+    }
 
     // Parse strategy from CLI args
     use std::str::FromStr;
     let strategy = Strategy::from_str(&cli_args.strategy).unwrap_or_else(|_| {
-        eprintln!(
-            "⚠️ Warning: Invalid strategy '{}', falling back to CurrentToBest1Bin",
-            cli_args.strategy
-        );
+        if !cli_args.qa {
+            eprintln!(
+                "⚠️ Warning: Invalid strategy '{}', falling back to CurrentToBest1Bin",
+                cli_args.strategy
+            );
+        }
         Strategy::CurrentToBest1Bin
     });
 
@@ -362,7 +379,7 @@ pub fn optimize_filters_autoeq_with_callback(
     };
     config_builder = config_builder.parallel(parallel_config);
 
-    if !cli_args.no_parallel {
+    if !cli_args.no_parallel && !cli_args.qa {
         eprintln!(
             "🚄 Parallel evaluation enabled with {} threads",
             if cli_args.parallel_threads.eq(&0) {

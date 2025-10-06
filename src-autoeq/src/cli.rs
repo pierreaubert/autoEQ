@@ -236,6 +236,10 @@ pub struct Args {
     /// Number of threads to use for parallel evaluation (0 = use all available cores)
     #[arg(long, default_value_t = 0)]
     pub parallel_threads: usize,
+
+    /// Quality assurance mode: suppress normal output, show only summary line
+    #[arg(long, default_value_t = false)]
+    pub qa: bool,
 }
 
 impl Args {

@@ -33,16 +33,43 @@ The preference score is based on research showing correlation between measured r
 
 ```rust
 use autoeq_cea2034::{compute_cea2034_metrics, Curve};
+use ndarray::Array1;
+use std::collections::HashMap;
 
-let metrics = compute_cea2034_metrics(
-    &frequencies,
-    &spinorama_data,
-    Some(&equalized_response)
-).await?;
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let frequencies = Array1::from(vec![20.0, 25.0, 31.5, /* ... */ 20000.0]);
 
-println!("Preference Score: {:.2}", metrics.pref_score);
-println!("LW Score: {:.2}", metrics.lw_score);
-println!("PIR Score: {:.2}", metrics.pir_score);
+    // Example spinorama data - would typically come from measurements
+    let mut spinorama_data = HashMap::new();
+    spinorama_data.insert("On Axis".to_string(), Curve {
+        freq: frequencies.clone(),
+        spl: Array1::from(vec![-2.1, -1.8, -1.2, /* ... */ -10.5]),
+    });
+    spinorama_data.insert("Listening Window".to_string(), Curve {
+        freq: frequencies.clone(),
+        spl: Array1::from(vec![-2.0, -1.7, -1.1, /* ... */ -10.3]),
+    });
+    spinorama_data.insert("Sound Power".to_string(), Curve {
+        freq: frequencies.clone(),
+        spl: Array1::from(vec![-2.5, -2.0, -1.5, /* ... */ -11.0]),
+    });
+    spinorama_data.insert("Estimated In-Room Response".to_string(), Curve {
+        freq: frequencies.clone(),
+        spl: Array1::from(vec![-2.2, -1.9, -1.3, /* ... */ -10.7]),
+    });
+
+    let equalized_response = Array1::from(vec![0.5, 0.3, 0.1, /* ... */ -1.0]);
+
+    let metrics = compute_cea2034_metrics(
+        &frequencies,
+        &spinorama_data,
+        Some(&equalized_response)
+    ).await?;
+
+    println!("Preference Score: {:.2}", metrics.pref_score);
+    Ok(())
+}
 ```
 
 ## Scoring Components
@@ -75,22 +102,36 @@ println!("PIR Score: {:.2}", metrics.pir_score);
 ```rust
 use autoeq_cea2034::{score, octave_intervals, compute_pir_from_lw_er_sp};
 use ndarray::Array1;
-use std::collections::HashMap;
 
-// Compute preference score for a frequency response
-let frequencies = Array1::from(vec![20.0, 25.0, 31.5, /* ... */ 20000.0]);
-let response = Array1::from(vec![-2.1, -1.8, -1.2, /* ... */ -10.5]);
+fn main() {
+    // Example frequency and response data
+    let frequencies = Array1::from(vec![20.0, 25.0, 31.5, /* ... */ 20000.0]);
+    let on_axis = Array1::from(vec![-2.1, -1.8, -1.2, /* ... */ -10.5]);
+    let listening_window = Array1::from(vec![-2.0, -1.7, -1.1, /* ... */ -10.3]);
+    let sound_power = Array1::from(vec![-2.5, -2.0, -1.5, /* ... */ -11.0]);
+    let pir_response = Array1::from(vec![-2.2, -1.9, -1.3, /* ... */ -10.7]);
 
-let preference_score = score(
-    &frequencies,
-    &response,
-    100.0,    // reference frequency
-    10000.0,  // upper frequency limit
-    Some(&target_curve)
-)?;
+    // Compute octave band intervals for analysis
+    let intervals = octave_intervals(2, &frequencies);
 
-// Compute PIR from CEA2034 measurements
-let pir = compute_pir_from_lw_er_sp(&lw_curve, &er_curve, &sp_curve);
+    // Compute preference score for the frequency response
+    let preference_metrics = score(
+        &frequencies,
+        &intervals,
+        &on_axis,
+        &listening_window,
+        &sound_power,
+        &pir_response
+    );
+
+    println!("Preference Score: {:.2}", preference_metrics.pref_score);
+
+    // Compute PIR from CEA2034 measurements
+    let lw_curve = Array1::from(vec![-2.0, -1.7, -1.1, /* ... */ -10.3]);
+    let er_curve = Array1::from(vec![-2.3, -2.1, -1.6, /* ... */ -10.8]);
+    let sp_curve = Array1::from(vec![-2.5, -2.0, -1.5, /* ... */ -11.0]);
+    let computed_pir = compute_pir_from_lw_er_sp(&lw_curve, &er_curve, &sp_curve);
+}
 ```
 
 ## Integration
