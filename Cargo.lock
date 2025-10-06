@@ -224,7 +224,7 @@ dependencies = [
 
 [[package]]
 name = "autoeq-de"
-version = "0.2.46"
+version = "0.2.47"
 dependencies = [
  "accelerate-src",
  "autoeq-env",
@@ -264,7 +264,7 @@ dependencies = [
 
 [[package]]
 name = "autoeq-testfunctions"
-version = "0.2.33"
+version = "0.2.34"
 dependencies = [
  "autoeq-env",
  "clap",

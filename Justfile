@@ -144,8 +144,19 @@ install-macos:
 # Install macos
 # ----------------------------------------------------------------------
 
-install-linux:
-	sudo apt install cmake nlopt cargo just
+install-linux-arm:
+	sudo apt install \
+	     gcc g++ cmake \
+	     nlopt \
+	     rustup \
+	     just \
+	     libopenblas64-dev libopenblas64-0-pthread \
+	     libssl-dev \
+	     pkg-config \
+	     ca-certificates \
+	     chromium-chromedriver
+	rustup default stable
+	rustup target add aarch64-unknown-linux-gnu
 
 # ----------------------------------------------------------------------
 # publish

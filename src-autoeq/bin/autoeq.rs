@@ -195,7 +195,7 @@ fn perform_optimization(
     );
 
     let mut converged: bool;
-    let mut post_objective = None;
+    let mut post_objective: Option<f64>;
 
     match result {
         Ok((status, val)) => {

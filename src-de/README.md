@@ -30,23 +30,32 @@ This crate provides a pure Rust implementation of Differential Evolution (DE) gl
 ## Usage
 
 ```rust
-use autoeq_de::{differential_evolution, DEConfig, Strategy};
+use autoeq_de::{differential_evolution, DEConfig, Strategy, Mutation};
+use ndarray::Array1;
+
+// Example objective function (Rosenbrock)
+let objective = |x: &Array1<f64>| {
+    let a = 1.0;
+    let b = 100.0;
+    (a - x[0]).powi(2) + b * (x[1] - x[0].powi(2)).powi(2)
+};
+
+// Define bounds for 2D problem
+let bounds = vec![(-5.0, 5.0), (-5.0, 5.0)];
 
 let config = DEConfig {
-    bounds: bounds.clone(),
-    func: my_objective_function,
     strategy: Strategy::Rand1Bin,
-    max_iter: 1000,
-    pop_size: 50,
-    f: 0.8,
-    cr: 0.9,
+    maxiter: 1000,
+    popsize: 50,
+    mutation: Mutation::Factor(0.8),
+    recombination: 0.9,
     seed: Some(42),
     ..Default::default()
 };
 
-let result = differential_evolution(config)?;
+let result = differential_evolution(&objective, &bounds, config);
 println!("Best solution: {:?}", result.x);
-println!("Best fitness: {}", result.fx);
+println!("Best fitness: {}", result.fun);
 ```
 
 ## Constraint Support
@@ -54,13 +63,19 @@ println!("Best fitness: {}", result.fx);
 ### Linear Constraints
 
 ```rust
-use autoeq_de::LinearConstraint;
+use autoeq_de::{LinearConstraintHelper, DEConfig};
+use ndarray::{Array1, Array2};
 
-let constraint = LinearConstraint::new(
-    vec![1.0, 1.0], // coefficients
-    1.0,            // upper bound: x1 + x2 <= 1.0
-    ConstraintType::LessEqual
-);
+// Linear constraint: x1 + x2 <= 1.0
+let constraint = LinearConstraintHelper {
+    a: Array2::from_shape_vec((1, 2), vec![1.0, 1.0]).unwrap(),
+    lb: Array1::from_vec(vec![f64::NEG_INFINITY]),
+    ub: Array1::from_vec(vec![1.0]),
+};
+
+// Apply to configuration with penalty weight
+let mut config = DEConfig::default();
+constraint.apply_to(&mut config, 1000.0); // penalty weight
 ```
 
 ### Nonlinear Constraints

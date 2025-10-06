@@ -65,6 +65,7 @@ let result = rosenbrock(&x); // Returns 0.0 (global minimum)
 ### Function Metadata and Bounds
 
 ```rust
+use autoeq_testfunctions::{get_function_metadata, get_function_bounds, get_function_bounds_2d};
 // Get all function metadata
 let metadata = get_function_metadata();
 println!("Available functions: {}", metadata.len());
@@ -80,6 +81,10 @@ let bounds_2d = get_function_bounds_2d("sphere", (-5.0, 5.0));
 ### Working with Different Categories
 
 ```rust
+use ndarray::Array1;
+use autoeq_testfunctions::*;
+
+let x = Array1::from_vec(vec![1.0, 1.0]);
 // Unimodal functions (good for convergence testing)
 let result1 = elliptic(&x);    // Ill-conditioned
 let result2 = rosenbrock(&x);  // Valley-shaped
