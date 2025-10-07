@@ -1,11 +1,10 @@
 [package]
 name = "autoeq-de"
-version = "0.2.47"
-edition = "2024"
-authors = ["Pierre Aubert <pierre@spinorama.org>"]
-license = "GPL-3.0-or-later"
-description = "Differential Evolution optimizer and evaluation tools for AutoEQ"
-repository = "https://github.com/pierreaubert/autoeq"
+version = "0.2.48"
+edition = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
 
 [dependencies]
 # Core numerical computing
@@ -15,7 +14,6 @@ rayon = { workspace = true }
 csv = { workspace = true }
 clap = { workspace = true }
 plotly = { workspace = true }
-plotly_static = { workspace = true }
 autoeq-testfunctions = { version="0.2", path = "../src-testfunctions" }
 autoeq-env = { version="0.2", path = "../src-env" }
 serde = { workspace = true }
@@ -25,14 +23,27 @@ thiserror = { workspace = true }
 [dev-dependencies]
 tempfile = "3.10"
 
-# Platform-specific BLAS dependencies
 [target.'cfg(target_os = "macos")'.dependencies]
-blas-src = { version = "0.12.1", features = ["accelerate"] }
+# blas folklore
+blas-src = { version = "0.14", features = ["accelerate"] }
 accelerate-src = "0.3"
+# plotly_static config
+plotly_static = { version = "0.1", features = ["chromedriver", "webdriver_download"] }
 
-[target.'cfg(not(target_os = "macos"))'.dependencies]
-blas-src = { version = "0.12.1", features = ["openblas"] }
+[target.'cfg(target_os = "linux")'.dependencies]
+# blas folklore
+blas-src = { version = "0.14", features = ["openblas"] }
 openblas-src = { version = "0.10", features = ["cblas", "system"] }
+# plotly_static config
+plotly_static = { version = "0.1", features = ["chromedriver", "webdriver_download"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+# blas folklore
+blas-src = { version = "0.14", features = ["intel-mkl-dynamic-parallel"] }
+intel-mkl-src = "0.8.1"
+# plotly_static config
+# plotly_static = { version = "0.1", features = ["edgedriver", "webdriver_download"] }
+
 
 [[bin]]
 name = "plot_autoeq_de"

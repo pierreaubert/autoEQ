@@ -42,7 +42,9 @@ bench-convergence:
 	cargo run --release --bin benchmark_convergence
 
 bench-autoeq-speaker:
-	cargo run --release --bin benchmark_autoeq_speaker
+	# either jobs=1 or --no-parallel ; or a mix if you have a lot of
+	# CPU cores
+	cargo run --release --bin benchmark_autoeq_speaker -- --qa --jobs 1
 
 # ----------------------------------------------------------------------
 # PROD
@@ -142,7 +144,10 @@ install-macos:
 
 install-macos-doc:
 	brew install chruby ruby-install
-	gem install jekyll
+	ruby-install ruby 3.4.6
+	# if above line does not work out of the box, then
+	# cd ~/src/ruby-3.4.6 && make install
+	PATH=$HOME/.rubies/ruby-3.4.6/bin:$PATH gem install jekyll
 
 # ----------------------------------------------------------------------
 # Install macos
@@ -173,7 +178,10 @@ publish:
 # QA
 # ----------------------------------------------------------------------
 
-qa: prod-autoeq qa-ascilab-6b qa-jbl-m2-flat qa-jbl-m2-score
+qa: prod-autoeq \
+    qa-ascilab-6b \
+    qa-jbl-m2-flat qa-jbl-m2-score \
+    qa-beyerdynamic-dt1990pro-flat qa-beyerdynamic-dt1990pro-score  qa-beyerdynamic-dt1990pro-score2
 
 qa-ascilab-6b:
         ./target/release/autoeq --speaker="Ascilab F6B" --version asr --measurement CEA2034 --algo autoeq:de --loss speaker-score -n 7 --min-freq=30 --max-q=6 --qa | ./scripts/qa_check.sh
@@ -184,5 +192,11 @@ qa-jbl-m2-flat:
 qa-jbl-m2-score:
         ./target/release/autoeq --speaker="JBL M2" --version eac --measurement CEA2034 --algo autoeq:de --loss speaker-score -n 7 --min-freq=20 --max-q=6 --peq-model hp-pk --qa | ./scripts/qa_check.sh
 
-qa-beyerdynamic-dt1990pro:
+qa-beyerdynamic-dt1990pro-score:
 	./target/release/autoeq -n 4 --curve ./data_tests/headphone/asr/beyerdynamic_dt1990pro/Beyerdynamic\ DT1990\ Pro\ Headphone\ Frequency\ Response\ Measurement.csv --target ./data_tests/targets/harman-over-ear-2018.csv --loss headphone-score  --qa | ./scripts/qa_check.sh
+
+qa-beyerdynamic-dt1990pro-score2:
+	./target/release/autoeq -n 5 --curve ./data_tests/headphone/asr/beyerdynamic_dt1990pro/Beyerdynamic\ DT1990\ Pro\ Headphone\ Frequency\ Response\ Measurement.csv --target ./data_tests/targets/harman-over-ear-2018.csv --loss headphone-score  --max-db 6 --max-q 6 --algo mh:rga --maxeval 20000 --min-freq=20 --max-freq 10000 --peq-model hp-pk-lp --qa | ./scripts/qa_check.sh
+
+qa-beyerdynamic-dt1990pro-flat:
+	./target/release/autoeq -n 5 --curve ./data_tests/headphone/asr/beyerdynamic_dt1990pro/Beyerdynamic\ DT1990\ Pro\ Headphone\ Frequency\ Response\ Measurement.csv --target ./data_tests/targets/harman-over-ear-2018.csv --loss headphone-flat  --max-db 6 --max-q 6 --maxeval 20000 --algo mh:pso --min-freq=20 --max-freq 10000 --peq-model hp-pk-lp --qa | ./scripts/qa_check.sh

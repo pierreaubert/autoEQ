@@ -29,24 +29,20 @@ rustflags = [
   "-C", "link-arg=-lopenblas64"
 ]
 
-# === Windows ===
-# Option 1: Using vcpkg
-#   vcpkg install openblas:x64-windows
-#   Then uncomment and adjust the vcpkg paths above
-#
-# Option 2: Using MSYS2/MinGW64
-#   pacman -S mingw-w64-x86_64-openblas
-#
-# Option 3: Intel MKL (alternative to OpenBLAS)
-#   Download and install Intel oneAPI Math Kernel Library
-#   Set appropriate environment variables
-
 # Windows MSVC x86_64 configuration
 [target.x86_64-pc-windows-msvc]
 rustflags = [
     # Windows typically uses Intel MKL or OpenBLAS through vcpkg
     # Uncomment and adjust paths if using vcpkg OpenBLAS:
-    # "-C", "link-arg=/LIBPATH:C:\\vcpkg\\installed\\x64-windows\\lib",
+    "-C", "link-arg=/LIBPATH:C:\\vcpkg\\installed\\x64-windows\\lib",
+    # "-C", "link-arg=openblas.lib"
+]
+
+[target.aarm64-pc-windows-msvc]
+rustflags = [
+    # Windows typically uses Intel MKL or OpenBLAS through vcpkg
+    # Uncomment and adjust paths if using vcpkg OpenBLAS:
+    "-C", "link-arg=/LIBPATH:C:\\vcpkg\\installed\\x64-windows\\lib",
     # "-C", "link-arg=openblas.lib"
 ]
 

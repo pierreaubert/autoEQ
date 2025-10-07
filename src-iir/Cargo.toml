@@ -1,11 +1,10 @@
 [package]
 name = "autoeq-iir"
 version = "0.2.20"
-edition = "2024"
-authors = ["Pierre Aubert <pierre@spinorama.org>"]
-license = "GPL-3.0-or-later"
-description = "IIR filter implementations for audio equalization"
-repository = "https://github.com/pierreaubert/autoeq"
+edition = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
 
 [dependencies]
 ndarray = { workspace = true }

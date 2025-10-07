@@ -1,18 +1,17 @@
 [package]
 name = "autoeq"
-version = "0.2.240"
-edition = "2024"
-authors = ["Pierre Aubert <pierre@spinorama.org>"]
-license = "GPL-3.0-or-later"
+version = "0.2.241"
 description = "Automatic equalization for speakers and headphones"
-repository = "https://github.com/pierreaubert/autoeq"
+edition = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
 
 [dependencies]
 build_html = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true }
 csv = { workspace = true }
-ndarray = { workspace = true }
 num_cpus = { workspace = true }
 metaheuristics-nature = { workspace = true }
 plotly = { workspace = true }
@@ -31,19 +30,36 @@ autoeq-de = { version="0.2", path = "../src-de" }
 autoeq-cea2034 = { version="0.2", path = "../src-cea2034" }
 autoeq-env = { version="0.2", path = "../src-env" }
 
-# Unix-only dependencies for CLI
-[target.'cfg(not(target_os = "windows"))'.dependencies]
+# nlopt
+ndarray = { workspace = true }
+blas-src = { workspace = true }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+# blas folklore
+blas-src = { version = "0.14", features = ["accelerate"] }
+accelerate-src = "0.3"
+# plotly_static config
+plotly_static = { version = "0.1", features = ["chromedriver", "webdriver_download"] }
 nlopt = { workspace = true }
 signal-hook-tokio = { workspace = true }
 
-# External BLAS - platform-specific
-[target.'cfg(target_os = "macos")'.dependencies]
-blas-src = { version = "0.12.1", features = ["accelerate"] }
-accelerate-src = "0.3"
-
-[target.'cfg(not(target_os = "macos"))'.dependencies]
-blas-src = { version = "0.12.1", features = ["openblas"] }
+[target.'cfg(target_os = "linux")'.dependencies]
+# blas folklore
+blas-src = { version = "0.14", features = ["openblas"] }
 openblas-src = { version = "0.10", features = ["cblas", "system"] }
+# plotly_static config
+plotly_static = { version = "0.1", features = ["chromedriver", "webdriver_download"] }
+nlopt = { workspace = true }
+signal-hook-tokio = { workspace = true }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+# blas folklore
+blas-src = { version = "0.14", features = ["intel-mkl-dynamic-parallel"] }
+intel-mkl-src = "0.8.1"
+# plotly_static config
+# plotly_static = { version = "0.1", features = ["edgedriver", "webdriver_download"] }
+
+
 
 [[bin]]
 name = "autoeq"

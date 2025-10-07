@@ -1,11 +1,10 @@
 [package]
 name = "autoeq-cea2034"
 version = "0.2.189"
-edition = "2024"
-authors = ["Pierre Aubert <pierre@spinorama.org>"]
-license = "GPL-3.0-or-later"
-description = "CEA2034 scoring and preference rating algorithms for loudspeaker measurements"
-repository = "https://github.com/pierreaubert/autoeq"
+edition = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
 
 [dependencies]
 ndarray = { workspace = true }
