@@ -178,7 +178,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             a3.version = Some(version.clone());
             a3.measurement = Some("CEA2034".to_string());
             a3.loss = autoeq::LossType::SpeakerScore;
-            a3.algo = "nlopt:isres".to_string();
+            a3.algo = "mh:rga".to_string();
             let s3 = if shutdown_clone.load(Ordering::Relaxed) {
                 None
             } else {
