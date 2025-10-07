@@ -184,7 +184,7 @@ checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 
 [[package]]
 name = "autoeq"
-version = "0.2.241"
+version = "0.2.243"
 dependencies = [
  "accelerate-src",
  "autoeq-cea2034",
@@ -235,6 +235,7 @@ dependencies = [
  "csv",
  "intel-mkl-src",
  "ndarray",
+ "nlopt",
  "openblas-src",
  "plotly",
  "plotly_static 0.1.0",
@@ -242,6 +243,7 @@ dependencies = [
  "rayon",
  "serde",
  "serde_json",
+ "signal-hook-tokio",
  "tempfile",
  "thiserror 2.0.17",
 ]
@@ -272,6 +274,7 @@ dependencies = [
  "clap",
  "ndarray",
  "plotly",
+ "plotly_static 0.1.0",
  "regex",
  "serde",
  "serde_json",

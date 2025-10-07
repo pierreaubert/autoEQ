@@ -170,7 +170,7 @@ pub struct Args {
     pub local_algo: String,
 
     /// Minimum spacing between filter center frequencies in octaves (0 disables)
-    #[arg(long, default_value_t = 0.5)]
+    #[arg(long, default_value_t = 0.2)]
     pub min_spacing_oct: f64,
 
     /// Weight for the spacing penalty in the objective function

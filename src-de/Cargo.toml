@@ -13,7 +13,6 @@ rand = { workspace = true }
 rayon = { workspace = true }
 csv = { workspace = true }
 clap = { workspace = true }
-plotly = { workspace = true }
 autoeq-testfunctions = { version="0.2", path = "../src-testfunctions" }
 autoeq-env = { version="0.2", path = "../src-env" }
 serde = { workspace = true }
@@ -27,7 +26,10 @@ tempfile = "3.10"
 # blas folklore
 blas-src = { version = "0.14", features = ["accelerate"] }
 accelerate-src = "0.3"
+nlopt = { workspace = true }
+signal-hook-tokio = { workspace = true }
 # plotly_static config
+plotly = { version = "0.13", features = ["static_export_default"] }
 plotly_static = { version = "0.1", features = ["chromedriver", "webdriver_download"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
@@ -35,15 +37,24 @@ plotly_static = { version = "0.1", features = ["chromedriver", "webdriver_downlo
 blas-src = { version = "0.14", features = ["openblas"] }
 openblas-src = { version = "0.10", features = ["cblas", "system"] }
 # plotly_static config
+plotly = { version = "0.13", features = ["static_export_default"] }
 plotly_static = { version = "0.1", features = ["chromedriver", "webdriver_download"] }
+nlopt = { workspace = true }
+signal-hook-tokio = { workspace = true }
 
-[target.'cfg(target_os = "windows")'.dependencies]
+[target.'cfg(all(target_os = "windows", target_arch="x86_64"))'.dependencies]
 # blas folklore
 blas-src = { version = "0.14", features = ["intel-mkl-dynamic-parallel"] }
 intel-mkl-src = "0.8.1"
-# plotly_static config
-# plotly_static = { version = "0.1", features = ["edgedriver", "webdriver_download"] }
+# plotly no static on windows
+plotly = { version = "0.13" }
 
+[target.'cfg(all(target_os = "windows", target_arch="aarch64"))'.dependencies]
+# blas folklore: intel-mkl not supported on arm :)
+blas-src = { version = "0.14", features = ["openblas"] }
+openblas-src = { version = "0.10", features = ["cblas", "system"] }
+# plotly no static on windows
+plotly = { version = "0.13" }
 
 [[bin]]
 name = "plot_autoeq_de"

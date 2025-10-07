@@ -1,6 +1,6 @@
 [package]
 name = "autoeq"
-version = "0.2.241"
+version = "0.2.243"
 description = "Automatic equalization for speakers and headphones"
 edition = { workspace = true }
 repository = { workspace = true }
@@ -14,8 +14,6 @@ clap = { workspace = true }
 csv = { workspace = true }
 num_cpus = { workspace = true }
 metaheuristics-nature = { workspace = true }
-plotly = { workspace = true }
-plotly_static = { workspace = true }
 rand = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true }
@@ -39,6 +37,7 @@ blas-src = { workspace = true }
 blas-src = { version = "0.14", features = ["accelerate"] }
 accelerate-src = "0.3"
 # plotly_static config
+plotly = { version = "0.13", features = ["static_export_default"] }
 plotly_static = { version = "0.1", features = ["chromedriver", "webdriver_download"] }
 nlopt = { workspace = true }
 signal-hook-tokio = { workspace = true }
@@ -48,6 +47,7 @@ signal-hook-tokio = { workspace = true }
 blas-src = { version = "0.14", features = ["openblas"] }
 openblas-src = { version = "0.10", features = ["cblas", "system"] }
 # plotly_static config
+plotly = { version = "0.13", features = ["static_export_default"] }
 plotly_static = { version = "0.1", features = ["chromedriver", "webdriver_download"] }
 nlopt = { workspace = true }
 signal-hook-tokio = { workspace = true }
@@ -56,12 +56,17 @@ signal-hook-tokio = { workspace = true }
 # blas folklore
 blas-src = { version = "0.14", features = ["intel-mkl-dynamic-parallel"] }
 intel-mkl-src = "0.8.1"
+# plotly no static on windows
+plotly = { version = "0.13" }
 
 [target.'cfg(all(target_os = "windows", target_arch="aarch64"))'.dependencies]
 # blas folklore: intel-mkl not supported on arm :)
 blas-src = { version = "0.14", features = ["openblas"] }
 openblas-src = { version = "0.10", features = ["cblas", "system"] }
-
+# installed via vcpkg
+nlopt = { workspace = true }
+# plotly no static on windows
+plotly = { version = "0.13" }
 
 
 [[bin]]
@@ -70,7 +75,7 @@ path = "bin/autoeq.rs"
 
 [[bin]]
 name = "benchmark_autoeq_speaker"
-path = "bench/autoeq_benchmark_speaker.rs"
+path = "bin/autoeq_benchmark_speaker.rs"
 
 [[bin]]
 name = "download"

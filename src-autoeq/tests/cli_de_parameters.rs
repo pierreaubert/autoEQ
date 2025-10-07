@@ -29,6 +29,8 @@ fn create_test_objective_data() -> autoeq::optim::ObjectiveData {
         spacing_weight: 20.0,
         max_db: 3.0,
         min_db: 1.0,
+        min_freq: 60.0,
+        max_freq: 16000.0,
         peq_model: PeqModel::Pk,
         loss_type: LossType::SpeakerFlat,
         speaker_score_data: None,

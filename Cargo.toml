@@ -10,7 +10,7 @@ members = [
 resolver = "3"
 
 [workspace.package]
-version = "0.2.436"
+version = "0.2.438"
 authors = ["Pierre F. Aubert pierre@spinorama.org"]
 description = "A CLI for automatically eq-eing your speakers or your headphones"
 edition = "2024"
@@ -50,6 +50,7 @@ nlopt = "0.8.1"
 blas-src = {version="0.14"}
 
 # Plotting and visualization
-plotly = { version = "0.13", features = ["static_export_default"] }
-plotly_static = { version = "0.1" }
+# moved into crates since it depends of the environement
+# plotly = { version = "0.13", features = ["static_export_default"] }
+# plotly_static = { version = "0.1" }
 build_html = "2.7.0"

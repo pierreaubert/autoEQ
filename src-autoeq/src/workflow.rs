@@ -190,6 +190,8 @@ pub fn setup_objective_data(
         spacing_weight: args.spacing_weight,
         max_db: args.max_db,
         min_db: args.min_db,
+        min_freq: args.min_freq,
+        max_freq: args.max_freq,
         peq_model: args.effective_peq_model(),
         loss_type: args.loss,
         speaker_score_data: speaker_score_data_opt,

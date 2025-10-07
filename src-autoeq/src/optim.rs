@@ -276,6 +276,10 @@ pub struct ObjectiveData {
     pub max_db: f64,
     /// Minimum absolute gain for filters
     pub min_db: f64,
+    /// Minimum frequency in Hz for loss function evaluation
+    pub min_freq: f64,
+    /// Maximum frequency in Hz for loss function evaluation
+    pub max_freq: f64,
     /// PEQ model that defines the filter structure
     pub peq_model: PeqModel,
     /// Type of loss function to use
@@ -359,13 +363,13 @@ pub fn compute_base_fitness(x: &[f64], data: &ObjectiveData) -> f64 {
     match data.loss_type {
         LossType::HeadphoneFlat | LossType::SpeakerFlat => {
             let error = &peq_spl - &data.deviation;
-            flat_loss(&data.freqs, &error)
+            flat_loss(&data.freqs, &error, data.min_freq, data.max_freq)
         }
         LossType::SpeakerScore => {
             if let Some(ref sd) = data.speaker_score_data {
                 let error = &peq_spl - &data.deviation;
                 let s = speaker_score_loss(sd, &data.freqs, &peq_spl);
-                let p = flat_loss(&data.freqs, &error) / 3.0;
+                let p = flat_loss(&data.freqs, &error, data.min_freq, data.max_freq) / 3.0;
                 100.0 - s + p
             } else {
                 eprintln!("Error: speaker score loss requested but score data is missing");
@@ -383,10 +387,10 @@ pub fn compute_base_fitness(x: &[f64], data: &ObjectiveData) -> f64 {
                 };
                 let s = headphone_loss(&error_curve);
                 // compute flat error
-                let p = flat_loss(&data.freqs, &error);
+                let p = flat_loss(&data.freqs, &error, data.min_freq, data.max_freq);
                 // wants to maximize the score and improve the flatness
-                // println!("Headphone score: s={} p={}", s, p);
-                1000.0 - s + p
+                println!("Headphone score: s={} p={}", s, p);
+                1000.0 - s + p * 20.0
             } else {
                 eprintln!("Error: headphone score loss requested but headphone data is missing");
                 process::exit(1);
