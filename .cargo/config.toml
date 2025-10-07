@@ -35,20 +35,20 @@ rustflags = [
     # Windows typically uses Intel MKL or OpenBLAS through vcpkg
     # Uncomment and adjust paths if using vcpkg OpenBLAS:
     "-C", "link-arg=/LIBPATH:C:\\vcpkg\\installed\\x64-windows\\lib",
-    # "-C", "link-arg=openblas.lib"
+    "-C", "link-arg=openblas.lib"
 ]
 
 [target.aarm64-pc-windows-msvc]
 rustflags = [
     # Windows typically uses Intel MKL or OpenBLAS through vcpkg
     # Uncomment and adjust paths if using vcpkg OpenBLAS:
-    "-C", "link-arg=/LIBPATH:C:\\vcpkg\\installed\\x64-windows\\lib",
-    # "-C", "link-arg=openblas.lib"
+    "-C", "link-arg=/LIBPATH:C:\\vcpkg\\installed\\arm64-windows\\lib",
+    "-C", "link-arg=openblas.lib"
 ]
 
 # Windows GNU x86_64 configuration
 [target.x86_64-pc-windows-gnu]
 rustflags = [
     # For MinGW/MSYS2 with OpenBLAS
-    # "-C", "link-arg=-lopenblas"
+    "-C", "link-arg=-lopenblas"
 ]

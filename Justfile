@@ -1,4 +1,4 @@
-# ----------------------------------------------------------------------
+# --------------------------------------------------------- -*- just -*-
 # How to install Just?
 #     cargo install just
 # ----------------------------------------------------------------------
@@ -15,8 +15,21 @@ test:
 	cargo test --lib
 
 # ----------------------------------------------------------------------
+# FORMAT
+# ----------------------------------------------------------------------
+
+alias format := fmt
+
+fmt: fmt-rust
+
+fmt-rust:
+	cargo fmt --all
+
+# ----------------------------------------------------------------------
 # PROD
 # ----------------------------------------------------------------------
+
+alias build := prod
 
 prod: prod-workspace prod-autoeq
 	cargo build --release --bin plot_functions
@@ -83,7 +96,9 @@ update-pre-commit:
 demo: headphone_loss_demo plot_functions
 
 headphone_loss_demo:
-	cargo run --release --example headphone_loss_demo -- --spl "./data_tests/headphone/asr/bowerwilkins_p7/Bowers & Wilkins P7.csv" --target "./data_tests/targets/harman-over-ear-2018.csv"
+	cargo run --release --example headphone_loss_demo -- \
+	    --spl "./data_tests/headphone/asr/bowerwilkins_p7/Bowers & Wilkins P7.csv" \
+		--target "./data_tests/targets/harman-over-ear-2018.csv"
 
 plot_functions:
 	cargo run --release --bin plot_functions
@@ -132,7 +147,18 @@ cross-win-x86-gnu :
 install-cross:
 	rustup target add x86_64-apple-ios
 
-install-macos:
+install-brew:
+	curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh > install-brew
+	chmod +x install-brew
+	NONINTERACTIVE=1 ./install-brew
+
+install-rustup:
+    curl https://sh.rustup.rs -sSf > install-rustup
+    chmod +x install-rustup
+    ./install-rustup -y
+    source ~/.cargo/env
+
+install-macos: install-brew install-rustup
 	# need rustup first
 	# need xcode
 	xcode-select --install
@@ -150,7 +176,7 @@ install-macos-doc:
 	PATH=$HOME/.rubies/ruby-3.4.6/bin:$PATH gem install jekyll
 
 # ----------------------------------------------------------------------
-# Install macos
+# Install linux
 # ----------------------------------------------------------------------
 
 install-linux-arm:
@@ -168,11 +194,39 @@ install-linux-arm:
 	rustup target add aarch64-unknown-linux-gnu
 
 # ----------------------------------------------------------------------
+# Install windows
+# ----------------------------------------------------------------------
+
+set windows-shell := ["powershell.exe", "-NoLogo", "-Command"]
+
+install-windows-vcpkg:
+	git clone https://github.com/microsoft/vcpkg.git
+	cd vcpkg; .\bootstrap-vcpkg.bat
+	vcpkg install nlopt openblas
+
+install-windows-node:
+	echo "go to https://nodejs.org/en/download"
+
+install-windows-llvm-arm:
+	echo "go to https://learn.arm.com/install-guides/llvm-woa/"
+
+install-windows-arm: install-windows-vcpkg install-windows-node install-windows-llvm-arm
+	rustup deafult stable
+	rustup target add aarch64-pc-windows-msvc
+
+install-windows-x86: install-windows-vcpkg install-windows-node
+	rustup default stable
+	rustup target add x86_64-pc-windows-msvc
+
+# ----------------------------------------------------------------------
 # publish
 # ----------------------------------------------------------------------
 
 publish:
-        cargo publish
+        cd src-testfunctions && cargo publish
+        cd src-de && cargo publish
+        cd src-cea2034 && cargo publish
+        cd src-autoeq && cargo publish
 
 # ----------------------------------------------------------------------
 # QA
@@ -193,7 +247,10 @@ qa-jbl-m2-score:
         ./target/release/autoeq --speaker="JBL M2" --version eac --measurement CEA2034 --algo autoeq:de --loss speaker-score -n 7 --min-freq=20 --max-q=6 --peq-model hp-pk --qa | ./scripts/qa_check.sh
 
 qa-beyerdynamic-dt1990pro-score:
-	./target/release/autoeq -n 4 --curve ./data_tests/headphone/asr/beyerdynamic_dt1990pro/Beyerdynamic\ DT1990\ Pro\ Headphone\ Frequency\ Response\ Measurement.csv --target ./data_tests/targets/harman-over-ear-2018.csv --loss headphone-score  --qa | ./scripts/qa_check.sh
+	./target/release/autoeq -n 4 \
+	    --curve ./data_tests/headphone/asr/beyerdynamic_dt1990pro/Beyerdynamic\ DT1990\ Pro\ Headphone\ Frequency\ Response\ Measurement.csv \
+		--target ./data_tests/targets/harman-over-ear-2018.csv --loss headphone-score  --qa \
+		| ./scripts/qa_check.sh
 
 qa-beyerdynamic-dt1990pro-score2:
 	./target/release/autoeq -n 5 --curve ./data_tests/headphone/asr/beyerdynamic_dt1990pro/Beyerdynamic\ DT1990\ Pro\ Headphone\ Frequency\ Response\ Measurement.csv --target ./data_tests/targets/harman-over-ear-2018.csv --loss headphone-score  --max-db 6 --max-q 6 --algo mh:rga --maxeval 20000 --min-freq=20 --max-freq 10000 --peq-model hp-pk-lp --qa | ./scripts/qa_check.sh
