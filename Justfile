@@ -200,9 +200,11 @@ install-linux-arm:
 set windows-shell := ["powershell.exe", "-NoLogo", "-Command"]
 
 install-windows-vcpkg:
+    mkdir C:\Users\pierre\source\repos\microsoft
+    chdir C:\Users\pierre\source\repos\microsoft
     git clone https://github.com/microsoft/vcpkg.git
     cd vcpkg; .\bootstrap-vcpkg.bat
-    vcpkg install nlopt openblas
+    .\vcpkg install nlopt openblas
 
 install-windows-node:
     echo "go to https://nodejs.org/en/download"

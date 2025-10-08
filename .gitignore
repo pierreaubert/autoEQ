@@ -23,8 +23,9 @@ logs
 *.log
 
 # Editor directories and files
+/.vs
 .vscode/*
-!.vscode/extensions.json
+!.vscode/*.json
 /.idea
 /.fleet
 .DS_Store
