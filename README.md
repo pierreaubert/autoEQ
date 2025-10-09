@@ -20,9 +20,10 @@ and you are set up. See this [README](src-autoeq/README.md) for instructions on 
 
 ## Toolkit
 
-### src-env
+### src-autoeq
 
-A small set of functions and constants used by the other crates but you are unlikely to be interested.
+A [CLI](src-autoeq/README.md) to optimise the response of your headset or headphone.
+A corresponing App is also available at [https://github.com/pierreaubert/autoeq-app](https://github.com/pierreaubert/autoeq-app).
 
 ### src-testfunctions
 
@@ -36,7 +37,6 @@ A implementation of [differential evolution algorithm](src-de/README.md) (forked
 
 A implementation of CEA2034 aka [Spinorama](https://spinorama.org): a set of metrics and curves that describe a loudspeaker performance.
 
-### src-autoeq
+### src-env
 
-A [CLI](src-autoeq/README.md) to optimise the response of your headset or headphone.
-A corresponing App is also available at [https://github.com/pierreaubert/autoeq-app](https://github.com/pierreaubert/autoeq-app).
+A small set of functions and constants used by the other crates but you are unlikely to be interested.
