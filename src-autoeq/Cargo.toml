@@ -64,10 +64,10 @@ plotly = { version = "0.13" }
 blas-src = { version = "0.14", features = ["openblas"] }
 openblas-src = { version = "0.10", features = ["cblas", "system"] }
 # installed via vcpkg
-nlopt = { workspace = true }
+# nlopt = { workspace = true }
 # plotly no static on windows
-plotly = { version = "0.13" }
-
+plotly = { version = "0.13", features = ["static_export_default"] }
+plotly_static = { version = "0.1", features = ["geckodriver"] }
 
 [[bin]]
 name = "autoeq"
