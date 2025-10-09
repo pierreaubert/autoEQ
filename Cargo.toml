@@ -53,4 +53,9 @@ blas-src = {version="0.14"}
 # moved into crates since it depends of the environement
 # plotly = { version = "0.13", features = ["static_export_default"] }
 # plotly_static = { version = "0.1" }
+webdriver-downloader = "0.16.0"
 build_html = "2.7.0"
+
+[patch.crates-io]
+webdriver-downloader = { git = "https://github.com/pierreaubert/webdriver-downloader" }
+

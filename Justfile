@@ -205,6 +205,7 @@ install-windows-vcpkg:
     git clone https://github.com/microsoft/vcpkg.git
     cd vcpkg; .\bootstrap-vcpkg.bat
     .\vcpkg install nlopt openblas
+    .\vcpkg.exe integrate install
 
 install-windows-node:
     echo "go to https://nodejs.org/en/download"
