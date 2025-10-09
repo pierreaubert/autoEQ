@@ -136,6 +136,10 @@ cross-linux-x86 :
       echo "This can take minutes!"
       cross build --release --target x86_64-unknown-linux-gnu
 
+cross-linux-arm64 :
+      echo "This can take minutes!"
+      cross build --release --target aarch64-unknown-linux-gnu
+
 cross-win-x86-gnu :
       echo "This is not working well yet from macos!"
       cross build --release --target x86_64-pc-windows-gnu
@@ -242,7 +246,7 @@ qa: prod-autoeq \
     qa-edifierw830nb
 
 qa-ascilab-6b:
-        ./target/release/autoeq --speaker="Ascilab F6B" --version asr --measurement CEA2034 \
+        ./target/release/autoeq --speaker="AsciLab F6B" --version asr --measurement CEA2034 \
             --algo autoeq:de --loss speaker-score -n 7 --min-freq=30 --max-q=6 --qa \
             | ./scripts/qa_check.sh
 

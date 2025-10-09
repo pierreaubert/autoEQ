@@ -10,20 +10,19 @@ license = { workspace = true }
 ndarray = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 autoeq-env = { version = "0.2.2", path = "../src-env"}
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-regex = "1.10"
+serde = { workspace = true}
+serde_json = { workspace = true}
+regex = { workspace = true}
+plotly = { workspace = true}
 
-[target.'cfg(target_os = "macos")'.dependencies]
-plotly = { version = "0.13", features = ["static_export_default"] }
+[target.'cfg(target_arch="x86_64")'.dependencies]
 plotly_static = { version = "0.1", features = ["chromedriver", "webdriver_download"] }
 
-[target.'cfg(target_os = "linux")'.dependencies]
-plotly = { version = "0.13", features = ["static_export_default"] }
+[target.'cfg(all(target_os="macos", target_arch="aarch64"))'.dependencies]
 plotly_static = { version = "0.1", features = ["chromedriver", "webdriver_download"] }
 
-[target.'cfg(target_os = "windows")'.dependencies]
-plotly = { version = "0.13" }
+[target.'cfg(all(not(target_os="macos"), target_arch="aarch64"))'.dependencies]
+plotly_static = { version = "0.1", features = ["geckodriver", "webdriver_download"] }
 
 [lib]
 name = "autoeq_testfunctions"

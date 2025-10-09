@@ -14,6 +14,7 @@ clap = { workspace = true }
 csv = { workspace = true }
 num_cpus = { workspace = true }
 metaheuristics-nature = { workspace = true }
+plotly = { workspace = true }
 rand = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true }
@@ -36,19 +37,27 @@ blas-src = { workspace = true }
 # blas folklore
 blas-src = { version = "0.14", features = ["accelerate"] }
 accelerate-src = "0.3"
-# plotly_static config
-plotly = { version = "0.13", features = ["static_export_default"] }
-plotly_static = { version = "0.1", features = ["chromedriver", "webdriver_download"] }
+# nlopt
 nlopt = { workspace = true }
 signal-hook-tokio = { workspace = true }
+# plotly_static config
+plotly_static = { version = "0.1", features = ["chromedriver", "webdriver_download"] }
 
-[target.'cfg(target_os = "linux")'.dependencies]
+[target.'cfg(all(target_os = "linux", target_arch="x86_64"))'.dependencies]
 # blas folklore
 blas-src = { version = "0.14", features = ["openblas"] }
 openblas-src = { version = "0.10", features = ["cblas", "system"] }
 # plotly_static config
-plotly = { version = "0.13", features = ["static_export_default"] }
 plotly_static = { version = "0.1", features = ["chromedriver", "webdriver_download"] }
+nlopt = { workspace = true }
+signal-hook-tokio = { workspace = true }
+
+[target.'cfg(all(target_os = "linux", target_arch="aarch64"))'.dependencies]
+# blas folklore
+blas-src = { version = "0.14", features = ["openblas"] }
+openblas-src = { version = "0.10", features = ["cblas", "system"] }
+# plotly_static config
+plotly_static = { version = "0.1", features = ["geckodriver", "webdriver_download"] }
 nlopt = { workspace = true }
 signal-hook-tokio = { workspace = true }
 
@@ -56,17 +65,12 @@ signal-hook-tokio = { workspace = true }
 # blas folklore
 blas-src = { version = "0.14", features = ["intel-mkl-dynamic-parallel"] }
 intel-mkl-src = "0.8.1"
-# plotly no static on windows
-plotly = { version = "0.13" }
 
 [target.'cfg(all(target_os = "windows", target_arch="aarch64"))'.dependencies]
 # blas folklore: intel-mkl not supported on arm :)
 blas-src = { version = "0.14", features = ["openblas"] }
 openblas-src = { version = "0.10", features = ["cblas", "system"] }
-# installed via vcpkg
-# nlopt = { workspace = true }
-# plotly no static on windows
-plotly = { version = "0.13", features = ["static_export_default"] }
+# plotly no static on windows (gecko and edge are working)
 plotly_static = { version = "0.1", features = ["geckodriver"] }
 
 [[bin]]
