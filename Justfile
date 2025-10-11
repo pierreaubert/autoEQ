@@ -149,6 +149,7 @@ cross-win-x86-gnu :
 # ----------------------------------------------------------------------
 
 install-cross:
+    cargo install cross
     rustup target add x86_64-apple-ios
 
 install-brew:
