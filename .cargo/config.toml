@@ -34,9 +34,10 @@ rustflags = [
 [target.x86_64-pc-windows-msvc]
 rustflags = [
     # Windows typically uses Intel MKL or OpenBLAS through vcpkg
+    # "-C", "-DCMAKE_TOOLCHAIN_FILE=C:/Users/pierr/source/repos/microsoft/vcpkg/scripts/buildsystems/vcpkg.cmake",
     # Uncomment and adjust paths if using vcpkg OpenBLAS:
     "-C", "link-arg=/LIBPATH:C:\\vcpkg\\installed\\x64-windows\\lib",
-    "-C", "link-arg=/LIBPATH:C:\\Users\\pierre\\source\\repos\\microsoft\\vcpkg\\installed\\x64-windows\\lib",
+    "-C", "link-arg=/LIBPATH:C:\\Users\\pierr\\source\\repos\\microsoft\\vcpkg\\installed\\x64-windows\\lib",
     "-C", "link-arg=openblas.lib"
 ]
 
@@ -45,7 +46,7 @@ rustflags = [
     # Windows typically uses Intel MKL or OpenBLAS through vcpkg
     # Uncomment and adjust paths if using vcpkg OpenBLAS:
     "-C", "link-arg=/LIBPATH:C:\\vcpkg\\installed\\arm64-windows\\lib",
-    "-C", "link-arg=/LIBPATH:C:\\Users\\pierre\\source\\repos\\microsoft\\vcpkg\\installed\\arm64-windows\\lib",
+    "-C", "link-arg=/LIBPATH:C:\\Users\\pierr\\source\\repos\\microsoft\\vcpkg\\installed\\arm64-windows\\lib",
     "-C", "link-arg=openblas.lib",
     "-C", "link-arg=nlopt.lib"
 ]
