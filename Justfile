@@ -60,7 +60,7 @@ bench-autoeq-speaker:
     cargo run --release --bin benchmark_autoeq_speaker -- --qa --jobs 1
 
 # ----------------------------------------------------------------------
-# PROD
+# DEV
 # ----------------------------------------------------------------------
 
 dev:
@@ -194,7 +194,22 @@ install-linux-arm:
          libssl-dev \
          pkg-config \
          ca-certificates \
-         chromium-chromedriver
+         chromium-chromedriver \
+	 bc
+    rustup default stable
+
+install-linux-x86:
+    sudo apt install \
+         gcc g++ cmake \
+         libnlopt-dev \
+         rustup \
+         just \
+         libopenblas64-dev libopenblas64-0-pthread \
+         libssl-dev \
+         pkg-config \
+         ca-certificates \
+         chromium-chromedriver \
+	 bc
     rustup default stable
     rustup target add aarch64-unknown-linux-gnu
 
