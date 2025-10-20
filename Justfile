@@ -148,11 +148,11 @@ cross-win-x86-gnu :
 # Install macos
 # ----------------------------------------------------------------------
 
-install-cross:
+install-macos-cross:
 	cargo install cross
 	rustup target add x86_64-apple-ios
 
-install-brew:
+install-macos-brew:
 	curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh > install-brew
 	chmod +x install-brew
 	NONINTERACTIVE=1 ./install-brew
@@ -162,12 +162,14 @@ install-rustup:
 	chmod +x install-rustup
 	./install-rustup -y
 	source ~/.cargo/env
+	cargo install just
+	cargo install cargo-wizard
 
-install-macos: install-brew install-rustup
-	# need rustup first
+install-macos: install-macos-brew install-rustup
 	# need xcode
 	xcode-select --install
-
+	# need metal
+	xcodebuild -downloadComponent MetalToolchain
 	brew install chromedriver
 	xattr -d com.apple.quarantine $(which chromedriver)
 	# optimisation

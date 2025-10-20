@@ -5,6 +5,7 @@ MACOSX_DEPLOYMENT_TARGET = "15.0"
 # macOS Apple Silicon (M1/M2/M3) - using Accelerate framework
 [target.aarch64-apple-darwin]
 rustflags = [
+    "-C", 'target-cpu=native',
     "-C", "link-arg=-mmacosx-version-min=15.0",
     "-C", "link-arg=-framework", "-C", "link-arg=Accelerate"
 ]
@@ -57,3 +58,6 @@ rustflags = [
     # For MinGW/MSYS2 with OpenBLAS
     "-C", "link-arg=-lopenblas"
 ]
+
+[build]
+rustflags = ["-Ctarget-cpu=native"]

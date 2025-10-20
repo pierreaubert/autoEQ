@@ -60,3 +60,15 @@ build_html = "2.7.0"
 
 [patch.crates-io]
 webdriver-downloader = { version = "0.16.4", git = "https://github.com/pierreaubert/webdriver-downloader" }
+
+[profile.dev]
+opt-level = "z"
+strip = true
+lto = true
+codegen-units = 1
+panic = "abort"
+
+[profile.release]
+lto = true
+codegen-units = 1
+panic = "abort"
