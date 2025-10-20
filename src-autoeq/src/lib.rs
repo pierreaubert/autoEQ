@@ -1,5 +1,29 @@
 #![doc = include_str!("../README.md")]
 
+/// Conditional println macro that only prints when not in QA mode
+#[macro_export]
+macro_rules! qa_println {
+    // Without args parameter - always print (for contexts without args access)
+    // This pattern must come first to match string literals
+    ($fmt:literal) => {
+        println!($fmt);
+    };
+    ($fmt:literal, $($arg:expr),* $(,)?) => {
+        println!($fmt, $($arg),*);
+    };
+    // With args parameter - conditional printing
+    ($args:expr, $fmt:literal) => {
+        if $args.qa.is_none() {
+            println!($fmt);
+        }
+    };
+    ($args:expr, $fmt:literal, $($arg:expr),* $(,)?) => {
+        if $args.qa.is_none() {
+            println!($fmt, $($arg),*);
+        }
+    };
+}
+
 // Re-export external crate functionality
 pub use autoeq_cea2034 as cea2034;
 pub use autoeq_de as de;

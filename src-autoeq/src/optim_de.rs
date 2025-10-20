@@ -216,7 +216,7 @@ pub fn optimize_filters_autoeq(
     cli_args: &crate::cli::Args,
 ) -> Result<(String, f64), (String, f64)> {
     // Create the callback with all the logging and user feedback
-    let callback = create_de_callback("autoeq::DE", cli_args.qa);
+    let callback = create_de_callback("autoeq::DE", cli_args.qa.is_some());
 
     // Delegate to the callback-based version
     optimize_filters_autoeq_with_callback(
@@ -251,7 +251,7 @@ pub fn optimize_filters_autoeq_with_callback(
         objective_data.clone(),
         population,
         maxeval,
-        cli_args.qa,
+        cli_args.qa.is_some(),
     );
     let base_objective_fn = create_de_objective(setup.penalty_data.clone());
 
@@ -264,7 +264,7 @@ pub fn optimize_filters_autoeq_with_callback(
     let target_response = &setup.penalty_data.deviation;
     let freq_grid = &setup.penalty_data.freqs;
 
-    if !cli_args.qa {
+    if cli_args.qa.is_none() {
         eprintln!("🧠 Generating smart initial guesses based on frequency response analysis...");
     }
     let smart_guesses = create_smart_initial_guesses(
@@ -276,7 +276,7 @@ pub fn optimize_filters_autoeq_with_callback(
         cli_args.effective_peq_model(),
     );
 
-    if !cli_args.qa {
+    if cli_args.qa.is_none() {
         eprintln!("📊 Generated {} smart initial guesses", smart_guesses.len());
     }
 
@@ -287,7 +287,7 @@ pub fn optimize_filters_autoeq_with_callback(
         &setup.bounds,
     );
 
-    if !cli_args.qa {
+    if cli_args.qa.is_none() {
         eprintln!(
             "🎯 Generated {} Sobol quasi-random samples",
             sobol_samples.len()
@@ -306,14 +306,14 @@ pub fn optimize_filters_autoeq_with_callback(
         Array1::from(x.to_vec())
     };
 
-    if !cli_args.qa {
+    if cli_args.qa.is_none() {
         eprintln!("🚀 Using smart initial guess with Sobol population initialization");
     }
 
     // Parse strategy from CLI args
     use std::str::FromStr;
     let strategy = Strategy::from_str(&cli_args.strategy).unwrap_or_else(|_| {
-        if !cli_args.qa {
+        if cli_args.qa.is_none() {
             eprintln!(
                 "⚠️ Warning: Invalid strategy '{}', falling back to CurrentToBest1Bin",
                 cli_args.strategy
@@ -379,7 +379,7 @@ pub fn optimize_filters_autoeq_with_callback(
     };
     config_builder = config_builder.parallel(parallel_config);
 
-    if !cli_args.no_parallel && !cli_args.qa {
+    if !cli_args.no_parallel && cli_args.qa.is_none() {
         eprintln!(
             "🚄 Parallel evaluation enabled with {} threads",
             if cli_args.parallel_threads.eq(&0) {

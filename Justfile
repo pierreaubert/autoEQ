@@ -364,49 +364,43 @@ qa: prod-autoeq \
 
 qa-ascilab-6b:
 	./target/release/autoeq --speaker="AsciLab F6B" --version asr --measurement CEA2034 \
-	--algo autoeq:de --loss speaker-score -n 7 --min-freq=30 --max-q=6 --qa \
-	| ./scripts/qa_check.sh
+	--algo autoeq:de --loss speaker-score -n 7 --min-freq=30 --max-q=6 \
+	--qa 0.5
 
 qa-jbl-m2-flat:
 	./target/release/autoeq --speaker="JBL M2" --version eac --measurement CEA2034 \
 	--algo autoeq:de --loss speaker-flat -n 7 --min-freq=20 --max-q=6 --peq-model hp-pk \
-	--qa \
-	| ./scripts/qa_check.sh
+	--qa 0.5
 
 qa-jbl-m2-score:
 	./target/release/autoeq --speaker="JBL M2" --version eac --measurement CEA2034 \
-	--algo autoeq:de --loss speaker-score -n 7 --min-freq=20 --max-q=6 --peq-model hp-pk --qa \
-	| ./scripts/qa_check.sh
+	--algo autoeq:de --loss speaker-score -n 7 --min-freq=20 --max-q=6 --peq-model hp-pk \
+	--qa 0.5
 
 qa-beyerdynamic-dt1990pro-score:
-	./target/release/autoeq -n 4 \
-	--curve ./data_tests/headphone/asr/beyerdynamic_dt1990pro/Beyerdynamic\ DT1990\ Pro\ Headphone\ Frequency\ Response\ Measurement.csv \
-	--target ./data_tests/targets/harman-over-ear-2018.csv --loss headphone-score  \
-	--qa \
-	| ./scripts/qa_check.sh
-
-qa-beyerdynamic-dt1990pro-score2:
 	./target/release/autoeq -n 5 \
 	--curve ./data_tests/headphone/asr/beyerdynamic_dt1990pro/Beyerdynamic\ DT1990\ Pro\ Headphone\ Frequency\ Response\ Measurement.csv \
+	--target ./data_tests/targets/harman-over-ear-2018.csv --loss headphone-score  \
+	--qa 3.0
+
+qa-beyerdynamic-dt1990pro-score2:
+	./target/release/autoeq -n 7 \
+	--curve ./data_tests/headphone/asr/beyerdynamic_dt1990pro/Beyerdynamic\ DT1990\ Pro\ Headphone\ Frequency\ Response\ Measurement.csv \
 	--target ./data_tests/targets/harman-over-ear-2018.csv \
-	--loss headphone-score	--max-db 6 --max-q 6 --algo mh:rga --maxeval 20000 --min-freq=20 --max-freq 10000 --peq-model hp-pk-lp \
-	--qa \
-	| ./scripts/qa_check.sh
+	--loss headphone-score	--max-db 6 --max-q 6 --algo mh:rga --maxeval 20000 --min-freq=20 --max-freq 10000 --peq-model hp-pk-lp --min-q 0.6 --min-db 0.25 \
+	--qa 1.5
 
 qa-beyerdynamic-dt1990pro-flat:
 	./target/release/autoeq -n 5 \
 	--curve ./data_tests/headphone/asr/beyerdynamic_dt1990pro/Beyerdynamic\ DT1990\ Pro\ Headphone\ Frequency\ Response\ Measurement.csv \
 	--target ./data_tests/targets/harman-over-ear-2018.csv \
 	--loss headphone-flat  --max-db 6 --max-q 6 --maxeval 20000 --algo mh:pso --min-freq=20 --max-freq 10000 --peq-model pk \
-	--qa \
-	| ./scripts/qa_check.sh
+	--qa 0.5
 
 qa-edifierw830nb:
 	./target/release/autoeq -n 5 \
 	--curve data_tests/headphone/asr/edifierw830nb/Edifier\ W830NB.csv \
 	--target ./data_tests/targets/harman-over-ear-2018.csv \
 	--min-freq 50 --max-freq 16000 --max-q 6 --max-db 6 \
-	--loss headphone-score --smooth --smooth-n 1 --peq-model pk \
-	--qa \
-	| ./scripts/qa_check.sh
-
+	--loss headphone-score --smooth --smooth-n 1 --peq-model pk --min-spacing-oct 0.1 \
+	--qa 4.0

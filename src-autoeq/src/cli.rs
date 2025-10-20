@@ -237,9 +237,10 @@ pub struct Args {
     #[arg(long, default_value_t = 0)]
     pub parallel_threads: usize,
 
-    /// Quality assurance mode: suppress normal output, show only summary line
-    #[arg(long, default_value_t = false)]
-    pub qa: bool,
+    /// Quality assurance mode with optional threshold: suppress normal output, show summary line and analysis
+    /// If a threshold is provided (e.g., --qa 0.4), also perform QA analysis
+    #[arg(long, value_name = "THRESHOLD")]
+    pub qa: Option<f64>,
 }
 
 impl Args {

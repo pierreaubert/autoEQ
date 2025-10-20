@@ -79,14 +79,17 @@ pub fn build_target_curve(
     input_curve: &Curve,
 ) -> Curve {
     let base_target = if let Some(ref target_path) = args.target {
-        eprintln!(
+        crate::qa_println!(
+            args,
             "[RUST DEBUG] Loading target curve from path: {}",
             target_path.display()
         );
-        eprintln!(
+        crate::qa_println!(
+            args,
             "[RUST DEBUG] Current working directory: {:?}",
             std::env::current_dir()
         );
+
         let target_curve = read::read_curve_from_csv(target_path).unwrap_or_else(|e| {
             eprintln!(
                 "[RUST ERROR] Failed to load target curve from '{}': {}",
@@ -317,7 +320,7 @@ pub fn setup_bounds(args: &crate::cli::Args) -> (Vec<f64>, Vec<f64>) {
     }
 
     // Debug: Display bounds for each filter (unless in QA mode)
-    if !args.qa {
+    if args.qa.is_none() {
         println!("\n📏 Parameter Bounds (Model: {}):", model);
         println!("+-# -|---Freq Range (Hz)---|----Q Range----|---Gain Range (dB)---|--Type--+");
         for i in 0..args.num_filters {

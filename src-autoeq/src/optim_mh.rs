@@ -96,10 +96,11 @@ pub fn create_mh_callback(
 
         // Print when stalling or periodically
         if stall_count == 1 || stall_count % 25 == 0 || intermediate.iter % 10 == 0 {
-            eprintln!(
+            let msg = format!(
                 "{} iter {:4}  fitness={:.6e} {}",
                 name, intermediate.iter, intermediate.fun, improvement
             );
+            crate::qa_println!("{}", msg);
         }
 
         // Show parameter details every 50 iterations
@@ -112,7 +113,7 @@ pub fn create_mh_callback(
                     format!("[f{:.0}Hz Q{:.2} G{:.2}dB]", freq, q, gain)
                 })
                 .collect();
-            eprintln!("  --> Best params: {}", param_summary.join(" "));
+            crate::qa_println!("  --> Best params: {}", param_summary.join(" "));
         }
 
         CallbackAction::Continue

@@ -32,7 +32,7 @@ use tokio::fs;
 /// Conditional println macro that only prints when not in QA mode
 macro_rules! qa_println {
     ($args:expr, $($arg:tt)*) => {
-        if !$args.qa {
+        if $args.qa.is_none() {
             println!($($arg)*);
         }
     };
@@ -41,7 +41,7 @@ macro_rules! qa_println {
 /// Conditional eprintln macro that only prints when not in QA mode
 macro_rules! qa_eprintln {
     ($args:expr, $($arg:tt)*) => {
-        if !$args.qa {
+        if $args.qa.is_none() {
             eprintln!($($arg)*);
         }
     };
@@ -207,7 +207,7 @@ fn perform_optimization(
             );
             converged = true;
             post_objective = Some(val);
-            if !args.qa {
+            if args.qa.is_none() {
                 print_freq_spacing(&x, args, "global");
             }
         }
@@ -239,7 +239,7 @@ fn perform_optimization(
                 // Update convergence status based on local refinement
                 converged = true;
                 post_objective = Some(local_val);
-                if !args.qa {
+                if args.qa.is_none() {
                     print_freq_spacing(&x, args, "local");
                     autoeq::x2peq::peq_print_from_x(&x, args.effective_peq_model());
                 }
@@ -258,6 +258,81 @@ fn perform_optimization(
         pre_objective: pre_objective,
         post_objective: post_objective,
     })
+}
+
+/// Structure to hold QA analysis results
+struct QaAnalysisResult {
+    converge_ok: bool,
+    spacing_ok: bool,
+    improvement_ok: bool,
+    improvement_threshold: f64,
+    pre_value: f64,
+    post_value: f64,
+}
+
+/// Perform QA analysis similar to qa_check.sh
+fn perform_qa_analysis(
+    converged: bool,
+    spacing_ok: bool,
+    pre_score: Option<f64>,
+    post_score: Option<f64>,
+    threshold: f64,
+) -> QaAnalysisResult {
+    let pre_value = pre_score.unwrap_or(f64::NAN);
+    let post_value = post_score.unwrap_or(f64::NAN);
+
+    // Check convergence
+    let converge_ok = converged;
+
+    // Check spacing (already computed)
+    let spacing_check_ok = spacing_ok;
+
+    // Check improvement: post > pre + threshold
+    let improvement_threshold = pre_value + threshold;
+    let improvement_ok =
+        !pre_value.is_nan() && !post_value.is_nan() && post_value > improvement_threshold;
+
+    QaAnalysisResult {
+        converge_ok,
+        spacing_ok: spacing_check_ok,
+        improvement_ok,
+        improvement_threshold,
+        pre_value,
+        post_value,
+    }
+}
+
+/// Display QA analysis results similar to qa_check.sh
+fn display_qa_analysis(result: &QaAnalysisResult) {
+    println!("Parsed values:");
+    println!(
+        "  Converge: {} ({})",
+        if result.converge_ok { "true" } else { "false" },
+        if result.converge_ok { "✓" } else { "✗" }
+    );
+    println!(
+        "  Spacing:  {} ({})",
+        if result.spacing_ok { "ok" } else { "ko" },
+        if result.spacing_ok { "✓" } else { "✗" }
+    );
+    println!("  Pre:      {:.3}", result.pre_value);
+    println!("  Post:     {:.3}", result.post_value);
+    println!(
+        "  Improvement: {:.3} > {:.3} + {:.1} = {:.3} ({})",
+        result.post_value,
+        result.pre_value,
+        result.improvement_threshold - result.pre_value,
+        result.improvement_threshold,
+        if result.improvement_ok { "✓" } else { "✗" }
+    );
+    println!();
+
+    // Final result
+    if result.converge_ok && result.spacing_ok && result.improvement_ok {
+        println!("OK");
+    } else {
+        println!("FAIL");
+    }
 }
 
 /// A command-line tool to find optimal IIR filters to match a frequency curve.
@@ -428,7 +503,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let spacing_ok = check_spacing_constraints(&opt_result.params, &args);
 
     // Output QA summary if in QA mode
-    if args.qa {
+    if let Some(qa_threshold) = args.qa {
         let converge_str = if opt_result.converged {
             "true"
         } else {
@@ -449,10 +524,22 @@ async fn main() -> Result<(), Box<dyn Error>> {
             (format!("{:.6}", pre_obj), format!("{:.6}", post_obj))
         };
 
+        // Always output the standard QA summary line for backward compatibility
         println!(
             "Converge: {} | Spacing: {} | Pre: {} | Post: {}",
             converge_str, spacing_str, pre_str, post_str
         );
+
+        // Perform additional QA analysis if threshold was provided
+        let qa_result = perform_qa_analysis(
+            opt_result.converged,
+            spacing_ok,
+            pre_score,
+            post_score,
+            qa_threshold,
+        );
+        display_qa_analysis(&qa_result);
+
         return Ok(());
     }
 

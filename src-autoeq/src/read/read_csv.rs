@@ -45,11 +45,6 @@ pub fn load_frequency_response(
         // Detect number of columns on first data line
         if detected_columns == 0 && parts.len() >= 2 {
             detected_columns = parts.len();
-            if detected_columns == 4 {
-                println!(
-                    "    Detected 4-column format (stereo) - averaging left and right channels"
-                );
-            }
         }
 
         if detected_columns == 2 && parts.len() >= 2 {
