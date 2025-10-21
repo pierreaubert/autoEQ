@@ -378,7 +378,9 @@ pub fn compute_base_fitness(x: &[f64], data: &ObjectiveData) -> f64 {
         }
         LossType::HeadphoneScore => {
             if let Some(ref _hd) = data.headphone_score_data {
-                let error = &peq_spl - &data.deviation;
+                // Compute remaining deviation: target - (input + peq) = deviation - peq
+                // where deviation = target - input
+                let error = &data.deviation - &peq_spl;
 
                 // Use headphone_loss on the remaining deviation
                 let error_curve = Curve {

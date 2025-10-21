@@ -411,7 +411,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut headphone_metrics_before: Option<f64> = None;
     match objective_data.loss_type {
         autoeq::LossType::HeadphoneFlat | autoeq::LossType::HeadphoneScore => {
-            headphone_metrics_before = Some(loss::headphone_loss(&input_curve));
+            // headphone_loss expects deviation from Harman target, not raw curve
+            headphone_metrics_before = Some(loss::headphone_loss(&deviation_curve));
         }
         autoeq::LossType::SpeakerFlat | autoeq::LossType::SpeakerScore => {
             if use_cea {
@@ -446,11 +447,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 args.sample_rate,
                 args.effective_peq_model(),
             );
-            let input_autoeq = Curve {
+            // Compute remaining deviation from target after applying PEQ
+            // Use same convention as deviation_curve: target - corrected
+            // deviation_after = target - (input + peq)
+            let deviation_after = Curve {
                 freq: standard_freq.clone(),
-                spl: &input_curve.spl + peq_after,
+                spl: &target_curve.spl - &input_curve.spl - &peq_after,
             };
-            let headphone_metrics_after = loss::headphone_loss(&input_autoeq);
+            let headphone_metrics_after = loss::headphone_loss(&deviation_after);
             post_score = Some(headphone_metrics_after);
             qa_println!(
                 args,

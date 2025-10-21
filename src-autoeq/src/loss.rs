@@ -889,4 +889,92 @@ mod tests {
             expected2
         );
     }
+
+    #[test]
+    fn test_headphone_loss_perfect_correction() {
+        // Test that zero deviation gives perfect score
+        let freq = Array1::logspace(10.0, 1.699, 4.0, 100); // 50Hz to 10kHz
+        let zero_deviation = Array1::zeros(100);
+
+        let curve = Curve {
+            freq: freq.clone(),
+            spl: zero_deviation,
+        };
+        let score = headphone_loss(&curve);
+
+        // Perfect correction should give score of 114.49
+        let expected_perfect = 114.49;
+        assert!(
+            (score - expected_perfect).abs() < 1e-10,
+            "Perfect correction score incorrect: got {}, expected {}",
+            score,
+            expected_perfect
+        );
+    }
+
+    #[test]
+    fn test_headphone_loss_sign_independence() {
+        // Test that headphone_loss gives same result for +deviation and -deviation
+        // (since SD and AS are sign-independent)
+        let freq = Array1::logspace(10.0, 1.699, 4.0, 100);
+
+        // Create a deviation with varying values
+        let deviation_positive = freq.mapv(|f: f64| 0.5 * f.log2() + 2.0);
+        let deviation_negative = -&deviation_positive;
+
+        let curve_pos = Curve {
+            freq: freq.clone(),
+            spl: deviation_positive,
+        };
+        let curve_neg = Curve {
+            freq: freq.clone(),
+            spl: deviation_negative,
+        };
+
+        let score_pos = headphone_loss(&curve_pos);
+        let score_neg = headphone_loss(&curve_neg);
+
+        // Scores should be equal since SD is symmetric and AS uses absolute value
+        assert!(
+            (score_pos - score_neg).abs() < 1e-10,
+            "Sign independence violated: pos={}, neg={}",
+            score_pos,
+            score_neg
+        );
+    }
+
+    #[test]
+    fn test_headphone_loss_worse_than_perfect() {
+        // Test that non-zero deviation gives worse score than zero
+        let freq = Array1::logspace(10.0, 1.699, 4.0, 100);
+        let zero_deviation = Array1::zeros(100);
+        let nonzero_deviation = Array1::from_elem(100, 3.0); // 3dB constant deviation
+
+        let perfect_curve = Curve {
+            freq: freq.clone(),
+            spl: zero_deviation,
+        };
+        let imperfect_curve = Curve {
+            freq: freq.clone(),
+            spl: nonzero_deviation,
+        };
+
+        let perfect_score = headphone_loss(&perfect_curve);
+        let imperfect_score = headphone_loss(&imperfect_curve);
+
+        // Imperfect should score lower (worse) than perfect
+        assert!(
+            imperfect_score < perfect_score,
+            "Imperfect correction should score lower: perfect={}, imperfect={}",
+            perfect_score,
+            imperfect_score
+        );
+
+        // Perfect should be 114.49
+        assert!(
+            (perfect_score - 114.49).abs() < 1e-10,
+            "Perfect score should be 114.49, got {}",
+            perfect_score
+        );
+    }
 }
