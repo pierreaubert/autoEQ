@@ -45,6 +45,7 @@ where
         p
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn finish_report(
         &self,
         pop: Array2<f64>,

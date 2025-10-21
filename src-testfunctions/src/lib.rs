@@ -1651,7 +1651,7 @@ mod tests {
 
         for (func_name, meta) in metadata.iter() {
             // Skip constrained functions as they require special handling
-            if meta.inequality_constraints.len() > 0 || meta.equality_constraints.len() > 0 {
+            if !meta.inequality_constraints.is_empty() || !meta.equality_constraints.is_empty() {
                 continue;
             }
 

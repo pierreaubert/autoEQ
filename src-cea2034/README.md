@@ -99,39 +99,37 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## Usage
 
-```rust
+```rust,no_run
 use autoeq_cea2034::{score, octave_intervals, compute_pir_from_lw_er_sp};
 use ndarray::Array1;
 
-fn main() {
-    // Example frequency and response data
-    let frequencies = Array1::from(vec![20.0, 25.0, 31.5, /* ... */ 20000.0]);
-    let on_axis = Array1::from(vec![-2.1, -1.8, -1.2, /* ... */ -10.5]);
-    let listening_window = Array1::from(vec![-2.0, -1.7, -1.1, /* ... */ -10.3]);
-    let sound_power = Array1::from(vec![-2.5, -2.0, -1.5, /* ... */ -11.0]);
-    let pir_response = Array1::from(vec![-2.2, -1.9, -1.3, /* ... */ -10.7]);
+// Example frequency and response data
+let frequencies = Array1::from(vec![20.0, 25.0, 31.5, /* ... */ 20000.0]);
+let on_axis = Array1::from(vec![-2.1, -1.8, -1.2, /* ... */ -10.5]);
+let listening_window = Array1::from(vec![-2.0, -1.7, -1.1, /* ... */ -10.3]);
+let sound_power = Array1::from(vec![-2.5, -2.0, -1.5, /* ... */ -11.0]);
+let pir_response = Array1::from(vec![-2.2, -1.9, -1.3, /* ... */ -10.7]);
 
-    // Compute octave band intervals for analysis
-    let intervals = octave_intervals(2, &frequencies);
+// Compute octave band intervals for analysis
+let intervals = octave_intervals(2, &frequencies);
 
-    // Compute preference score for the frequency response
-    let preference_metrics = score(
-        &frequencies,
-        &intervals,
-        &on_axis,
-        &listening_window,
-        &sound_power,
-        &pir_response
-    );
+// Compute preference score for the frequency response
+let preference_metrics = score(
+    &frequencies,
+    &intervals,
+    &on_axis,
+    &listening_window,
+    &sound_power,
+    &pir_response
+);
 
-    println!("Preference Score: {:.2}", preference_metrics.pref_score);
+println!("Preference Score: {:.2}", preference_metrics.pref_score);
 
-    // Compute PIR from CEA2034 measurements
-    let lw_curve = Array1::from(vec![-2.0, -1.7, -1.1, /* ... */ -10.3]);
-    let er_curve = Array1::from(vec![-2.3, -2.1, -1.6, /* ... */ -10.8]);
-    let sp_curve = Array1::from(vec![-2.5, -2.0, -1.5, /* ... */ -11.0]);
-    let computed_pir = compute_pir_from_lw_er_sp(&lw_curve, &er_curve, &sp_curve);
-}
+// Compute PIR from CEA2034 measurements
+let lw_curve = Array1::from(vec![-2.0, -1.7, -1.1, /* ... */ -10.3]);
+let er_curve = Array1::from(vec![-2.3, -2.1, -1.6, /* ... */ -10.8]);
+let sp_curve = Array1::from(vec![-2.5, -2.0, -1.5, /* ... */ -11.0]);
+let computed_pir = compute_pir_from_lw_er_sp(&lw_curve, &er_curve, &sp_curve);
 ```
 
 ## Integration

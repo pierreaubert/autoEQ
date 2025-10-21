@@ -12,14 +12,14 @@ pub struct ApiError {
 impl ApiError {
     /// Parse an API error response and extract the speaker name if present
     pub fn from_json(value: &Value) -> Option<Self> {
-        if let Some(error_obj) = value.as_object() {
-            if let Some(error_message) = error_obj.get("error").and_then(|v| v.as_str()) {
-                let speaker_name = extract_speaker_name_from_error(error_message);
-                return Some(ApiError {
-                    message: error_message.to_string(),
-                    speaker_name,
-                });
-            }
+        if let Some(error_obj) = value.as_object()
+            && let Some(error_message) = error_obj.get("error").and_then(|v| v.as_str())
+        {
+            let speaker_name = extract_speaker_name_from_error(error_message);
+            return Some(ApiError {
+                message: error_message.to_string(),
+                speaker_name,
+            });
         }
         None
     }

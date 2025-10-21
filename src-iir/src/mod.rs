@@ -940,14 +940,14 @@ fn biquad_to_rme_type(filter_type: BiquadFilterType, pos: usize) -> f64 {
 /// Includes LC Grade and LC Freq defaults, followed by Band parameters for
 /// frequency, Q, and gain, then Band Type specifications.
 pub fn peq_format_rme(peq: &Peq) -> String {
-    let mut lines = Vec::new();
-    lines.push("<Preset>".to_string());
-    lines.push("  <Equalizer>".to_string());
-    lines.push("    <Params>".to_string());
-
-    // Default LC parameters
-    lines.push("\t<val e=\"LC Grade\" v=\"1.00,\"/>".to_string());
-    lines.push("\t<val e=\"LC Freq\" v=\"20.00,\"/>".to_string());
+    #[allow(clippy::vec_init_then_push)]
+    let mut lines = vec![
+        "<Preset>".to_string(),
+        "  <Equalizer>".to_string(),
+        "    <Params>".to_string(),
+        "\t<val e=\"LC Grade\" v=\"1.00,\"/>".to_string(),
+        "\t<val e=\"LC Freq\" v=\"20.00,\"/>".to_string(),
+    ];
 
     // Add Band parameters (freq, Q, gain)
     for (i, (_, biquad)) in peq.iter().enumerate() {

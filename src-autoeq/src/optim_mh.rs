@@ -54,15 +54,15 @@ impl MhObjFunc for MHObjective {
         let fitness_val = compute_fitness_penalties(xs, None, &mut data_copy);
 
         // Update callback state if present
-        if let Some(ref state_arc) = self.callback_state {
-            if let Ok(mut state) = state_arc.lock() {
-                state.eval_count += 1;
+        if let Some(ref state_arc) = self.callback_state
+            && let Ok(mut state) = state_arc.lock()
+        {
+            state.eval_count += 1;
 
-                // Track best solution
-                if fitness_val < state.best_fitness {
-                    state.best_fitness = fitness_val;
-                    state.best_params = xs.to_vec();
-                }
+            // Track best solution
+            if fitness_val < state.best_fitness {
+                state.best_fitness = fitness_val;
+                state.best_params = xs.to_vec();
             }
         }
 
@@ -95,7 +95,7 @@ pub fn create_mh_callback(
         };
 
         // Print when stalling or periodically
-        if stall_count == 1 || stall_count % 25 == 0 || intermediate.iter % 10 == 0 {
+        if stall_count == 1 || stall_count % 25 == 0 || intermediate.iter.is_multiple_of(10) {
             let msg = format!(
                 "{} iter {:4}  fitness={:.6e} {}",
                 name, intermediate.iter, intermediate.fun, improvement
@@ -104,7 +104,7 @@ pub fn create_mh_callback(
         }
 
         // Show parameter details every 50 iterations
-        if intermediate.iter > 0 && intermediate.iter % 50 == 0 {
+        if intermediate.iter > 0 && intermediate.iter.is_multiple_of(50) {
             let param_summary: Vec<String> = (0..intermediate.x.len() / 3)
                 .map(|i| {
                     let freq = 10f64.powf(intermediate.x[i * 3]);
@@ -147,6 +147,7 @@ pub fn optimize_filters_mh(
 }
 
 /// Optimize filter parameters using metaheuristics algorithms with callback support
+#[allow(clippy::too_many_arguments)]
 pub fn optimize_filters_mh_with_callback(
     x: &mut [f64],
     lower_bounds: &[f64],
@@ -172,7 +173,7 @@ pub fn optimize_filters_mh_with_callback(
     // PSO needs balanced penalties - not too harsh to allow exploration,
     // but strong enough to guide toward feasible solutions
     let (ceiling_penalty, spacing_penalty, mingain_penalty) = if mh_name == "pso" {
-        (5e2, objective_data.spacing_weight.max(0.0) * 5e2, 50.0)  // Moderate penalties
+        (5e2, objective_data.spacing_weight.max(0.0) * 5e2, 50.0) // Moderate penalties
     } else {
         (1e4, objective_data.spacing_weight.max(0.0) * 1e3, 1e3)
     };
@@ -208,9 +209,9 @@ pub fn optimize_filters_mh_with_callback(
             // where v becomes the new position (not standard PSO)
             // Balance exploration and exploitation
             let pso_tuned = MhPso::default()
-                .cognition(1.0)   // Equal personal best influence
-                .social(1.5)      // Stronger global best attraction
-                .velocity(0.9);   // Moderate inertia for gradual convergence
+                .cognition(1.0) // Equal personal best influence
+                .social(1.5) // Stronger global best attraction
+                .velocity(0.9); // Moderate inertia for gradual convergence
             MhSolver::build_boxed(pso_tuned, mh_obj)
         }
         "rga" => {
@@ -225,9 +226,9 @@ pub fn optimize_filters_mh_with_callback(
             // beta_min: minimum attractiveness (exploitation)
             // gamma: light absorption coefficient (distance sensitivity)
             let fa_tuned = MhFa::default()
-                .alpha(0.5)      // Reduced randomization for more focused search
-                .beta_min(1.0)   // Keep default attractiveness
-                .gamma(0.01);    // Keep default absorption
+                .alpha(0.5) // Reduced randomization for more focused search
+                .beta_min(1.0) // Keep default attractiveness
+                .gamma(0.01); // Keep default absorption
             MhSolver::build_boxed(fa_tuned, mh_obj)
         }
         _ => MhSolver::build_boxed(MhDe::default(), mh_obj),

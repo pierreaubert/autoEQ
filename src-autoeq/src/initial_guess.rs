@@ -4,8 +4,8 @@
 //! based on frequency response analysis.
 
 use ndarray::Array1;
-use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
+use rand::{Rng, SeedableRng};
 
 /// Smart initialization configuration
 #[derive(Debug, Clone)]

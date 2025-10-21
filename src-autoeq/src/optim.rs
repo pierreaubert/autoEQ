@@ -243,10 +243,8 @@ pub fn find_algorithm_info(name: &str) -> Option<AlgorithmInfo> {
     // Then try without prefix for backward compatibility
     let name_lower = name.to_lowercase();
     for algo in &algorithms {
-        if let Some(suffix) = algo.name.split(':').nth(1) {
-            if suffix.eq_ignore_ascii_case(&name_lower) {
-                return Some(algo.clone());
-            }
+        if let Some(suffix) = algo.name.split(':').nth(1) && suffix.eq_ignore_ascii_case(&name_lower) {
+            return Some(algo.clone());
         }
     }
 
@@ -391,9 +389,8 @@ pub fn compute_base_fitness(x: &[f64], data: &ObjectiveData) -> f64 {
                 // compute flat error
                 let p = flat_loss(&data.freqs, &error, data.min_freq, data.max_freq);
                 // wants to maximize the score and improve the flatness
-                let fitness = 1000.0 - s + p * 20.0;
-                // println!("DEBUG Headphone score: s={:.3} p={:.3} fitness={:.3}", s, p, fitness);
-                fitness
+                // println!("DEBUG Headphone score: s={:.3} p={:.3} fitness={:.3}", s, p, 1000.0 - s + p * 20.0);
+                1000.0 - s + p * 20.0
             } else {
                 eprintln!("Error: headphone score loss requested but headphone data is missing");
                 process::exit(1);

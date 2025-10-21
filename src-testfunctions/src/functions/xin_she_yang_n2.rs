@@ -19,6 +19,7 @@ mod tests {
     fn test_xin_she_yang_n2_known_properties() {
         // Test some properties of the Xin-She Yang N.2 function
         use ndarray::Array1;
+        use std::f64::consts::{PI, TAU};
 
         // Test the known global optimum
         let x_global = Array1::from(vec![0.0, 0.0]);
@@ -35,7 +36,7 @@ mod tests {
         let test_points = vec![
             vec![1.0, 1.0],
             vec![-3.0, 2.0],
-            vec![3.14, -3.14],
+            vec![PI, -PI],
             vec![-6.0, 6.0],
         ];
 
@@ -58,7 +59,7 @@ mod tests {
         }
 
         // Test boundary behavior
-        let x_boundary = Array1::from(vec![6.28, -6.28]);
+        let x_boundary = Array1::from(vec![TAU, -TAU]);
         let f_boundary = xin_she_yang_n2(&x_boundary);
         assert!(
             f_boundary >= 0.0,

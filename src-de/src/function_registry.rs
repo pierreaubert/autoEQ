@@ -7,6 +7,9 @@ use std::collections::HashMap;
 /// Test function type definition
 pub type TestFunction = fn(&Array1<f64>) -> f64;
 
+/// CSV trace point: (x_vector, f_value, is_improvement)
+pub type TracePoint = (Vec<f64>, f64, bool);
+
 /// Configuration for a benchmark
 #[derive(Clone, Debug)]
 pub struct BenchmarkConfig {
@@ -258,6 +261,7 @@ impl Default for FunctionRegistry {
 }
 
 /// Generate all benchmark configurations
+#[allow(clippy::vec_init_then_push)]
 pub fn generate_benchmark_configs() -> Vec<BenchmarkConfig> {
     let mut configs = Vec::new();
 
@@ -364,7 +368,7 @@ pub fn find_csv_files_for_function(csv_dir: &str, function_name: &str) -> Vec<St
 /// Read and combine multiple CSV files for a function
 pub fn read_combined_csv_traces(
     csv_files: &[String],
-) -> Result<Vec<(Vec<f64>, f64, bool)>, Box<dyn std::error::Error>> {
+) -> Result<Vec<TracePoint>, Box<dyn std::error::Error>> {
     use std::fs;
 
     let mut all_points = Vec::new();
@@ -400,10 +404,11 @@ pub fn read_combined_csv_traces(
                 }
             }
 
-            if let Ok(f_value) = parts[x_end].parse::<f64>() {
-                if let Ok(is_improvement) = parts[x_end + 2].parse::<bool>() {
-                    all_points.push((x, f_value, is_improvement));
-                }
+            if let (Ok(f_value), Ok(is_improvement)) = (
+                parts[x_end].parse::<f64>(),
+                parts[x_end + 2].parse::<bool>(),
+            ) {
+                all_points.push((x, f_value, is_improvement));
             }
         }
     }

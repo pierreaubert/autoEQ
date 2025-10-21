@@ -330,21 +330,19 @@ pub fn plot_spin_tonal(
             } else {
                 format!("y{}", i + 1)
             };
-            if let Some(curve) = curves.get(*curve_name) {
-                if let Some((slope, intercept)) =
-                    calculate_tonal_balance(&curve.freq, &curve.spl, 100.0, 10000.0)
-                {
-                    let regression_line = generate_regression_line(slope, intercept, &curve.freq);
-                    let trace = create_regression_trace(
-                        &curve.freq,
-                        &regression_line,
-                        &format!("{} {:.2} dB/oct", shorten_curve_name(curve_name), slope),
-                        filter_color(i),
-                        Some(&x_axis),
-                        Some(&y_axis),
-                    );
-                    plot.add_trace(Box::new(trace));
-                }
+            if let Some(curve) = curves.get(*curve_name)
+                && let Some((slope, intercept)) = calculate_tonal_balance(&curve.freq, &curve.spl, 100.0, 10000.0)
+            {
+                let regression_line = generate_regression_line(slope, intercept, &curve.freq);
+                let trace = create_regression_trace(
+                    &curve.freq,
+                    &regression_line,
+                    &format!("{} {:.2} dB/oct", shorten_curve_name(curve_name), slope),
+                    filter_color(i),
+                    Some(&x_axis),
+                    Some(&y_axis),
+                );
+                plot.add_trace(Box::new(trace));
             }
         }
 

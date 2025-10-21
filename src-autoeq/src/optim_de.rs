@@ -258,8 +258,10 @@ pub fn optimize_filters_autoeq_with_callback(
     // Create smart initialization based on frequency response analysis
     let params_per_filter = crate::param_utils::params_per_filter(cli_args.effective_peq_model());
     let num_filters = x.len() / params_per_filter;
-    let mut smart_config = SmartInitConfig::default();
-    smart_config.seed = cli_args.seed;  // Pass seed for deterministic initialization
+    let smart_config = SmartInitConfig {
+        seed: cli_args.seed,  // Pass seed for deterministic initialization
+        ..SmartInitConfig::default()
+    };
 
     // Use the inverted target as the response to analyze for problems
     let target_response = &setup.penalty_data.deviation;

@@ -42,6 +42,16 @@ pub use parallel_eval::ParallelConfig;
 pub use recorder::{OptimizationRecord, OptimizationRecorder};
 pub use run_recorded::run_recorded_differential_evolution;
 
+// Type aliases to reduce complexity
+/// Scalar constraint function type
+pub type ScalarConstraintFn = Arc<dyn Fn(&Array1<f64>) -> f64 + Send + Sync>;
+/// Vector constraint function type
+pub type VectorConstraintFn = Arc<dyn Fn(&Array1<f64>) -> Array1<f64> + Send + Sync>;
+/// Penalty tuple type (function, weight)
+pub type PenaltyTuple = (ScalarConstraintFn, f64);
+/// Callback function type
+pub type CallbackFn = Box<dyn FnMut(&DEIntermediate) -> CallbackAction>;
+
 pub(crate) fn argmin(v: &Array1<f64>) -> (usize, f64) {
     let mut best_i = 0usize;
     let mut best_v = v[0];
@@ -209,7 +219,7 @@ impl LinearConstraintHelper {
 /// SciPy-like nonlinear constraint helper: vector-valued fun(x) with lb <= fun(x) <= ub
 #[derive(Clone)]
 pub struct NonlinearConstraintHelper {
-    pub fun: Arc<dyn Fn(&Array1<f64>) -> Array1<f64> + Send + Sync>,
+    pub fun: VectorConstraintFn,
     pub lb: Array1<f64>,
     pub ub: Array1<f64>,
 }
@@ -436,11 +446,11 @@ pub struct DEConfig {
     /// Print objective best at each iteration
     pub disp: bool,
     /// Optional per-iteration callback (may stop early)
-    pub callback: Option<Box<dyn FnMut(&DEIntermediate) -> CallbackAction>>,
+    pub callback: Option<CallbackFn>,
     /// Penalty-based inequality constraints: fc(x) <= 0
-    pub penalty_ineq: Vec<(Arc<dyn Fn(&Array1<f64>) -> f64 + Send + Sync>, f64)>,
+    pub penalty_ineq: Vec<PenaltyTuple>,
     /// Penalty-based equality constraints: h(x) = 0
-    pub penalty_eq: Vec<(Arc<dyn Fn(&Array1<f64>) -> f64 + Send + Sync>, f64)>,
+    pub penalty_eq: Vec<PenaltyTuple>,
     /// Optional linear constraints treated by penalty: lb <= A x <= ub (component-wise)
     pub linear_penalty: Option<LinearPenalty>,
     /// Polishing configuration (optional)
@@ -810,13 +820,13 @@ where
 
         // Build thread-safe energy function that includes penalties
         let func_ref = self.func;
-        let penalty_ineq_vec: Vec<(Arc<dyn Fn(&Array1<f64>) -> f64 + Send + Sync>, f64)> = self
+        let penalty_ineq_vec: Vec<PenaltyTuple> = self
             .config
             .penalty_ineq
             .iter()
             .map(|(f, w)| (f.clone(), *w))
             .collect();
-        let penalty_eq_vec: Vec<(Arc<dyn Fn(&Array1<f64>) -> f64 + Send + Sync>, f64)> = self
+        let penalty_eq_vec: Vec<PenaltyTuple> = self
             .config
             .penalty_eq
             .iter()
@@ -1151,13 +1161,13 @@ where
             }
             // Evaluate all trials including penalties, possibly in parallel
             let func_ref = self.func;
-            let penalty_ineq_vec: Vec<(Arc<dyn Fn(&Array1<f64>) -> f64 + Send + Sync>, f64)> = self
+            let penalty_ineq_vec: Vec<PenaltyTuple> = self
                 .config
                 .penalty_ineq
                 .iter()
                 .map(|(f, w)| (f.clone(), *w))
                 .collect();
-            let penalty_eq_vec: Vec<(Arc<dyn Fn(&Array1<f64>) -> f64 + Send + Sync>, f64)> = self
+            let penalty_eq_vec: Vec<PenaltyTuple> = self
                 .config
                 .penalty_eq
                 .iter()
