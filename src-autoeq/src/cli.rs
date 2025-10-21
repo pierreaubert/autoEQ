@@ -237,6 +237,11 @@ pub struct Args {
     #[arg(long, default_value_t = 0)]
     pub parallel_threads: usize,
 
+    /// Random seed for deterministic optimization (default: random seed for each run)
+    /// Setting this makes optimization results reproducible
+    #[arg(long)]
+    pub seed: Option<u64>,
+
     /// Quality assurance mode with optional threshold: suppress normal output, show summary line and analysis
     /// If a threshold is provided (e.g., --qa 0.4), also perform QA analysis
     #[arg(long, value_name = "THRESHOLD")]

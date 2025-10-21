@@ -391,8 +391,9 @@ pub fn compute_base_fitness(x: &[f64], data: &ObjectiveData) -> f64 {
                 // compute flat error
                 let p = flat_loss(&data.freqs, &error, data.min_freq, data.max_freq);
                 // wants to maximize the score and improve the flatness
-                // println!("Headphone score: s={} p={}", s, p);
-                1000.0 - s + p * 20.0
+                let fitness = 1000.0 - s + p * 20.0;
+                // println!("DEBUG Headphone score: s={:.3} p={:.3} fitness={:.3}", s, p, fitness);
+                fitness
             } else {
                 eprintln!("Error: headphone score loss requested but headphone data is missing");
                 process::exit(1);

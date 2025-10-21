@@ -169,9 +169,16 @@ pub fn optimize_filters_mh_with_callback(
 
     // Create objective with penalties (metaheuristics don't support constraints)
     let mut penalty_data = objective_data.clone();
-    penalty_data.penalty_w_ceiling = 1e4;
-    penalty_data.penalty_w_spacing = objective_data.spacing_weight.max(0.0) * 1e3;
-    penalty_data.penalty_w_mingain = 1e3;
+    // PSO needs balanced penalties - not too harsh to allow exploration,
+    // but strong enough to guide toward feasible solutions
+    let (ceiling_penalty, spacing_penalty, mingain_penalty) = if mh_name == "pso" {
+        (5e2, objective_data.spacing_weight.max(0.0) * 5e2, 50.0)  // Moderate penalties
+    } else {
+        (1e4, objective_data.spacing_weight.max(0.0) * 1e3, 1e3)
+    };
+    penalty_data.penalty_w_ceiling = ceiling_penalty;
+    penalty_data.penalty_w_spacing = spacing_penalty;
+    penalty_data.penalty_w_mingain = mingain_penalty;
 
     // Create callback state
     let callback_state = Arc::new(Mutex::new(CallbackState {
@@ -195,10 +202,34 @@ pub fn optimize_filters_mh_with_callback(
     // Use boxed builder to allow runtime selection with unified type
     let builder = match mh_name {
         "de" => MhSolver::build_boxed(MhDe::default(), mh_obj),
-        "pso" => MhSolver::build_boxed(MhPso::default(), mh_obj),
-        "rga" => MhSolver::build_boxed(MhRga::default(), mh_obj),
+        "pso" => {
+            // Tuned PSO parameters for this implementation
+            // This PSO uses: v = velocity*x + cognition*r1*(pbest-x) + social*r2*(gbest-x)
+            // where v becomes the new position (not standard PSO)
+            // Balance exploration and exploitation
+            let pso_tuned = MhPso::default()
+                .cognition(1.0)   // Equal personal best influence
+                .social(1.5)      // Stronger global best attraction
+                .velocity(0.9);   // Moderate inertia for gradual convergence
+            MhSolver::build_boxed(pso_tuned, mh_obj)
+        }
+        "rga" => {
+            // RGA works well for constrained optimization with default parameters
+            // Note: RGA benefits from larger populations (recommended: 100+)
+            MhSolver::build_boxed(MhRga::default(), mh_obj)
+        }
         "tlbo" => MhSolver::build_boxed(MhTlbo, mh_obj),
-        "fa" | "firefly" => MhSolver::build_boxed(MhFa::default(), mh_obj),
+        "fa" | "firefly" => {
+            // Firefly works well for constrained optimization
+            // alpha: randomization parameter (exploration)
+            // beta_min: minimum attractiveness (exploitation)
+            // gamma: light absorption coefficient (distance sensitivity)
+            let fa_tuned = MhFa::default()
+                .alpha(0.5)      // Reduced randomization for more focused search
+                .beta_min(1.0)   // Keep default attractiveness
+                .gamma(0.01);    // Keep default absorption
+            MhSolver::build_boxed(fa_tuned, mh_obj)
+        }
         _ => MhSolver::build_boxed(MhDe::default(), mh_obj),
     };
 

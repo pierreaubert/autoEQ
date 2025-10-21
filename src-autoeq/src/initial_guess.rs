@@ -4,7 +4,8 @@
 //! based on frequency response analysis.
 
 use ndarray::Array1;
-use rand::Rng;
+use rand::{Rng, SeedableRng};
+use rand::rngs::StdRng;
 
 /// Smart initialization configuration
 #[derive(Debug, Clone)]
@@ -21,6 +22,8 @@ pub struct SmartInitConfig {
     pub critical_frequencies: Vec<f64>,
     /// Random variation factor for guess diversification
     pub variation_factor: f64,
+    /// Random seed for deterministic initialization (None = random)
+    pub seed: Option<u64>,
 }
 
 impl Default for SmartInitConfig {
@@ -32,6 +35,7 @@ impl Default for SmartInitConfig {
             min_peak_distance: 10,
             critical_frequencies: vec![100.0, 300.0, 1000.0, 3000.0, 8000.0, 16000.0],
             variation_factor: 0.1,
+            seed: None,
         }
     }
 }
@@ -109,6 +113,12 @@ pub fn create_smart_initial_guesses(
     config: &SmartInitConfig,
     peq_model: crate::cli::PeqModel,
 ) -> Vec<Vec<f64>> {
+    // Create RNG based on config seed
+    let mut main_rng: Box<dyn rand::RngCore> = if let Some(seed) = config.seed {
+        Box::new(StdRng::seed_from_u64(seed))
+    } else {
+        Box::new(rand::rng())
+    };
     // Smooth the response to reduce noise
     let smoothed = smooth_gaussian(target_response, config.smoothing_sigma);
 
@@ -175,11 +185,10 @@ pub fn create_smart_initial_guesses(
 
             // Fill remaining with random frequencies if needed
             while used_problems.len() < num_filters {
-                let mut rng = rand::rng();
-                let rand_freq = rng.random_range(freq_grid[0]..freq_grid[freq_grid.len() - 1]);
+                let rand_freq = main_rng.random_range(freq_grid[0]..freq_grid[freq_grid.len() - 1]);
                 used_problems.push(FrequencyProblem {
                     frequency: rand_freq,
-                    magnitude: rng.random_range(-2.0..2.0),
+                    magnitude: main_rng.random_range(-2.0..2.0),
                     q_factor: 1.0,
                 });
             }
@@ -190,12 +199,10 @@ pub fn create_smart_initial_guesses(
             let problem = &used_problems[i % used_problems.len()];
 
             // Add some randomization to diversify guesses
-            let mut rng = rand::rng();
-
             let freq_var = problem.frequency
-                * (1.0 + rng.random_range(-config.variation_factor..config.variation_factor));
-            let gain_var = problem.magnitude * (1.0 + rng.random_range(-0.2..0.2));
-            let q_var = problem.q_factor * (1.0 + rng.random_range(-0.3..0.3));
+                * (1.0 + main_rng.random_range(-config.variation_factor..config.variation_factor));
+            let gain_var = problem.magnitude * (1.0 + main_rng.random_range(-0.2..0.2));
+            let q_var = problem.q_factor * (1.0 + main_rng.random_range(-0.3..0.3));
 
             // Convert to log10(freq) and constrain to bounds based on model
             match peq_model {

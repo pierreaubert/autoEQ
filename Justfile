@@ -360,7 +360,7 @@ qa: prod-autoeq \
 	qa-ascilab-6b \
 	qa-jbl-m2-flat qa-jbl-m2-score \
 	qa-beyerdynamic-dt1990pro-flat qa-beyerdynamic-dt1990pro-score  qa-beyerdynamic-dt1990pro-score2 \
-	qa-edifierw830nb
+	qa-edifierw830nb-autoeqde qa-edifierw830nb-mhrga qa-edifierw830nb-mhfirefly
 
 qa-ascilab-6b:
 	./target/release/autoeq --speaker="AsciLab F6B" --version asr --measurement CEA2034 \
@@ -397,10 +397,28 @@ qa-beyerdynamic-dt1990pro-flat:
 	--loss headphone-flat  --max-db 6 --max-q 6 --maxeval 20000 --algo mh:pso --min-freq=20 --max-freq 10000 --peq-model pk \
 	--qa 0.5
 
-qa-edifierw830nb:
+qa-edifierw830nb-autoeqde:
 	./target/release/autoeq -n 5 \
 	--curve data_tests/headphone/asr/edifierw830nb/Edifier\ W830NB.csv \
 	--target ./data_tests/targets/harman-over-ear-2018.csv \
 	--min-freq 50 --max-freq 16000 --max-q 6 --max-db 6 \
 	--loss headphone-score --min-spacing-oct 0.1 --atolerance 0.000001 --tolerance 0.0000001 --algo autoeq:de --population 30 \
+	--qa 4.0
+
+qa-edifierw830nb-mhrga:
+	./target/release/autoeq -n 5 \
+	--curve data_tests/headphone/asr/edifierw830nb/Edifier\ W830NB.csv \
+	--target ./data_tests/targets/harman-over-ear-2018.csv \
+	--min-freq 50 --max-freq 16000 --max-q 6 --max-db 6 \
+	--loss headphone-score \
+	--min-spacing-oct 0.1 --atolerance 0.000001 --tolerance 0.0000001 --algo mh:rga --population 100 --maxevals 20000 \
+	--qa 4.0
+
+qa-edifierw830nb-mhfirefly:
+	./target/release/autoeq -n 5 \
+	--curve data_tests/headphone/asr/edifierw830nb/Edifier\ W830NB.csv \
+	--target ./data_tests/targets/harman-over-ear-2018.csv \
+	--min-freq 50 --max-freq 16000 --max-q 6 --max-db 6 \
+	--loss headphone-score \
+	--min-spacing-oct 0.1 --atolerance 0.000001 --tolerance 0.0000001 --algo mh:rga --population 80 --maxevals 6000 \
 	--qa 4.0
