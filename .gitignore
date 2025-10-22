@@ -1,6 +1,7 @@
 .DS_Store
 /target
 /data
+/docs
 data_cached
 data_generated
 /coverage

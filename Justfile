@@ -168,6 +168,18 @@ cross-macos-arm-2-win-arm-msvc :
 
 
 # ----------------------------------------------------------------------
+# Install rustup
+# ----------------------------------------------------------------------
+
+install-rustup:
+	curl https://sh.rustup.rs -sSf > ./scripts/install-rustup
+	chmod +x ./scripts/install-rustup
+	./scripts/install-rustup -y
+	source ~/.cargo/env
+	cargo install just
+	cargo install cargo-wizard
+
+# ----------------------------------------------------------------------
 # Install macos
 # ----------------------------------------------------------------------
 
@@ -181,14 +193,6 @@ install-macos-brew:
 	chmod +x ./scripts/install-brew
 	NONINTERACTIVE=1 ./scripts/install-brew
 
-install-rustup:
-	curl https://sh.rustup.rs -sSf > ./scripts/install-rustup
-	chmod +x ./scripts/install-rustup
-	./scripts/install-rustup -y
-	source ~/.cargo/env
-	cargo install just
-	cargo install cargo-wizard
-
 install-macos: install-macos-brew install-rustup
 	# need xcode
 	xcode-select --install
@@ -201,6 +205,19 @@ install-macos: install-macos-brew install-rustup
 	brew install nlopt cmake
 
 
+# ----------------------------------------------------------------------
+# Install linux
+# ----------------------------------------------------------------------
+
+install-linux-root:
+	sudo apt update && sudo apt -y install \
+       perl curl build-essential gcc g++ pkg-config cmake ninja-build gfortran \
+       libssl-dev \
+       ca-certificates \
+       patchelf libopenblas-dev gfortran \
+       chromium-browser chromium-chromedriver
+
+install-linux: install-linux-root install-rust
 
 # ----------------------------------------------------------------------
 # Install windows

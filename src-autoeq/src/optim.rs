@@ -243,7 +243,9 @@ pub fn find_algorithm_info(name: &str) -> Option<AlgorithmInfo> {
     // Then try without prefix for backward compatibility
     let name_lower = name.to_lowercase();
     for algo in &algorithms {
-        if let Some(suffix) = algo.name.split(':').nth(1) && suffix.eq_ignore_ascii_case(&name_lower) {
+        if let Some(suffix) = algo.name.split(':').nth(1)
+            && suffix.eq_ignore_ascii_case(&name_lower)
+        {
             return Some(algo.clone());
         }
     }

@@ -331,7 +331,8 @@ pub fn plot_spin_tonal(
                 format!("y{}", i + 1)
             };
             if let Some(curve) = curves.get(*curve_name)
-                && let Some((slope, intercept)) = calculate_tonal_balance(&curve.freq, &curve.spl, 100.0, 10000.0)
+                && let Some((slope, intercept)) =
+                    calculate_tonal_balance(&curve.freq, &curve.spl, 100.0, 10000.0)
             {
                 let regression_line = generate_regression_line(slope, intercept, &curve.freq);
                 let trace = create_regression_trace(

@@ -418,10 +418,10 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         expected_optimum: vec![2.808, 2.808],
         fun_tolerance: -7.0,     // Maximization: negative values are better
         position_tolerance: 6.0, // Relaxed for multimodal function
-        maxiter: 20000,
-        popsize: 500,
-        strategy: Strategy::Best1Bin,
-        recombination: 0.9,
+        maxiter: 25000,
+        popsize: 600,
+        strategy: Strategy::RandToBest1Bin,
+        recombination: 0.95,
         seed: 50,
     });
 
@@ -432,10 +432,10 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         expected_optimum: vec![2.808; 3],
         fun_tolerance: -20.0, // 3D: expected minimum ≈ -2.808^3 ≈ -22.2
         position_tolerance: 0.5,
-        maxiter: 1500,
-        popsize: 75,
+        maxiter: 4000,
+        popsize: 200,
         strategy: Strategy::RandToBest1Bin,
-        recombination: 0.95,
+        recombination: 0.98,
         seed: 51,
     });
 
@@ -715,10 +715,10 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         expected_optimum: vec![std::f64::consts::PI, 2.275],
         fun_tolerance: 0.4, // Global minimum is 0.397887
         position_tolerance: 0.2,
-        maxiter: 1000,
-        popsize: 60,
-        strategy: Strategy::Best1Exp,
-        recombination: 0.9,
+        maxiter: 3000,
+        popsize: 150,
+        strategy: Strategy::RandToBest1Bin,
+        recombination: 0.98,
         seed: 114,
     });
 
@@ -745,10 +745,10 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         expected_optimum: vec![4.0, 4.0, 4.0, 4.0],
         fun_tolerance: -10.0, // Global minimum is -10.5364
         position_tolerance: 0.5,
-        maxiter: 2000,
-        popsize: 100,
-        strategy: Strategy::Best1Exp,
-        recombination: 0.9,
+        maxiter: 4000,
+        popsize: 200,
+        strategy: Strategy::RandToBest1Bin,
+        recombination: 0.98,
         seed: 116,
     });
 
@@ -929,10 +929,10 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         expected_optimum: vec![-10.0, 1.0],
         fun_tolerance: 1.0, // Very relaxed - Bukin N6 is extremely difficult
         position_tolerance: 2.0,
-        maxiter: 1500,
-        popsize: 100,
-        strategy: Strategy::RandToBest1Exp,
-        recombination: 0.9,
+        maxiter: 4000,
+        popsize: 200,
+        strategy: Strategy::Rand1Bin,
+        recombination: 0.98,
         seed: 26,
     });
 
@@ -973,10 +973,10 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         expected_optimum: vec![0.0, 0.0],
         fun_tolerance: -0.99, // Global minimum is -1
         position_tolerance: 0.1,
-        maxiter: 800,
-        popsize: 50,
-        strategy: Strategy::Best1Exp,
-        recombination: 0.9,
+        maxiter: 2500,
+        popsize: 120,
+        strategy: Strategy::RandToBest1Bin,
+        recombination: 0.98,
         seed: 72,
     });
 
@@ -988,10 +988,10 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         expected_optimum: vec![std::f64::consts::PI, std::f64::consts::PI],
         fun_tolerance: -0.9, // Global minimum is -1 at (π, π)
         position_tolerance: 1.0,
-        maxiter: 800,
-        popsize: 40,
-        strategy: Strategy::Rand1Exp,
-        recombination: 0.95,
+        maxiter: 3000,
+        popsize: 150,
+        strategy: Strategy::RandToBest1Bin,
+        recombination: 0.98,
         seed: 10,
     });
 
@@ -1005,10 +1005,10 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         expected_optimum: vec![0.0, 0.0],
         fun_tolerance: 1e-3,
         position_tolerance: 0.1,
-        maxiter: 800,
-        popsize: 40,
-        strategy: Strategy::Best1Exp,
-        recombination: 0.9,
+        maxiter: 2500,
+        popsize: 120,
+        strategy: Strategy::RandToBest1Bin,
+        recombination: 0.98,
         seed: 43,
     });
 
@@ -1020,10 +1020,10 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         expected_optimum: vec![0.682, -0.367],
         fun_tolerance: -198.0,   // Approximate global minimum
         position_tolerance: 5.0, // Relaxed for extremely difficult function
-        maxiter: 1500,
-        popsize: 80,
-        strategy: Strategy::RandToBest1Exp,
-        recombination: 0.95,
+        maxiter: 3000,
+        popsize: 150,
+        strategy: Strategy::RandToBest1Bin,
+        recombination: 0.98,
         seed: 44,
     });
 
@@ -1067,10 +1067,10 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         expected_optimum: vec![4.701, 3.152], // Approximate optimum
         fun_tolerance: 0.0,                   // Just find negative value
         position_tolerance: 2.0,
-        maxiter: 1500,
-        popsize: 80,
-        strategy: Strategy::RandToBest1Exp,
-        recombination: 0.9,
+        maxiter: 3000,
+        popsize: 120,
+        strategy: Strategy::RandToBest1Bin,
+        recombination: 0.95,
         seed: 70,
     });
 
@@ -1126,10 +1126,10 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         expected_optimum: vec![1.349, 1.349], // One of the optima
         fun_tolerance: -2.0,                  // Global minimum is -2.06261
         position_tolerance: 0.2,
-        maxiter: 2000,
-        popsize: 100,
-        strategy: Strategy::Rand1Exp,
-        recombination: 0.95,
+        maxiter: 3000,
+        popsize: 150,
+        strategy: Strategy::RandToBest1Bin,
+        recombination: 0.98,
         seed: 71,
     });
 
@@ -1141,10 +1141,10 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         expected_optimum: vec![1.0, 0.707], // 2^(-0.5)
         fun_tolerance: 1e-4,
         position_tolerance: 1e-2,
-        maxiter: 800,
-        popsize: 40,
-        strategy: Strategy::Best1Exp,
-        recombination: 0.9,
+        maxiter: 2500,
+        popsize: 120,
+        strategy: Strategy::RandToBest1Bin,
+        recombination: 0.98,
         seed: 83,
     });
 
@@ -1155,10 +1155,10 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         expected_optimum: vec![1.0, 0.707, 0.595, 0.500, 0.420], // 2^(-(2^i - 2)/(2^i))
         fun_tolerance: 1e-2,
         position_tolerance: 0.1,
-        maxiter: 1500,
-        popsize: 100,
-        strategy: Strategy::RandToBest1Exp,
-        recombination: 0.95,
+        maxiter: 4000,
+        popsize: 200,
+        strategy: Strategy::RandToBest1Bin,
+        recombination: 0.98,
         seed: 84,
     });
 
@@ -1170,10 +1170,10 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         expected_optimum: vec![512.0, 404.2319], // Approximate optimum
         fun_tolerance: -700.0,                   // Global minimum is -959.6407
         position_tolerance: 50.0,                // Very relaxed due to extreme difficulty
-        maxiter: 1200,
-        popsize: 40,
-        strategy: Strategy::Rand1Exp,
-        recombination: 0.95,
+        maxiter: 5000,
+        popsize: 250,
+        strategy: Strategy::Rand1Bin,
+        recombination: 0.98,
         seed: 27,
     });
 
@@ -1185,10 +1185,10 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         expected_optimum: vec![2.693, 0.0], // Approximate
         fun_tolerance: -0.8,                // Approximate minimum
         position_tolerance: 0.5,
-        maxiter: 1200,
-        popsize: 60,
-        strategy: Strategy::RandToBest1Exp,
-        recombination: 0.9,
+        maxiter: 3000,
+        popsize: 150,
+        strategy: Strategy::RandToBest1Bin,
+        recombination: 0.98,
         seed: 74,
     });
 
@@ -1275,10 +1275,10 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         expected_optimum: vec![8.055, 9.665], // One of the optima
         fun_tolerance: -19.0,                 // Global minimum is -19.2085
         position_tolerance: 0.5,
-        maxiter: 1200,
-        popsize: 60,
-        strategy: Strategy::Rand1Exp,
-        recombination: 0.9,
+        maxiter: 3000,
+        popsize: 150,
+        strategy: Strategy::RandToBest1Bin,
+        recombination: 0.98,
         seed: 280,
     });
 
@@ -1290,10 +1290,10 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         expected_optimum: vec![2.808, 8.883], // Approximate
         fun_tolerance: -5.0,                  // Global minimum around -5.16
         position_tolerance: 1.0,
-        maxiter: 1500,
-        popsize: 80,
-        strategy: Strategy::Rand1Exp,
-        recombination: 0.9,
+        maxiter: 4000,
+        popsize: 200,
+        strategy: Strategy::RandToBest1Bin,
+        recombination: 0.98,
         seed: 290,
     });
 
@@ -1305,10 +1305,10 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         expected_optimum: vec![1.0, 1.0],
         fun_tolerance: 1e-6,
         position_tolerance: 1e-3,
-        maxiter: 800,
-        popsize: 40,
-        strategy: Strategy::Best1Exp,
-        recombination: 0.9,
+        maxiter: 2000,
+        popsize: 100,
+        strategy: Strategy::RandToBest1Bin,
+        recombination: 0.95,
         seed: 300,
     });
 
@@ -1335,10 +1335,10 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         expected_optimum: vec![2.20, 1.57], // Approximate
         fun_tolerance: -1.8,                // Global minimum around -1.8013
         position_tolerance: 0.1,
-        maxiter: 1000,
-        popsize: 60,
-        strategy: Strategy::Best1Exp,
-        recombination: 0.9,
+        maxiter: 2500,
+        popsize: 120,
+        strategy: Strategy::RandToBest1Bin,
+        recombination: 0.98,
         seed: 320,
     });
 
@@ -1349,10 +1349,10 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         expected_optimum: vec![2.20, 1.57, 1.28, 1.92, 1.72], // Approximate
         fun_tolerance: -4.5,                                  // Global minimum around -4.687
         position_tolerance: 0.2,
-        maxiter: 1500,
-        popsize: 100,
-        strategy: Strategy::RandToBest1Exp,
-        recombination: 0.95,
+        maxiter: 4000,
+        popsize: 200,
+        strategy: Strategy::RandToBest1Bin,
+        recombination: 0.98,
         seed: 321,
     });
 
@@ -1379,10 +1379,10 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         expected_optimum: vec![0.0, 0.0],
         fun_tolerance: 1e-8,
         position_tolerance: 1e-4,
-        maxiter: 1000,
-        popsize: 60,
-        strategy: Strategy::Best1Exp,
-        recombination: 0.9,
+        maxiter: 3000,
+        popsize: 150,
+        strategy: Strategy::RandToBest1Bin,
+        recombination: 0.98,
         seed: 340,
     });
 
@@ -1423,10 +1423,10 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         expected_optimum: vec![1.414, 2.0], // sqrt(i) for i=1,2
         fun_tolerance: 1e-4,
         position_tolerance: 1e-2,
-        maxiter: 1000,
-        popsize: 60,
-        strategy: Strategy::Best1Exp,
-        recombination: 0.9,
+        maxiter: 3000,
+        popsize: 150,
+        strategy: Strategy::RandToBest1Bin,
+        recombination: 0.95,
         seed: 360,
     });
 
@@ -1438,10 +1438,10 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         expected_optimum: vec![0.19388, 0.48513],
         fun_tolerance: -3873.7, // Global minimum
         position_tolerance: 0.01,
-        maxiter: 800,
-        popsize: 50,
-        strategy: Strategy::Best1Exp,
-        recombination: 0.9,
+        maxiter: 2500,
+        popsize: 120,
+        strategy: Strategy::RandToBest1Bin,
+        recombination: 0.95,
         seed: 370,
     });
 
@@ -1541,10 +1541,10 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         expected_optimum: vec![0.0, 1.25313],
         fun_tolerance: 0.3, // Global minimum is 0.292579
         position_tolerance: 0.1,
-        maxiter: 1000,
-        popsize: 60,
-        strategy: Strategy::Rand1Exp,
-        recombination: 0.9,
+        maxiter: 3000,
+        popsize: 150,
+        strategy: Strategy::RandToBest1Bin,
+        recombination: 0.98,
         seed: 420,
     });
 
@@ -1631,10 +1631,10 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         expected_optimum: vec![6.0, 10.0, 12.0, 12.0, 10.0, 6.0], // i(d+1-i)
         fun_tolerance: -50.0,                                     // Global minimum is -50 for d=6
         position_tolerance: 0.1,
-        maxiter: 1200,
-        popsize: 80,
-        strategy: Strategy::Best1Exp,
-        recombination: 0.9,
+        maxiter: 3000,
+        popsize: 150,
+        strategy: Strategy::RandToBest1Bin,
+        recombination: 0.95,
         seed: 480,
     });
 
@@ -1646,10 +1646,10 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         expected_optimum: vec![7.706, 7.706], // Approximate
         fun_tolerance: -2.0,                  // Global minimum around -2 for 2D
         position_tolerance: 2.0,              // Many local minima
-        maxiter: 1500,
-        popsize: 80,
-        strategy: Strategy::Rand1Exp,
-        recombination: 0.9,
+        maxiter: 4000,
+        popsize: 200,
+        strategy: Strategy::RandToBest1Bin,
+        recombination: 0.98,
         seed: 490,
     });
 
@@ -1676,10 +1676,10 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         expected_optimum: vec![0.0, 0.0],
         fun_tolerance: -1.0, // Global minimum
         position_tolerance: 0.1,
-        maxiter: 1000,
-        popsize: 60,
-        strategy: Strategy::Best1Exp,
-        recombination: 0.9,
+        maxiter: 2500,
+        popsize: 120,
+        strategy: Strategy::RandToBest1Bin,
+        recombination: 0.98,
         seed: 510,
     });
 
@@ -1691,10 +1691,10 @@ fn generate_all_benchmarks() -> HashMap<String, Box<dyn Fn() -> BenchmarkResult>
         expected_optimum: vec![0.0, 0.0],
         fun_tolerance: -1.0, // Global minimum
         position_tolerance: 0.1,
-        maxiter: 1000,
-        popsize: 60,
-        strategy: Strategy::Best1Exp,
-        recombination: 0.9,
+        maxiter: 2500,
+        popsize: 120,
+        strategy: Strategy::RandToBest1Bin,
+        recombination: 0.98,
         seed: 520,
     });
 

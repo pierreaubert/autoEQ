@@ -5,7 +5,9 @@ use plotly::{
     common::{ColorScale, ColorScalePalette, Marker, Mode, Title},
     contour::Contour,
 };
-use std::fs;
+use std::collections::BTreeMap;
+use std::fs::{self, File};
+use std::io::Write;
 use std::path::Path;
 
 // Import environment utilities
@@ -298,10 +300,29 @@ fn add_optimization_trace(
         .copied()
         .collect();
 
-    // Plot all evaluation points (gray)
+    // Plot all evaluation points (gray) - decimate if more than 1000 points
     if !non_improvements.is_empty() {
-        let x_coords: Vec<f64> = non_improvements.iter().map(|p| p.x[0]).collect();
-        let y_coords: Vec<f64> = non_improvements.iter().map(|p| p.x[1]).collect();
+        const MAX_POINTS: usize = 1000;
+        let step_size = std::cmp::max(1, non_improvements.len() / MAX_POINTS);
+
+        let decimated_points: Vec<&OptimizationPoint> = if non_improvements.len() > MAX_POINTS {
+            eprintln!(
+                "  Decimating non-improvement points: {} -> {} (step: {})",
+                non_improvements.len(),
+                non_improvements.len() / step_size,
+                step_size
+            );
+            non_improvements
+                .iter()
+                .step_by(step_size)
+                .copied()
+                .collect()
+        } else {
+            non_improvements
+        };
+
+        let x_coords: Vec<f64> = decimated_points.iter().map(|p| p.x[0]).collect();
+        let y_coords: Vec<f64> = decimated_points.iter().map(|p| p.x[1]).collect();
 
         let trace_all = Scatter::new(x_coords, y_coords)
             .mode(Mode::Markers)
@@ -315,10 +336,25 @@ fn add_optimization_trace(
         plot.add_trace(trace_all);
     }
 
-    // Plot improvement points (bright colors on Viridis-friendly colors)
+    // Plot improvement points (bright colors on Viridis-friendly colors) - decimate if more than 1000 points
     if !improvements.is_empty() {
-        let x_coords: Vec<f64> = improvements.iter().map(|p| p.x[0]).collect();
-        let y_coords: Vec<f64> = improvements.iter().map(|p| p.x[1]).collect();
+        const MAX_POINTS: usize = 1000;
+        let step_size = std::cmp::max(1, improvements.len() / MAX_POINTS);
+
+        let decimated_improvements: Vec<&OptimizationPoint> = if improvements.len() > MAX_POINTS {
+            eprintln!(
+                "  Decimating improvement points: {} -> {} (step: {})",
+                improvements.len(),
+                improvements.len() / step_size,
+                step_size
+            );
+            improvements.iter().step_by(step_size).copied().collect()
+        } else {
+            improvements.clone()
+        };
+
+        let x_coords: Vec<f64> = decimated_improvements.iter().map(|p| p.x[0]).collect();
+        let y_coords: Vec<f64> = decimated_improvements.iter().map(|p| p.x[1]).collect();
 
         let trace_improvements = Scatter::new(x_coords, y_coords)
             .mode(Mode::Markers)
@@ -337,10 +373,25 @@ fn add_optimization_trace(
         plot.add_trace(trace_improvements);
     }
 
-    // Plot the optimization path (connecting improvements)
+    // Plot the optimization path (connecting improvements) - decimate if more than 1000 points
     if improvements.len() > 1 {
-        let x_coords: Vec<f64> = improvements.iter().map(|p| p.x[0]).collect();
-        let y_coords: Vec<f64> = improvements.iter().map(|p| p.x[1]).collect();
+        const MAX_PATH_POINTS: usize = 1000;
+        let step_size = std::cmp::max(1, improvements.len() / MAX_PATH_POINTS);
+
+        let path_points: Vec<&OptimizationPoint> = if improvements.len() > MAX_PATH_POINTS {
+            eprintln!(
+                "  Decimating path points: {} -> {} (step: {})",
+                improvements.len(),
+                improvements.len() / step_size,
+                step_size
+            );
+            improvements.iter().step_by(step_size).copied().collect()
+        } else {
+            improvements.clone()
+        };
+
+        let x_coords: Vec<f64> = path_points.iter().map(|p| p.x[0]).collect();
+        let y_coords: Vec<f64> = path_points.iter().map(|p| p.x[1]).collect();
 
         let path_trace = Scatter::new(x_coords, y_coords)
             .mode(Mode::Lines)
@@ -463,7 +514,7 @@ fn main() {
         .unwrap_or_else(|| match get_data_generated_dir() {
             Ok(data_dir) => {
                 let mut path = data_dir;
-                path.push("plot_functions");
+                path.push("plot_autoeq_de");
                 path.to_string_lossy().to_string()
             }
             Err(e) => {
@@ -507,15 +558,17 @@ fn main() {
     };
 
     println!(
-        "Plotting {} functions with {}x{} grid",
+        "Generating interactive HTML with JSON files for {} functions with {}x{} grid",
         functions_to_plot.len(),
         args.xn,
         args.yn
     );
 
-    // Plot each function
+    // Generate JSON file for each function
+    let mut processed_functions = BTreeMap::new();
+
     for (name, func) in functions_to_plot {
-        println!("Plotting function: {}", name);
+        println!("Processing function: {}", name);
 
         // Check if function requires more than 2D (skip if so)
         if let Some(meta) = metadata.get(&name) {
@@ -600,7 +653,8 @@ fn main() {
             None
         };
 
-        plot_function(
+        // Create the plot
+        let plot = create_plot(
             &name,
             func,
             plot_x_bounds,
@@ -609,7 +663,6 @@ fn main() {
             args.yn,
             args.width,
             args.height,
-            &output_dir,
             if args.show_traces {
                 trace.as_ref()
             } else {
@@ -617,6 +670,28 @@ fn main() {
             },
             metadata.get(&name),
         );
+
+        // Save plot as JSON file
+        if let Err(e) = save_plot_as_json(&plot, &output_dir, &name) {
+            eprintln!(
+                "  Warning: Failed to save JSON for function '{}': {}",
+                name, e
+            );
+        } else {
+            println!("  Saved JSON file for function '{}'", name);
+
+            // Add to processed functions for the grouped display
+            let first_char = name.chars().next().unwrap_or('_').to_ascii_uppercase();
+            let key = if first_char.is_ascii_alphabetic() {
+                first_char
+            } else {
+                '#'
+            };
+            processed_functions
+                .entry(key)
+                .or_insert_with(Vec::new)
+                .push((name.clone(), func));
+        }
 
         // Create convergence plot if requested and trace is available
         if args.convergence_plots {
@@ -626,7 +701,17 @@ fn main() {
         }
     }
 
-    println!("Plots saved to directory: {}", output_dir);
+    // Generate the interactive HTML file
+    generate_interactive_html(&output_dir, &processed_functions);
+
+    println!(
+        "Interactive HTML with alphabetical navigation saved to directory: {}",
+        output_dir
+    );
+    println!(
+        "Generated {} JSON plot files",
+        processed_functions.values().map(|v| v.len()).sum::<usize>()
+    );
 }
 
 fn parse_bounds(bounds_str: &str) -> Result<(f64, f64), Box<dyn std::error::Error>> {
@@ -650,7 +735,7 @@ fn parse_bounds(bounds_str: &str) -> Result<(f64, f64), Box<dyn std::error::Erro
     Ok((min, max))
 }
 
-fn plot_function(
+fn create_plot(
     name: &str,
     func: TestFunction,
     x_bounds: (f64, f64),
@@ -659,10 +744,9 @@ fn plot_function(
     yn: usize,
     width: usize,
     height: usize,
-    output_dir: &str,
     trace: Option<&OptimizationTrace>,
     metadata: Option<&FunctionMetadata>,
-) {
+) -> Plot {
     // Create coordinate grids
     let x_vals: Vec<f64> = (0..xn)
         .map(|i| x_bounds.0 + (x_bounds.1 - x_bounds.0) * i as f64 / (xn - 1) as f64)
@@ -685,15 +769,14 @@ fn plot_function(
     }
 
     // Create contour plot with custom colorbar configuration
-    // Using fraction mode with 60% height
     let contour = Contour::new(x_vals.clone(), y_vals.clone(), z_vals.clone())
         .color_scale(ColorScale::Palette(ColorScalePalette::Viridis))
         .color_bar(
             plotly::common::ColorBar::new()
                 .len_mode(plotly::common::ThicknessMode::Pixels)
-                .len(60 * height / 100) // 60% in fraction mode (may need to be scaled)
+                .len(60 * height / 100)
                 .y_anchor(plotly::common::Anchor::Bottom)
-                .y(0.0), // Position at bottom
+                .y(0.0),
         );
 
     // Create layout
@@ -724,9 +807,263 @@ fn plot_function(
     }
 
     plot.set_layout(layout);
+    plot
+}
 
-    let filename = format!("{}/{}.html", output_dir, name.replace(' ', "_"));
-    plot.write_html(&filename);
+/// Save a plot to a JSON file
+fn save_plot_as_json(
+    plot: &Plot,
+    output_dir: &str,
+    function_name: &str,
+) -> Result<(), std::io::Error> {
+    let json_path = format!("{}/{}.json", output_dir, function_name.replace(' ', "_"));
+    let plot_json = plot.to_json();
+
+    let mut file = File::create(&json_path)?;
+    file.write_all(plot_json.as_bytes())?;
+
+    Ok(())
+}
+
+/// Generate interactive HTML with alphabetical navigation
+fn generate_interactive_html(
+    output_dir: &str,
+    grouped_functions: &BTreeMap<char, Vec<(String, TestFunction)>>,
+) {
+    let file_path = format!("{}/interactive_plots.html", output_dir);
+    let mut file = File::create(&file_path).expect("Failed to create HTML file");
+
+    // Generate letter navigation buttons
+    let letter_buttons: String = grouped_functions
+        .keys()
+        .map(|letter| {
+            format!(
+                "<button class=\"letter-btn\" onclick=\"showLetter('{}')\">{}</button>",
+                letter, letter
+            )
+        })
+        .collect::<Vec<String>>()
+        .join("");
+
+    // Generate function lists for each letter
+    let mut function_lists = String::new();
+    for (letter, functions) in grouped_functions {
+        function_lists.push_str(&format!(
+            "<div id=\"functions-{}\" class=\"function-list\" style=\"display: none;\">\n",
+            letter
+        ));
+
+        for (name, _) in functions {
+            function_lists.push_str(&format!(
+                "  <div class=\"function-item\" onclick=\"loadFunction('{}')\">{}</div>\n",
+                name.replace(' ', "_"),
+                name
+            ));
+        }
+
+        function_lists.push_str("</div>\n");
+    }
+
+    let html_content = format!(
+        r#"<!DOCTYPE html>
+<html>
+<head>
+    <title>Interactive AutoEQ DE Optimization Plots</title>
+    <script src="https://cdn.plot.ly/plotly-3.1.0.min.js"></script>
+    <style>
+        body {{
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }}
+        .container {{
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }}
+        .header {{
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }}
+        .navigation {{
+            display: flex;
+            justify-content: space-between;
+            padding: 20px;
+            background-color: #fafafa;
+            border-bottom: 1px solid #eee;
+        }}
+        .letter-navigation {{
+            flex: 1;
+        }}
+        .letter-btn {{
+            padding: 8px 12px;
+            margin: 2px;
+            border: none;
+            background-color: #e9ecef;
+            color: #495057;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: all 0.3s ease;
+        }}
+        .letter-btn:hover, .letter-btn.active {{
+            background-color: #007bff;
+            color: white;
+        }}
+        .function-panel {{
+            width: 300px;
+            padding: 20px;
+            border-right: 1px solid #eee;
+        }}
+        .function-list {{
+            max-height: 400px;
+            overflow-y: auto;
+        }}
+        .function-item {{
+            padding: 10px;
+            margin: 5px 0;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }}
+        .function-item:hover {{
+            background-color: #e9ecef;
+        }}
+        .function-item.active {{
+            background-color: #007bff;
+            color: white;
+        }}
+        .main-content {{
+            display: flex;
+        }}
+        .plot-container {{
+            flex: 1;
+            padding: 20px;
+            min-height: 600px;
+        }}
+        .loading {{
+            text-align: center;
+            padding: 50px;
+            color: #6c757d;
+        }}
+        .error {{
+            text-align: center;
+            padding: 50px;
+            color: #dc3545;
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Interactive AutoEQ DE Optimization Plots</h1>
+            <p>Click on a letter to browse functions, then click on a function name to view its plot</p>
+        </div>
+
+        <div class="navigation">
+            <div class="letter-navigation">
+                {letter_buttons}
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="function-panel">
+                {function_lists}
+            </div>
+
+            <div class="plot-container">
+                <div id="plot-display" class="loading">
+                    <h3>Select a function to view its plot</h3>
+                    <p>Choose a letter from the navigation above, then click on a function name.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentLetter = null;
+        let currentFunction = null;
+
+        function showLetter(letter) {{
+            /* Hide all function lists */
+            const allLists = document.querySelectorAll('.function-list');
+            allLists.forEach(list => list.style.display = 'none');
+
+            /* Show the selected letter's function list */
+            const targetList = document.getElementById('functions-' + letter);
+            if (targetList) {{
+                targetList.style.display = 'block';
+            }}
+
+            /* Update button states */
+            document.querySelectorAll('.letter-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+
+            /* Clear the plot when changing letters */
+            const plotDisplay = document.getElementById('plot-display');
+            plotDisplay.innerHTML = '<div class="loading"><h3>Select a function to view its plot</h3><p>Choose a function from the list below.</p></div>';
+
+            /* Clear function item selection states */
+            document.querySelectorAll('.function-item').forEach(item => item.classList.remove('active'));
+
+            currentLetter = letter;
+            currentFunction = null;
+        }}
+
+        async function loadFunction(functionName) {{
+            const plotDisplay = document.getElementById('plot-display');
+
+            /* Show loading state */
+            plotDisplay.innerHTML = '<div class="loading"><h3>Loading plot...</h3></div>';
+
+            /* Update function item states */
+            document.querySelectorAll('.function-item').forEach(item => item.classList.remove('active'));
+            event.target.classList.add('active');
+
+            try {{
+                /* Load the JSON file for this function */
+                const response = await fetch(functionName + '.json');
+
+                if (!response.ok) {{
+                    throw new Error('Failed to load plot data: ' + response.statusText);
+                }}
+
+                const plotData = await response.text();
+                const plot = JSON.parse(plotData);
+
+                /* Clear the plot display and render the new plot */
+                plotDisplay.innerHTML = '';
+                await Plotly.newPlot('plot-display', plot.data, plot.layout);
+
+                currentFunction = functionName;
+
+            }} catch (error) {{
+                console.error('Error loading function plot:', error);
+                plotDisplay.innerHTML = '<div class="error"><h3>Error Loading Plot</h3><p>Failed to load plot for function: ' + functionName.replace('_', ' ') + '</p><p>Error: ' + error.message + '</p></div>';
+            }}
+        }}
+
+        /* Initialize by showing the first letter */
+        const firstLetter = document.querySelector('.letter-btn');
+        if (firstLetter) {{
+            firstLetter.click();
+        }}
+    </script>
+</body>
+</html>
+"#,
+        letter_buttons = letter_buttons,
+        function_lists = function_lists
+    );
+
+    file.write_all(html_content.as_bytes())
+        .expect("Failed to write to HTML file");
 }
 
 /// Automatically get all test functions using the shared registry

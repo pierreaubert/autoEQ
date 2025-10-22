@@ -259,7 +259,7 @@ pub fn optimize_filters_autoeq_with_callback(
     let params_per_filter = crate::param_utils::params_per_filter(cli_args.effective_peq_model());
     let num_filters = x.len() / params_per_filter;
     let smart_config = SmartInitConfig {
-        seed: cli_args.seed,  // Pass seed for deterministic initialization
+        seed: cli_args.seed, // Pass seed for deterministic initialization
         ..SmartInitConfig::default()
     };
 
