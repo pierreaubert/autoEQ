@@ -24,6 +24,10 @@ plotly_static = { version = "0.1", features = ["chromedriver", "webdriver_downlo
 [target.'cfg(all(not(target_os="macos"), target_arch="aarch64"))'.dependencies]
 plotly_static = { version = "0.1", features = ["geckodriver", "webdriver_download"] }
 
+[target.'cfg(all(target_os = "windows", target_arch="x86_64"))'.dependencies]
+# plotly no static on windows (gecko and edge are working)
+plotly_static = { version = "0.1", features = ["chromedriver"] }
+
 [lib]
 name = "autoeq_testfunctions"
 path = "src/lib.rs"
