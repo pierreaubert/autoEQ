@@ -1,6 +1,6 @@
 [package]
 name = "autoeq-de"
-version = "0.2.48"
+version = "0.2.49"
 edition = { workspace = true }
 repository = { workspace = true }
 authors = { workspace = true }
