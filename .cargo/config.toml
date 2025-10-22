@@ -2,7 +2,7 @@
 # macOS-specific configuration
 MACOSX_DEPLOYMENT_TARGET = "15.0"
 
-# macOS Apple Silicon (M1/M2/M3) - using Accelerate framework
+# macOS Apple Silicon (M1-M5) - using Accelerate framework
 [target.aarch64-apple-darwin]
 rustflags = [
     "-C", 'target-cpu=native',

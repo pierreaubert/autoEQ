@@ -1,4 +1,4 @@
-﻿# --------------------------------------------------------- -*- just -*-
+# --------------------------------------------------------- -*- just -*-
 # How to install Just?
 #     cargo install just
 # ----------------------------------------------------------------------
@@ -132,17 +132,33 @@ examples-testfunctions:
 
 cross : cross-linux-x86
 
+# Debug: Build Docker image and open interactive shell
+cross-debug-x86 :
+	@echo "Building Docker image..."
+	docker build -t autoeq-linux-x86 -f ./builds/Dockerfile.x86_64-unknown-linux-gnu .
+	@echo "Starting interactive shell. Try: cargo build --release --target x86_64-unknown-linux-gnu"
+	docker run -it --rm -v "$(pwd)":/project -w /project autoeq-linux-x86 /bin/bash
+
 cross-linux-x86 :
 	echo "This can take minutes!"
-	cross build --release --target x86_64-unknown-linux-gnu
+	@echo "Building Docker image..."
+	docker build -t autoeq-linux-x86 -f ./builds/Dockerfile.x86_64-unknown-linux-gnu .
+	@echo "Building in Docker container..."
+	docker run --rm -v "$(pwd)":/project -w /project autoeq-linux-x86 \
+		cargo build --release --target x86_64-unknown-linux-gnu
+	@echo "Done! Binary at: target/x86_64-unknown-linux-gnu/release/autoeq"
 
 cross-linux-arm64 :
 	echo "This can take minutes!"
+	mv rust-toolchain.toml rust-toolchain.toml.bak || true
 	cross build --release --target aarch64-unknown-linux-gnu
+	mv rust-toolchain.toml.bak rust-toolchain.toml || true
 
 cross-win-x86-gnu :
 	echo "This is not working well yet from macos!"
+	mv rust-toolchain.toml rust-toolchain.toml.bak || true
 	cross build --release --target x86_64-pc-windows-gnu
+	mv rust-toolchain.toml.bak rust-toolchain.toml || true
 
 # ----------------------------------------------------------------------
 # Install macos
@@ -150,7 +166,7 @@ cross-win-x86-gnu :
 
 install-macos-cross:
 	cargo install cross
-	rustup target add x86_64-apple-ios
+	cross target add x86_64-apple-ios
 
 install-macos-brew:
 	curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh > install-brew
