@@ -130,7 +130,7 @@ examples-testfunctions:
 # CROSS
 # ----------------------------------------------------------------------
 
-cross : cross-linux-x86
+cross : cross-macos-arm-2-linux-x86
 
 # Debug: Build Docker image and open interactive shell
 cross-debug-x86 :
@@ -139,7 +139,7 @@ cross-debug-x86 :
 	@echo "Starting interactive shell. Try: cargo build --release --target x86_64-unknown-linux-gnu"
 	docker run -it --rm -v "$(pwd)":/project -w /project autoeq-linux-x86 /bin/bash
 
-cross-linux-x86 :
+cross-macos-arm-2-linux-x86 :
 	echo "This can take minutes!"
 	@echo "Building Docker image..."
 	docker build -t autoeq-linux-x86 -f ./builds/Dockerfile.x86_64-unknown-linux-gnu .
@@ -148,35 +148,43 @@ cross-linux-x86 :
 		cargo build --release --target x86_64-unknown-linux-gnu
 	@echo "Done! Binary at: target/x86_64-unknown-linux-gnu/release/autoeq"
 
-cross-linux-arm64 :
+cross-macos-arm-2-linux-arm64 :
 	echo "This can take minutes!"
-	mv rust-toolchain.toml rust-toolchain.toml.bak || true
 	cross build --release --target aarch64-unknown-linux-gnu
-	mv rust-toolchain.toml.bak rust-toolchain.toml || true
 
-cross-win-x86-gnu :
-	echo "This is not working well yet from macos!"
-	mv rust-toolchain.toml rust-toolchain.toml.bak || true
-	cross build --release --target x86_64-pc-windows-gnu
-	mv rust-toolchain.toml.bak rust-toolchain.toml || true
+cross-macos-arm-2-win-x86-gnu :
+	echo "This is not supported yet"
+	CROSS_CONFIG=./builds/CrossFromMacARM.toml cross build --release --target x86_64-pc-windows-gnu
+
+cross-macos-arm-2-win-x86-msvc :
+	echo "This can take minutes!"
+	CROSS_CONFIG=./builds/CrossFromMacARM.toml cross build --release --target x86_64-pc-windows-msvc
+
+cross-macos-arm-2-win-arm-gnu :
+	echo "This is not supported!"
+
+cross-macos-arm-2-win-arm-msvc :
+	echo "This is not supported!"
+
 
 # ----------------------------------------------------------------------
 # Install macos
 # ----------------------------------------------------------------------
 
 install-macos-cross:
-	cargo install cross
+	# use git version until 0.2.6 is out
+	cargo install cross --git https://github.com/cross-rs/cross
 	cross target add x86_64-apple-ios
 
 install-macos-brew:
-	curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh > install-brew
-	chmod +x install-brew
-	NONINTERACTIVE=1 ./install-brew
+	curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh > ./scripts/install-brew
+	chmod +x ./scripts/install-brew
+	NONINTERACTIVE=1 ./scripts/install-brew
 
 install-rustup:
-	curl https://sh.rustup.rs -sSf > install-rustup
-	chmod +x install-rustup
-	./install-rustup -y
+	curl https://sh.rustup.rs -sSf > ./scripts/install-rustup
+	chmod +x ./scripts/install-rustup
+	./scripts/install-rustup -y
 	source ~/.cargo/env
 	cargo install just
 	cargo install cargo-wizard
@@ -186,9 +194,10 @@ install-macos: install-macos-brew install-rustup
 	xcode-select --install
 	# need metal
 	xcodebuild -downloadComponent MetalToolchain
+	# chromedriver sheanigans
 	brew install chromedriver
 	xattr -d com.apple.quarantine $(which chromedriver)
-	# optimisation
+	# optimisation library
 	brew install nlopt cmake
 
 

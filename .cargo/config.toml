@@ -2,6 +2,9 @@
 # macOS-specific configuration
 MACOSX_DEPLOYMENT_TARGET = "15.0"
 
+[build]
+rustflags = ["-Ctarget-cpu=native"]
+
 # macOS Apple Silicon (M1-M5) - using Accelerate framework
 [target.aarch64-apple-darwin]
 rustflags = [
@@ -42,6 +45,7 @@ rustflags = [
     "-C", "link-arg=openblas.lib"
 ]
 
+# Windows MSVC ARM configuration
 [target.aarch64-pc-windows-msvc]
 rustflags = [
     # Windows typically uses Intel MKL or OpenBLAS through vcpkg
@@ -58,6 +62,3 @@ rustflags = [
     # For MinGW/MSYS2 with OpenBLAS
     "-C", "link-arg=-lopenblas"
 ]
-
-[build]
-rustflags = ["-Ctarget-cpu=native"]
