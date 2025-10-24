@@ -10,9 +10,14 @@ default:
 # TEST
 # ----------------------------------------------------------------------
 
-test:
+test-rust:
 	cargo check --all-targets
 	cargo test --lib
+
+test-ts:
+	npm run test
+
+test: test-rust test-ts
 
 # ----------------------------------------------------------------------
 # FORMAT
@@ -20,10 +25,13 @@ test:
 
 alias format := fmt
 
-fmt: fmt-rust
+fmt: fmt-rust fmt-ts
 
 fmt-rust:
 	cargo fmt --all
+
+fmt-ts:
+	npm run fmt
 
 # ----------------------------------------------------------------------
 # PROD
@@ -60,6 +68,18 @@ bench-autoeq-speaker:
 	cargo run --release --bin benchmark_autoeq_speaker -- --qa --jobs 1
 
 # ----------------------------------------------------------------------
+# CLEAN
+# ----------------------------------------------------------------------
+
+clean:
+	cargo clean
+	rm -rf src-*/dist
+	rm -rf src-*/node_modules
+	find . -name '*~' -exec rm {} \; -print
+	find . -name 'Cargo.lock' -exec rm {} \; -print
+	find . -name 'package-lock.json' -exec rm {} \; -print
+
+# ----------------------------------------------------------------------
 # DEV
 # ----------------------------------------------------------------------
 
@@ -72,6 +92,7 @@ dev:
 	cargo build --bin benchmark_autoeq_speaker
 	cargo build --bin plot_autoeq_de
 	cargo build --bin run_autoeq_de
+	cargo build --bin audio_test
 
 download:
 	cargo run --bin download
@@ -80,7 +101,7 @@ download:
 # UPDATE
 # ----------------------------------------------------------------------
 
-update: update-rust update-pre-commit
+update: update-rust update-pre-commit update-ts
 
 update-rust:
 	rustup update
@@ -88,6 +109,10 @@ update-rust:
 
 update-pre-commit:
 	pre-commit autoupdate
+
+update-ts:
+	npm run tauri update
+	npm run upgrade
 
 # ----------------------------------------------------------------------
 # DEMO
@@ -218,6 +243,48 @@ install-linux-root:
 	   chromium-browser chromium-chromedriver
 
 install-linux: install-linux-root install-rustup
+
+install-ubuntu-common:
+		sudo apt install -y \
+			 curl \
+			 build-essential gcc g++ \
+			 pkg-config \
+			 libssl-dev \
+			 ca-certificates \
+			 cmake \
+			 ninja-build \
+			 perl \
+			 rustup \
+			 just \
+			 libglib2.0-dev \
+			 libgtk-3-dev \
+			 libwebkit2gtk-4.1-dev \
+			 libayatana-appindicator3-dev \
+			 librsvg2-dev \
+			 patchelf \
+			 libopenblas-dev \
+			 gfortran \
+			 libasound2-dev
+
+install-ubuntu-x86-driver :
+		sudo apt install -y \
+			 chromium-browser \
+			 chromium-chromedriver
+
+install-ubuntu-arm64-driver :
+		sudo apt install -y firefox
+		# where is the geckodriver ?
+
+install-ubuntu-node:
+		# node
+		sudo npm cache clean -f
+		sudo npm install -f n
+		sudo n stable
+
+install-ubuntu-x86: install-ubuntu-common install-ubuntu-x86-driver install-ubuntu-node
+
+install-ubuntu-arm64: install-ubuntu-common install-ubuntu-arm64-driver install-ubuntu-node
+
 
 # ----------------------------------------------------------------------
 # Install windows
@@ -469,3 +536,29 @@ qa-edifierw830nb-mhfirefly:
 	--loss headphone-score \
 	--min-spacing-oct 0.08 --atolerance 0.000001 --tolerance 0.0000001 --algo mh:rga --population 80 --maxeval 3000 \
 	--qa 4.0
+
+# ----------------------------------------------------------------------
+# POST
+# ----------------------------------------------------------------------
+
+post-install-npm-ui:
+	cd src-ui && npm install .
+
+post-install-npm-capture:
+	cd src-audio-capture && npm install . && cd ..
+
+post-install-npm: post-install-npm-ui post-install-npm-capture
+
+post-install-rust:
+	rustup default stable
+	cargo install just
+	cargo check
+
+post-install: post-install-rust post-install-npm
+
+# ----------------------------------------------------------------------
+# SIGNING
+# ----------------------------------------------------------------------
+
+
+
