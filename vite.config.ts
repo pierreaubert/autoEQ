@@ -36,7 +36,7 @@ export default defineConfig(async () => ({
     // 'outDir' is relative to the new 'root' (i.e., 'frontend')
     // We use a relative path '../dist' to put the final build
     // *outside* the 'frontend' folder, typically at project-root/dist
-    outDir: "./dist",
+    outDir: "../dist",
   },
 
   resolve: {
