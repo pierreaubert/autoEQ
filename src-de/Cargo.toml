@@ -1,6 +1,6 @@
 [package]
 name = "autoeq-de"
-version = "0.2.51"
+version = "0.2.52"
 edition = { workspace = true }
 repository = { workspace = true }
 authors = { workspace = true }
@@ -65,6 +65,8 @@ signal-hook-tokio = { workspace = true }
 # blas folklore
 blas-src = { version = "0.14", features = ["intel-mkl-dynamic-parallel"] }
 intel-mkl-src = "0.8.1"
+# plotly static on windows (gecko and edge are working)
+plotly_static = { version = "0.1", features = ["chromedriver"] }
 
 [target.'cfg(all(target_os = "windows", target_arch="aarch64"))'.dependencies]
 # blas folklore: intel-mkl not supported on arm :)

@@ -1,6 +1,6 @@
 [package]
 name = "autoeq-testfunctions"
-version = "0.2.35"
+version = "0.2.36"
 edition = { workspace = true }
 repository = { workspace = true }
 authors = { workspace = true }
@@ -25,8 +25,12 @@ plotly_static = { version = "0.1", features = ["chromedriver", "webdriver_downlo
 plotly_static = { version = "0.1", features = ["geckodriver", "webdriver_download"] }
 
 [target.'cfg(all(target_os = "windows", target_arch="x86_64"))'.dependencies]
-# plotly no static on windows (gecko and edge are working)
+# plotly static on windows (gecko and edge are working)
 plotly_static = { version = "0.1", features = ["chromedriver"] }
+
+[target.'cfg(all(target_os = "windows", target_arch="aarch64"))'.dependencies]
+# plotly static on windows (gecko and edge are working)
+plotly_static = { version = "0.1", features = ["geckodriver"] }
 
 [lib]
 name = "autoeq_testfunctions"
