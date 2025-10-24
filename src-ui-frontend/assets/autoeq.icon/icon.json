@@ -1,0 +1,63 @@
+{
+  "color-space-for-untagged-svg-colors" : "display-p3",
+  "fill" : {
+    "automatic-gradient" : "extended-srgb:0.00000,0.53333,1.00000,1.00000"
+  },
+  "groups" : [
+    {
+      "layers" : [
+        {
+          "blend-mode" : "darken",
+          "fill" : "automatic",
+          "glass" : true,
+          "image-name" : "woofers 2.svg",
+          "name" : "woofers 2",
+          "position" : {
+            "scale" : 2.5,
+            "translation-in-points" : [
+              100,
+              0
+            ]
+          }
+        },
+        {
+          "fill" : {
+            "automatic-gradient" : "srgb:0.97198,0.96857,1.00000,1.00000"
+          },
+          "image-name" : "speaker 3.svg",
+          "name" : "speaker 3",
+          "position" : {
+            "scale" : 2.5,
+            "translation-in-points" : [
+              100,
+              0
+            ]
+          }
+        },
+        {
+          "hidden" : true,
+          "image-name" : "eq.svg",
+          "name" : "eq",
+          "position" : {
+            "scale" : 3,
+            "translation-in-points" : [
+              -44.1171875,
+              -80.90625
+            ]
+          }
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.5
+      }
+    }
+  ],
+  "supported-platforms" : {
+    "squares" : "shared"
+  }
+}

@@ -2,6 +2,8 @@
 /target
 /data
 /docs
+/dist
+/node_modules
 data_cached
 data_generated
 /coverage

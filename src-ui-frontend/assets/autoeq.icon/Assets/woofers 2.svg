@@ -1,0 +1,17 @@
+<svg width="250" height="250" viewBox="0 0 250 250" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <!-- Woofer - with concentric rings for realism -->
+    <circle cx="85" cy="165" r="40" fill="#5c77a5" stroke="#555555" stroke-width="2"/>
+    <circle cx="85" cy="165" r="28" fill="#556e9c" />
+    <circle cx="85" cy="165" r="18" fill="#4d658c" />
+    <circle cx="85" cy="165" r="10" fill="#ffffff" />
+
+    <!-- Midrange - with concentric rings -->
+    <circle cx="85" cy="95" r="25" fill="#dc842a" stroke="#555555" stroke-width="2"/>
+    <circle cx="85" cy="95" r="18" fill="#c97725"/>
+    <circle cx="85" cy="95" r="6" fill="#ffffff"/>
+
+    <!-- Tweeter - with a subtle highlight for a dome effect -->
+    <circle cx="85" cy="50" r="15" fill="#c85857" stroke="#555555" stroke-width="2"/>
+    <circle cx="85" cy="50" r="5" fill="#ffffff" stroke="#e0e0e0" stroke-width="1"/>
+
+</svg>
