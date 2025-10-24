@@ -13,6 +13,6 @@ components = [
 ]
 profile = "minimal"
 # Only specify host targets - cross will handle Linux/Windows via Docker
-targets = [
-  "aarch64-apple-darwin"
-]
+#targets = [
+#  "aarch64-apple-darwin"
+#]

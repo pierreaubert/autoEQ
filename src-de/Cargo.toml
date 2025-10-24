@@ -1,6 +1,6 @@
 [package]
 name = "autoeq-de"
-version = "0.2.49"
+version = "0.2.51"
 edition = { workspace = true }
 repository = { workspace = true }
 authors = { workspace = true }
@@ -20,6 +20,11 @@ thiserror = { workspace = true }
 plotly = { workspace = true }
 autoeq-testfunctions = { version="0.2", path = "../src-testfunctions" }
 autoeq-env = { version="0.2", path = "../src-env" }
+nlopt = { workspace = true, optional = true }
+
+[features]
+default = ["nlopt"]
+nlopt = ["dep:nlopt"]
 
 [dev-dependencies]
 tempfile = "3.10"
@@ -28,11 +33,17 @@ tempfile = "3.10"
 # blas folklore
 blas-src = { version = "0.14", features = ["accelerate"] }
 accelerate-src = "0.3"
-# nlopt
-nlopt = { workspace = true }
 signal-hook-tokio = { workspace = true }
 # plotly_static config
 plotly_static = { version = "0.1", features = ["chromedriver", "webdriver_download"] }
+
+[target.'cfg(all(any(target_os = "ios", target_os="ios_sim"), target_arch = "aarch64"))'.dependencies]
+# blas folklore
+blas-src = { version = "0.14", features = ["accelerate"] }
+accelerate-src = "0.3"
+signal-hook-tokio = { workspace = true }
+# plotly_static config
+plotly_static = { version = "0.1", features = ["chromedriver", "webdriver_download"], optional = true }
 
 [target.'cfg(all(target_os = "linux", target_arch="x86_64"))'.dependencies]
 # blas folklore
@@ -40,7 +51,6 @@ blas-src = { version = "0.14", features = ["openblas"] }
 openblas-src = { version = "0.10", features = ["cblas", "system"] }
 # plotly_static config
 plotly_static = { version = "0.1", features = ["chromedriver", "webdriver_download"] }
-nlopt = { workspace = true }
 signal-hook-tokio = { workspace = true }
 
 [target.'cfg(all(target_os = "linux", target_arch="aarch64"))'.dependencies]
@@ -49,7 +59,6 @@ blas-src = { version = "0.14", features = ["openblas"] }
 openblas-src = { version = "0.10", features = ["cblas", "system"] }
 # plotly_static config
 plotly_static = { version = "0.1", features = ["geckodriver", "webdriver_download"] }
-nlopt = { workspace = true }
 signal-hook-tokio = { workspace = true }
 
 [target.'cfg(all(target_os = "windows", target_arch="x86_64"))'.dependencies]

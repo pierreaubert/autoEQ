@@ -1,6 +1,6 @@
 [package]
 name = "autoeq"
-version = "0.2.247"
+version = "0.2.249"
 description = "Automatic equalization for speakers, headphones and rooms!"
 edition = { workspace = true }
 repository = { workspace = true }
@@ -29,19 +29,32 @@ autoeq-de = { version="0.2", path = "../src-de" }
 autoeq-cea2034 = { version="0.2", path = "../src-cea2034" }
 autoeq-env = { version="0.2", path = "../src-env" }
 
-# nlopt
+# Core numerical computing
 ndarray = { workspace = true }
 blas-src = { workspace = true }
+
+# Optional features
+nlopt = { workspace = true, optional = true }
+
+[features]
+default = ["nlopt"]
+nlopt = ["dep:nlopt"]
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # blas folklore
 blas-src = { version = "0.14", features = ["accelerate"] }
 accelerate-src = "0.3"
-# nlopt
-nlopt = { workspace = true }
 signal-hook-tokio = { workspace = true }
 # plotly_static config
 plotly_static = { version = "0.1", features = ["chromedriver", "webdriver_download"] }
+
+[target.'cfg(all(any(target_os = "ios", target_os="ios_sim"), target_arch = "aarch64"))'.dependencies]
+# blas folklore
+blas-src = { version = "0.14", features = ["accelerate"] }
+accelerate-src = "0.3"
+signal-hook-tokio = { workspace = true }
+# plotly_static config
+plotly_static = { version = "0.1", features = ["chromedriver", "webdriver_download"], optional = true }
 
 [target.'cfg(all(target_os = "linux", target_arch="x86_64"))'.dependencies]
 # blas folklore
@@ -49,7 +62,6 @@ blas-src = { version = "0.14", features = ["openblas"] }
 openblas-src = { version = "0.10", features = ["cblas", "system"] }
 # plotly_static config
 plotly_static = { version = "0.1", features = ["chromedriver", "webdriver_download"] }
-nlopt = { workspace = true }
 signal-hook-tokio = { workspace = true }
 
 [target.'cfg(all(target_os = "linux", target_arch="aarch64"))'.dependencies]
@@ -58,7 +70,6 @@ blas-src = { version = "0.14", features = ["openblas"] }
 openblas-src = { version = "0.10", features = ["cblas", "system"] }
 # plotly_static config
 plotly_static = { version = "0.1", features = ["geckodriver", "webdriver_download"] }
-nlopt = { workspace = true }
 signal-hook-tokio = { workspace = true }
 
 [target.'cfg(all(target_os = "windows", target_arch="x86_64"))'.dependencies]

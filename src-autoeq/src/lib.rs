@@ -49,7 +49,7 @@ pub mod optim_de;
 /// Metaheuristics-specific optimization code
 pub mod optim_mh;
 /// NLOPT-specific optimization code
-#[cfg(not(target_os = "windows"))]
+#[cfg(feature = "nlopt")]
 pub mod optim_nlopt;
 /// Parameter vector utilities for different PEQ models
 pub mod param_utils;

@@ -22,12 +22,12 @@ use super::loss::{
 };
 use super::optim_de::optimize_filters_autoeq;
 use super::optim_mh::optimize_filters_mh;
-#[cfg(not(target_os = "windows"))]
+#[cfg(feature = "nlopt")]
 use super::optim_nlopt::optimize_filters_nlopt;
 use super::x2peq::x2spl;
 use crate::Curve;
 use ndarray::Array1;
-#[cfg(not(target_os = "windows"))]
+#[cfg(feature = "nlopt")]
 use nlopt::Algorithm;
 use std::process;
 
@@ -58,7 +58,7 @@ pub enum AlgorithmType {
 /// Get all available algorithms with their metadata
 pub fn get_all_algorithms() -> Vec<AlgorithmInfo> {
     let algorithms = vec![
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(feature = "nlopt")]
         // NLOPT algorithms - Global with nonlinear constraint support
         AlgorithmInfo {
             name: "nlopt:isres",
@@ -67,7 +67,7 @@ pub fn get_all_algorithms() -> Vec<AlgorithmInfo> {
             supports_linear_constraints: true,
             supports_nonlinear_constraints: true,
         },
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(feature = "nlopt")]
         AlgorithmInfo {
             name: "nlopt:ags",
             library: "NLOPT",
@@ -75,7 +75,7 @@ pub fn get_all_algorithms() -> Vec<AlgorithmInfo> {
             supports_linear_constraints: false,
             supports_nonlinear_constraints: true,
         },
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(feature = "nlopt")]
         AlgorithmInfo {
             name: "nlopt:origdirect",
             library: "NLOPT",
@@ -83,7 +83,7 @@ pub fn get_all_algorithms() -> Vec<AlgorithmInfo> {
             supports_linear_constraints: false,
             supports_nonlinear_constraints: true,
         },
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(feature = "nlopt")]
         // NLOPT algorithms - Global without nonlinear constraint support
         AlgorithmInfo {
             name: "nlopt:crs2lm",
@@ -92,7 +92,7 @@ pub fn get_all_algorithms() -> Vec<AlgorithmInfo> {
             supports_linear_constraints: false,
             supports_nonlinear_constraints: false,
         },
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(feature = "nlopt")]
         AlgorithmInfo {
             name: "nlopt:direct",
             library: "NLOPT",
@@ -100,7 +100,7 @@ pub fn get_all_algorithms() -> Vec<AlgorithmInfo> {
             supports_linear_constraints: false,
             supports_nonlinear_constraints: false,
         },
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(feature = "nlopt")]
         AlgorithmInfo {
             name: "nlopt:directl",
             library: "NLOPT",
@@ -108,7 +108,7 @@ pub fn get_all_algorithms() -> Vec<AlgorithmInfo> {
             supports_linear_constraints: false,
             supports_nonlinear_constraints: false,
         },
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(feature = "nlopt")]
         AlgorithmInfo {
             name: "nlopt:gmlsl",
             library: "NLOPT",
@@ -116,7 +116,7 @@ pub fn get_all_algorithms() -> Vec<AlgorithmInfo> {
             supports_linear_constraints: false,
             supports_nonlinear_constraints: false,
         },
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(feature = "nlopt")]
         AlgorithmInfo {
             name: "nlopt:gmlsllds",
             library: "NLOPT",
@@ -124,7 +124,7 @@ pub fn get_all_algorithms() -> Vec<AlgorithmInfo> {
             supports_linear_constraints: false,
             supports_nonlinear_constraints: false,
         },
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(feature = "nlopt")]
         AlgorithmInfo {
             name: "nlopt:sbplx",
             library: "NLOPT",
@@ -132,7 +132,7 @@ pub fn get_all_algorithms() -> Vec<AlgorithmInfo> {
             supports_linear_constraints: false,
             supports_nonlinear_constraints: false,
         },
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(feature = "nlopt")]
         AlgorithmInfo {
             name: "nlopt:slsqp",
             library: "NLOPT",
@@ -140,7 +140,7 @@ pub fn get_all_algorithms() -> Vec<AlgorithmInfo> {
             supports_linear_constraints: true,
             supports_nonlinear_constraints: true,
         },
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(feature = "nlopt")]
         AlgorithmInfo {
             name: "nlopt:stogo",
             library: "NLOPT",
@@ -148,7 +148,7 @@ pub fn get_all_algorithms() -> Vec<AlgorithmInfo> {
             supports_linear_constraints: false,
             supports_nonlinear_constraints: false,
         },
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(feature = "nlopt")]
         AlgorithmInfo {
             name: "nlopt:stogorand",
             library: "NLOPT",
@@ -156,7 +156,7 @@ pub fn get_all_algorithms() -> Vec<AlgorithmInfo> {
             supports_linear_constraints: false,
             supports_nonlinear_constraints: false,
         },
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(feature = "nlopt")]
         // NLOPT algorithms - Local
         AlgorithmInfo {
             name: "nlopt:bobyqa",
@@ -165,7 +165,7 @@ pub fn get_all_algorithms() -> Vec<AlgorithmInfo> {
             supports_linear_constraints: false,
             supports_nonlinear_constraints: false,
         },
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(feature = "nlopt")]
         AlgorithmInfo {
             name: "nlopt:cobyla",
             library: "NLOPT",
@@ -173,7 +173,7 @@ pub fn get_all_algorithms() -> Vec<AlgorithmInfo> {
             supports_linear_constraints: true,
             supports_nonlinear_constraints: true,
         },
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(feature = "nlopt")]
         AlgorithmInfo {
             name: "nlopt:neldermead",
             library: "NLOPT",
@@ -306,7 +306,7 @@ pub struct ObjectiveData {
 #[derive(Debug, Clone)]
 pub enum AlgorithmCategory {
     /// NLOPT library algorithm with specific algorithm type
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(feature = "nlopt")]
     Nlopt(Algorithm),
     /// Metaheuristics library algorithm with algorithm name
     Metaheuristics(String),
@@ -319,7 +319,7 @@ pub fn parse_algorithm_name(name: &str) -> Option<AlgorithmCategory> {
     if let Some(algo_info) = find_algorithm_info(name) {
         let normalized_name = algo_info.name;
 
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(feature = "nlopt")]
         if normalized_name.starts_with("nlopt:") {
             let nlopt_name = normalized_name.strip_prefix("nlopt:").unwrap();
             let nlopt_algo = match nlopt_name {
@@ -540,7 +540,7 @@ pub fn optimize_filters_with_algo_override(
 
     // Parse algorithm and dispatch to appropriate function
     match parse_algorithm_name(algo) {
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(feature = "nlopt")]
         Some(AlgorithmCategory::Nlopt(nlopt_algo)) => optimize_filters_nlopt(
             x,
             lower_bounds,
