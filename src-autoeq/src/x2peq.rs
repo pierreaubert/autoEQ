@@ -75,7 +75,11 @@ pub fn peq2x(peq: &Peq, peq_model: PeqModel) -> Vec<f64> {
 
         // Add parameters based on model
         match peq_model {
-            PeqModel::Pk | PeqModel::HpPk | PeqModel::HpPkLp => {
+            PeqModel::Pk
+            | PeqModel::HpPk
+            | PeqModel::HpPkLp
+            | PeqModel::LsPk
+            | PeqModel::LsPkHs => {
                 x.push(params.freq);
                 x.push(params.q);
                 x.push(params.gain);

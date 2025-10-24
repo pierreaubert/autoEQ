@@ -267,7 +267,11 @@ pub fn setup_bounds(args: &crate::cli::Args) -> (Vec<f64>, Vec<f64>) {
 
         // Add bounds based on model type
         match model {
-            PeqModel::Pk | PeqModel::HpPk | PeqModel::HpPkLp => {
+            PeqModel::Pk
+            | PeqModel::HpPk
+            | PeqModel::HpPkLp
+            | PeqModel::LsPk
+            | PeqModel::LsPkHs => {
                 // Fixed filter types: [freq, Q, gain]
                 lower_bounds.extend_from_slice(&[f_low_adjusted, q_lower, gain_lower]);
                 upper_bounds.extend_from_slice(&[f_high_adjusted, args.max_q, args.max_db]);
@@ -303,19 +307,43 @@ pub fn setup_bounds(args: &crate::cli::Args) -> (Vec<f64>, Vec<f64>) {
             lower_bounds[2] = 0.0;
             upper_bounds[2] = 0.0;
         }
+        PeqModel::LsPk | PeqModel::LsPkHs => {
+            // First filter is low shelves - fixed 3-param layout
+            lower_bounds[0] = 20.0_f64.max(args.min_freq).log10();
+            upper_bounds[0] = 120.0_f64.min(args.min_freq + 20.0).log10();
+            lower_bounds[1] = args.min_q;
+            upper_bounds[1] = args.max_q;
+            lower_bounds[2] = -args.max_db;
+            upper_bounds[2] = args.max_db;
+        }
         _ => {}
     }
 
-    if matches!(model, PeqModel::HpPkLp) && args.num_filters > 1 {
-        // Last filter is lowpass - fixed 3-param layout
-        let last_idx = (args.num_filters - 1) * ppf;
-        if ppf == 3 {
-            lower_bounds[last_idx] = (args.max_freq - 2000.0).max(5000.0).log10();
-            upper_bounds[last_idx] = args.max_freq.log10();
-            lower_bounds[last_idx + 1] = 1.0;
-            upper_bounds[last_idx + 1] = 1.5;
-            lower_bounds[last_idx + 2] = 0.0;
-            upper_bounds[last_idx + 2] = 0.0;
+    if args.num_filters > 1 {
+        if matches!(model, PeqModel::HpPkLp) {
+            // Last filter is lowpass - fixed 3-param layout
+            let last_idx = (args.num_filters - 1) * ppf;
+            if ppf == 3 {
+                lower_bounds[last_idx] = (args.max_freq - 2000.0).max(5000.0).log10();
+                upper_bounds[last_idx] = args.max_freq.log10();
+                lower_bounds[last_idx + 1] = 1.0;
+                upper_bounds[last_idx + 1] = 1.5;
+                lower_bounds[last_idx + 2] = 0.0;
+                upper_bounds[last_idx + 2] = 0.0;
+            }
+        }
+
+        if matches!(model, PeqModel::LsPkHs) {
+            // Last filter is lowpass - fixed 3-param layout
+            let last_idx = (args.num_filters - 1) * ppf;
+            if ppf == 3 {
+                lower_bounds[last_idx] = (args.max_freq - 2000.0).max(5000.0).log10();
+                upper_bounds[last_idx] = args.max_freq.log10();
+                lower_bounds[last_idx + 1] = args.min_q;
+                upper_bounds[last_idx + 1] = args.max_q;
+                lower_bounds[last_idx + 2] = -args.max_db;
+                upper_bounds[last_idx + 2] = args.max_db;
+            }
         }
     }
 
@@ -344,6 +372,11 @@ pub fn setup_bounds(args: &crate::cli::Args) -> (Vec<f64>, Vec<f64>) {
                 PeqModel::HpPkLp if i == 0 => "HP",
                 PeqModel::HpPkLp if i == args.num_filters - 1 => "LP",
                 PeqModel::HpPkLp => "PK",
+                PeqModel::LsPk if i == 0 => "LS",
+                PeqModel::LsPk => "PK",
+                PeqModel::LsPkHs if i == 0 => "LS",
+                PeqModel::LsPkHs if i == args.num_filters - 1 => "HS",
+                PeqModel::LsPkHs => "PK",
                 PeqModel::FreePkFree if i == 0 || i == args.num_filters - 1 => "??",
                 PeqModel::FreePkFree => "PK",
                 PeqModel::Free => "??",
@@ -381,7 +414,11 @@ pub fn initial_guess(
         let offset = i * ppf;
 
         match model {
-            PeqModel::Pk | PeqModel::HpPk | PeqModel::HpPkLp => {
+            PeqModel::Pk
+            | PeqModel::HpPk
+            | PeqModel::HpPkLp
+            | PeqModel::LsPk
+            | PeqModel::LsPkHs => {
                 // Fixed filter types: [freq, Q, gain]
                 let freq = lower_bounds[offset].min(args.max_freq.log10());
                 let q = (upper_bounds[offset + 1] * lower_bounds[offset + 1]).sqrt();

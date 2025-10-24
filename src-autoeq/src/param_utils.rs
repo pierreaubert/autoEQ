@@ -10,7 +10,7 @@ use crate::iir::BiquadFilterType;
 pub fn params_per_filter(peq_model: PeqModel) -> usize {
     match peq_model {
         // Fixed filter types use 3 parameters: freq, Q, gain
-        PeqModel::Pk | PeqModel::HpPk | PeqModel::HpPkLp => 3,
+        PeqModel::Pk | PeqModel::HpPk | PeqModel::HpPkLp | PeqModel::LsPk | PeqModel::LsPkHs => 3,
         // Free filter types use 4 parameters: type, freq, Q, gain
         PeqModel::FreePkFree | PeqModel::Free => 4,
     }
@@ -27,7 +27,7 @@ pub fn get_filter_params(x: &[f64], i: usize, peq_model: PeqModel) -> FilterPara
     let offset = i * ppf;
 
     match peq_model {
-        PeqModel::Pk | PeqModel::HpPk | PeqModel::HpPkLp => {
+        PeqModel::Pk | PeqModel::HpPk | PeqModel::HpPkLp | PeqModel::LsPk | PeqModel::LsPkHs => {
             // Fixed filter types: parameters are [freq, Q, gain]
             FilterParams {
                 filter_type: None,
@@ -54,7 +54,7 @@ pub fn set_filter_params(x: &mut [f64], i: usize, params: &FilterParams, peq_mod
     let offset = i * ppf;
 
     match peq_model {
-        PeqModel::Pk | PeqModel::HpPk | PeqModel::HpPkLp => {
+        PeqModel::Pk | PeqModel::HpPk | PeqModel::HpPkLp | PeqModel::LsPk | PeqModel::LsPkHs => {
             // Fixed filter types: parameters are [freq, Q, gain]
             x[offset] = params.freq;
             x[offset + 1] = params.q;
@@ -104,6 +104,22 @@ pub fn determine_filter_type(
                 BiquadFilterType::HighpassVariableQ
             } else if i == num_filters - 1 {
                 BiquadFilterType::Lowpass
+            } else {
+                BiquadFilterType::Peak
+            }
+        }
+        PeqModel::LsPk => {
+            if i == 0 {
+                BiquadFilterType::Lowshelf
+            } else {
+                BiquadFilterType::Peak
+            }
+        }
+        PeqModel::LsPkHs => {
+            if i == 0 {
+                BiquadFilterType::Lowshelf
+            } else if i == num_filters - 1 {
+                BiquadFilterType::Highshelf
             } else {
                 BiquadFilterType::Peak
             }

@@ -36,6 +36,12 @@ pub enum PeqModel {
     /// First filter is highpass, last is lowpass, rest are peak filters
     #[value(name = "hp-pk-lp")]
     HpPkLp,
+    /// First filter is low shelve, rest are peak filters
+    #[value(name = "ls-pk")]
+    LsPk,
+    /// First filter is low shelve, last is high shelve, rest are peak filters
+    #[value(name = "ls-pk-hs")]
+    LsPkHs,
     /// First and last filters are free (any type), rest are peak filters
     #[value(name = "free-pk-free")]
     FreePkFree,
@@ -49,7 +55,9 @@ impl fmt::Display for PeqModel {
         match self {
             PeqModel::Pk => write!(f, "pk"),
             PeqModel::HpPk => write!(f, "hp-pk"),
+            PeqModel::LsPk => write!(f, "ls-pk"),
             PeqModel::HpPkLp => write!(f, "hp-pk-lp"),
+            PeqModel::LsPkHs => write!(f, "ls-pk-hs"),
             PeqModel::FreePkFree => write!(f, "free-pk-free"),
             PeqModel::Free => write!(f, "free"),
         }
@@ -62,7 +70,9 @@ impl PeqModel {
         vec![
             PeqModel::Pk,
             PeqModel::HpPk,
+            PeqModel::LsPk,
             PeqModel::HpPkLp,
+            PeqModel::LsPkHs,
             PeqModel::FreePkFree,
             PeqModel::Free,
         ]
@@ -73,7 +83,11 @@ impl PeqModel {
         match self {
             PeqModel::Pk => "All filters are peak/bell filters",
             PeqModel::HpPk => "First filter is highpass, rest are peak filters",
+            PeqModel::LsPk => "First filter is low shelve, rest are peak filters",
             PeqModel::HpPkLp => "First filter is highpass, last is lowpass, rest are peak filters",
+            PeqModel::LsPkHs => {
+                "First filter is low shelve, last is high shelve, rest are peak filters"
+            }
             PeqModel::FreePkFree => {
                 "First and last filters can be any type, middle filters are peak"
             }

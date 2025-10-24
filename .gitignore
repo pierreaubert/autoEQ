@@ -12,6 +12,7 @@ autoeq_*.png
 *~
 .*~
 *#
+.#*
 src/unused.rs
 .idea
 .qwen
