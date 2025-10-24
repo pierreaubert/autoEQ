@@ -4,9 +4,13 @@ import {
   OPTIMIZATION_DEFAULTS,
   OPTIMIZATION_LIMITS,
   OPTIMIZATION_STEPS,
+  LOSS_OPTIONS,
+  SPEAKER_LOSS_OPTIONS,
+  HEADPHONE_LOSS_OPTIONS,
 } from "./optimization-constants";
 import { CaptureModalManager } from "@audio-capture/capture-modal-manager";
 import { RoutingMatrix } from "@audio-player/audio-routing";
+import { AudioProcessor } from "@audio-player/audio-processor";
 import {
   CaptureStorage,
   type StoredCapture,
@@ -846,48 +850,43 @@ export class UIManager {
     inputType: string,
     lossSelect: HTMLSelectElement,
   ): void {
-    // Import loss options
-    import("./optimization-constants").then(
-      ({ LOSS_OPTIONS, SPEAKER_LOSS_OPTIONS, HEADPHONE_LOSS_OPTIONS }) => {
-        const currentValue = lossSelect.value;
+    const currentValue = lossSelect.value;
 
-        // Clear existing options
-        lossSelect.innerHTML = "";
+    // Clear existing options
+    lossSelect.innerHTML = "";
 
-        // Determine which options to use
-        let options;
-        let defaultValue;
+    // Determine which options to use
+    let options;
+    let defaultValue;
 
-        if (inputType === "headphone") {
-          // Headphone: only headphone options
-          options = HEADPHONE_LOSS_OPTIONS;
-          defaultValue = "headphone-flat";
-        } else if (inputType === "speaker") {
-          // Speaker: only speaker options
-          options = SPEAKER_LOSS_OPTIONS;
-          defaultValue = "speaker-flat";
-        } else {
-          // File, Capture, or any other: show all 4 options
-          options = LOSS_OPTIONS;
-          defaultValue = "speaker-flat";
-        }
+    if (inputType === "headphone") {
+      // Headphone: only headphone options
+      options = HEADPHONE_LOSS_OPTIONS;
+      defaultValue = "headphone-flat";
+    } else if (inputType === "speaker") {
+      // Speaker: only speaker options
+      options = SPEAKER_LOSS_OPTIONS;
+      defaultValue = "speaker-flat";
+    } else {
+      // File, Capture, or any other: show all 4 options
+      options = LOSS_OPTIONS;
+      defaultValue = "speaker-flat";
+    }
 
-        // Populate with appropriate options
-        Object.entries(options).forEach(([value, label]) => {
-          const option = document.createElement("option");
-          option.value = value;
-          option.textContent = label;
-          lossSelect.appendChild(option);
-        });
+    // Populate with appropriate options
+    Object.entries(options).forEach(([value, label]) => {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = label;
+      lossSelect.appendChild(option);
+    });
 
-        // Try to keep the current value if it's still valid, otherwise set default
-        if (lossSelect.querySelector(`option[value="${currentValue}"]`)) {
-          lossSelect.value = currentValue;
-        } else {
-          lossSelect.value = defaultValue;
-        }
-      },
-    );
+    // Try to keep the current value if it's still valid, otherwise set default
+    if (lossSelect.querySelector(`option[value="${currentValue}"]`)) {
+      lossSelect.value = currentValue;
+    } else {
+      lossSelect.value = defaultValue;
+    }
   }
 
   // Event handlers (to be connected to main application logic)
@@ -928,10 +927,6 @@ export class UIManager {
         this.captureResult.style.display = "none";
       }
 
-      // Import AudioProcessor dynamically to avoid circular dependencies
-      const { AudioProcessor } = await import(
-        "@audio-player/audio-processor"
-      );
       const audioProcessor = new AudioProcessor();
 
       try {
@@ -1217,9 +1212,6 @@ export class UIManager {
     // Populate audio devices on initialization
     if (this.captureDeviceSelect) {
       try {
-        const { AudioProcessor } = await import(
-          "@audio-player/audio-processor"
-        );
         const audioProcessor = new AudioProcessor();
         await this.populateAudioDevices(audioProcessor);
         audioProcessor.destroy();

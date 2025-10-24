@@ -94,7 +94,7 @@ export class CaptureGraphRenderer {
 
   private bindEvents(): void {
     // Handle window resize with debouncing
-    let resizeTimeout: NodeJS.Timeout;
+    let resizeTimeout: number;
     window.addEventListener("resize", () => {
       clearTimeout(resizeTimeout);
       resizeTimeout = setTimeout(() => {

@@ -19,22 +19,17 @@
 
     /* Path mappings */
     "paths": {
-      "@audio-player/*": ["../src-audio-player/src/*"],
-      "@audio-capture/*": ["../src-audio-capture/src/*"],
-      "@ui/*": ["./src*"]
+      "@audio-player/*":  ["./src-ui-frontend/modules/audio-player/*"],
+      "@audio-capture/*": ["./src-ui-frontend/modules/audio-capture/*"],
+      "@ui/*": ["./src-ui-frontend*"]
     }
   },
   "include": [
-    "./**/*",
-    "../src-audio-player/src/**/*",
-    "../src-audio-capture/src/**/*"
+    "./src-ui-frontend/**/*",
   ],
   "exclude": [
     "node_modules",
     "dist",
-    "./src/tests/**/*",
-    "../src-audio-player/src/tests/**/*",
-    "../src-audio-capture/src/tests/**/*",
-    "../src-audio-player/scripts/build-audio-player.js"
+    "./src-ui-frontend/tests/**/*",
   ]
 }
