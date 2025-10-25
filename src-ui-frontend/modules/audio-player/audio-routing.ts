@@ -14,14 +14,14 @@ export interface RoutingConfig {
 }
 
 const CHANNEL_NAMES = [
-  'Left',
-  'Right',
-  'Center',
-  'Subwoofer',
-  'SR', // Surround Right
-  'SL', // Surround Left
-  'RR', // Rear Right
-  'RL', // Rear Left
+  "Left",
+  "Right",
+  "Center",
+  "Subwoofer",
+  "SR", // Surround Right
+  "SL", // Surround Left
+  "RR", // Rear Right
+  "RL", // Rear Left
 ];
 
 /**
@@ -75,7 +75,7 @@ export class RoutingMatrix {
    */
   public setRouting(routing: number[]): void {
     if (routing.length !== this.channelCount) {
-      throw new Error('Routing array length must match channel count');
+      throw new Error("Routing array length must match channel count");
     }
     this.routing = [...routing];
   }
@@ -98,17 +98,17 @@ export class RoutingMatrix {
    */
   public show(anchorElement: HTMLElement): void {
     // Create overlay
-    this.overlay = document.createElement('div');
-    this.overlay.className = 'routing-overlay';
-    this.overlay.addEventListener('click', (e) => {
+    this.overlay = document.createElement("div");
+    this.overlay.className = "routing-overlay";
+    this.overlay.addEventListener("click", (e) => {
       if (e.target === this.overlay) {
         this.hide();
       }
     });
 
     // Create container
-    this.container = document.createElement('div');
-    this.container.className = 'routing-matrix-container';
+    this.container = document.createElement("div");
+    this.container.className = "routing-matrix-container";
 
     // Position near anchor
     const rect = anchorElement.getBoundingClientRect();
@@ -123,12 +123,12 @@ export class RoutingMatrix {
 
     // Add escape key handler
     const escapeHandler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
+      if (e.key === "Escape") {
         this.hide();
-        document.removeEventListener('keydown', escapeHandler);
+        document.removeEventListener("keydown", escapeHandler);
       }
     };
-    document.addEventListener('keydown', escapeHandler);
+    document.addEventListener("keydown", escapeHandler);
   }
 
   /**
@@ -149,31 +149,31 @@ export class RoutingMatrix {
     if (!this.container) return;
 
     // Clear container
-    this.container.innerHTML = '';
+    this.container.innerHTML = "";
 
     // Title
-    const title = document.createElement('div');
-    title.className = 'routing-matrix-title';
-    title.textContent = 'Channel Routing';
+    const title = document.createElement("div");
+    title.className = "routing-matrix-title";
+    title.textContent = "Channel Routing";
     this.container.appendChild(title);
 
     // Set grid template columns dynamically for all rows
     const gridTemplate = `80px repeat(${this.channelCount}, 32px)`;
-    
+
     // Create header row with physical channel numbers
-    const headerRow = document.createElement('div');
-    headerRow.className = 'routing-matrix-header';
+    const headerRow = document.createElement("div");
+    headerRow.className = "routing-matrix-header";
     headerRow.style.gridTemplateColumns = gridTemplate;
-    
+
     // Empty cell for row labels
-    const emptyCell = document.createElement('div');
-    emptyCell.className = 'routing-matrix-cell routing-matrix-corner';
+    const emptyCell = document.createElement("div");
+    emptyCell.className = "routing-matrix-cell routing-matrix-corner";
     headerRow.appendChild(emptyCell);
 
     // Physical channel headers
     for (let i = 0; i < this.channelCount; i++) {
-      const headerCell = document.createElement('div');
-      headerCell.className = 'routing-matrix-cell routing-matrix-header-cell';
+      const headerCell = document.createElement("div");
+      headerCell.className = "routing-matrix-cell routing-matrix-header-cell";
       headerCell.textContent = `${i + 1}`;
       headerCell.title = `Physical Channel ${i + 1}`;
       headerRow.appendChild(headerCell);
@@ -181,32 +181,40 @@ export class RoutingMatrix {
     this.container.appendChild(headerRow);
 
     // Create rows for each logical channel
-    for (let logicalChannel = 0; logicalChannel < this.channelCount; logicalChannel++) {
-      const row = document.createElement('div');
-      row.className = 'routing-matrix-row';
+    for (
+      let logicalChannel = 0;
+      logicalChannel < this.channelCount;
+      logicalChannel++
+    ) {
+      const row = document.createElement("div");
+      row.className = "routing-matrix-row";
       row.style.gridTemplateColumns = gridTemplate;
 
       // Row label (logical channel name)
-      const labelCell = document.createElement('div');
-      labelCell.className = 'routing-matrix-cell routing-matrix-label-cell';
+      const labelCell = document.createElement("div");
+      labelCell.className = "routing-matrix-cell routing-matrix-label-cell";
       labelCell.textContent = getChannelName(logicalChannel, this.channelCount);
       labelCell.title = `Logical: ${getChannelName(logicalChannel, this.channelCount)}`;
       row.appendChild(labelCell);
 
       // Create cells for each physical channel
-      for (let physicalChannel = 0; physicalChannel < this.channelCount; physicalChannel++) {
-        const cell = document.createElement('div');
-        cell.className = 'routing-matrix-cell routing-matrix-data-cell';
-        
+      for (
+        let physicalChannel = 0;
+        physicalChannel < this.channelCount;
+        physicalChannel++
+      ) {
+        const cell = document.createElement("div");
+        cell.className = "routing-matrix-cell routing-matrix-data-cell";
+
         // Check if this is the current routing
         const isActive = this.routing[logicalChannel] === physicalChannel;
         if (isActive) {
-          cell.classList.add('routing-active');
-          cell.textContent = '×';
+          cell.classList.add("routing-active");
+          cell.textContent = "×";
         }
 
         // Click handler
-        cell.addEventListener('click', () => {
+        cell.addEventListener("click", () => {
           this.handleCellClick(logicalChannel, physicalChannel);
         });
 
@@ -217,17 +225,20 @@ export class RoutingMatrix {
     }
 
     // Close button
-    const closeButton = document.createElement('button');
-    closeButton.className = 'routing-matrix-close';
-    closeButton.textContent = 'Close';
-    closeButton.addEventListener('click', () => this.hide());
+    const closeButton = document.createElement("button");
+    closeButton.className = "routing-matrix-close";
+    closeButton.textContent = "Close";
+    closeButton.addEventListener("click", () => this.hide());
     this.container.appendChild(closeButton);
   }
 
   /**
    * Handle cell click - swap routing
    */
-  private handleCellClick(logicalChannel: number, physicalChannel: number): void {
+  private handleCellClick(
+    logicalChannel: number,
+    physicalChannel: number,
+  ): void {
     // Find if any other logical channel is routed to this physical channel
     const otherLogicalChannel = this.routing.indexOf(physicalChannel);
 
@@ -255,17 +266,17 @@ export class RoutingMatrix {
  * Create a routing button element with mini matrix icon
  */
 export function createRoutingButton(): HTMLButtonElement {
-  const button = document.createElement('button');
-  button.className = 'routing-button';
-  button.title = 'Configure channel routing';
-  button.setAttribute('aria-label', 'Configure channel routing');
+  const button = document.createElement("button");
+  button.className = "routing-button";
+  button.title = "Configure channel routing";
+  button.setAttribute("aria-label", "Configure channel routing");
 
   // Create mini matrix SVG icon
-  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.setAttribute('width', '16');
-  svg.setAttribute('height', '16');
-  svg.setAttribute('viewBox', '0 0 16 16');
-  svg.setAttribute('fill', 'currentColor');
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("width", "16");
+  svg.setAttribute("height", "16");
+  svg.setAttribute("viewBox", "0 0 16 16");
+  svg.setAttribute("fill", "currentColor");
 
   // Draw a simple 3x3 grid with one diagonal marked
   const gridSize = 3;
@@ -274,33 +285,42 @@ export function createRoutingButton(): HTMLButtonElement {
   // Draw grid lines
   for (let i = 0; i <= gridSize; i++) {
     // Vertical lines
-    const vLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-    vLine.setAttribute('x1', `${i * cellSize}`);
-    vLine.setAttribute('y1', '0');
-    vLine.setAttribute('x2', `${i * cellSize}`);
-    vLine.setAttribute('y2', '16');
-    vLine.setAttribute('stroke', 'currentColor');
-    vLine.setAttribute('stroke-width', '1');
+    const vLine = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "line",
+    );
+    vLine.setAttribute("x1", `${i * cellSize}`);
+    vLine.setAttribute("y1", "0");
+    vLine.setAttribute("x2", `${i * cellSize}`);
+    vLine.setAttribute("y2", "16");
+    vLine.setAttribute("stroke", "currentColor");
+    vLine.setAttribute("stroke-width", "1");
     svg.appendChild(vLine);
 
     // Horizontal lines
-    const hLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-    hLine.setAttribute('x1', '0');
-    hLine.setAttribute('y1', `${i * cellSize}`);
-    hLine.setAttribute('x2', '16');
-    hLine.setAttribute('y2', `${i * cellSize}`);
-    hLine.setAttribute('stroke', 'currentColor');
-    hLine.setAttribute('stroke-width', '1');
+    const hLine = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "line",
+    );
+    hLine.setAttribute("x1", "0");
+    hLine.setAttribute("y1", `${i * cellSize}`);
+    hLine.setAttribute("x2", "16");
+    hLine.setAttribute("y2", `${i * cellSize}`);
+    hLine.setAttribute("stroke", "currentColor");
+    hLine.setAttribute("stroke-width", "1");
     svg.appendChild(hLine);
   }
 
   // Draw diagonal marks (identity routing) in green
   for (let i = 0; i < gridSize; i++) {
-    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-    circle.setAttribute('cx', `${i * cellSize + cellSize / 2}`);
-    circle.setAttribute('cy', `${i * cellSize + cellSize / 2}`);
-    circle.setAttribute('r', '1.5');
-    circle.setAttribute('fill', '#57F287'); // Green color
+    const circle = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "circle",
+    );
+    circle.setAttribute("cx", `${i * cellSize + cellSize / 2}`);
+    circle.setAttribute("cy", `${i * cellSize + cellSize / 2}`);
+    circle.setAttribute("r", "1.5");
+    circle.setAttribute("fill", "#57F287"); // Green color
     svg.appendChild(circle);
   }
 
@@ -314,12 +334,12 @@ export function createRoutingButton(): HTMLButtonElement {
 export function initializeRouting(
   buttonElement: HTMLElement,
   channelCount: number,
-  onRoutingChange: (routing: number[]) => void
+  onRoutingChange: (routing: number[]) => void,
 ): RoutingMatrix {
   const matrix = new RoutingMatrix(channelCount);
   matrix.setOnRoutingChange(onRoutingChange);
 
-  buttonElement.addEventListener('click', () => {
+  buttonElement.addEventListener("click", () => {
     matrix.show(buttonElement);
   });
 

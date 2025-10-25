@@ -3,7 +3,7 @@
  * Tests complex number operations, frequency response calculations, and phase handling
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from "vitest";
 import {
   magnitudePhaseToComplex,
   complexToMagnitudePhase,
@@ -14,36 +14,36 @@ import {
   normalizePhase,
   type ComplexNumber,
   type FrequencyResponse,
-} from '@audio-player/audio-math';
+} from "@audio-player/audio-math";
 
-describe('audio-math', () => {
-  describe('magnitudePhaseToComplex', () => {
-    it('should convert 0 dB and 0 degrees correctly', () => {
+describe("audio-math", () => {
+  describe("magnitudePhaseToComplex", () => {
+    it("should convert 0 dB and 0 degrees correctly", () => {
       const result = magnitudePhaseToComplex(0, 0);
       expect(result.real).toBeCloseTo(1, 5);
       expect(result.imag).toBeCloseTo(0, 5);
     });
 
-    it('should convert 6 dB and 0 degrees correctly', () => {
+    it("should convert 6 dB and 0 degrees correctly", () => {
       const result = magnitudePhaseToComplex(6, 0);
       const expected = Math.pow(10, 6 / 20); // ~1.995
       expect(result.real).toBeCloseTo(expected, 5);
       expect(result.imag).toBeCloseTo(0, 5);
     });
 
-    it('should handle 90 degree phase shift', () => {
+    it("should handle 90 degree phase shift", () => {
       const result = magnitudePhaseToComplex(0, 90);
       expect(result.real).toBeCloseTo(0, 5);
       expect(result.imag).toBeCloseTo(1, 5);
     });
 
-    it('should handle 180 degree phase shift', () => {
+    it("should handle 180 degree phase shift", () => {
       const result = magnitudePhaseToComplex(0, 180);
       expect(result.real).toBeCloseTo(-1, 5);
       expect(result.imag).toBeCloseTo(0, 5);
     });
 
-    it('should handle negative dB values', () => {
+    it("should handle negative dB values", () => {
       const result = magnitudePhaseToComplex(-6, 0);
       const expected = Math.pow(10, -6 / 20); // ~0.501
       expect(result.real).toBeCloseTo(expected, 5);
@@ -51,37 +51,40 @@ describe('audio-math', () => {
     });
   });
 
-  describe('complexToMagnitudePhase', () => {
-    it('should convert unity magnitude correctly', () => {
+  describe("complexToMagnitudePhase", () => {
+    it("should convert unity magnitude correctly", () => {
       const complex: ComplexNumber = { real: 1, imag: 0 };
       const result = complexToMagnitudePhase(complex);
       expect(result.magnitudeDB).toBeCloseTo(0, 5);
       expect(result.phaseDeg).toBeCloseTo(0, 5);
     });
 
-    it('should handle imaginary unit correctly', () => {
+    it("should handle imaginary unit correctly", () => {
       const complex: ComplexNumber = { real: 0, imag: 1 };
       const result = complexToMagnitudePhase(complex);
       expect(result.magnitudeDB).toBeCloseTo(0, 5);
       expect(result.phaseDeg).toBeCloseTo(90, 5);
     });
 
-    it('should handle negative real correctly', () => {
+    it("should handle negative real correctly", () => {
       const complex: ComplexNumber = { real: -1, imag: 0 };
       const result = complexToMagnitudePhase(complex);
       expect(result.magnitudeDB).toBeCloseTo(0, 5);
       expect(result.phaseDeg).toBeCloseTo(180, 5);
     });
 
-    it('should roundtrip conversion correctly', () => {
+    it("should roundtrip conversion correctly", () => {
       const original = { magnitudeDB: 3, phaseDeg: 45 };
-      const complex = magnitudePhaseToComplex(original.magnitudeDB, original.phaseDeg);
+      const complex = magnitudePhaseToComplex(
+        original.magnitudeDB,
+        original.phaseDeg,
+      );
       const result = complexToMagnitudePhase(complex);
       expect(result.magnitudeDB).toBeCloseTo(original.magnitudeDB, 5);
       expect(result.phaseDeg).toBeCloseTo(original.phaseDeg, 5);
     });
 
-    it('should avoid log(0) errors', () => {
+    it("should avoid log(0) errors", () => {
       const complex: ComplexNumber = { real: 0, imag: 0 };
       const result = complexToMagnitudePhase(complex);
       expect(result.magnitudeDB).toBeLessThan(-100); // Very negative dB
@@ -89,8 +92,8 @@ describe('audio-math', () => {
     });
   });
 
-  describe('complexAdd', () => {
-    it('should add two complex numbers correctly', () => {
+  describe("complexAdd", () => {
+    it("should add two complex numbers correctly", () => {
       const a: ComplexNumber = { real: 1, imag: 2 };
       const b: ComplexNumber = { real: 3, imag: 4 };
       const result = complexAdd(a, b);
@@ -98,7 +101,7 @@ describe('audio-math', () => {
       expect(result.imag).toBe(6);
     });
 
-    it('should handle zero addition', () => {
+    it("should handle zero addition", () => {
       const a: ComplexNumber = { real: 5, imag: 3 };
       const b: ComplexNumber = { real: 0, imag: 0 };
       const result = complexAdd(a, b);
@@ -106,7 +109,7 @@ describe('audio-math', () => {
       expect(result.imag).toBe(3);
     });
 
-    it('should handle negative numbers', () => {
+    it("should handle negative numbers", () => {
       const a: ComplexNumber = { real: 5, imag: -3 };
       const b: ComplexNumber = { real: -2, imag: 4 };
       const result = complexAdd(a, b);
@@ -115,13 +118,13 @@ describe('audio-math', () => {
     });
   });
 
-  describe('sumFrequencyResponses', () => {
-    it('should return null for empty array', () => {
+  describe("sumFrequencyResponses", () => {
+    it("should return null for empty array", () => {
       const result = sumFrequencyResponses([]);
       expect(result).toBeNull();
     });
 
-    it('should return copy of single response', () => {
+    it("should return copy of single response", () => {
       const response: FrequencyResponse = {
         frequencies: [100, 1000, 10000],
         magnitudes: [0, -3, -6],
@@ -134,7 +137,7 @@ describe('audio-math', () => {
       expect(result?.phases).toEqual(response.phases);
     });
 
-    it('should sum two identical in-phase signals (6dB increase)', () => {
+    it("should sum two identical in-phase signals (6dB increase)", () => {
       const response: FrequencyResponse = {
         frequencies: [1000],
         magnitudes: [0],
@@ -147,7 +150,7 @@ describe('audio-math', () => {
       expect(result?.phases[0]).toBeCloseTo(0, 1);
     });
 
-    it('should cancel two out-of-phase signals', () => {
+    it("should cancel two out-of-phase signals", () => {
       const response1: FrequencyResponse = {
         frequencies: [1000],
         magnitudes: [0],
@@ -163,7 +166,7 @@ describe('audio-math', () => {
       expect(result?.magnitudes[0]).toBeLessThan(-80); // Very low
     });
 
-    it('should handle 90 degree phase difference correctly', () => {
+    it("should handle 90 degree phase difference correctly", () => {
       const response1: FrequencyResponse = {
         frequencies: [1000],
         magnitudes: [0],
@@ -180,7 +183,7 @@ describe('audio-math', () => {
       expect(result?.phases[0]).toBeCloseTo(45, 1);
     });
 
-    it('should reject mismatched frequency counts', () => {
+    it("should reject mismatched frequency counts", () => {
       const response1: FrequencyResponse = {
         frequencies: [100, 1000],
         magnitudes: [0, 0],
@@ -195,7 +198,7 @@ describe('audio-math', () => {
       expect(result).toBeNull();
     });
 
-    it('should reject mismatched frequency values', () => {
+    it("should reject mismatched frequency values", () => {
       const response1: FrequencyResponse = {
         frequencies: [100, 1000],
         magnitudes: [0, 0],
@@ -211,8 +214,8 @@ describe('audio-math', () => {
     });
   });
 
-  describe('sumLeftRightChannels', () => {
-    it('should sum left and right channels', () => {
+  describe("sumLeftRightChannels", () => {
+    it("should sum left and right channels", () => {
       const left: FrequencyResponse = {
         frequencies: [1000],
         magnitudes: [0],
@@ -228,8 +231,8 @@ describe('audio-math', () => {
     });
   });
 
-  describe('averageLeftRightChannels', () => {
-    it('should average two identical signals', () => {
+  describe("averageLeftRightChannels", () => {
+    it("should average two identical signals", () => {
       const left: FrequencyResponse = {
         frequencies: [1000],
         magnitudes: [3],
@@ -246,7 +249,7 @@ describe('audio-math', () => {
       expect(result?.phases[0]).toBeCloseTo(0, 1);
     });
 
-    it('should average different magnitude signals', () => {
+    it("should average different magnitude signals", () => {
       const left: FrequencyResponse = {
         frequencies: [1000],
         magnitudes: [0],
@@ -263,7 +266,7 @@ describe('audio-math', () => {
       expect(result?.magnitudes[0]).toBeCloseTo(3.52, 1);
     });
 
-    it('should return null for mismatched frequencies', () => {
+    it("should return null for mismatched frequencies", () => {
       const left: FrequencyResponse = {
         frequencies: [1000],
         magnitudes: [0],
@@ -279,22 +282,22 @@ describe('audio-math', () => {
     });
   });
 
-  describe('normalizePhase', () => {
-    it('should keep phase in [-180, 180] range', () => {
+  describe("normalizePhase", () => {
+    it("should keep phase in [-180, 180] range", () => {
       expect(normalizePhase(0)).toBe(0);
       expect(normalizePhase(90)).toBe(90);
       expect(normalizePhase(180)).toBe(180);
       expect(normalizePhase(-180)).toBe(-180);
     });
 
-    it('should wrap phases above 180 degrees', () => {
+    it("should wrap phases above 180 degrees", () => {
       expect(normalizePhase(270)).toBe(-90);
       expect(normalizePhase(360)).toBe(0);
       expect(normalizePhase(450)).toBe(90);
       expect(normalizePhase(720)).toBe(0);
     });
 
-    it('should wrap phases below -180 degrees', () => {
+    it("should wrap phases below -180 degrees", () => {
       expect(normalizePhase(-270)).toBe(90);
       expect(normalizePhase(-360)).toBe(0);
       expect(normalizePhase(-450)).toBe(-90);

@@ -4,7 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { save } from "@tauri-apps/plugin-dialog";
 import { writeTextFile } from "@tauri-apps/plugin-fs";
 
-export type ExportFormat = "apo" | "aupreset" | "rme";
+export type ExportFormat = "apo" | "aupreset" | "rme" | "rme-room";
 
 /**
  * Export optimized EQ parameters in selected format
@@ -47,6 +47,13 @@ export async function exportEQ(
       }
       case "rme":
         content = (await invoke("generate_rme_format", {
+          filterParams,
+          sampleRate,
+          peqModel,
+        })) as string;
+        break;
+      case "rme-room":
+        content = (await invoke("generate_rme_room_format", {
           filterParams,
           sampleRate,
           peqModel,
@@ -105,7 +112,8 @@ function generatePresetName(
   }
 
   // Use speaker name or "Unknown"
-  const speakerPart = speakerName && speakerName.trim() !== "" ? speakerName.trim() : "Unknown";
+  const speakerPart =
+    speakerName && speakerName.trim() !== "" ? speakerName.trim() : "Unknown";
 
   return `AutoEQ ${lossTypePart} - ${speakerPart}`;
 }
@@ -161,6 +169,7 @@ function getFileExtension(format: ExportFormat): string {
     case "aupreset":
       return "aupreset";
     case "rme":
+    case "rme-room":
       return "xml";
     default:
       return "txt";
@@ -170,7 +179,9 @@ function getFileExtension(format: ExportFormat): string {
 /**
  * Get file filters for save dialog based on format
  */
-function getFileFilters(format: ExportFormat): Array<{ name: string; extensions: string[] }> {
+function getFileFilters(
+  format: ExportFormat,
+): Array<{ name: string; extensions: string[] }> {
   switch (format) {
     case "apo":
       return [
@@ -183,13 +194,12 @@ function getFileFilters(format: ExportFormat): Array<{ name: string; extensions:
         { name: "All Files", extensions: ["*"] },
       ];
     case "rme":
+    case "rme-room":
       return [
         { name: "XML Files", extensions: ["xml"] },
         { name: "All Files", extensions: ["*"] },
       ];
     default:
-      return [
-        { name: "All Files", extensions: ["*"] },
-      ];
+      return [{ name: "All Files", extensions: ["*"] }];
   }
 }

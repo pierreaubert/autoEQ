@@ -333,7 +333,9 @@ export class UIManager {
     this.stopBtn?.addEventListener("click", () => this.onStopClick());
 
     // Download APO button
-    this.downloadApoBtn?.addEventListener("click", () => this.onDownloadApoClick());
+    this.downloadApoBtn?.addEventListener("click", () =>
+      this.onDownloadApoClick(),
+    );
   }
 
   private setupUIInteractions(): void {

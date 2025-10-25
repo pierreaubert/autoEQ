@@ -273,6 +273,8 @@ export function generateEQDesign(): string {
           <option value="pk">PK - All Peak Filters</option>
           <option value="hp-pk">HP+PK - Highpass + Peaks</option>
           <option value="hp-pk-lp">HP+PK+LP - Highpass + Peaks + Lowpass</option>
+          <option value="ls-pk">LS+PK - Low Shelf + Peaks</option>
+          <option value="ls-pk-hs">LS+PK+HS - Low Shelf + Peaks + High Shelf</option>
           <option value="free-pk-free">Free+PK+Free - Flexible ends, peaks middle</option>
           <option value="free">Free - All filters flexible</option>
         </select>
@@ -543,6 +545,7 @@ export function generateBottomRow(): string {
                 <option value="apo">APO</option>
                 <option value="aupreset">AUpreset</option>
                 <option value="rme">RME Channel</option>
+                <option value="rme-room">RME Room</option>
             </select>
             <button
                 type="button"

@@ -3,7 +3,7 @@
 export interface CaptureResult {
   frequencies: number[];
   magnitudes: number[];
-  phases: number[];  // Phase data in degrees
+  phases: number[]; // Phase data in degrees
   success: boolean;
   error?: string;
 }
@@ -426,14 +426,15 @@ export class AudioProcessor {
     try {
       // Check if capture is supported
       if (!this.isCaptureSupported()) {
-        const error = "Microphone capture is not supported by your browser. Please ensure you are using a modern browser with WebRTC support.";
+        const error =
+          "Microphone capture is not supported by your browser. Please ensure you are using a modern browser with WebRTC support.";
         console.error("Capture not supported:", error);
         return {
           frequencies: [],
           magnitudes: [],
           phases: [],
           success: false,
-          error: error
+          error: error,
         };
       }
 
@@ -468,15 +469,24 @@ export class AudioProcessor {
         },
       };
 
-      console.log('Requesting getUserMedia with constraints:', audioConstraints);
-      
+      console.log(
+        "Requesting getUserMedia with constraints:",
+        audioConstraints,
+      );
+
       try {
         this.mediaStream =
           await navigator.mediaDevices.getUserMedia(audioConstraints);
       } catch (error: any) {
         // If we get OverconstrainedError with a specific device, try with default
-        if (error.name === 'OverconstrainedError' && deviceId && deviceId !== 'default') {
-          console.warn(`Failed to use device ${deviceId}, falling back to default device`);
+        if (
+          error.name === "OverconstrainedError" &&
+          deviceId &&
+          deviceId !== "default"
+        ) {
+          console.warn(
+            `Failed to use device ${deviceId}, falling back to default device`,
+          );
           audioConstraints = {
             audio: {
               echoCancellation: false,
@@ -519,23 +529,26 @@ export class AudioProcessor {
     } catch (error) {
       console.error("Error during audio capture:", error);
       this.stopCapture();
-      
+
       // Provide more specific error messages based on the error type
       let errorMessage = "Unknown capture error";
       if (error instanceof Error) {
-        if (error.name === 'NotAllowedError') {
-          errorMessage = "Microphone permission denied. Please allow microphone access and try again.";
-        } else if (error.name === 'NotFoundError') {
-          errorMessage = "No microphone found. Please connect a microphone and try again.";
-        } else if (error.name === 'NotReadableError') {
+        if (error.name === "NotAllowedError") {
+          errorMessage =
+            "Microphone permission denied. Please allow microphone access and try again.";
+        } else if (error.name === "NotFoundError") {
+          errorMessage =
+            "No microphone found. Please connect a microphone and try again.";
+        } else if (error.name === "NotReadableError") {
           errorMessage = "Microphone is already in use by another application.";
-        } else if (error.name === 'OverconstrainedError') {
-          errorMessage = "The selected microphone settings are not supported by your device.";
+        } else if (error.name === "OverconstrainedError") {
+          errorMessage =
+            "The selected microphone settings are not supported by your device.";
         } else {
           errorMessage = error.message;
         }
       }
-      
+
       return {
         frequencies: [],
         magnitudes: [],
@@ -590,7 +603,7 @@ export class AudioProcessor {
       this.mediaStream.getTracks().forEach((track) => track.stop());
       this.mediaStream = null;
     }
-    
+
     // Stop and clean up the audio element used for device routing
     if (this.captureAudioElement) {
       try {
@@ -602,7 +615,7 @@ export class AudioProcessor {
         console.error("Error cleaning up capture audio element:", e);
       }
     }
-    
+
     // Disconnect all nodes from the audio context destination
     // This ensures no audio is still playing
     if (this.audioContext && this.audioContext.destination) {
@@ -624,10 +637,10 @@ export class AudioProcessor {
     }
 
     // Resume audio context if suspended (required for some browsers)
-    if (this.audioContext.state === 'suspended') {
-      console.log('Resuming suspended audio context...');
+    if (this.audioContext.state === "suspended") {
+      console.log("Resuming suspended audio context...");
       await this.audioContext.resume();
-      console.log('Audio context resumed, state:', this.audioContext.state);
+      console.log("Audio context resumed, state:", this.audioContext.state);
     }
 
     console.log(`Starting ${this.signalType} capture...`);
@@ -637,7 +650,7 @@ export class AudioProcessor {
 
     const duration = this.sweepDuration;
     let sourceNode: AudioNode;
-    
+
     // Keep track of all nodes to clean up
     const nodesToCleanup: AudioNode[] = [];
 
@@ -671,34 +684,48 @@ export class AudioProcessor {
     // Convert percentage (0-100) to gain value (0-1)
     gainNode.gain.value = this.outputVolume / 100;
     nodesToCleanup.push(gainNode);
-    
+
     // Create destination node that respects the selected output device
     let finalDestination: AudioNode;
     let mediaStreamDestination: MediaStreamAudioDestinationNode | null = null;
-    
-    if (this.outputDeviceId && this.outputDeviceId !== "default" && this.outputDeviceId !== "") {
+
+    if (
+      this.outputDeviceId &&
+      this.outputDeviceId !== "default" &&
+      this.outputDeviceId !== ""
+    ) {
       // For specific output devices, we need to use MediaStreamDestination
       // and route it through an audio element with setSinkId
       try {
-        mediaStreamDestination = this.audioContext.createMediaStreamDestination();
+        mediaStreamDestination =
+          this.audioContext.createMediaStreamDestination();
         this.captureAudioElement = new Audio();
         this.captureAudioElement.srcObject = mediaStreamDestination.stream;
         this.captureAudioElement.autoplay = true;
         this.captureAudioElement.volume = 1.0; // Ensure element volume is up
-        
+
         // Try to set the output device
-        if ('setSinkId' in this.captureAudioElement) {
+        if ("setSinkId" in this.captureAudioElement) {
           try {
-            await (this.captureAudioElement as any).setSinkId(this.outputDeviceId);
-            console.log(`Audio successfully routed to device: ${this.outputDeviceId}`);
+            await (this.captureAudioElement as any).setSinkId(
+              this.outputDeviceId,
+            );
+            console.log(
+              `Audio successfully routed to device: ${this.outputDeviceId}`,
+            );
           } catch (setSinkError) {
-            console.warn(`Failed to set sink ID "${this.outputDeviceId}":`, setSinkError);
-            console.log('Continuing with current default output device');
+            console.warn(
+              `Failed to set sink ID "${this.outputDeviceId}":`,
+              setSinkError,
+            );
+            console.log("Continuing with current default output device");
           }
         } else {
-          console.warn("setSinkId not supported by browser, using default output device");
+          console.warn(
+            "setSinkId not supported by browser, using default output device",
+          );
         }
-        
+
         // Start playing the audio element with error handling
         try {
           const playPromise = this.captureAudioElement.play();
@@ -707,22 +734,28 @@ export class AudioProcessor {
           }
           console.log("Audio element successfully playing for output routing");
         } catch (playError: any) {
-          if (playError.name === 'NotAllowedError') {
-            console.warn("Autoplay blocked, user interaction may be required:", playError);
+          if (playError.name === "NotAllowedError") {
+            console.warn(
+              "Autoplay blocked, user interaction may be required:",
+              playError,
+            );
           } else {
             console.warn("Failed to play audio element:", playError);
           }
         }
-        
+
         finalDestination = mediaStreamDestination;
         nodesToCleanup.push(mediaStreamDestination);
       } catch (error) {
-        console.error("Failed to setup output device routing, falling back to default:", error);
+        console.error(
+          "Failed to setup output device routing, falling back to default:",
+          error,
+        );
         finalDestination = this.audioContext.destination;
       }
     } else {
       // Use default output device
-      console.log('Using default audio output device');
+      console.log("Using default audio output device");
       finalDestination = this.audioContext.destination;
     }
 
@@ -828,7 +861,7 @@ export class AudioProcessor {
       // Get both frequency and time domain data
       this.captureAnalyser.getFloatFrequencyData(frequencyData);
       this.captureAnalyser.getFloatTimeDomainData(timeData);
-      
+
       frequencyResponses.push(new Float32Array(frequencyData));
       timeDomainResponses.push(new Float32Array(timeData));
 
@@ -855,7 +888,7 @@ export class AudioProcessor {
       }
       this.noiseSource = null;
     }
-    
+
     // Disconnect all audio nodes created during capture
     console.log(`Disconnecting ${nodesToCleanup.length} audio nodes...`);
     for (const node of nodesToCleanup) {
@@ -865,14 +898,16 @@ export class AudioProcessor {
         // Already disconnected
       }
     }
-    
+
     // Clean up the audio element used for device routing
     if (this.captureAudioElement) {
       try {
         this.captureAudioElement.pause();
         this.captureAudioElement.srcObject = null;
         this.captureAudioElement = null;
-        console.log("Capture audio element stopped and cleaned up after measurement");
+        console.log(
+          "Capture audio element stopped and cleaned up after measurement",
+        );
       } catch (e) {
         console.error("Error stopping capture audio element:", e);
       }
@@ -895,13 +930,22 @@ export class AudioProcessor {
     }
 
     // Calculate phase from time domain data
-    console.log('Calculating phase data from time domain samples...');
-    const phaseData = this.calculatePhaseFromTimeDomain(timeDomainResponses, sampleRate);
+    console.log("Calculating phase data from time domain samples...");
+    const phaseData = this.calculatePhaseFromTimeDomain(
+      timeDomainResponses,
+      sampleRate,
+    );
 
     // Apply 1/24 octave smoothing and resample to 1000 points for high resolution
-    const result = this.smoothAndResampleWithPhase(averagedMagnitudeData, phaseData, sampleRate);
+    const result = this.smoothAndResampleWithPhase(
+      averagedMagnitudeData,
+      phaseData,
+      sampleRate,
+    );
 
-    console.log(`Processed ${result.frequencies.length} frequency points with phase data`);
+    console.log(
+      `Processed ${result.frequencies.length} frequency points with phase data`,
+    );
 
     return {
       frequencies: result.frequencies,
@@ -914,11 +958,11 @@ export class AudioProcessor {
   // Phase calculation from time domain data using FFT
   private calculatePhaseFromTimeDomain(
     timeDomainResponses: Float32Array[],
-    sampleRate: number
+    sampleRate: number,
   ): Float32Array {
     const bufferLength = timeDomainResponses[0]?.length || 0;
     if (bufferLength === 0) {
-      console.warn('No time domain data available for phase calculation');
+      console.warn("No time domain data available for phase calculation");
       return new Float32Array(0);
     }
 
@@ -938,7 +982,7 @@ export class AudioProcessor {
 
     // Perform FFT to get complex frequency domain data
     const complexData = this.performFFT(averagedTimeData);
-    
+
     // Extract phase from complex data
     const phaseData = new Float32Array(complexData.length / 2);
     for (let i = 0; i < phaseData.length; i++) {
@@ -956,32 +1000,33 @@ export class AudioProcessor {
   private performFFT(timeData: Float32Array): Float32Array {
     const N = timeData.length;
     const complexData = new Float32Array(N * 2); // Real + imaginary pairs
-    
+
     // Copy time data to complex array (real part only)
     for (let i = 0; i < N; i++) {
-      complexData[i * 2] = timeData[i];     // Real part
-      complexData[i * 2 + 1] = 0;          // Imaginary part
+      complexData[i * 2] = timeData[i]; // Real part
+      complexData[i * 2 + 1] = 0; // Imaginary part
     }
-    
+
     // Apply simple DFT (not optimized, but functional for demonstration)
     const result = new Float32Array(N * 2);
-    for (let k = 0; k < N / 2; k++) { // Only need first half due to Nyquist
+    for (let k = 0; k < N / 2; k++) {
+      // Only need first half due to Nyquist
       let realSum = 0;
       let imagSum = 0;
-      
+
       for (let n = 0; n < N; n++) {
-        const angle = -2 * Math.PI * k * n / N;
+        const angle = (-2 * Math.PI * k * n) / N;
         const cos = Math.cos(angle);
         const sin = Math.sin(angle);
-        
+
         realSum += timeData[n] * cos;
         imagSum += timeData[n] * sin;
       }
-      
-      result[k * 2] = realSum;      // Real part
-      result[k * 2 + 1] = imagSum;  // Imaginary part
+
+      result[k * 2] = realSum; // Real part
+      result[k * 2 + 1] = imagSum; // Imaginary part
     }
-    
+
     return result;
   }
 
@@ -1033,7 +1078,7 @@ export class AudioProcessor {
           const linear = Math.pow(10, magnitudeData[j] / 20);
           magSum += linear;
           magCount++;
-          
+
           // Collect phase values for circular averaging
           if (j < phaseData.length) {
             phasesInWindow.push(phaseData[j]);
@@ -1075,14 +1120,17 @@ export class AudioProcessor {
   private calculateCircularMean(phases: number[]): number {
     let sumSin = 0;
     let sumCos = 0;
-    
+
     for (const phase of phases) {
       const radians = (phase * Math.PI) / 180;
       sumSin += Math.sin(radians);
       sumCos += Math.cos(radians);
     }
-    
-    const meanRadians = Math.atan2(sumSin / phases.length, sumCos / phases.length);
+
+    const meanRadians = Math.atan2(
+      sumSin / phases.length,
+      sumCos / phases.length,
+    );
     return (meanRadians * 180) / Math.PI;
   }
 
@@ -1156,7 +1204,6 @@ export class AudioProcessor {
     return { frequencies, magnitudes };
   }
 
-
   setSweepDuration(duration: number): void {
     this.sweepDuration = duration;
   }
@@ -1172,24 +1219,24 @@ export class AudioProcessor {
   setSignalType(type: "sweep" | "white" | "pink"): void {
     this.signalType = type;
   }
-  
+
   setCaptureVolume(volume: number): void {
     // Clamp volume between 0 and 100
     this.captureVolume = Math.max(0, Math.min(100, volume));
     console.log(`Capture volume set to: ${this.captureVolume}%`);
   }
-  
+
   setOutputVolume(volume: number): void {
     // Clamp volume between 0 and 100
     this.outputVolume = Math.max(0, Math.min(100, volume));
     console.log(`Output volume set to: ${this.outputVolume}%`);
   }
-  
+
   setOutputDevice(deviceId: string): void {
     this.outputDeviceId = deviceId || "default";
     console.log(`Output device set to: ${this.outputDeviceId}`);
   }
-  
+
   getOutputDevice(): string {
     return this.outputDeviceId;
   }

@@ -26,13 +26,15 @@ const mockAudioContext = {
       }
     }),
   })),
-  createBuffer: vi.fn((channels: number, length: number, sampleRate: number) => ({
-    duration: length / sampleRate,
-    length: length,
-    numberOfChannels: channels,
-    sampleRate: sampleRate,
-    getChannelData: vi.fn(() => new Float32Array(length)),
-  })),
+  createBuffer: vi.fn(
+    (channels: number, length: number, sampleRate: number) => ({
+      duration: length / sampleRate,
+      length: length,
+      numberOfChannels: channels,
+      sampleRate: sampleRate,
+      getChannelData: vi.fn(() => new Float32Array(length)),
+    }),
+  ),
   createBufferSource: vi.fn(() => ({
     connect: vi.fn(),
     disconnect: vi.fn(),
@@ -116,7 +118,7 @@ globalThis.fetch = vi.fn();
 
 // Mock setTimeout to speed up tests
 let timeoutId = 0;
-vi.stubGlobal('setTimeout', (callback: Function, delay?: number) => {
+vi.stubGlobal("setTimeout", (callback: Function, delay?: number) => {
   // Speed up tests by reducing delays
   const actualDelay = Math.min(delay || 0, 10); // Max 10ms delay
   return (global.setTimeout as any)(callback, actualDelay);

@@ -18,6 +18,18 @@ cargo install autoeq
 
 and you are set up. See this [README](src-autoeq/README.md) for instructions on how to use it.
 
+### Optional Features
+
+#### PNG Export
+
+By default, AutoEQ only generates HTML plots. To enable PNG export functionality (which requires a WebDriver), install with the `plotly_static` feature:
+
+```shell
+cargo install autoeq --features plotly_static
+```
+
+This feature is disabled by default to reduce dependencies and build complexity. HTML plots provide the same visualization capabilities without requiring additional system dependencies.
+
 ## Toolkit
 
 ### src-autoeq

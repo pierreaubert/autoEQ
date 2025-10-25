@@ -4,7 +4,10 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { CaptureStorage, type StoredCapture } from "@audio-capture/capture-storage";
+import {
+  CaptureStorage,
+  type StoredCapture,
+} from "@audio-capture/capture-storage";
 
 describe("capture-storage", () => {
   // Mock localStorage

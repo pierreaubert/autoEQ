@@ -9,7 +9,7 @@ export interface AudioConfig {
   sample_rate: number;
   channels: number;
   buffer_size?: number;
-  sample_format: 'f32' | 'i16' | 'u16' | 'unknown';
+  sample_format: "f32" | "i16" | "u16" | "unknown";
 }
 
 /**
@@ -46,7 +46,7 @@ export interface AudioDevicesMap {
  */
 export interface DeviceProperties {
   name: string;
-  type: 'input' | 'output';
+  type: "input" | "output";
   supported_config_ranges?: Array<{
     min_sample_rate: number;
     max_sample_rate: number;
@@ -63,14 +63,14 @@ export interface DeviceProperties {
 }
 
 // Tauri command bindings
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from "@tauri-apps/api/core";
 
 /**
  * Get information about all available audio devices
  * @returns A map of input and output devices
  */
 export async function getAudioDevices(): Promise<AudioDevicesMap> {
-  return await invoke<AudioDevicesMap>('get_audio_devices');
+  return await invoke<AudioDevicesMap>("get_audio_devices");
 }
 
 /**
@@ -83,12 +83,12 @@ export async function getAudioDevices(): Promise<AudioDevicesMap> {
 export async function setAudioDevice(
   deviceName: string,
   isInput: boolean,
-  config: AudioConfig
+  config: AudioConfig,
 ): Promise<string> {
-  return await invoke<string>('set_audio_device', {
+  return await invoke<string>("set_audio_device", {
     device_name: deviceName,
     is_input: isInput,
-    config: config
+    config: config,
   });
 }
 
@@ -97,7 +97,7 @@ export async function setAudioDevice(
  * @returns The current audio state
  */
 export async function getAudioConfig(): Promise<AudioState> {
-  return await invoke<AudioState>('get_audio_config');
+  return await invoke<AudioState>("get_audio_config");
 }
 
 /**
@@ -108,10 +108,10 @@ export async function getAudioConfig(): Promise<AudioState> {
  */
 export async function getDeviceProperties(
   deviceName: string,
-  isInput: boolean
+  isInput: boolean,
 ): Promise<DeviceProperties> {
-  return await invoke<DeviceProperties>('get_device_properties', {
+  return await invoke<DeviceProperties>("get_device_properties", {
     device_name: deviceName,
-    is_input: isInput
+    is_input: isInput,
   });
 }

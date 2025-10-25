@@ -1,6 +1,13 @@
 // Types for optimization parameters and results
 
-export type PeqModel = "pk" | "hp-pk" | "hp-pk-lp" | "ls-pk" | "ls-pk-hs" | "free-pk-free" | "free";
+export type PeqModel =
+  | "pk"
+  | "hp-pk"
+  | "hp-pk-lp"
+  | "ls-pk"
+  | "ls-pk-hs"
+  | "free-pk-free"
+  | "free";
 
 export const PEQ_MODEL_DESCRIPTIONS: Record<PeqModel, string> = {
   pk: "All filters are peak/bell filters",

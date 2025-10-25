@@ -10,7 +10,6 @@ import {
 } from "@audio-player/audio-player";
 
 describe("Audio Module Exports", () => {
-
   test("should export AudioPlayer class", () => {
     expect(AudioPlayer).toBeDefined();
     expect(typeof AudioPlayer).toBe("function");
@@ -49,5 +48,4 @@ describe("Audio Module Exports", () => {
       player.destroy();
     }).not.toThrow();
   });
-
 });
