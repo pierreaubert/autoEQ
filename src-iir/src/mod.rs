@@ -538,10 +538,7 @@ pub fn peq_format_apo(comment: &str, peq: &Peq) -> String {
     res.push(String::new());
 
     // Sort filters by frequency in ascending order
-    let mut sorted_peq: Vec<(f64, &Biquad)> = peq
-        .iter()
-        .map(|(_, iir)| (iir.freq, iir))
-        .collect();
+    let mut sorted_peq: Vec<(f64, &Biquad)> = peq.iter().map(|(_, iir)| (iir.freq, iir)).collect();
     sorted_peq.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
 
     for (i, (_, iir)) in sorted_peq.iter().enumerate() {
@@ -943,10 +940,10 @@ fn biquad_to_rme_type(filter_type: BiquadFilterType, pos: usize) -> f64 {
 /// * String formatted as RME TotalMix channel preset XML
 ///
 /// # Notes
-/// Generates XML in the format expected by RME TotalMix channel EQ.
+/// Generates XML in the format expected by RME TotalMix channel EQ (max 3 bands).
 /// Includes LC Grade and LC Freq defaults, followed by Band parameters for
 /// frequency, Q, and gain, then Band Type specifications.
-pub fn peq_format_rme(peq: &Peq) -> String {
+pub fn peq_format_rme_channel(peq: &Peq) -> String {
     #[allow(clippy::vec_init_then_push)]
     let mut lines = vec![
         "<Preset>".to_string(),
@@ -989,6 +986,271 @@ pub fn peq_format_rme(peq: &Peq) -> String {
 
     lines.push("    </Params>".to_string());
     lines.push("  </Equalizer>".to_string());
+    lines.push("</Preset>".to_string());
+
+    lines.join("\n")
+}
+
+// ----------------------------------------------------------------------
+// RME TotalMix Room EQ Format Functions
+// ----------------------------------------------------------------------
+
+/// Get priority for filter type (higher number = higher priority)
+///
+/// # Arguments
+/// * `filter_type` - The type of filter
+///
+/// # Returns
+/// * Priority value (higher = more important to keep)
+///
+/// # Notes
+/// Priority levels:
+/// - Lowshelf/Highshelf: 9 (important for overall curve)
+/// - Lowpass/Highpass: 7 (medium priority)
+/// - Bandpass: 5 (lower priority)
+/// - Peak: 3 (lowest priority, most common)
+/// - Default: 1
+fn get_filter_priority(filter_type: BiquadFilterType) -> u8 {
+    match filter_type {
+        BiquadFilterType::Lowshelf | BiquadFilterType::Highshelf => 9,
+        BiquadFilterType::Lowpass => 7,
+        BiquadFilterType::Highpass | BiquadFilterType::HighpassVariableQ => 7,
+        BiquadFilterType::Bandpass => 5,
+        BiquadFilterType::Peak => 3,
+        _ => 1,
+    }
+}
+
+/// Filter PEQs while preserving order and prioritizing important filter types
+///
+/// # Arguments
+/// * `peqs` - List of PEQ items in original order
+/// * `max_count` - Maximum number of PEQ items to keep
+///
+/// # Returns
+/// * List of PEQ items in original order, limited to max_count, with low-priority/low-gain filters removed
+///
+/// # Notes
+/// If the input has fewer than or equal to max_count items, returns a clone.
+/// Otherwise, sorts by priority (descending) then by absolute gain (descending),
+/// takes the top max_count items, and returns them in their original order.
+fn filter_peqs_by_gain(peqs: &Peq, max_count: usize) -> Peq {
+    if peqs.len() <= max_count {
+        return peqs.clone();
+    }
+
+    // Create list of (index, peq_item, priority, abs_gain) for sorting
+    let mut indexed_peqs: Vec<(usize, &(f64, Biquad), u8, f64)> = peqs
+        .iter()
+        .enumerate()
+        .map(|(i, item)| {
+            let priority = get_filter_priority(item.1.filter_type);
+            let abs_gain = item.1.db_gain.abs();
+            (i, item, priority, abs_gain)
+        })
+        .collect();
+
+    // Sort by priority (descending) then by absolute gain (descending)
+    // This puts high-priority, high-gain filters first
+    indexed_peqs.sort_by(|a, b| {
+        b.2.cmp(&a.2) // Compare priority (descending)
+            .then_with(|| b.3.partial_cmp(&a.3).unwrap_or(std::cmp::Ordering::Equal))
+        // Then abs_gain (descending)
+    });
+
+    // Take the top max_count filters
+    let mut selected: Vec<(usize, (f64, Biquad))> = indexed_peqs
+        .into_iter()
+        .take(max_count)
+        .map(|(idx, item, _, _)| (idx, item.clone()))
+        .collect();
+
+    // Sort selected filters back to original order by index
+    selected.sort_by_key(|(idx, _)| *idx);
+
+    // Extract just the PEQ items
+    selected.into_iter().map(|(_, item)| item).collect()
+}
+
+/// Enforce RME room EQ constraints on lowshelf and highshelf filters
+///
+/// # Arguments
+/// * `peqs` - List of PEQ items
+///
+/// # Returns
+/// * List of PEQ items with RME room EQ constraints applied:
+///   - At most 1 lowshelf filter (positioned first if present)
+///   - At most 1 highshelf filter (positioned last if present)
+///   - Other filters preserved in their relative order
+///
+/// # Notes
+/// If multiple lowshelf or highshelf filters exist, selects the one
+/// with the highest absolute gain.
+fn enforce_rme_room_filter_constraints(peqs: &Peq) -> Peq {
+    if peqs.is_empty() {
+        return peqs.clone();
+    }
+
+    // Separate filters by type
+    let mut lowshelf_filters: Vec<&(f64, Biquad)> = Vec::new();
+    let mut highshelf_filters: Vec<&(f64, Biquad)> = Vec::new();
+    let mut other_filters: Vec<(f64, Biquad)> = Vec::new();
+
+    for item in peqs {
+        match item.1.filter_type {
+            BiquadFilterType::Lowshelf => lowshelf_filters.push(item),
+            BiquadFilterType::Highshelf => highshelf_filters.push(item),
+            _ => other_filters.push(item.clone()),
+        }
+    }
+
+    // Select at most one lowshelf filter (prefer highest absolute gain)
+    let selected_lowshelf = lowshelf_filters
+        .into_iter()
+        .max_by(|a, b| {
+            a.1.db_gain
+                .abs()
+                .partial_cmp(&b.1.db_gain.abs())
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
+        .cloned();
+
+    // Select at most one highshelf filter (prefer highest absolute gain)
+    let selected_highshelf = highshelf_filters
+        .into_iter()
+        .max_by(|a, b| {
+            a.1.db_gain
+                .abs()
+                .partial_cmp(&b.1.db_gain.abs())
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
+        .cloned();
+
+    // Reorder: lowshelf first, other filters in middle, highshelf last
+    let mut result = Vec::new();
+    if let Some(ls) = selected_lowshelf {
+        result.push(ls);
+    }
+    result.extend(other_filters);
+    if let Some(hs) = selected_highshelf {
+        result.push(hs);
+    }
+
+    result
+}
+
+/// Format PEQ as RME TotalMix room EQ preset XML (dual channel)
+///
+/// # Arguments
+/// * `left` - PEQ vector for left channel
+/// * `right` - PEQ vector for right channel (if empty, left channel is used for both)
+///
+/// # Returns
+/// * String formatted as RME TotalMix room EQ preset XML
+///
+/// # Notes
+/// Generates XML in the format expected by RME TotalMix room EQ.
+/// Supports up to 9 bands per channel. If more bands are provided,
+/// filters are selected based on priority (filter type) and absolute gain.
+/// Enforces constraints:
+/// - At most 1 lowshelf filter per channel (positioned first)
+/// - At most 1 highshelf filter per channel (positioned last)
+pub fn peq_format_rme_room(left: &Peq, right: &Peq) -> String {
+    // Apply RME room EQ constraints for lowshelf and highshelf filters
+    let mut left_constrained = enforce_rme_room_filter_constraints(left);
+    let mut right_constrained = enforce_rme_room_filter_constraints(right);
+
+    // Track original counts for warning message
+    let original_left_count = left_constrained.len();
+    let original_right_count = right_constrained.len();
+
+    // Filter left channel if needed
+    if left_constrained.len() > 9 {
+        left_constrained = filter_peqs_by_gain(&left_constrained, 9);
+    }
+
+    // Filter right channel if needed
+    if right_constrained.len() > 9 {
+        right_constrained = filter_peqs_by_gain(&right_constrained, 9);
+    }
+
+    // Print warning if any channel was filtered
+    if original_left_count > 9 || original_right_count > 9 {
+        eprintln!(
+            "Warning: TotalMix room EQ supports a maximum of 9 bands per channel. \
+             Left channel has {} bands, right channel has {} bands. \
+             Keeping the 9 bands with highest absolute gain.",
+            original_left_count, original_right_count
+        );
+    }
+
+    let mut lines = Vec::new();
+
+    // Helper closure to process a channel's PEQ items
+    let process_channel = |peqs: &Peq, lines: &mut Vec<String>| {
+        // Add frequency, Q, and gain parameters
+        for (i, (_, biquad)) in peqs.iter().enumerate() {
+            lines.push(format!(
+                "        <val e=\"REQ Band{} Freq\" v=\"{:7.2},\"/>",
+                i + 1,
+                biquad.freq
+            ));
+            lines.push(format!(
+                "        <val e=\"REQ Band{} Q\" v=\"{:4.2},\"/>",
+                i + 1,
+                biquad.q
+            ));
+            lines.push(format!(
+                "        <val e=\"REQ Band{} Gain\" v=\"{:4.2},\"/>",
+                i + 1,
+                biquad.db_gain
+            ));
+        }
+
+        // Add type parameters
+        for (i, (_, biquad)) in peqs.iter().enumerate() {
+            let rme_type = biquad_to_rme_type(biquad.filter_type, i + 1);
+            if rme_type >= 0.0 {
+                lines.push(format!(
+                    "        <val e=\"REQ Band{} Type\" v=\"{:4.2},\"/>",
+                    i + 1,
+                    rme_type
+                ));
+            }
+        }
+    };
+
+    lines.push("<Preset>".to_string());
+
+    // Process left channel
+    let preamp_gain = 0.0;
+    lines.push("  <Room EQ L>".to_string());
+    lines.push("    <Params>".to_string());
+    lines.push("\t<val e=\"REQ Delay\" v=\"0.00,\"/>".to_string());
+    process_channel(&left_constrained, &mut lines);
+    lines.push(format!(
+        "\t<val e=\"REQ Chan Gain\" v=\"{},\"/>",
+        preamp_gain
+    ));
+    lines.push("    </Params>".to_string());
+    lines.push("  </Room EQ L>".to_string());
+
+    // Process right channel (use left if right is empty)
+    lines.push("  <Room EQ R>".to_string());
+    lines.push("    <Params>".to_string());
+    lines.push("\t<val e=\"REQ Delay\" v=\"0.00,\"/>".to_string());
+    if !right_constrained.is_empty() {
+        process_channel(&right_constrained, &mut lines);
+    } else {
+        process_channel(&left_constrained, &mut lines);
+    }
+    lines.push(format!(
+        "\t<val e=\"REQ Chan Gain\" v=\"{},\"/>",
+        preamp_gain
+    ));
+    lines.push("    </Params>".to_string());
+    lines.push("  </Room EQ R>".to_string());
+
     lines.push("</Preset>".to_string());
 
     lines.join("\n")
@@ -1146,10 +1408,10 @@ mod format_tests {
     use super::*;
 
     #[test]
-    fn test_peq_format_rme_single_peak() {
+    fn test_peq_format_rme_channel_single_peak() {
         let bq = Biquad::new(BiquadFilterType::Peak, 1000.0, 48000.0, 1.0, 3.0);
         let peq = vec![(1.0, bq)];
-        let rme_str = peq_format_rme(&peq);
+        let rme_str = peq_format_rme_channel(&peq);
 
         // Verify structure
         assert!(rme_str.contains("<Preset>"));
@@ -1168,9 +1430,9 @@ mod format_tests {
     }
 
     #[test]
-    fn test_peq_format_rme_empty() {
+    fn test_peq_format_rme_channel_empty() {
         let peq: Peq = vec![];
-        let rme_str = peq_format_rme(&peq);
+        let rme_str = peq_format_rme_channel(&peq);
 
         // Should still have basic structure
         assert!(rme_str.contains("<Preset>"));
@@ -1180,11 +1442,11 @@ mod format_tests {
     }
 
     #[test]
-    fn test_peq_format_rme_multiple_bands() {
+    fn test_peq_format_rme_channel_multiple_bands() {
         let bq1 = Biquad::new(BiquadFilterType::Peak, 1000.0, 48000.0, 1.0, 3.0);
         let bq2 = Biquad::new(BiquadFilterType::Peak, 2000.0, 48000.0, 2.0, -2.0);
         let peq = vec![(1.0, bq1), (1.0, bq2)];
-        let rme_str = peq_format_rme(&peq);
+        let rme_str = peq_format_rme_channel(&peq);
 
         assert!(rme_str.contains("Band1 Freq"));
         assert!(rme_str.contains("Band2 Freq"));
@@ -1311,5 +1573,235 @@ mod format_tests {
         assert_eq!(biquad_to_rme_type(BiquadFilterType::Highshelf, 3), 1.0);
         assert_eq!(biquad_to_rme_type(BiquadFilterType::Highshelf, 9), 1.0);
         assert_eq!(biquad_to_rme_type(BiquadFilterType::Highshelf, 2), -1.0);
+    }
+
+    #[test]
+    fn test_get_filter_priority() {
+        assert_eq!(get_filter_priority(BiquadFilterType::Lowshelf), 9);
+        assert_eq!(get_filter_priority(BiquadFilterType::Highshelf), 9);
+        assert_eq!(get_filter_priority(BiquadFilterType::Lowpass), 7);
+        assert_eq!(get_filter_priority(BiquadFilterType::Highpass), 7);
+        assert_eq!(get_filter_priority(BiquadFilterType::HighpassVariableQ), 7);
+        assert_eq!(get_filter_priority(BiquadFilterType::Bandpass), 5);
+        assert_eq!(get_filter_priority(BiquadFilterType::Peak), 3);
+        assert_eq!(get_filter_priority(BiquadFilterType::Notch), 1);
+    }
+
+    #[test]
+    fn test_filter_peqs_by_gain_under_limit() {
+        let bq1 = Biquad::new(BiquadFilterType::Peak, 1000.0, 48000.0, 1.0, 3.0);
+        let bq2 = Biquad::new(BiquadFilterType::Peak, 2000.0, 48000.0, 1.0, 2.0);
+        let peq = vec![(1.0, bq1), (1.0, bq2)];
+        let filtered = filter_peqs_by_gain(&peq, 5);
+        assert_eq!(filtered.len(), 2);
+    }
+
+    #[test]
+    fn test_filter_peqs_by_gain_over_limit() {
+        // Create 12 peak filters with varying gains
+        let mut peq = Vec::new();
+        for i in 0..12 {
+            let gain = (i as f64) * 0.5 + 0.5; // gains from 0.5 to 6.0
+            let bq = Biquad::new(
+                BiquadFilterType::Peak,
+                1000.0 + (i as f64 * 100.0),
+                48000.0,
+                1.0,
+                gain,
+            );
+            peq.push((1.0, bq));
+        }
+        let filtered = filter_peqs_by_gain(&peq, 9);
+        assert_eq!(filtered.len(), 9);
+        // Should keep the ones with higher gains (indices 3-11)
+        // First frequency should be from index 3 (1300 Hz)
+        assert!((filtered[0].1.freq - 1300.0).abs() < 1.0);
+    }
+
+    #[test]
+    fn test_filter_peqs_by_gain_priority() {
+        // Mix of different filter types with varying gains
+        let mut peq = Vec::new();
+        // Add 6 peaks with high gains
+        for i in 0..6 {
+            let bq = Biquad::new(
+                BiquadFilterType::Peak,
+                1000.0 + (i as f64 * 100.0),
+                48000.0,
+                1.0,
+                5.0,
+            );
+            peq.push((1.0, bq));
+        }
+        // Add 2 lowshelf with lower gain but higher priority
+        let ls1 = Biquad::new(BiquadFilterType::Lowshelf, 100.0, 48000.0, 0.7, 2.0);
+        let ls2 = Biquad::new(BiquadFilterType::Lowshelf, 120.0, 48000.0, 0.7, 2.5);
+        peq.push((1.0, ls1));
+        peq.push((1.0, ls2));
+        // Add 3 more peaks
+        for i in 6..9 {
+            let bq = Biquad::new(
+                BiquadFilterType::Peak,
+                1000.0 + (i as f64 * 100.0),
+                48000.0,
+                1.0,
+                4.0,
+            );
+            peq.push((1.0, bq));
+        }
+        let filtered = filter_peqs_by_gain(&peq, 9);
+        assert_eq!(filtered.len(), 9);
+        // Both lowshelf filters should be kept due to higher priority
+        let lowshelf_count = filtered
+            .iter()
+            .filter(|(_, bq)| bq.filter_type == BiquadFilterType::Lowshelf)
+            .count();
+        assert_eq!(lowshelf_count, 2);
+    }
+
+    #[test]
+    fn test_enforce_rme_room_filter_constraints_empty() {
+        let peq: Peq = vec![];
+        let result = enforce_rme_room_filter_constraints(&peq);
+        assert_eq!(result.len(), 0);
+    }
+
+    #[test]
+    fn test_enforce_rme_room_filter_constraints_no_shelves() {
+        let bq1 = Biquad::new(BiquadFilterType::Peak, 1000.0, 48000.0, 1.0, 3.0);
+        let bq2 = Biquad::new(BiquadFilterType::Peak, 2000.0, 48000.0, 1.0, 2.0);
+        let peq = vec![(1.0, bq1), (1.0, bq2)];
+        let result = enforce_rme_room_filter_constraints(&peq);
+        assert_eq!(result.len(), 2);
+    }
+
+    #[test]
+    fn test_enforce_rme_room_filter_constraints_single_lowshelf() {
+        let ls = Biquad::new(BiquadFilterType::Lowshelf, 100.0, 48000.0, 0.7, 2.0);
+        let pk1 = Biquad::new(BiquadFilterType::Peak, 1000.0, 48000.0, 1.0, 3.0);
+        let pk2 = Biquad::new(BiquadFilterType::Peak, 2000.0, 48000.0, 1.0, 2.0);
+        let peq = vec![(1.0, pk1), (1.0, ls.clone()), (1.0, pk2)];
+        let result = enforce_rme_room_filter_constraints(&peq);
+        assert_eq!(result.len(), 3);
+        // Lowshelf should be first
+        assert_eq!(result[0].1.filter_type, BiquadFilterType::Lowshelf);
+    }
+
+    #[test]
+    fn test_enforce_rme_room_filter_constraints_multiple_lowshelf() {
+        let ls1 = Biquad::new(BiquadFilterType::Lowshelf, 100.0, 48000.0, 0.7, 2.0);
+        let ls2 = Biquad::new(BiquadFilterType::Lowshelf, 120.0, 48000.0, 0.7, 4.0); // Higher gain
+        let pk = Biquad::new(BiquadFilterType::Peak, 1000.0, 48000.0, 1.0, 3.0);
+        let peq = vec![(1.0, ls1), (1.0, pk), (1.0, ls2)];
+        let result = enforce_rme_room_filter_constraints(&peq);
+        // Should keep only the lowshelf with higher gain (ls2)
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].1.filter_type, BiquadFilterType::Lowshelf);
+        assert!((result[0].1.freq - 120.0).abs() < 1.0);
+    }
+
+    #[test]
+    fn test_enforce_rme_room_filter_constraints_multiple_highshelf() {
+        let hs1 = Biquad::new(BiquadFilterType::Highshelf, 8000.0, 48000.0, 0.7, 1.5);
+        let hs2 = Biquad::new(BiquadFilterType::Highshelf, 10000.0, 48000.0, 0.7, 3.0); // Higher gain
+        let pk = Biquad::new(BiquadFilterType::Peak, 1000.0, 48000.0, 1.0, 3.0);
+        let peq = vec![(1.0, pk), (1.0, hs1), (1.0, hs2)];
+        let result = enforce_rme_room_filter_constraints(&peq);
+        // Should keep only the highshelf with higher gain (hs2)
+        assert_eq!(result.len(), 2);
+        assert_eq!(
+            result[result.len() - 1].1.filter_type,
+            BiquadFilterType::Highshelf
+        );
+        assert!((result[result.len() - 1].1.freq - 10000.0).abs() < 1.0);
+    }
+
+    #[test]
+    fn test_enforce_rme_room_filter_constraints_both_shelves() {
+        let ls = Biquad::new(BiquadFilterType::Lowshelf, 100.0, 48000.0, 0.7, 2.0);
+        let hs = Biquad::new(BiquadFilterType::Highshelf, 8000.0, 48000.0, 0.7, 1.5);
+        let pk1 = Biquad::new(BiquadFilterType::Peak, 1000.0, 48000.0, 1.0, 3.0);
+        let pk2 = Biquad::new(BiquadFilterType::Peak, 2000.0, 48000.0, 1.0, 2.0);
+        let peq = vec![(1.0, pk1), (1.0, ls), (1.0, pk2), (1.0, hs)];
+        let result = enforce_rme_room_filter_constraints(&peq);
+        assert_eq!(result.len(), 4);
+        // Lowshelf should be first
+        assert_eq!(result[0].1.filter_type, BiquadFilterType::Lowshelf);
+        // Highshelf should be last
+        assert_eq!(
+            result[result.len() - 1].1.filter_type,
+            BiquadFilterType::Highshelf
+        );
+    }
+
+    #[test]
+    fn test_peq_format_rme_room_single_channel() {
+        let bq1 = Biquad::new(BiquadFilterType::Peak, 1000.0, 48000.0, 1.0, 3.0);
+        let bq2 = Biquad::new(BiquadFilterType::Peak, 2000.0, 48000.0, 2.0, -2.0);
+        let left = vec![(1.0, bq1), (1.0, bq2)];
+        let right: Peq = vec![];
+        let rme_str = peq_format_rme_room(&left, &right);
+
+        // Verify structure
+        assert!(rme_str.contains("<Preset>"));
+        assert!(rme_str.contains("<Room EQ L>"));
+        assert!(rme_str.contains("<Room EQ R>"));
+        assert!(rme_str.contains("<Params>"));
+        assert!(rme_str.contains("REQ Delay"));
+        assert!(rme_str.contains("REQ Band1 Freq"));
+        assert!(rme_str.contains("REQ Band1 Q"));
+        assert!(rme_str.contains("REQ Band1 Gain"));
+        assert!(rme_str.contains("REQ Band1 Type"));
+        assert!(rme_str.contains("REQ Band2 Freq"));
+        assert!(rme_str.contains("REQ Chan Gain"));
+        assert!(rme_str.contains("</Preset>"));
+    }
+
+    #[test]
+    fn test_peq_format_rme_room_dual_channel() {
+        let bq_left = Biquad::new(BiquadFilterType::Peak, 1000.0, 48000.0, 1.0, 3.0);
+        let bq_right = Biquad::new(BiquadFilterType::Peak, 2000.0, 48000.0, 2.0, -2.0);
+        let left = vec![(1.0, bq_left)];
+        let right = vec![(1.0, bq_right)];
+        let rme_str = peq_format_rme_room(&left, &right);
+
+        // Both channels should have different frequencies
+        assert!(rme_str.contains("1000.00"));
+        assert!(rme_str.contains("2000.00"));
+    }
+
+    #[test]
+    fn test_peq_format_rme_room_max_bands() {
+        // Test with 9 bands (at limit)
+        let mut left = Vec::new();
+        for i in 0..9 {
+            let freq = 100.0 + (i as f64 * 100.0);
+            let bq = Biquad::new(BiquadFilterType::Peak, freq, 48000.0, 1.0, 1.0);
+            left.push((1.0, bq));
+        }
+        let right: Peq = vec![];
+        let rme_str = peq_format_rme_room(&left, &right);
+
+        // Should contain all 9 bands
+        assert!(rme_str.contains("REQ Band1 Freq"));
+        assert!(rme_str.contains("REQ Band9 Freq"));
+    }
+
+    #[test]
+    fn test_peq_format_rme_room_over_limit() {
+        // Test with more than 9 bands (should be filtered)
+        let mut left = Vec::new();
+        for i in 0..12 {
+            let freq = 100.0 + (i as f64 * 100.0);
+            let gain = (i as f64) * 0.5 + 0.5;
+            let bq = Biquad::new(BiquadFilterType::Peak, freq, 48000.0, 1.0, gain);
+            left.push((1.0, bq));
+        }
+        let right: Peq = vec![];
+        let rme_str = peq_format_rme_room(&left, &right);
+
+        // Should only contain 9 bands
+        assert!(rme_str.contains("REQ Band9 Freq"));
+        assert!(!rme_str.contains("REQ Band10 Freq"));
     }
 }

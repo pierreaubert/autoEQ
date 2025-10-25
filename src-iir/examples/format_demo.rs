@@ -7,7 +7,7 @@
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-use autoeq_iir::{Biquad, BiquadFilterType, Peq, peq_format_aupreset, peq_format_rme};
+use autoeq_iir::{Biquad, BiquadFilterType, Peq, peq_format_aupreset, peq_format_rme_channel};
 
 fn main() {
     // Create a sample PEQ with a few filters
@@ -25,8 +25,8 @@ fn main() {
     let highshelf = Biquad::new(BiquadFilterType::Highshelf, 8000.0, 48000.0, 0.7, 2.0);
     peq.push((1.0, highshelf));
 
-    println!("=== RME TotalMix Format ===\n");
-    let rme_output = peq_format_rme(&peq);
+    println!("=== RME TotalMix Channel Format ===\n");
+    let rme_output = peq_format_rme_channel(&peq);
     println!("{}\n", rme_output);
 
     println!("=== Apple AUNBandEQ Format ===\n");
