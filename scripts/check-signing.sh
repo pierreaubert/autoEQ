@@ -32,8 +32,8 @@ echo ""
 
 # Check Tauri config
 echo "⚙️  Checking Tauri Configuration:"
-if [ -f "src-ui/src-tauri/tauri.conf.json" ]; then
-    SIGNING_IDENTITY=$(grep -A 6 '"macOS"' src-ui/src-tauri/tauri.conf.json | grep 'signingIdentity' | cut -d'"' -f4)
+if [ -f "./src-tauri/tauri.conf.json" ]; then
+    SIGNING_IDENTITY=$(grep -A 6 '"macOS"' src-tauri/tauri.conf.json | grep 'signingIdentity' | cut -d'"' -f4)
     if [ "$SIGNING_IDENTITY" = "null" ] || [ -z "$SIGNING_IDENTITY" ]; then
         echo "⚠️  signingIdentity is not configured in tauri.conf.json"
         echo "   Update 'bundle.macOS.signingIdentity' with your certificate name"
@@ -47,18 +47,18 @@ echo ""
 
 # Check entitlements
 echo "📋 Checking Entitlements:"
-if [ -f "src-ui/src-tauri/Entitlements.plist" ]; then
+if [ -f "./src-tauri/Entitlements.plist" ]; then
     echo "✅ Entitlements.plist exists"
 
     # Check for audio permissions
-    if grep -q "com.apple.security.device.audio-input" src-ui/src-tauri/Entitlements.plist; then
+    if grep -q "com.apple.security.device.audio-input" src-tauri/Entitlements.plist; then
         echo "✅ Audio input permission configured"
     else
         echo "⚠️  Audio input permission missing"
     fi
 
     # Check for network permissions
-    if grep -q "com.apple.security.network.client" src-ui/src-tauri/Entitlements.plist; then
+    if grep -q "com.apple.security.network.client" src-tauri/Entitlements.plist; then
         echo "✅ Network client permission configured"
     else
         echo "⚠️  Network client permission missing"
@@ -112,9 +112,9 @@ if [ "$HAS_DEV_ID" = true ] && [ -n "$APPLE_ID" ] && [ -n "$APPLE_TEAM_ID" ]; th
     echo "✅ Ready for signing and notarization!"
     echo ""
     echo "Next steps:"
-    echo "  1. Build: cd src-ui && npm run tauri build"
+    echo "  1. Build: cd npm run tauri build"
     echo "  2. The app will be automatically signed and submitted for notarization"
-    echo "  3. Find the signed DMG in: src-ui/src-tauri/target/release/bundle/dmg/"
+    echo "  3. Find the signed DMG in: /target/release/bundle/dmg/"
 elif [ "$HAS_DEV_ID" = true ]; then
     echo "⚠️  Certificate ready, but notarization not configured"
     echo ""
