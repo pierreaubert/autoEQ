@@ -2,6 +2,7 @@ use std::path::PathBuf;
 use std::{error::Error, io};
 
 use autoeq::read;
+use clap::Parser;
 use reqwest::Client;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
@@ -9,15 +10,49 @@ use tokio::fs;
 
 const BASE_URL: &str = "https://api.spinorama.org";
 
+/// Download speaker measurements from spinorama.org API
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    /// Force re-download of existing measurements
+    #[arg(short, long, default_value_t = false)]
+    force: bool,
+
+    /// Download only measurements for a specific speaker (case-insensitive substring match)
+    #[arg(short, long)]
+    speaker: Option<String>,
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    let args = Args::parse();
     let client = Client::new();
 
     let speakers: Vec<String> = fetch_json(&client, &format!("{}/v1/speakers", BASE_URL)).await?;
     println!("Found {} speakers", speakers.len());
 
-    for speaker in speakers {
-        if let Err(e) = process_speaker(&client, &speaker).await {
+    // Filter speakers if --speaker flag is provided
+    let speakers_to_process: Vec<String> = if let Some(ref filter) = args.speaker {
+        let filter_lower = filter.to_lowercase();
+        speakers
+            .into_iter()
+            .filter(|s| s.to_lowercase().contains(&filter_lower))
+            .collect()
+    } else {
+        speakers
+    };
+
+    if speakers_to_process.is_empty() {
+        if let Some(ref filter) = args.speaker {
+            eprintln!("No speakers found matching '{}'", filter);
+            return Ok(());
+        }
+    }
+
+    println!("Processing {} speaker(s)", speakers_to_process.len());
+
+    for speaker in speakers_to_process {
+        if let Err(e) = process_speaker(&client, &speaker, args.force).await {
             eprintln!("[WARN] Skipping speaker '{}': {}", speaker, e);
         }
     }
@@ -25,7 +60,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-async fn process_speaker(client: &Client, speaker: &str) -> Result<(), Box<dyn Error>> {
+async fn process_speaker(
+    client: &Client,
+    speaker: &str,
+    force: bool,
+) -> Result<(), Box<dyn Error>> {
     let enc_speaker = urlencoding::encode(speaker);
 
     // 1. versions
@@ -47,6 +86,24 @@ async fn process_speaker(client: &Client, speaker: &str) -> Result<(), Box<dyn E
     // 3. if CEA2034 present, download CEA2034 and Estimated In-Room Response and metadata
     if measurements.iter().any(|m| m == "CEA2034") {
         let dir = read::data_dir_for(speaker);
+
+        // Check if measurements already exist (unless --force is specified)
+        if !force {
+            let cea2034_file = dir.join("CEA2034.json");
+            let in_room_file = dir.join("Estimated In-Room Response.json");
+            let metadata_file = dir.join("metadata.json");
+
+            // If all files exist, skip downloading
+            if cea2034_file.exists() && in_room_file.exists() && metadata_file.exists() {
+                println!(
+                    "Skipping '{}': measurements already cached (use --force to re-download)",
+                    speaker
+                );
+                return Ok(());
+            }
+        }
+
+        // Create directory if needed
         fs::create_dir_all(&dir).await?;
 
         // metadata
@@ -55,6 +112,15 @@ async fn process_speaker(client: &Client, speaker: &str) -> Result<(), Box<dyn E
         write_json(&dir.join("metadata.json"), &metadata).await?;
 
         // Measurements: leverage shared cache-aware fetcher, which also saves to disk
+        // Note: We need to delete existing cache files first if force is enabled
+        // because fetch_measurement_plot_data will use cache if it exists
+        if force {
+            let cea2034_file = dir.join("CEA2034.json");
+            let in_room_file = dir.join("Estimated In-Room Response.json");
+            let _ = fs::remove_file(&cea2034_file).await;
+            let _ = fs::remove_file(&in_room_file).await;
+        }
+
         let _ = read::fetch_measurement_plot_data(speaker, version, "CEA2034").await?;
         let _ = read::fetch_measurement_plot_data(speaker, version, "Estimated In-Room Response")
             .await?;
