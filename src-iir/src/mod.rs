@@ -537,7 +537,14 @@ pub fn peq_format_apo(comment: &str, peq: &Peq) -> String {
     res.push(format!("Preamp: {:.1} dB", peq_preamp_gain(peq)));
     res.push(String::new());
 
-    for (i, (_, iir)) in peq.iter().enumerate() {
+    // Sort filters by frequency in ascending order
+    let mut sorted_peq: Vec<(f64, &Biquad)> = peq
+        .iter()
+        .map(|(_, iir)| (iir.freq, iir))
+        .collect();
+    sorted_peq.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+
+    for (i, (_, iir)) in sorted_peq.iter().enumerate() {
         match iir.filter_type {
             BiquadFilterType::Peak | BiquadFilterType::Notch | BiquadFilterType::Bandpass => {
                 res.push(format!(
@@ -892,16 +899,16 @@ mod peq_tests {
 /// # Notes
 /// RME format codes depend on both filter type and position:
 /// - PK (Peak): 0.0
-/// - LP (Lowpass): 3.0 at pos 1, 2.0 at pos 3
-/// - HP (Highpass): 2.0 at pos 1, 3.0 at pos 3
-/// - LS (Lowshelf): 2.0 at pos 3
+/// - LP (Lowpass): 3.0 at pos 1, 2.0 at pos 3 or 9
+/// - HP (Highpass): 2.0 at pos 1, 3.0 at pos 3 or 9
+/// - LS/HS (Lowshelf/Highshelf): 1.0 at pos 1, 3, or 9
 fn biquad_to_rme_type(filter_type: BiquadFilterType, pos: usize) -> f64 {
     match filter_type {
         BiquadFilterType::Peak => 0.0,
         BiquadFilterType::Lowpass => {
             if pos == 1 {
                 3.0
-            } else if pos == 3 {
+            } else if pos == 3 || pos == 9 {
                 2.0
             } else {
                 -1.0
@@ -910,15 +917,15 @@ fn biquad_to_rme_type(filter_type: BiquadFilterType, pos: usize) -> f64 {
         BiquadFilterType::Highpass | BiquadFilterType::HighpassVariableQ => {
             if pos == 1 {
                 2.0
-            } else if pos == 3 {
+            } else if pos == 3 || pos == 9 {
                 3.0
             } else {
                 -1.0
             }
         }
-        BiquadFilterType::Lowshelf => {
-            if pos == 3 {
-                2.0
+        BiquadFilterType::Lowshelf | BiquadFilterType::Highshelf => {
+            if pos == 1 || pos == 3 || pos == 9 {
+                1.0
             } else {
                 -1.0
             }
@@ -1284,14 +1291,25 @@ mod format_tests {
         // Lowpass position-dependent
         assert_eq!(biquad_to_rme_type(BiquadFilterType::Lowpass, 1), 3.0);
         assert_eq!(biquad_to_rme_type(BiquadFilterType::Lowpass, 3), 2.0);
+        assert_eq!(biquad_to_rme_type(BiquadFilterType::Lowpass, 9), 2.0);
         assert_eq!(biquad_to_rme_type(BiquadFilterType::Lowpass, 2), -1.0);
 
         // Highpass position-dependent
         assert_eq!(biquad_to_rme_type(BiquadFilterType::Highpass, 1), 2.0);
         assert_eq!(biquad_to_rme_type(BiquadFilterType::Highpass, 3), 3.0);
+        assert_eq!(biquad_to_rme_type(BiquadFilterType::Highpass, 9), 3.0);
+        assert_eq!(biquad_to_rme_type(BiquadFilterType::Highpass, 2), -1.0);
 
         // Lowshelf position-dependent
-        assert_eq!(biquad_to_rme_type(BiquadFilterType::Lowshelf, 3), 2.0);
-        assert_eq!(biquad_to_rme_type(BiquadFilterType::Lowshelf, 1), -1.0);
+        assert_eq!(biquad_to_rme_type(BiquadFilterType::Lowshelf, 1), 1.0);
+        assert_eq!(biquad_to_rme_type(BiquadFilterType::Lowshelf, 3), 1.0);
+        assert_eq!(biquad_to_rme_type(BiquadFilterType::Lowshelf, 9), 1.0);
+        assert_eq!(biquad_to_rme_type(BiquadFilterType::Lowshelf, 2), -1.0);
+
+        // Highshelf position-dependent
+        assert_eq!(biquad_to_rme_type(BiquadFilterType::Highshelf, 1), 1.0);
+        assert_eq!(biquad_to_rme_type(BiquadFilterType::Highshelf, 3), 1.0);
+        assert_eq!(biquad_to_rme_type(BiquadFilterType::Highshelf, 9), 1.0);
+        assert_eq!(biquad_to_rme_type(BiquadFilterType::Highshelf, 2), -1.0);
     }
 }

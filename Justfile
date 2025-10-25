@@ -92,7 +92,7 @@ dev:
 	cargo build --bin benchmark_autoeq_speaker
 	cargo build --bin plot_autoeq_de
 	cargo build --bin run_autoeq_de
-	cargo build --bin audio_test
+	cargo build --bin sotf_audio_test
 
 download:
 	cargo run --bin download

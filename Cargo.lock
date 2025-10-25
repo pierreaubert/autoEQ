@@ -279,7 +279,7 @@ checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 
 [[package]]
 name = "autoeq"
-version = "0.2.249"
+version = "0.2.250"
 dependencies = [
  "accelerate-src",
  "autoeq-cea2034",
@@ -5118,7 +5118,7 @@ dependencies = [
 
 [[package]]
 name = "sotf"
-version = "0.4.44"
+version = "0.4.46"
 dependencies = [
  "accelerate-src",
  "autoeq",
@@ -5144,7 +5144,7 @@ dependencies = [
 
 [[package]]
 name = "sotf_backend"
-version = "0.2.443"
+version = "0.2.446"
 dependencies = [
  "accelerate-src",
  "autoeq",
