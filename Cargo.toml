@@ -12,7 +12,7 @@ members = [
 resolver = "3"
 
 [workspace.package]
-version = "0.2.447"
+version = "0.2.450"
 authors = ["Pierre F. Aubert pierre@spinorama.org"]
 description = "A CLI for automatically eq-eing your speakers or your headphones"
 edition = "2024"
@@ -61,8 +61,7 @@ autoeq = { path = "src-autoeq" }
 
 # Plotting and visualization
 plotly = { version = "0.13.5" }
-# moved into crates since it depends of the environement
-# plotly_static = { version = "0.1" }
+# plotly_static will be specified per-crate as needed
 # patched currently locally
 webdriver-downloader = "0.16.0"
 build_html = "2.7.0"

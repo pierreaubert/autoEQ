@@ -541,13 +541,8 @@ qa-edifierw830nb-mhfirefly:
 # POST
 # ----------------------------------------------------------------------
 
-post-install-npm-ui:
-	cd src-ui && npm install .
-
-post-install-npm-capture:
-	cd src-audio-capture && npm install . && cd ..
-
-post-install-npm: post-install-npm-ui post-install-npm-capture
+post-install-npm:
+	cd src-ui-frontend && npm install .
 
 post-install-rust:
 	rustup default stable

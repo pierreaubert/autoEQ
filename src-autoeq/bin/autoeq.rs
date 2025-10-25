@@ -138,7 +138,7 @@ async fn save_peq_to_file(
     // Save RME TotalMix format (.xml)
     let rme_filename = filename.replace(".txt", ".xml");
     let rme_path = parent_dir.join(&rme_filename);
-    let rme_content = iir::peq_format_rme(&peq);
+    let rme_content = iir::peq_format_rme_channel(&peq);
     fs::write(&rme_path, rme_content).await?;
     qa_println!(
         args,

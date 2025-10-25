@@ -279,7 +279,7 @@ checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 
 [[package]]
 name = "autoeq"
-version = "0.2.250"
+version = "0.2.251"
 dependencies = [
  "accelerate-src",
  "autoeq-cea2034",
@@ -320,7 +320,7 @@ dependencies = [
 
 [[package]]
 name = "autoeq-de"
-version = "0.2.52"
+version = "0.2.53"
 dependencies = [
  "accelerate-src",
  "autoeq-env",
@@ -352,7 +352,7 @@ dependencies = [
 
 [[package]]
 name = "autoeq-iir"
-version = "0.2.20"
+version = "0.2.22"
 dependencies = [
  "base64 0.22.1",
  "byteorder",
@@ -363,7 +363,7 @@ dependencies = [
 
 [[package]]
 name = "autoeq-testfunctions"
-version = "0.2.36"
+version = "0.2.37"
 dependencies = [
  "autoeq-env",
  "clap",
@@ -5118,7 +5118,7 @@ dependencies = [
 
 [[package]]
 name = "sotf"
-version = "0.4.46"
+version = "0.4.47"
 dependencies = [
  "accelerate-src",
  "autoeq",
@@ -5144,7 +5144,7 @@ dependencies = [
 
 [[package]]
 name = "sotf_backend"
-version = "0.2.446"
+version = "0.2.450"
 dependencies = [
  "accelerate-src",
  "autoeq",

@@ -1,6 +1,6 @@
 [package]
 name = "autoeq"
-version = "0.2.250"
+version = "0.2.251"
 description = "Automatic equalization for speakers, headphones and rooms!"
 edition = { workspace = true }
 repository = { workspace = true }
@@ -35,56 +35,46 @@ blas-src = { workspace = true }
 
 # Optional features
 nlopt = { workspace = true, optional = true }
+plotly_static = { version = "0.1", features = ["chromedriver", "webdriver_download"], optional = true }
 
 [features]
 default = ["nlopt"]
 nlopt = ["dep:nlopt"]
+plotly_static = ["dep:plotly_static"]
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # blas folklore
 blas-src = { version = "0.14", features = ["accelerate"] }
 accelerate-src = "0.3"
 signal-hook-tokio = { workspace = true }
-# plotly_static config
-plotly_static = { version = "0.1", features = ["chromedriver", "webdriver_download"] }
 
 [target.'cfg(all(any(target_os = "ios", target_os="ios_sim"), target_arch = "aarch64"))'.dependencies]
 # blas folklore
 blas-src = { version = "0.14", features = ["accelerate"] }
 accelerate-src = "0.3"
 signal-hook-tokio = { workspace = true }
-# plotly_static config
-plotly_static = { version = "0.1", features = ["chromedriver", "webdriver_download"], optional = true }
 
 [target.'cfg(all(target_os = "linux", target_arch="x86_64"))'.dependencies]
 # blas folklore
 blas-src = { version = "0.14", features = ["openblas"] }
 openblas-src = { version = "0.10", features = ["cblas", "system"] }
-# plotly_static config
-plotly_static = { version = "0.1", features = ["chromedriver", "webdriver_download"] }
 signal-hook-tokio = { workspace = true }
 
 [target.'cfg(all(target_os = "linux", target_arch="aarch64"))'.dependencies]
 # blas folklore
 blas-src = { version = "0.14", features = ["openblas"] }
 openblas-src = { version = "0.10", features = ["cblas", "system"] }
-# plotly_static config
-plotly_static = { version = "0.1", features = ["geckodriver", "webdriver_download"] }
 signal-hook-tokio = { workspace = true }
 
 [target.'cfg(all(target_os = "windows", target_arch="x86_64"))'.dependencies]
 # blas folklore
 blas-src = { version = "0.14", features = ["intel-mkl-dynamic-parallel"] }
 intel-mkl-src = "0.8.1"
-# plotly no static on windows (gecko and edge are working)
-plotly_static = { version = "0.1", features = ["chromedriver"] }
 
 [target.'cfg(all(target_os = "windows", target_arch="aarch64"))'.dependencies]
 # blas folklore: intel-mkl not supported on arm :)
 blas-src = { version = "0.14", features = ["openblas"] }
 openblas-src = { version = "0.10", features = ["cblas", "system"] }
-# plotly no static on windows (gecko and edge are working)
-plotly_static = { version = "0.1", features = ["geckodriver"] }
 
 [[bin]]
 name = "autoeq"
