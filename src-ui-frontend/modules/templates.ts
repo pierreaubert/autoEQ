@@ -535,6 +535,24 @@ export function generateBottomRow(): string {
                 <label>Improvement:</label>
                 <span id="score_improvement">-</span>
             </div>
+            <select
+                id="export_format_select"
+                class="export-format-select"
+                title="Select export format"
+            >
+                <option value="apo">APO</option>
+                <option value="aupreset">AUpreset</option>
+                <option value="rme">RME Channel</option>
+            </select>
+            <button
+                type="button"
+                id="download_apo_btn"
+                class="btn btn-secondary"
+                disabled
+                title="Download optimized EQ"
+            >
+                💾 Download
+            </button>
         </div>
     </div>
 </div>`;

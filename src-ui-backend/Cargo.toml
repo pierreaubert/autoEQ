@@ -8,7 +8,7 @@ name = "sotf_backend"
 path = "src/lib.rs"
 
 [[bin]]
-name = "audio_test"
+name = "sotf_audio_test"
 path = "bin/audio_test.rs"
 
 [dependencies]
@@ -33,6 +33,9 @@ reqwest = { workspace = true }
 # BLAS: Use Accelerate framework on macOS
 blas-src = { version = "0.14", features = ["accelerate"] }
 accelerate-src = "0.3"
+# plotly_static config
+plotly_static = { version = "0.1", features = ["chromedriver", "webdriver_download"] }
+signal-hook-tokio = { workspace = true }
 
 [target.'cfg(all(target_os = "linux", target_arch="x86_64"))'.dependencies]
 # blas folklore

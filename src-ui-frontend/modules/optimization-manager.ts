@@ -23,6 +23,13 @@ export class OptimizationManager {
   private capturedFrequencies: number[] | null = null;
   private capturedMagnitudes: number[] | null = null;
 
+  // Optimization result storage
+  private lastFilterParams: number[] | null = null;
+  private lastSampleRate: number | null = null;
+  private lastPeqModel: PeqModel | null = null;
+  private lastLossType: string | null = null;
+  private lastSpeakerName: string | null = null;
+
   // Event callbacks
   private onProgressUpdate?: (
     stage: string,
@@ -249,6 +256,22 @@ export class OptimizationManager {
       console.log("Optimization completed:", result);
 
       if (result.success) {
+        // Store the optimization results for later use (e.g., APO export)
+        if (result.filter_params) {
+          this.lastFilterParams = result.filter_params;
+          this.lastSampleRate = params.sample_rate;
+          this.lastPeqModel = params.peq_model || "pk";
+          this.lastLossType = params.loss || "flat";
+          this.lastSpeakerName = params.speaker || null;
+          console.log("Stored filter params for APO export:", {
+            numParams: this.lastFilterParams.length,
+            sampleRate: this.lastSampleRate,
+            peqModel: this.lastPeqModel,
+            lossType: this.lastLossType,
+            speakerName: this.lastSpeakerName,
+          });
+        }
+
         if (this.onOptimizationComplete) {
           this.onOptimizationComplete(result);
         }
@@ -585,6 +608,31 @@ export class OptimizationManager {
 
   getProgressData(): ProgressData[] {
     return [...this.progressData];
+  }
+
+  // Getters for optimization results (for APO export)
+  getFilterParams(): number[] | null {
+    return this.lastFilterParams ? [...this.lastFilterParams] : null;
+  }
+
+  getSampleRate(): number | null {
+    return this.lastSampleRate;
+  }
+
+  getPeqModel(): PeqModel | null {
+    return this.lastPeqModel;
+  }
+
+  getLossType(): string | null {
+    return this.lastLossType;
+  }
+
+  getSpeakerName(): string | null {
+    return this.lastSpeakerName;
+  }
+
+  hasOptimizationResult(): boolean {
+    return this.lastFilterParams !== null && this.lastSampleRate !== null;
   }
 
   // Cleanup

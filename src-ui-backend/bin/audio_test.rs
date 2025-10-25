@@ -1,5 +1,5 @@
-use sotf_backend::{AudioManager, AudioState, CamillaError, FilterParams, audio};
 use clap::{Parser, Subcommand};
+use sotf_backend::{AudioManager, AudioState, CamillaError, FilterParams, audio};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -201,8 +201,8 @@ async fn main() {
 async fn list_devices() -> Result<(), String> {
     println!("Enumerating audio devices...\n");
 
-    let devices = audio::get_audio_devices()
-        .map_err(|e| format!("Failed to get devices: {}", e))?;
+    let devices =
+        audio::get_audio_devices().map_err(|e| format!("Failed to get devices: {}", e))?;
 
     // Print input devices
     if let Some(input_devices) = devices.get("input") {

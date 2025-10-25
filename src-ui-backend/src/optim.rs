@@ -429,7 +429,7 @@ pub async fn run_optimization_internal<P: ProgressCallback + 'static>(
         no_parallel: false,
         parallel_threads: 0,
         seed: None, // Random seed for deterministic optimization (None = random)
-        qa: None, // Quality assurance mode disabled for UI (None = disabled)
+        qa: None,   // Quality assurance mode disabled for UI (None = disabled)
     };
 
     // Load input data (following autoeq.rs pattern)

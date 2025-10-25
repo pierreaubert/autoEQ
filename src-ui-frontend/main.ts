@@ -189,6 +189,15 @@ class AutoEQApplication {
       }
     });
 
+    // Connect optimization result getter for APO download
+    this.uiManager.setOptimizationResultGetter(() => ({
+      filterParams: this.optimizationManager.getFilterParams(),
+      sampleRate: this.optimizationManager.getSampleRate(),
+      peqModel: this.optimizationManager.getPeqModel(),
+      lossType: this.optimizationManager.getLossType(),
+      speakerName: this.optimizationManager.getSpeakerName(),
+    }));
+
     // Override UI manager event handlers to connect to application logic
     this.overrideUIEventHandlers();
   }
@@ -327,6 +336,7 @@ class AutoEQApplication {
 
       // Update UI state
       this.uiManager.setOptimizationRunning(true);
+      this.uiManager.disableDownloadButton();
       this.uiManager.openOptimizationModal();
 
       // Clear any existing progress data
@@ -428,6 +438,9 @@ class AutoEQApplication {
       // Show close button instead of cancel button
       this.uiManager.showCloseButton();
 
+      // Enable download button after successful optimization
+      this.uiManager.enableDownloadButton();
+
       // Determine if this is speaker-based or curve+target optimization
       const hasSpinData = !!result.spin_details;
 
@@ -464,6 +477,9 @@ class AutoEQApplication {
     console.error("Optimization error:", error);
     this.uiManager.showError(error);
     this.uiManager.setOptimizationRunning(false);
+
+    // Keep download button disabled on error
+    this.uiManager.disableDownloadButton();
 
     // Show close button instead of cancel button even on error
     this.uiManager.showCloseButton();

@@ -15,6 +15,7 @@ import {
   CaptureStorage,
   type StoredCapture,
 } from "@audio-capture/capture-storage";
+import { exportEQ, type ExportFormat } from "./apo-export";
 
 export class UIManager {
   private form!: HTMLFormElement;
@@ -48,6 +49,10 @@ export class UIManager {
   private audioPosition!: HTMLElement;
   private audioProgressFill!: HTMLElement;
 
+  // Download APO button and format selector
+  private downloadApoBtn!: HTMLButtonElement;
+  private exportFormatSelect!: HTMLSelectElement;
+
   // Capture elements
   private captureBtn: HTMLButtonElement | null = null;
   private captureStatus: HTMLElement | null = null;
@@ -79,6 +84,13 @@ export class UIManager {
     magnitudes: number[],
   ) => void;
   private outputDeviceChangeCallback?: (deviceId: string) => void;
+  private getOptimizationResult?: () => {
+    filterParams: number[] | null;
+    sampleRate: number | null;
+    peqModel: string | null;
+    lossType: string | null;
+    speakerName: string | null;
+  };
 
   constructor() {
     this.initializeElements();
@@ -243,6 +255,14 @@ export class UIManager {
     this.signalTypeSelect = document.getElementById(
       "signal_type",
     ) as HTMLSelectElement;
+
+    // Initialize download APO button and format selector
+    this.downloadApoBtn = document.getElementById(
+      "download_apo_btn",
+    ) as HTMLButtonElement;
+    this.exportFormatSelect = document.getElementById(
+      "export_format_select",
+    ) as HTMLSelectElement;
   }
 
   private setupEventListeners(): void {
@@ -311,6 +331,9 @@ export class UIManager {
     this.eqOffBtn?.addEventListener("click", () => this.setEQEnabled(false));
     this.listenBtn?.addEventListener("click", () => this.onListenClick());
     this.stopBtn?.addEventListener("click", () => this.onStopClick());
+
+    // Download APO button
+    this.downloadApoBtn?.addEventListener("click", () => this.onDownloadApoClick());
   }
 
   private setupUIInteractions(): void {
@@ -1408,5 +1431,79 @@ export class UIManager {
     } else {
       console.warn("Listen button not found in UIManager!");
     }
+  }
+
+  // Download APO button control
+  enableDownloadButton(): void {
+    if (this.downloadApoBtn) {
+      this.downloadApoBtn.disabled = false;
+      console.log("Download APO button enabled");
+    }
+  }
+
+  disableDownloadButton(): void {
+    if (this.downloadApoBtn) {
+      this.downloadApoBtn.disabled = true;
+      console.log("Download APO button disabled");
+    }
+  }
+
+  private async onDownloadApoClick(): Promise<void> {
+    console.log("Download APO button clicked");
+
+    try {
+      if (!this.getOptimizationResult) {
+        console.error("[DOWNLOAD] Optimization result getter not set");
+        this.showError("Unable to download: Optimization result not available");
+        return;
+      }
+
+      const result = this.getOptimizationResult();
+      if (!result.filterParams || !result.sampleRate || !result.peqModel) {
+        console.error("[DOWNLOAD] Missing optimization result data", result);
+        this.showError("No optimization result available to download");
+        return;
+      }
+
+      // Get selected export format
+      const format = (this.exportFormatSelect?.value || "apo") as ExportFormat;
+
+      console.log(`[DOWNLOAD] Exporting ${format.toUpperCase()} format...`, {
+        numParams: result.filterParams.length,
+        sampleRate: result.sampleRate,
+        peqModel: result.peqModel,
+        lossType: result.lossType,
+        speakerName: result.speakerName,
+        format,
+      });
+
+      await exportEQ(
+        result.filterParams,
+        result.sampleRate,
+        result.peqModel,
+        result.lossType,
+        result.speakerName,
+        format,
+      );
+
+      console.log("[DOWNLOAD] APO export successful");
+    } catch (error) {
+      console.error("[DOWNLOAD] Error exporting APO:", error);
+      this.showError(
+        `Failed to export APO: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
+    }
+  }
+
+  setOptimizationResultGetter(
+    getter: () => {
+      filterParams: number[] | null;
+      sampleRate: number | null;
+      peqModel: string | null;
+      lossType: string | null;
+      speakerName: string | null;
+    },
+  ): void {
+    this.getOptimizationResult = getter;
   }
 }

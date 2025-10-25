@@ -1,6 +1,6 @@
-use serde::{Deserialize, Serialize};
-use reqwest;
 use crate::plot::CurveData;
+use reqwest;
+use serde::{Deserialize, Serialize};
 
 const SPINORAMA_API_BASE: &str = "https://api.spinorama.org";
 
@@ -33,8 +33,9 @@ impl SpinAudioClient {
     /// List all available speakers
     pub async fn list_speakers(&self) -> Result<Vec<SpeakerInfo>, String> {
         let url = format!("{}/speakers", SPINORAMA_API_BASE);
-        
-        let response = self.client
+
+        let response = self
+            .client
             .get(&url)
             .send()
             .await
@@ -51,10 +52,18 @@ impl SpinAudioClient {
     }
 
     /// Get measurements for a specific speaker
-    pub async fn get_measurements(&self, brand: &str, model: &str) -> Result<Vec<MeasurementInfo>, String> {
-        let url = format!("{}/speakers/{}/{}/measurements", SPINORAMA_API_BASE, brand, model);
-        
-        let response = self.client
+    pub async fn get_measurements(
+        &self,
+        brand: &str,
+        model: &str,
+    ) -> Result<Vec<MeasurementInfo>, String> {
+        let url = format!(
+            "{}/speakers/{}/{}/measurements",
+            SPINORAMA_API_BASE, brand, model
+        );
+
+        let response = self
+            .client
             .get(&url)
             .send()
             .await
@@ -81,8 +90,9 @@ impl SpinAudioClient {
             "{}/speakers/{}/{}/measurements/{}/cea2034",
             SPINORAMA_API_BASE, brand, model, measurement_id
         );
-        
-        let response = self.client
+
+        let response = self
+            .client
             .get(&url)
             .send()
             .await
@@ -110,8 +120,9 @@ impl SpinAudioClient {
             "{}/speakers/{}/{}/measurements/{}/curves/{}",
             SPINORAMA_API_BASE, brand, model, measurement_id, curve_name
         );
-        
-        let response = self.client
+
+        let response = self
+            .client
             .get(&url)
             .send()
             .await

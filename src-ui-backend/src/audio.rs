@@ -370,9 +370,7 @@ pub fn set_audio_device(
 }
 
 /// Get the current audio configuration
-pub fn get_audio_config(
-    audio_state: &SharedAudioState,
-) -> Result<AudioState, String> {
+pub fn get_audio_config(audio_state: &SharedAudioState) -> Result<AudioState, String> {
     println!("[AUDIO DEBUG] Getting current audio configuration");
     let state = audio_state.lock().map_err(|e| {
         eprintln!("[AUDIO ERROR] Failed to lock audio state: {}", e);
