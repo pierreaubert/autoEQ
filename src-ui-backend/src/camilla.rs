@@ -229,6 +229,8 @@ pub struct DeviceConfig {
     /// Enable automatic sample rate adjustment (allows CamillaDSP to adapt to device rate)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub enable_rate_adjust: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resampler: Option<serde_yaml::Value>,
 }
 
 /// Capture device configuration
@@ -1358,6 +1360,19 @@ pub fn generate_streaming_config(
         filter.validate()?;
     }
 
+    // Detect device native sample rate for proper resampling
+    let device_sample_rate = get_device_native_sample_rate(output_device)
+        .unwrap_or(sample_rate); // Fallback to file rate if detection fails
+    
+    let needs_resampling = sample_rate != device_sample_rate;
+    
+    if needs_resampling {
+        println!(
+            "[CamillaDSP] Sample rate mismatch detected: file={}Hz, device={}Hz. Adding resampler.",
+            sample_rate, device_sample_rate
+        );
+    }
+
     // Create capture device (stdin input)
     let capture = CaptureDevice {
         device_type: "Stdin".to_string(),
@@ -1403,12 +1418,24 @@ pub fn generate_streaming_config(
         channel_map: None, // CoreAudio doesn't accept channel_map; we route via Mixer
     };
 
+    // Generate resampler config if needed
+    let resampler_config = if needs_resampling {
+        let resampler_yaml = r#"
+            type: Synchronous
+        "#;
+        Some(serde_yaml::from_str::<serde_yaml::Value>(resampler_yaml)
+            .map_err(|e| CamillaError::ConfigGenerationFailed(format!("Failed to generate resampler: {}", e)))?)
+    } else {
+        None
+    };
+
     let devices = DeviceConfig {
-        samplerate: sample_rate,
+        samplerate: device_sample_rate, // Use device's native rate (output side)
         chunksize: 1024,
         capture: Some(capture),
         playback,
-        enable_rate_adjust: Some(true), // Allow CamillaDSP to adapt to device's native sample rate
+        enable_rate_adjust: Some(true),
+        resampler: resampler_config,
     };
 
     // Generate filters section
@@ -1434,8 +1461,8 @@ pub fn generate_streaming_config(
         right_dest,
     ));
 
-    // Generate pipeline - always include mixer; add filters if any
-    let pipeline = Some(generate_pipeline(mixer_out_channels, filters));
+    // Generate pipeline - always include mixer; add filters and resampler if needed
+    let pipeline = Some(generate_pipeline(mixer_out_channels, filters, needs_resampling));
 
     Ok(CamillaDSPConfig {
         devices,
@@ -1522,12 +1549,37 @@ pub fn generate_playback_config(
         channel_map: None, // CoreAudio doesn't accept channel_map; we route via Mixer
     };
 
+    // Detect device native sample rate for file playback too
+    let device_sample_rate = get_device_native_sample_rate(output_device)
+        .unwrap_or(sample_rate);
+    
+    let needs_resampling = sample_rate != device_sample_rate;
+    
+    if needs_resampling {
+        println!(
+            "[CamillaDSP] Sample rate mismatch detected: file={}Hz, device={}Hz. Adding resampler.",
+            sample_rate, device_sample_rate
+        );
+    }
+
+    // Generate resampler config if needed
+    let resampler_config = if needs_resampling {
+        let resampler_yaml = r#"
+            type: Synchronous
+        "#;
+        Some(serde_yaml::from_str::<serde_yaml::Value>(resampler_yaml)
+            .map_err(|e| CamillaError::ConfigGenerationFailed(format!("Failed to generate resampler: {}", e)))?)
+    } else {
+        None
+    };
+
     let devices = DeviceConfig {
-        samplerate: sample_rate,
+        samplerate: device_sample_rate, // Use device's native rate (output side)
         chunksize: 1024,
         capture: Some(capture),
         playback,
-        enable_rate_adjust: Some(true), // Allow CamillaDSP to adapt to device's native sample rate
+        enable_rate_adjust: Some(true),
+        resampler: resampler_config,
     };
 
     // Generate filters section
@@ -1553,8 +1605,8 @@ pub fn generate_playback_config(
         right_dest,
     ));
 
-    // Generate pipeline - always include mixer; add filters if any
-    let pipeline = Some(generate_pipeline(mixer_out_channels, filters));
+    // Generate pipeline - always include mixer; add filters and resampler if needed
+    let pipeline = Some(generate_pipeline(mixer_out_channels, filters, needs_resampling));
 
     Ok(CamillaDSPConfig {
         devices,
@@ -1623,7 +1675,8 @@ pub fn generate_recording_config(
         chunksize: 1024,
         capture: Some(capture),
         playback,
-        enable_rate_adjust: Some(true), // Allow CamillaDSP to adapt to device's native sample rate
+        enable_rate_adjust: Some(true),
+        resampler: None,
     };
 
     Ok(CamillaDSPConfig {
@@ -1632,6 +1685,27 @@ pub fn generate_recording_config(
         mixers: None,
         pipeline: None,
     })
+}
+
+/// Get the native sample rate of an output device
+fn get_device_native_sample_rate(device_name: Option<&str>) -> Option<u32> {
+    use cpal::traits::{DeviceTrait, HostTrait};
+    
+    let host = cpal::default_host();
+    
+    let device = if let Some(name) = device_name {
+        // Find device by name
+        host.output_devices()
+            .ok()?
+            .find(|d| d.name().ok().as_deref() == Some(name))
+    } else {
+        // Use default device
+        host.default_output_device()
+    };
+    
+    let device = device?;
+    let config = device.default_output_config().ok()?;
+    Some(config.sample_rate().0)
 }
 
 /// Map output device name to CamillaDSP format
@@ -1761,10 +1835,11 @@ fn generate_stereo_mixer_yaml(
 }
 
 /// Generate the pipeline
-fn generate_pipeline(channels: u16, filters: &[FilterParams]) -> Vec<PipelineStep> {
+/// Note: Resampler is NOT added to pipeline when using devices.resampler - it's automatic
+fn generate_pipeline(channels: u16, filters: &[FilterParams], _needs_resampling: bool) -> Vec<PipelineStep> {
     let mut pipeline = Vec::new();
 
-    // Always add mixer first
+    // Always add mixer
     pipeline.push(PipelineStep {
         step_type: "Mixer".to_string(),
         channel: None,
