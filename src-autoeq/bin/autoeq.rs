@@ -15,21 +15,19 @@
 //! You should have received a copy of the GNU General Public License
 //! along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-use autoeq::Curve;
-use autoeq::cea2034 as score;
-use autoeq::iir;
-use autoeq::loss;
-use autoeq::optim;
-use autoeq::optim::ObjectiveData;
 use autoeq::plot;
-use autoeq::read;
 use autoeq_env::DATA_GENERATED;
 use clap::Parser;
 use std::error::Error;
-use std::path::{Path, PathBuf};
-use tokio::fs;
+use std::path::PathBuf;
 
 // Include split modules
+#[path = "src/load.rs"]
+mod load;
+#[path = "src/postscore.rs"]
+mod postscore;
+#[path = "src/prescore.rs"]
+mod prescore;
 #[path = "src/qa.rs"]
 mod qa;
 #[path = "src/runopt.rs"]
@@ -80,66 +78,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Validate CLI arguments
     autoeq::cli::validate_args_or_exit(&args);
 
-    // Load input data
-    let (input_curve_raw, spin_data_raw) = autoeq::workflow::load_input_curve(&args).await?;
-
-    // Determine if this is headphone or speaker optimization
-    let is_headphone = matches!(
-        args.loss,
-        autoeq::LossType::HeadphoneFlat | autoeq::LossType::HeadphoneScore
-    );
-
-    // Determine if we can use the original frequency grid from CEA2034 data
-    // to avoid unnecessary resampling while maintaining accuracy
-    let use_original_freq = if let Some(ref spin_data) = spin_data_raw {
-        // Check if all curves have the same frequency grid as input_curve_raw
-        let input_freq = &input_curve_raw.freq;
-        spin_data.iter().all(|(_, curve)| {
-            curve.freq.len() == input_freq.len()
-                && curve
-                    .freq
-                    .iter()
-                    .zip(input_freq.iter())
-                    .all(|(a, b)| (a - b).abs() < 1e-9) // Allow tiny numerical differences
-        })
-    } else {
-        false
-    };
-
-    // Use original frequency grid from API data if available and consistent,
-    // otherwise create a standard log-spaced grid
-    let standard_freq = if use_original_freq {
-        input_curve_raw.freq.clone()
-    } else {
-        let num_points = if is_headphone { 120 } else { 200 };
-        read::create_log_frequency_grid(num_points, 20.0, 20000.0)
-    };
-
-    // Normalize and interpolate input curve
-    let input_curve = read::normalize_and_interpolate_response(&standard_freq, &input_curve_raw);
-
-    // Interpolate spinorama data if available
-    let spin_data = spin_data_raw.map(|spin_data| {
-        spin_data
-            .into_iter()
-            .map(|(name, curve)| {
-                let interpolated = read::interpolate_log_space(&standard_freq, &curve);
-                (name, interpolated)
-            })
-            .collect()
-    });
-
-    // Build/Get target and interpolate it
-    let target_curve_raw =
-        autoeq::workflow::build_target_curve(&args, &standard_freq, &input_curve_raw);
-    let target_curve = read::interpolate_log_space(&standard_freq, &target_curve_raw);
-
-    // Compute and interpolate deviation curve
-    let deviation_curve_raw = Curve {
-        freq: target_curve.freq.clone(),
-        spl: target_curve.spl.clone() - &input_curve.spl,
-    };
-    let deviation_curve = read::interpolate_log_space(&standard_freq, &deviation_curve_raw);
+    // Load and prepare all input data
+    let (standard_freq, input_curve, target_curve, deviation_curve, spin_data) =
+        load::load_and_prepare(&args).await?;
 
     // Objective data
     let (objective_data, use_cea) = autoeq::workflow::setup_objective_data(
@@ -150,102 +91,50 @@ async fn main() -> Result<(), Box<dyn Error>> {
         &spin_data,
     );
 
-    // Metrics before optimisation
-    let mut cea2034_metrics_before: Option<score::ScoreMetrics> = None;
-    let mut headphone_metrics_before: Option<f64> = None;
-    match objective_data.loss_type {
-        autoeq::LossType::HeadphoneFlat | autoeq::LossType::HeadphoneScore => {
-            // headphone_loss expects deviation from Harman target, not raw curve
-            headphone_metrics_before = Some(loss::headphone_loss(&deviation_curve));
-        }
-        autoeq::LossType::SpeakerFlat | autoeq::LossType::SpeakerScore => {
-            if use_cea {
-                let metrics = score::compute_cea2034_metrics(
-                    &input_curve.freq,
-                    spin_data.as_ref().unwrap(),
-                    None,
-                )
-                .await?;
-                cea2034_metrics_before = Some(metrics);
-            }
-        }
-    }
+    // Compute pre-optimization metrics
+    let pre_metrics = prescore::compute_pre_optimization_metrics(
+        &args,
+        &objective_data,
+        use_cea,
+        &deviation_curve,
+        &spin_data,
+    )
+    .await?;
 
     // Optimize
     qa_println!(args, "🚀 Starting optimization...");
     let opt_result = runopt::perform_optimization(&args, &objective_data)?;
 
-    // Variables to store pre/post scores for QA summary
-    let mut pre_score: Option<f64> = None;
-    let mut post_score: Option<f64> = None;
+    // Compute post-optimization metrics
+    let post_metrics = postscore::compute_post_optimization_metrics(
+        &args,
+        &objective_data,
+        use_cea,
+        &opt_result.params,
+        &standard_freq,
+        &target_curve,
+        &input_curve,
+        &spin_data,
+        pre_metrics.cea2034_metrics,
+        pre_metrics.headphone_loss,
+    )
+    .await?;
 
-    match objective_data.loss_type {
+    // Print pre and post optimization scores
+    postscore::print_optimization_scores(&args, &post_metrics);
+
+    // Extract scores for QA summary
+    let (pre_score, post_score) = match objective_data.loss_type {
         autoeq::LossType::HeadphoneFlat | autoeq::LossType::HeadphoneScore => {
-            if let Some(before) = headphone_metrics_before {
-                pre_score = Some(before);
-                qa_println!(args, "✅  Pre-Optimization Headphone Score: {:.3}", before);
-            }
-            let peq_after = autoeq::x2peq::compute_peq_response_from_x(
-                &standard_freq,
-                &opt_result.params,
-                args.sample_rate,
-                args.effective_peq_model(),
-            );
-            // Compute remaining deviation from target after applying PEQ
-            // Use same convention as deviation_curve: target - corrected
-            // deviation_after = target - (input + peq)
-            let deviation_after = Curve {
-                freq: standard_freq.clone(),
-                spl: &target_curve.spl - &input_curve.spl - &peq_after,
-            };
-            let headphone_metrics_after = loss::headphone_loss(&deviation_after);
-            post_score = Some(headphone_metrics_after);
-            qa_println!(
-                args,
-                "✅ Post-Optimization Headphone Score: {:.3}",
-                headphone_metrics_after
-            );
+            (post_metrics.pre_headphone_loss, post_metrics.headphone_loss)
         }
         autoeq::LossType::SpeakerFlat | autoeq::LossType::SpeakerScore => {
-            if use_cea {
-                let freq = &input_curve.freq;
-                let peq_after = autoeq::x2peq::compute_peq_response_from_x(
-                    freq,
-                    &opt_result.params,
-                    args.sample_rate,
-                    args.effective_peq_model(),
-                );
-                let metrics_after = score::compute_cea2034_metrics(
-                    freq,
-                    spin_data.as_ref().unwrap(),
-                    Some(&peq_after),
-                )
-                .await?;
-                if let Some(before) = cea2034_metrics_before {
-                    pre_score = Some(before.pref_score);
-                    qa_println!(
-                        args,
-                        "✅  Pre-Optimization CEA2034 Score: pref={:.3} | nbd_on={:.3} nbd_pir={:.3} lfx={:.0}Hz sm_pir={:.3}",
-                        before.pref_score,
-                        before.nbd_on,
-                        before.nbd_pir,
-                        10f64.powf(before.lfx),
-                        before.sm_pir
-                    );
-                }
-                post_score = Some(metrics_after.pref_score);
-                qa_println!(
-                    args,
-                    "✅ Post-Optimization CEA2034 Score: pref={:.3} | nbd_on={:.3} nbd_pir={:.3} lfx={:.0}hz sm_pir={:.3}",
-                    metrics_after.pref_score,
-                    metrics_after.nbd_on,
-                    metrics_after.nbd_pir,
-                    10f64.powf(metrics_after.lfx),
-                    metrics_after.sm_pir
-                );
-            }
+            (
+                post_metrics.pre_cea2034.as_ref().map(|m| m.pref_score),
+                post_metrics.cea2034_metrics.as_ref().map(|m| m.pref_score),
+            )
         }
-    }
+    };
 
     // Check spacing constraints
     let spacing_ok = spacing::check_spacing_constraints(&opt_result.params, &args);
