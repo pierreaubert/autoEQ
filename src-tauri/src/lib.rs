@@ -192,7 +192,7 @@ async fn generate_plot_filters(params: PlotFiltersParams) -> Result<serde_json::
         version: None,
         measurement: None,
         curve_name: "Listening Window".to_string(),
-        algo: "nlopt:cobyla".to_string(),
+        algo: "autoeq:de".to_string(),
         population: 300,
         maxeval: 2000,
         refine: false,

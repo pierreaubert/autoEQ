@@ -55,7 +55,7 @@ pub(super) async fn save_peq_to_file(
     autoeq::qa_println!(args, "🕶 PEQ settings saved to: {}", file_path.display());
 
     // Save RME TotalMix format (.xml)
-    let rme_filename = filename.replace(".txt", ".xml");
+    let rme_filename = filename.replace(".txt", ".tmreq");
     let rme_path = parent_dir.join(&rme_filename);
     let rme_content = iir::peq_format_rme_room(&peq, &peq);
     fs::write(&rme_path, rme_content).await?;

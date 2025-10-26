@@ -169,8 +169,9 @@ function getFileExtension(format: ExportFormat): string {
     case "aupreset":
       return "aupreset";
     case "rme":
+      return "tmeq";
     case "rme-room":
-      return "xml";
+      return "tmreq";
     default:
       return "txt";
   }
@@ -194,9 +195,12 @@ function getFileFilters(
         { name: "All Files", extensions: ["*"] },
       ];
     case "rme":
+        { name: "TotalMix Channel EQ", extensions: ["tmeq"] },
+        { name: "All Files", extensions: ["*"] },
+      ];
     case "rme-room":
       return [
-        { name: "XML Files", extensions: ["xml"] },
+        { name: "TotalMix Room EQ", extensions: ["tmreq"] },
         { name: "All Files", extensions: ["*"] },
       ];
     default:
