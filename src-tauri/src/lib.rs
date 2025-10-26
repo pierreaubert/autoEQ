@@ -13,7 +13,8 @@ use sotf_backend::optim::{ProgressCallback, ProgressUpdate, run_optimization_int
 use sotf_backend::plot::{PlotFiltersParams, PlotSpinParams, plot_to_json};
 use sotf_backend::{
     AudioFileInfo, AudioManager, AudioStreamingManager, CancellationState, OptimizationParams,
-    OptimizationResult, SharedAudioState, StreamingState, audio, curve_data_to_curve,
+    OptimizationResult, ReplayGainInfo, SharedAudioState, StreamingState, analyze_file,
+    curve_data_to_curve,
 };
 use tokio::sync::Mutex;
 
@@ -989,6 +990,32 @@ async fn generate_rme_room_format(
     Ok(rme_room_string)
 }
 
+// ============================================================================
+// ReplayGain Analysis Commands
+// ============================================================================
+
+#[tauri::command]
+async fn analyze_replaygain(
+    file_path: String,
+) -> Result<ReplayGainInfo, String> {
+    println!("[REPLAYGAIN] Analyzing file: {}", file_path);
+
+    match analyze_file(&file_path) {
+        Ok(info) => {
+            println!(
+                "[REPLAYGAIN] Analysis complete - Gain: {:.2} dB, Peak: {:.6}",
+                info.gain, info.peak
+            );
+            Ok(info)
+        }
+        Err(e) => {
+            let error_msg = format!("{}", e);
+            println!("[REPLAYGAIN] Analysis failed: {}", error_msg);
+            Err(error_msg)
+        }
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Find CamillaDSP binary
@@ -1043,10 +1070,13 @@ pub fn run() {
             flac_seek,
             flac_get_state,
             flac_get_file_info,
+            // Export format commands
             generate_apo_format,
             generate_aupreset_format,
             generate_rme_format,
-            generate_rme_room_format
+            generate_rme_room_format,
+            // ReplayGain analysis
+            analyze_replaygain
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

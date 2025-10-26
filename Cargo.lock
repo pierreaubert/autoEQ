@@ -5193,7 +5193,7 @@ dependencies = [
 
 [[package]]
 name = "sotf_backend"
-version = "0.2.453"
+version = "0.2.454"
 dependencies = [
  "accelerate-src",
  "autoeq",
