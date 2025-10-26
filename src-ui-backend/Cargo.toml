@@ -48,6 +48,7 @@ symphonia-format-ogg = "0.5"
 symphonia-format-isomp4 = "0.5"
 
 plotly_static = { version = "0.1", features = ["chromedriver", "webdriver_download"], optional = true }
+ebur128 = "0.1.10"
 
 [features]
 default = []

@@ -22,6 +22,7 @@ pub use camilla::{
 pub mod export;
 pub mod optim;
 pub mod plot;
+pub mod replaygain;
 pub mod spinorama_api;
 
 // Re-export commonly used types and helpers for easier access in tests and consumers
@@ -30,6 +31,7 @@ pub use optim::{
     CancellationState, OptimizationParams, OptimizationResult, ProgressUpdate, validate_params,
 };
 pub use plot::{CurveData, PlotData, curve_data_to_curve};
+pub use replaygain::{analyze_file, ReplayGainInfo};
 pub use spinorama_api::{
     Cea2034Data, FrequencyResponse, MeasurementInfo, SpeakerInfo, SpinAudioClient,
 };

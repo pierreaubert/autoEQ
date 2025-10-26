@@ -54,6 +54,11 @@ export class AudioPlayer {
   private eqEnabled: boolean = true;
   private outputDeviceId: string = "default"; // Selected output device ID
   private audioElement: HTMLAudioElement | null = null; // For device routing
+  
+  // Playback configuration
+  private loudnessCompensation: boolean = false;
+  private splAmplitude: number = -20; // dB range: -30 to 0
+  private autoGain: boolean = true; // Auto-gain enabled by default
 
   // Frequency analyzer
   private analyserNode: AnalyserNode | null = null;
@@ -73,6 +78,7 @@ export class AudioPlayer {
   private eqModal: HTMLElement | null = null;
   private eqBackdrop: HTMLElement | null = null;
   private eqModalCloseBtn: HTMLButtonElement | null = null;
+  private playbackOptionsContainer: HTMLElement | null = null;
   private eqTableContainer: HTMLElement | null = null;
   private statusText: HTMLElement | null = null;
   private positionText: HTMLElement | null = null;
@@ -156,10 +162,11 @@ export class AudioPlayer {
     modal.innerHTML = `
       <div class="eq-modal-content">
         <div class="eq-modal-header">
-          <h3>Equalizer Configuration</h3>
+          <h3>Playback Configuration</h3>
           <button type="button" class="eq-modal-close-btn">&times;</button>
         </div>
         <div class="eq-modal-body">
+          <div class="playback-options-container"></div>
           <div class="eq-table-container"></div>
         </div>
       </div>
@@ -312,10 +319,10 @@ export class AudioPlayer {
                     <span class="eq-filter-count">#0</span>
                     <span class="eq-gain-compensation">0dB</span>
                   </div>
-                  <div class="eq-toggle-buttons">
+                  <div class="eq-toggle-buttons" tabindex="0">
                     <button type="button" class="eq-toggle-btn eq-on-btn active">On</button>
-                    <button type="button" class="eq-toggle-btn eq-config-btn">⚙️</button>
                     <button type="button" class="eq-toggle-btn eq-off-btn">Off</button>
+                    <button type="button" class="eq-toggle-btn eq-config-btn">⚙️</button>
                   </div>
                 </div>
               </div>
@@ -392,6 +399,7 @@ export class AudioPlayer {
     console.log("[EQ Debug] Backdrop element found:", this.eqBackdrop);
     if (this.eqModal) {
       this.eqModalCloseBtn = this.eqModal.querySelector(".eq-modal-close-btn");
+      this.playbackOptionsContainer = this.eqModal.querySelector(".playback-options-container");
       this.eqTableContainer = this.eqModal.querySelector(".eq-table-container");
     }
 
@@ -481,6 +489,30 @@ export class AudioPlayer {
     }
     this.eqModalCloseBtn?.addEventListener("click", () => this.closeEQModal());
     this.eqBackdrop?.addEventListener("click", () => this.closeEQModal());
+
+    // Keyboard controls for EQ buttons
+    const eqButtonsContainer = this.container.querySelector(".eq-toggle-buttons") as HTMLElement;
+    if (eqButtonsContainer) {
+      eqButtonsContainer.addEventListener("keydown", (e: KeyboardEvent) => {
+        switch (e.key) {
+          case "ArrowLeft":
+            e.preventDefault();
+            this.setEQEnabled(true);
+            console.log("EQ enabled via left arrow key");
+            break;
+          case "ArrowRight":
+            e.preventDefault();
+            this.setEQEnabled(false);
+            console.log("EQ disabled via right arrow key");
+            break;
+          case " ": // Space bar
+            e.preventDefault();
+            this.setEQEnabled(!this.eqEnabled);
+            console.log("EQ toggled via space key:", this.eqEnabled);
+            break;
+        }
+      });
+    }
   }
 
   private openEQModal(): void {
@@ -562,14 +594,26 @@ export class AudioPlayer {
   };
 
   private renderEQTable(): void {
-    console.log("[EQ Debug] Rendering EQ table");
+    console.log("[EQ Debug] Rendering playback configuration");
+    console.log("[EQ Debug] Playback options container:", this.playbackOptionsContainer);
     console.log("[EQ Debug] EQ table container:", this.eqTableContainer);
     console.log("[EQ Debug] Current filter params:", this.currentFilterParams);
-    if (!this.eqTableContainer) {
-      console.error("[EQ Debug] EQ table container not found");
+    
+    if (!this.playbackOptionsContainer || !this.eqTableContainer) {
+      console.error("[EQ Debug] Container not found");
       return;
     }
 
+    // Render playback options section
+    this.renderPlaybackOptions();
+    
+    // Render EQ table section
+    const eqSection = document.createElement("div");
+    eqSection.className = "eq-section";
+    
+    const header = document.createElement("h4");
+    header.textContent = "Equalizer Configuration";
+    
     const table = document.createElement("table");
     table.innerHTML = `
       <thead>
@@ -597,9 +641,79 @@ export class AudioPlayer {
     `;
 
     this.eqTableContainer.innerHTML = "";
-    this.eqTableContainer.appendChild(table);
+    eqSection.appendChild(header);
+    eqSection.appendChild(table);
+    this.eqTableContainer.appendChild(eqSection);
 
     table.addEventListener("input", (e) => this.handleEQTableChange(e));
+  }
+
+  private renderPlaybackOptions(): void {
+    if (!this.playbackOptionsContainer) return;
+
+    const optionsHTML = `
+      <div class="playback-options-section">
+        <h4>Playback Options</h4>
+        <div class="playback-option-item">
+          <label class="playback-option-label">
+            <input type="checkbox" id="loudness-compensation" class="loudness-compensation-toggle" ${this.loudnessCompensation ? "checked" : ""}>
+            <span>Loudness Compensation</span>
+          </label>
+        </div>
+        <div class="playback-option-item spl-slider-container" style="display: ${this.loudnessCompensation ? "flex" : "none"};">
+          <label class="playback-option-label" for="spl-amplitude">
+            <span>SPL Amplitude: <span class="spl-value">${this.splAmplitude}</span> dB</span>
+          </label>
+          <input type="range" id="spl-amplitude" class="spl-slider" min="-30" max="0" step="1" value="${this.splAmplitude}">
+        </div>
+        <div class="playback-option-item">
+          <label class="playback-option-label">
+            <input type="checkbox" id="auto-gain" class="auto-gain-toggle" ${this.autoGain ? "checked" : ""}>
+            <span>Auto-Gain</span>
+          </label>
+          <div class="auto-gain-warning" style="display: ${this.autoGain ? "none" : "block"};">
+            <span class="warning-icon">⚠️</span>
+            <span class="warning-text">Disabling auto-gain may cause clipping</span>
+          </div>
+        </div>
+      </div>
+    `;
+
+    this.playbackOptionsContainer.innerHTML = optionsHTML;
+
+    // Attach event listeners
+    const loudnessToggle = this.playbackOptionsContainer.querySelector(".loudness-compensation-toggle") as HTMLInputElement;
+    const splSliderContainer = this.playbackOptionsContainer.querySelector(".spl-slider-container") as HTMLElement;
+    const splSlider = this.playbackOptionsContainer.querySelector(".spl-slider") as HTMLInputElement;
+    const splValueDisplay = this.playbackOptionsContainer.querySelector(".spl-value") as HTMLElement;
+    const autoGainToggle = this.playbackOptionsContainer.querySelector(".auto-gain-toggle") as HTMLInputElement;
+    const autoGainWarning = this.playbackOptionsContainer.querySelector(".auto-gain-warning") as HTMLElement;
+
+    if (loudnessToggle) {
+      loudnessToggle.addEventListener("change", (e) => {
+        this.loudnessCompensation = (e.target as HTMLInputElement).checked;
+        if (splSliderContainer) {
+          splSliderContainer.style.display = this.loudnessCompensation ? "flex" : "none";
+        }
+        console.log("Loudness compensation:", this.loudnessCompensation);
+      });
+    }
+
+    if (splSlider && splValueDisplay) {
+      splSlider.addEventListener("input", (e) => {
+        this.splAmplitude = parseInt((e.target as HTMLInputElement).value, 10);
+        splValueDisplay.textContent = this.splAmplitude.toString();
+        console.log("SPL amplitude:", this.splAmplitude);
+      });
+    }
+
+    if (autoGainToggle && autoGainWarning) {
+      autoGainToggle.addEventListener("change", (e) => {
+        this.autoGain = (e.target as HTMLInputElement).checked;
+        autoGainWarning.style.display = this.autoGain ? "none" : "block";
+        console.log("Auto-gain:", this.autoGain);
+      });
+    }
   }
 
   private handleEQTableChange(e: Event): void {
