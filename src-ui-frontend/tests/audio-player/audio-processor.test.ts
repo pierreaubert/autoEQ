@@ -90,8 +90,12 @@ const mockAudioContext = {
 };
 
 // Mock global AudioContext
-(globalThis as any).AudioContext = vi.fn(() => mockAudioContext);
-(globalThis as any).webkitAudioContext = vi.fn(() => mockAudioContext);
+(globalThis as any).AudioContext = vi.fn(function () {
+  return mockAudioContext;
+});
+(globalThis as any).webkitAudioContext = vi.fn(function () {
+  return mockAudioContext;
+});
 
 // Mock MediaDevices API
 const mockMediaStream = {

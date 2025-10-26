@@ -12,8 +12,8 @@ use sotf_backend::camilla::ChannelMapMode;
 use sotf_backend::optim::{ProgressCallback, ProgressUpdate, run_optimization_internal};
 use sotf_backend::plot::{PlotFiltersParams, PlotSpinParams, plot_to_json};
 use sotf_backend::{
-    AudioManager, CancellationState, OptimizationParams, OptimizationResult, SharedAudioState,
-    audio, curve_data_to_curve,
+    AudioFileInfo, AudioManager, AudioStreamingManager, CancellationState, OptimizationParams,
+    OptimizationResult, SharedAudioState, StreamingState, audio, curve_data_to_curve,
 };
 use tokio::sync::Mutex;
 
@@ -585,6 +585,221 @@ async fn audio_get_signal_peak(
 }
 
 // ============================================================================
+// FLAC Streaming Audio Commands
+// ============================================================================
+
+/// Audio file information for the frontend
+#[derive(Clone, serde::Serialize)]
+struct AudioFileInfoPayload {
+    path: String,
+    format: String,
+    sample_rate: u32,
+    channels: u16,
+    bits_per_sample: u16,
+    duration_seconds: Option<f64>,
+}
+
+fn convert_audio_file_info(info: &AudioFileInfo) -> AudioFileInfoPayload {
+    AudioFileInfoPayload {
+        path: info.path.to_string_lossy().to_string(),
+        format: info.format.to_string(),
+        sample_rate: info.spec.sample_rate,
+        channels: info.spec.channels,
+        bits_per_sample: info.spec.bits_per_sample,
+        duration_seconds: info.duration_seconds,
+    }
+}
+
+#[tauri::command]
+async fn flac_load_file(
+    file_path: String,
+    streaming_manager: State<'_, Mutex<AudioStreamingManager>>,
+    app_handle: AppHandle,
+) -> Result<AudioFileInfoPayload, String> {
+    println!("[FLAC] Loading file: {}", file_path);
+
+    let mut manager = streaming_manager.lock().await;
+    match manager.load_file(&file_path).await {
+        Ok(audio_info) => {
+            let payload = convert_audio_file_info(&audio_info);
+
+            // Emit file loaded event
+            let _ = app_handle.emit("flac:file-loaded", &payload);
+
+            Ok(payload)
+        }
+        Err(e) => {
+            let error_msg = format!("{}", e);
+            let _ = app_handle.emit(
+                "flac:error",
+                AudioError {
+                    error: error_msg.clone(),
+                },
+            );
+            Err(error_msg)
+        }
+    }
+}
+
+#[tauri::command]
+async fn flac_start_playback(
+    output_device: Option<String>,
+    filters: Vec<FilterParams>,
+    streaming_manager: State<'_, Mutex<AudioStreamingManager>>,
+    app_handle: AppHandle,
+) -> Result<(), String> {
+    println!("[FLAC] Starting playback with {} filters", filters.len());
+
+    let mut manager = streaming_manager.lock().await;
+    match manager
+        .start_playback(output_device.clone(), filters, ChannelMapMode::Normal, None)
+        .await
+    {
+        Ok(_) => {
+            // Emit state change event
+            let _ = app_handle.emit(
+                "flac:state-changed",
+                serde_json::json!({
+                    "state": "playing",
+                    "output_device": output_device,
+                }),
+            );
+            Ok(())
+        }
+        Err(e) => {
+            let error_msg = format!("{}", e);
+            let _ = app_handle.emit(
+                "flac:error",
+                AudioError {
+                    error: error_msg.clone(),
+                },
+            );
+            Err(error_msg)
+        }
+    }
+}
+
+#[tauri::command]
+async fn flac_pause_playback(
+    streaming_manager: State<'_, Mutex<AudioStreamingManager>>,
+    app_handle: AppHandle,
+) -> Result<(), String> {
+    println!("[FLAC] Pausing playback");
+
+    let manager = streaming_manager.lock().await;
+    match manager.pause().await {
+        Ok(_) => {
+            let _ = app_handle.emit(
+                "flac:state-changed",
+                serde_json::json!({
+                    "state": "paused",
+                }),
+            );
+            Ok(())
+        }
+        Err(e) => Err(format!("{}", e)),
+    }
+}
+
+#[tauri::command]
+async fn flac_resume_playback(
+    streaming_manager: State<'_, Mutex<AudioStreamingManager>>,
+    app_handle: AppHandle,
+) -> Result<(), String> {
+    println!("[FLAC] Resuming playback");
+
+    let manager = streaming_manager.lock().await;
+    match manager.resume().await {
+        Ok(_) => {
+            let _ = app_handle.emit(
+                "flac:state-changed",
+                serde_json::json!({
+                    "state": "playing",
+                }),
+            );
+            Ok(())
+        }
+        Err(e) => Err(format!("{}", e)),
+    }
+}
+
+#[tauri::command]
+async fn flac_stop_playback(
+    streaming_manager: State<'_, Mutex<AudioStreamingManager>>,
+    app_handle: AppHandle,
+) -> Result<(), String> {
+    println!("[FLAC] Stopping playback");
+
+    let mut manager = streaming_manager.lock().await;
+    match manager.stop().await {
+        Ok(_) => {
+            let _ = app_handle.emit(
+                "flac:state-changed",
+                serde_json::json!({
+                    "state": "idle",
+                }),
+            );
+            Ok(())
+        }
+        Err(e) => Err(format!("{}", e)),
+    }
+}
+
+#[tauri::command]
+async fn flac_seek(
+    seconds: f64,
+    streaming_manager: State<'_, Mutex<AudioStreamingManager>>,
+    app_handle: AppHandle,
+) -> Result<(), String> {
+    println!("[FLAC] Seeking to {}s", seconds);
+
+    let manager = streaming_manager.lock().await;
+    match manager.seek(seconds).await {
+        Ok(_) => {
+            let _ = app_handle.emit(
+                "flac:position-changed",
+                serde_json::json!({
+                    "position_seconds": seconds,
+                }),
+            );
+            Ok(())
+        }
+        Err(e) => Err(format!("{}", e)),
+    }
+}
+
+#[tauri::command]
+async fn flac_get_state(
+    streaming_manager: State<'_, Mutex<AudioStreamingManager>>,
+) -> Result<String, String> {
+    let manager = streaming_manager.lock().await;
+    let state = manager.get_state();
+
+    let state_str = match state {
+        StreamingState::Idle => "idle",
+        StreamingState::Loading => "loading",
+        StreamingState::Ready => "ready",
+        StreamingState::Playing => "playing",
+        StreamingState::Paused => "paused",
+        StreamingState::Seeking => "seeking",
+        StreamingState::Error => "error",
+    };
+
+    Ok(state_str.to_string())
+}
+
+#[tauri::command]
+async fn flac_get_file_info(
+    streaming_manager: State<'_, Mutex<AudioStreamingManager>>,
+) -> Result<Option<AudioFileInfoPayload>, String> {
+    let manager = streaming_manager.lock().await;
+    match manager.get_audio_info() {
+        Some(info) => Ok(Some(convert_audio_file_info(info))),
+        None => Ok(None),
+    }
+}
+
+// ============================================================================
 // Audio Device Management Commands (Tauri wrappers for backend functions)
 // ============================================================================
 
@@ -784,7 +999,10 @@ pub fn run() {
     });
 
     // Create AudioManager (wrapped in Mutex for Tauri state)
-    let audio_manager = Mutex::new(AudioManager::new(camilla_binary));
+    let audio_manager = Mutex::new(AudioManager::new(camilla_binary.clone()));
+
+    // Create AudioStreamingManager for FLAC playback
+    let streaming_manager = Mutex::new(AudioStreamingManager::new(camilla_binary));
 
     tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
@@ -792,6 +1010,7 @@ pub fn run() {
         .manage(CancellationState::new())
         .manage(SharedAudioState::default())
         .manage(audio_manager)
+        .manage(streaming_manager)
         .invoke_handler(tauri::generate_handler![
             greet,
             run_optimization,
@@ -815,6 +1034,15 @@ pub fn run() {
             audio_start_recording,
             audio_stop_recording,
             audio_get_signal_peak,
+            // FLAC streaming commands
+            flac_load_file,
+            flac_start_playback,
+            flac_pause_playback,
+            flac_resume_playback,
+            flac_stop_playback,
+            flac_seek,
+            flac_get_state,
+            flac_get_file_info,
             generate_apo_format,
             generate_aupreset_format,
             generate_rme_format,

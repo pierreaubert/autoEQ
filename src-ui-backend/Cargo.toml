@@ -19,15 +19,22 @@ plotly = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 cpal = { workspace = true }
-tokio = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "tracing"] }
 tokio-tungstenite = { workspace = true }
 futures-util = { workspace = true }
+futures = "0.3"
 tempfile = { workspace = true }
 serde_yaml = { workspace = true }
 which = { workspace = true }
 clap = { workspace = true }
 ctrlc = { workspace = true }
 reqwest = { workspace = true }
+
+# Audio decoding
+symphonia = { version = "0.5", features = ["flac"] }
+symphonia-core = "0.5"
+symphonia-metadata = "0.5"
+
 plotly_static = { version = "0.1", features = ["chromedriver", "webdriver_download"], optional = true }
 
 [features]

@@ -4,7 +4,7 @@ use std::fs;
 use std::io::Write;
 use std::net::TcpListener;
 use std::path::PathBuf;
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -293,6 +293,8 @@ pub enum ChannelMapMode {
 pub struct CamillaDSPProcess {
     /// Child process handle
     process: Option<Child>,
+    /// Stdin handle for streaming audio data
+    stdin: Option<ChildStdin>,
     /// Path to the CamillaDSP binary
     binary_path: PathBuf,
     /// Path to the config file
@@ -310,6 +312,7 @@ impl CamillaDSPProcess {
         let websocket_port = find_available_port().unwrap_or(1234);
         Self {
             process: None,
+            stdin: None,
             binary_path,
             config_path: None,
             websocket_port,
@@ -403,16 +406,20 @@ impl CamillaDSPProcess {
             .arg(config_path.to_str().ok_or_else(|| {
                 CamillaError::ConfigGenerationFailed("Invalid config path encoding".to_string())
             })?)
-            .stdin(Stdio::null())
+            .stdin(Stdio::piped()) // Piped stdin for streaming audio
             .stdout(Stdio::inherit()) // Show output directly
             .stderr(Stdio::inherit());
 
         // Spawn the process
-        let child = cmd.spawn().map_err(|e| {
+        let mut child = cmd.spawn().map_err(|e| {
             CamillaError::ProcessStartFailed(format!("Failed to spawn CamillaDSP process: {}", e))
         })?;
 
+        // Take ownership of stdin handle
+        let stdin = child.stdin.take();
+
         self.process = Some(child);
+        self.stdin = stdin;
         self.config_path = Some(config_path);
 
         // Give the process a moment to start
@@ -429,8 +436,16 @@ impl CamillaDSPProcess {
         Ok(())
     }
 
+    /// Get a mutable reference to the stdin handle for writing audio data
+    pub fn stdin_mut(&mut self) -> Option<&mut ChildStdin> {
+        self.stdin.as_mut()
+    }
+
     /// Stop the CamillaDSP process gracefully
     pub fn stop(&mut self) -> CamillaResult<()> {
+        // Drop stdin to signal end of stream
+        self.stdin = None;
+
         if let Some(mut child) = self.process.take() {
             println!("[CamillaDSP] Stopping subprocess...");
 
@@ -886,6 +901,105 @@ impl AudioManager {
         Arc::clone(&self.state)
     }
 
+    /// Take the stdin handle from the CamillaDSP process for writing audio data
+    /// This transfers ownership of the stdin handle to the caller
+    pub fn take_stdin(&mut self) -> Option<std::process::ChildStdin> {
+        let mut process = self.process.lock().ok()?;
+        process.stdin.take()
+    }
+
+    /// Start streaming playback from decoded audio (FLAC, MP3, etc.)
+    pub async fn start_streaming_playback(
+        &self,
+        audio_spec: crate::audio_decoder::decoder::AudioSpec,
+        output_device: Option<String>,
+        filters: Vec<FilterParams>,
+        channel_map_mode: ChannelMapMode,
+        output_map: Option<Vec<u16>>,
+    ) -> CamillaResult<()> {
+        println!(
+            "[AudioManager] Starting streaming playback: {}Hz, {}ch, {} filters",
+            audio_spec.sample_rate,
+            audio_spec.channels,
+            filters.len()
+        );
+
+        // Update state to reflect we're starting
+        {
+            let mut state = self.state.lock().map_err(|e| {
+                CamillaError::ProcessCommunicationFailed(format!("Failed to lock state: {}", e))
+            })?;
+            state.state = AudioState::Idle;
+            state.current_file = None; // No file for streaming
+            state.output_device = output_device.clone();
+            state.sample_rate = audio_spec.sample_rate;
+            state.channels = audio_spec.channels;
+            state.filters = filters.clone();
+            state.channel_map_mode = channel_map_mode;
+            state.playback_channel_map = output_map.clone();
+            state.error_message = None;
+        }
+
+        // Generate config for streaming (stdin input)
+        let config = generate_streaming_config(
+            output_device.as_deref(),
+            audio_spec.sample_rate,
+            audio_spec.channels,
+            &filters,
+            channel_map_mode,
+            output_map.as_deref(),
+        )?;
+
+        // Write config to temp file
+        let temp_file = write_config_to_temp(&config)?;
+        let config_path = temp_file.path().to_path_buf();
+
+        // Store temp file to keep it alive
+        {
+            let mut temp_config = self.temp_config_file.lock().map_err(|e| {
+                CamillaError::ProcessCommunicationFailed(format!(
+                    "Failed to lock temp config: {}",
+                    e
+                ))
+            })?;
+            *temp_config = Some(temp_file);
+        }
+
+        // Start the CamillaDSP process
+        {
+            let mut process = self.process.lock().map_err(|e| {
+                CamillaError::ProcessCommunicationFailed(format!("Failed to lock process: {}", e))
+            })?;
+            process.start(config_path)?;
+        }
+
+        // Wait for WebSocket to be ready and verify connection
+        let ws_url = {
+            let process = self.process.lock().map_err(|e| {
+                CamillaError::ProcessCommunicationFailed(format!("Failed to lock process: {}", e))
+            })?;
+            process.websocket_url()
+        };
+
+        let client = CamillaWebSocketClient::new(ws_url);
+        // Use shorter retry for faster startup
+        client
+            .connect_with_retry(3, Duration::from_millis(300))
+            .await?;
+
+        // Update state to playing
+        {
+            let mut state = self.state.lock().map_err(|e| {
+                CamillaError::ProcessCommunicationFailed(format!("Failed to lock state: {}", e))
+            })?;
+            state.state = AudioState::Playing;
+            state.position_seconds = 0.0;
+        }
+
+        println!("[AudioManager] Streaming playback started successfully");
+        Ok(())
+    }
+
     /// Start playback with the given audio file and filters
     pub async fn start_playback(
         &self,
@@ -1226,6 +1340,106 @@ impl AudioManager {
 // ============================================================================
 // Config Generation
 // ============================================================================
+
+/// Generate a CamillaDSP config for streaming playback with stdin input
+pub fn generate_streaming_config(
+    output_device: Option<&str>,
+    sample_rate: u32,
+    channels: u16,
+    filters: &[FilterParams],
+    map_mode: ChannelMapMode,
+    output_map: Option<&[u16]>,
+) -> CamillaResult<CamillaDSPConfig> {
+    // Validate all filters
+    for filter in filters {
+        filter.validate()?;
+    }
+
+    // Create capture device (stdin input)
+    let capture = CaptureDevice {
+        device_type: "Stdin".to_string(),
+        device: None,
+        filename: None,
+        channels: Some(channels),
+        format: Some("FLOAT32LE".to_string()), // Our decoder outputs f32 samples
+        channel_map: None,
+    };
+
+    // Create playback device
+    let (playback_type, device_name) = map_output_device(output_device)?;
+    // Prepare output channel_map if provided
+    let effective_output_map: Option<Vec<u16>> = if let Some(map) = output_map {
+        if map.len() as u16 >= channels {
+            // Use the last `channels` entries to select L/R, as often used for dedicated output pairs
+            let start = map.len() - channels as usize;
+            Some(map[start..].to_vec())
+        } else {
+            return Err(CamillaError::InvalidConfiguration(format!(
+                "Output channel_map length ({}) must be >= channels ({})",
+                map.len(),
+                channels
+            )));
+        }
+    } else {
+        None
+    };
+
+    // Determine total number of output channels required
+    let mixer_out_channels: u16 = if let Some(ref outs) = effective_output_map {
+        outs.iter().copied().max().unwrap_or(1) as u16 + 1
+    } else {
+        channels
+    };
+
+    let playback = PlaybackDevice {
+        device_type: playback_type,
+        device: device_name,
+        filename: None,
+        channels: Some(mixer_out_channels),
+        format: None,      // Let CoreAudio use default format
+        channel_map: None, // CoreAudio doesn't accept channel_map; we route via Mixer
+    };
+
+    let devices = DeviceConfig {
+        samplerate: sample_rate,
+        chunksize: 1024,
+        capture: Some(capture),
+        playback,
+    };
+
+    // Generate filters section
+    let filters_section = if !filters.is_empty() {
+        Some(generate_filters_yaml(filters)?)
+    } else {
+        None
+    };
+
+    // Determine mixer output channel count and destinations
+    let (mixer_out_channels, left_dest, right_dest) = if let Some(ref outs) = effective_output_map {
+        let max_idx = outs.iter().copied().max().unwrap_or(1) as u16;
+        (max_idx + 1, outs[0], outs[1])
+    } else {
+        (2u16, 0u16, 1u16)
+    };
+
+    // Generate mixers section (stereo routing)
+    let mixers_section = Some(generate_stereo_mixer_yaml(
+        map_mode,
+        mixer_out_channels,
+        left_dest,
+        right_dest,
+    ));
+
+    // Generate pipeline - always include mixer; add filters if any
+    let pipeline = Some(generate_pipeline(mixer_out_channels, filters));
+
+    Ok(CamillaDSPConfig {
+        devices,
+        filters: filters_section,
+        mixers: mixers_section,
+        pipeline,
+    })
+}
 
 /// Generate a CamillaDSP config for file playback with EQ filters
 pub fn generate_playback_config(

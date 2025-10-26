@@ -168,10 +168,12 @@ describe("csv-export", () => {
       global.URL.createObjectURL = vi.fn(() => "blob:mock-url");
       global.URL.revokeObjectURL = vi.fn();
 
-      global.Blob = vi.fn((content: any[], options: any) => ({
-        content,
-        options,
-      })) as any;
+      global.Blob = vi.fn(function (content: any[], options: any) {
+        return {
+          content,
+          options,
+        };
+      }) as any;
     });
 
     it("should trigger download with correct filename", () => {

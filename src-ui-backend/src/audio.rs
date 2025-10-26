@@ -59,7 +59,15 @@ pub fn get_audio_devices() -> Result<HashMap<String, Vec<AudioDevice>>, String> 
                 println!("[AUDIO DEBUG] Default input device: {}", name);
             }
 
-            for device in devices {
+            // WORKAROUND: On macOS, collecting devices into a Vec first can prevent
+            // crashes caused by iterator issues with CoreAudio
+            let device_vec: Vec<_> = devices.collect();
+            println!(
+                "[AUDIO DEBUG] Collected {} input device(s)",
+                device_vec.len()
+            );
+
+            for device in device_vec {
                 if let Ok(name) = device.name() {
                     let is_default = default_input_name.as_ref() == Some(&name);
 
@@ -148,7 +156,15 @@ pub fn get_audio_devices() -> Result<HashMap<String, Vec<AudioDevice>>, String> 
                 println!("[AUDIO DEBUG] Default output device: {}", name);
             }
 
-            for device in devices {
+            // WORKAROUND: On macOS, collecting devices into a Vec first can prevent
+            // crashes caused by iterator issues with CoreAudio
+            let device_vec: Vec<_> = devices.collect();
+            println!(
+                "[AUDIO DEBUG] Collected {} output device(s)",
+                device_vec.len()
+            );
+
+            for device in device_vec {
                 if let Ok(name) = device.name() {
                     let is_default = default_output_name.as_ref() == Some(&name);
 

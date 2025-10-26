@@ -1,0 +1,606 @@
+use std::collections::VecDeque;
+use std::io::Write;
+use std::path::{Path, PathBuf};
+use std::process::ChildStdin;
+use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::{Arc, Mutex};
+use std::thread::{self, JoinHandle};
+use std::time::Duration;
+
+use crate::camilla::{AudioManager, ChannelMapMode, FilterParams};
+use crate::{
+    AudioDecoderError, AudioDecoderResult, AudioFormat, AudioSpec, create_decoder, probe_file,
+};
+
+/// High-level audio streaming manager that combines FLAC decoding with CamillaDSP processing
+pub struct AudioStreamingManager {
+    /// CamillaDSP audio manager
+    audio_manager: AudioManager,
+    /// Current decoder thread handle
+    decoder_thread: Option<JoinHandle<()>>,
+    /// Command channel for controlling the decoder
+    command_tx: Option<Sender<StreamingCommand>>,
+    /// Current streaming state
+    state: Arc<Mutex<StreamingState>>,
+    /// Current audio file information
+    current_audio_info: Option<AudioFileInfo>,
+    /// Number of CamillaDSP chunks to buffer (1 chunk = 1024 frames)
+    /// Range: 32 (low latency) to 1024 (high reliability)
+    buffer_chunks: usize,
+    /// Shared underrun counter for adaptive buffering
+    underrun_count: Arc<Mutex<usize>>,
+}
+
+/// Commands for controlling the streaming decoder
+#[derive(Debug, Clone)]
+pub enum StreamingCommand {
+    /// Start streaming playback
+    Start,
+    /// Pause streaming (decoder continues, but no data sent to CamillaDSP)
+    Pause,
+    /// Resume streaming
+    Resume,
+    /// Stop streaming and cleanup
+    Stop,
+    /// Seek to position in seconds
+    SeekSeconds(f64),
+}
+
+/// Current state of the streaming manager
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum StreamingState {
+    Idle,
+    Loading,
+    Ready,
+    Playing,
+    Paused,
+    Seeking,
+    Error,
+}
+
+/// Information about the currently loaded audio file
+#[derive(Debug, Clone)]
+pub struct AudioFileInfo {
+    pub path: PathBuf,
+    pub format: AudioFormat,
+    pub spec: AudioSpec,
+    pub duration_seconds: Option<f64>,
+}
+
+impl AudioStreamingManager {
+    /// Create a new streaming manager with the given CamillaDSP binary path
+    pub fn new(camilla_binary_path: PathBuf) -> Self {
+        Self {
+            audio_manager: AudioManager::new(camilla_binary_path),
+            decoder_thread: None,
+            command_tx: None,
+            state: Arc::new(Mutex::new(StreamingState::Idle)),
+            current_audio_info: None,
+            buffer_chunks: 128, // Default: balanced performance
+            underrun_count: Arc::new(Mutex::new(0)),
+        }
+    }
+
+    /// Set the number of CamillaDSP chunks to buffer
+    /// - 32: Low latency, high performance systems
+    /// - 128: Balanced (default)
+    /// - 1024: High reliability, poor network/slow systems
+    pub fn set_buffer_chunks(&mut self, chunks: usize) {
+        self.buffer_chunks = chunks.clamp(32, 1024);
+    }
+
+    /// Get the current buffer size in chunks
+    pub fn buffer_chunks(&self) -> usize {
+        self.buffer_chunks
+    }
+
+    /// Load an audio file and prepare for streaming
+    pub async fn load_file<P: AsRef<Path>>(
+        &mut self,
+        file_path: P,
+    ) -> AudioDecoderResult<AudioFileInfo> {
+        let path = file_path.as_ref().to_path_buf();
+
+        // Set state to loading
+        {
+            let mut state = self.state.lock().unwrap();
+            *state = StreamingState::Loading;
+        }
+
+        // Stop any current playback
+        self.stop().await?;
+
+        println!("[AudioStreamingManager] Loading file: {:?}", path);
+
+        // Probe the file to get format and spec information
+        let (format, spec) = probe_file(&path)?;
+
+        let duration_seconds = spec.duration().map(|d| d.as_secs_f64());
+
+        let audio_info = AudioFileInfo {
+            path: path.clone(),
+            format,
+            spec,
+            duration_seconds,
+        };
+
+        println!(
+            "[AudioStreamingManager] Loaded {} file: {}Hz, {}ch, {:?}s duration",
+            audio_info.format,
+            audio_info.spec.sample_rate,
+            audio_info.spec.channels,
+            audio_info.duration_seconds
+        );
+
+        self.current_audio_info = Some(audio_info.clone());
+
+        // Set state to ready
+        {
+            let mut state = self.state.lock().unwrap();
+            *state = StreamingState::Ready;
+        }
+
+        Ok(audio_info)
+    }
+
+    /// Start streaming playback with the given settings
+    pub async fn start_playback(
+        &mut self,
+        output_device: Option<String>,
+        filters: Vec<FilterParams>,
+        channel_map_mode: ChannelMapMode,
+        output_map: Option<Vec<u16>>,
+    ) -> AudioDecoderResult<()> {
+        let audio_info = self
+            .current_audio_info
+            .as_ref()
+            .ok_or_else(|| AudioDecoderError::ConfigError("No file loaded".to_string()))?;
+
+        println!("[AudioStreamingManager] Starting playback");
+
+        // Start CamillaDSP with streaming configuration
+        self.audio_manager
+            .start_streaming_playback(
+                audio_info.spec.clone(),
+                output_device,
+                filters,
+                channel_map_mode,
+                output_map,
+            )
+            .await
+            .map_err(|e| AudioDecoderError::ConfigError(format!("CamillaDSP error: {}", e)))?;
+
+        // Start the decoder thread (it will pre-buffer before playing)
+        self.start_decoder_thread().await?;
+
+        // Send start command - decoder will honor it after pre-buffering
+        if let Some(ref cmd_tx) = self.command_tx {
+            cmd_tx
+                .send(StreamingCommand::Start)
+                .map_err(|_| AudioDecoderError::StreamEnded)?;
+        }
+
+        // Note: State will be set to Playing by the decoder thread after pre-buffering completes
+
+        Ok(())
+    }
+
+    /// Pause playback
+    pub async fn pause(&self) -> AudioDecoderResult<()> {
+        println!("[AudioStreamingManager] Pausing playback");
+
+        if let Some(ref cmd_tx) = self.command_tx {
+            cmd_tx
+                .send(StreamingCommand::Pause)
+                .map_err(|_| AudioDecoderError::StreamEnded)?;
+        }
+
+        {
+            let mut state = self.state.lock().unwrap();
+            *state = StreamingState::Paused;
+        }
+
+        Ok(())
+    }
+
+    /// Resume playback
+    pub async fn resume(&self) -> AudioDecoderResult<()> {
+        println!("[AudioStreamingManager] Resuming playback");
+
+        if let Some(ref cmd_tx) = self.command_tx {
+            cmd_tx
+                .send(StreamingCommand::Resume)
+                .map_err(|_| AudioDecoderError::StreamEnded)?;
+        }
+
+        {
+            let mut state = self.state.lock().unwrap();
+            *state = StreamingState::Playing;
+        }
+
+        Ok(())
+    }
+
+    /// Stop playback
+    pub async fn stop(&mut self) -> AudioDecoderResult<()> {
+        println!("[AudioStreamingManager] Stopping playback");
+
+        // Send stop command to decoder thread
+        if let Some(ref cmd_tx) = self.command_tx {
+            let _ = cmd_tx.send(StreamingCommand::Stop);
+        }
+
+        // Wait for decoder thread to finish
+        if let Some(handle) = self.decoder_thread.take() {
+            let _ = handle.join();
+        }
+
+        // Stop CamillaDSP
+        self.audio_manager
+            .stop_playback()
+            .await
+            .map_err(|e| AudioDecoderError::ConfigError(format!("CamillaDSP error: {}", e)))?;
+
+        // Clear command channel
+        self.command_tx = None;
+
+        // Set state to idle
+        {
+            let mut state = self.state.lock().unwrap();
+            *state = StreamingState::Idle;
+        }
+
+        Ok(())
+    }
+
+    /// Seek to a specific position in seconds
+    pub async fn seek(&self, seconds: f64) -> AudioDecoderResult<()> {
+        println!("[AudioStreamingManager] Seeking to {}s", seconds);
+
+        if let Some(ref cmd_tx) = self.command_tx {
+            cmd_tx
+                .send(StreamingCommand::SeekSeconds(seconds))
+                .map_err(|_| AudioDecoderError::StreamEnded)?;
+        }
+
+        {
+            let mut state = self.state.lock().unwrap();
+            *state = StreamingState::Seeking;
+        }
+
+        Ok(())
+    }
+
+    /// Get current streaming state
+    pub fn get_state(&self) -> StreamingState {
+        *self.state.lock().unwrap()
+    }
+
+    /// Get current audio file information
+    pub fn get_audio_info(&self) -> Option<&AudioFileInfo> {
+        self.current_audio_info.as_ref()
+    }
+
+    /// Get the underlying AudioManager for access to CamillaDSP features
+    pub fn audio_manager(&self) -> &AudioManager {
+        &self.audio_manager
+    }
+
+    /// Start the decoder thread that feeds PCM data to CamillaDSP via stdin
+    async fn start_decoder_thread(&mut self) -> AudioDecoderResult<()> {
+        let audio_info = self.current_audio_info.as_ref().unwrap();
+        let path = audio_info.path.clone();
+        let state = Arc::clone(&self.state);
+        let buffer_chunks = self.buffer_chunks;
+        let underrun_count = Arc::clone(&self.underrun_count);
+
+        // Create command channel
+        let (cmd_tx, cmd_rx) = mpsc::channel();
+        self.command_tx = Some(cmd_tx);
+
+        // Get the CamillaDSP stdin handle from the audio manager
+        let stdin = self.audio_manager.take_stdin()
+            .ok_or_else(|| AudioDecoderError::ConfigError(
+                "CamillaDSP stdin not available".to_string()
+            ))?;
+        
+        // Spawn decoder thread
+        let handle = thread::spawn(move || {
+            if let Err(e) = Self::decoder_thread_main(path, state, cmd_rx, stdin, buffer_chunks, underrun_count) {
+                eprintln!("[AudioStreamingManager] Decoder thread error: {:?}", e);
+            }
+        });
+
+        self.decoder_thread = Some(handle);
+        
+        Ok(())
+    }
+    /// Main decoder thread function with pre-buffering and adaptive buffering
+    fn decoder_thread_main(
+        path: PathBuf,
+        state: Arc<Mutex<StreamingState>>,
+        cmd_rx: Receiver<StreamingCommand>,
+        mut stdin: ChildStdin,
+        mut buffer_chunks: usize,
+        underrun_count: Arc<Mutex<usize>>,
+    ) -> AudioDecoderResult<()> {
+        println!(
+            "[AudioStreamingManager] Decoder thread starting for: {:?}",
+            path
+        );
+        println!(
+            "[AudioStreamingManager] Buffer size: {} chunks (1024 frames each)",
+            buffer_chunks
+        );
+
+        // Create decoder
+        let mut decoder = create_decoder(&path)?;
+        let spec = decoder.spec().clone();
+
+        // Calculate buffer target in frames (1 chunk = 1024 frames)
+        const FRAMES_PER_CHUNK: usize = 1024;
+        let mut target_buffer_frames = buffer_chunks * FRAMES_PER_CHUNK;
+        let mut last_underrun_check = std::time::Instant::now();
+
+        // Buffer for decoded audio data (stores raw PCM bytes)
+        let mut audio_buffer: VecDeque<u8> =
+            VecDeque::with_capacity(target_buffer_frames * spec.channels as usize * 4);
+        let mut buffered_frames: usize = 0;
+        let mut playing = false;
+        let mut pre_buffered = false;
+        let mut packet_count = 0usize;
+
+        println!(
+            "[AudioStreamingManager] Pre-buffering {} frames...",
+            target_buffer_frames
+        );
+
+        // Immediately write silence to prevent initial underrun while decoder spins up
+        // Write 2 seconds of silence to cover worst-case thread startup delay
+        let silence_frames = spec.sample_rate as usize * 2;
+        let silence_bytes = vec![0u8; silence_frames * spec.channels as usize * 4];
+        if let Err(e) = stdin.write_all(&silence_bytes) {
+            eprintln!("[AudioStreamingManager] Failed to write initial silence: {:?}", e);
+        } else if let Err(e) = stdin.flush() {
+            eprintln!("[AudioStreamingManager] Failed to flush initial silence: {:?}", e);
+        }
+
+        loop {
+            // Check for commands (batched - check every 10 packets to reduce overhead)
+            if packet_count % 10 == 0 {
+                if let Ok(command) = cmd_rx.try_recv() {
+                    match command {
+                        StreamingCommand::Start | StreamingCommand::Resume => {
+                            playing = true;
+                            if pre_buffered {
+                                let mut state_lock = state.lock().unwrap();
+                                *state_lock = StreamingState::Playing;
+                            }
+                        }
+                        StreamingCommand::Pause => {
+                            playing = false;
+                            let mut state_lock = state.lock().unwrap();
+                            *state_lock = StreamingState::Paused;
+                        }
+                        StreamingCommand::Stop => {
+                            break;
+                        }
+                        StreamingCommand::SeekSeconds(seconds) => {
+                            let frame_position = (seconds * spec.sample_rate as f64) as u64;
+                            if let Err(e) = decoder.seek(frame_position) {
+                                eprintln!("[AudioStreamingManager] Seek error: {:?}", e);
+                            } else {
+                                // Clear buffer after seek
+                                audio_buffer.clear();
+                                buffered_frames = 0;
+                                pre_buffered = false;
+                                let mut state_lock = state.lock().unwrap();
+                                *state_lock = if playing {
+                                    StreamingState::Playing
+                                } else {
+                                    StreamingState::Paused
+                                };
+                            }
+                        }
+                    }
+                }
+            }
+            packet_count += 1;
+
+            // Pre-buffering phase: decode and accumulate, also write to keep CamillaDSP fed
+            if !pre_buffered {
+                match decoder.decode_next() {
+                    Ok(Some(decoded_audio)) => {
+                        let pcm_bytes = decoded_audio.to_bytes_f32_le();
+                        let frames_in_packet = pcm_bytes.len() / (spec.channels as usize * 4);
+                        
+                        // Write immediately to CamillaDSP to prevent initial underrun
+                        if let Err(e) = stdin.write_all(&pcm_bytes) {
+                            eprintln!("[AudioStreamingManager] Failed to write during pre-buffering: {:?}", e);
+                            let mut state_lock = state.lock().unwrap();
+                            *state_lock = StreamingState::Error;
+                            break;
+                        }
+                        if let Err(e) = stdin.flush() {
+                            eprintln!("[AudioStreamingManager] Failed to flush during pre-buffering: {:?}", e);
+                            let mut state_lock = state.lock().unwrap();
+                            *state_lock = StreamingState::Error;
+                            break;
+                        }
+                        
+                        // Also keep in buffer for smooth playback
+                        audio_buffer.extend(pcm_bytes.iter());
+                        buffered_frames += frames_in_packet;
+
+                        // Check if we've reached the target buffer size
+                        if buffered_frames >= target_buffer_frames {
+                            println!("[AudioStreamingManager] Pre-buffer complete: {} frames buffered", buffered_frames);
+                            pre_buffered = true;
+                            
+                            if playing {
+                                let mut state_lock = state.lock().unwrap();
+                                *state_lock = StreamingState::Playing;
+                            }
+                        }
+                    }
+                    Ok(None) => {
+                        // End of stream during pre-buffering
+                        println!("[AudioStreamingManager] End of stream during pre-buffering");
+                        let mut state_lock = state.lock().unwrap();
+                        *state_lock = StreamingState::Idle;
+                        break;
+                    }
+                    Err(e) => {
+                        eprintln!(
+                            "[AudioStreamingManager] Decode error during pre-buffering: {:?}",
+                            e
+                        );
+                        let mut state_lock = state.lock().unwrap();
+                        *state_lock = StreamingState::Error;
+                        break;
+                    }
+                }
+                continue;
+            }
+
+            // Detect underrun: if buffer dropped too low, count it
+            if pre_buffered && buffered_frames < target_buffer_frames / 10 {
+                let mut underruns = underrun_count.lock().unwrap();
+                *underruns += 1;
+                eprintln!(
+                    "[AudioStreamingManager] Warning: Buffer critically low ({} frames, target {})",
+                    buffered_frames, target_buffer_frames
+                );
+            }
+
+            // Adaptive buffering: check for underruns periodically and increase buffer size
+            if last_underrun_check.elapsed() > Duration::from_secs(5) && pre_buffered {
+                let underruns = *underrun_count.lock().unwrap();
+                if underruns > 0 {
+                    // Increase buffer by 50% (up to max of 1024 chunks)
+                    let new_chunks = ((buffer_chunks as f64 * 1.5) as usize).min(1024);
+                    if new_chunks > buffer_chunks {
+                        buffer_chunks = new_chunks;
+                        target_buffer_frames = buffer_chunks * FRAMES_PER_CHUNK;
+                        println!(
+                            "[AudioStreamingManager] Detected {} underrun(s), increasing buffer to {} chunks ({} frames)",
+                            underruns, buffer_chunks, target_buffer_frames
+                        );
+                        // Reset underrun counter
+                        *underrun_count.lock().unwrap() = 0;
+                    }
+                }
+                last_underrun_check = std::time::Instant::now();
+            }
+
+            // Playback phase: write buffered data and decode ahead
+            if playing && pre_buffered {
+                // Write from buffer to stdin if we have data
+                if !audio_buffer.is_empty() {
+                    // Write in chunks for better performance
+                    let write_size = std::cmp::min(audio_buffer.len(), 8192 * 4); // Write up to 4 CamillaDSP chunks at once
+                    let chunk: Vec<u8> = audio_buffer.drain(..write_size).collect();
+
+                    if let Err(e) = stdin.write_all(&chunk) {
+                        eprintln!(
+                            "[AudioStreamingManager] Failed to write to CamillaDSP stdin: {:?}",
+                            e
+                        );
+                        let mut state_lock = state.lock().unwrap();
+                        *state_lock = StreamingState::Error;
+                        break;
+                    }
+
+                    // Flush to ensure immediate delivery
+                    if let Err(e) = stdin.flush() {
+                        eprintln!("[AudioStreamingManager] Failed to flush stdin: {:?}", e);
+                        let mut state_lock = state.lock().unwrap();
+                        *state_lock = StreamingState::Error;
+                        break;
+                    }
+
+                    let frames_written = write_size / (spec.channels as usize * 4);
+                    buffered_frames = buffered_frames.saturating_sub(frames_written);
+                }
+
+                // Decode ahead to maintain buffer (keep it at least half full)
+                if buffered_frames < target_buffer_frames / 2 {
+                    match decoder.decode_next() {
+                        Ok(Some(decoded_audio)) => {
+                            let pcm_bytes = decoded_audio.to_bytes_f32_le();
+                            let frames_in_packet = pcm_bytes.len() / (spec.channels as usize * 4);
+
+                            audio_buffer.extend(pcm_bytes.iter());
+                            buffered_frames += frames_in_packet;
+                        }
+                        Ok(None) => {
+                            // End of stream - drain remaining buffer
+                            if audio_buffer.is_empty() {
+                                let mut state_lock = state.lock().unwrap();
+                                *state_lock = StreamingState::Idle;
+                                playing = false;
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("[AudioStreamingManager] Decode error: {:?}", e);
+                            let mut state_lock = state.lock().unwrap();
+                            *state_lock = StreamingState::Error;
+                            break;
+                        }
+                    }
+                } else {
+                    // Buffer is healthy, small sleep to prevent busy-waiting
+                    thread::sleep(Duration::from_micros(100));
+                }
+            } else if !playing {
+                // Sleep when paused
+                thread::sleep(Duration::from_millis(50));
+            }
+        }
+
+        println!("[AudioStreamingManager] Decoder thread exiting");
+        Ok(())
+    }
+}
+
+impl Drop for AudioStreamingManager {
+    fn drop(&mut self) {
+        // Ensure cleanup
+        let _ = futures::executor::block_on(self.stop());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    #[test]
+    fn test_streaming_manager_creation() {
+        let camilla_path = PathBuf::from("/usr/local/bin/camilladsp");
+        let manager = AudioStreamingManager::new(camilla_path);
+        assert_eq!(manager.get_state(), StreamingState::Idle);
+        assert!(manager.get_audio_info().is_none());
+    }
+
+    #[test]
+    fn test_audio_file_info() {
+        let spec = AudioSpec {
+            sample_rate: 44100,
+            channels: 2,
+            bits_per_sample: 16,
+            total_frames: Some(441000), // 10 seconds
+        };
+
+        let info = AudioFileInfo {
+            path: PathBuf::from("test.flac"),
+            format: AudioFormat::Flac,
+            spec,
+            duration_seconds: Some(10.0),
+        };
+
+        assert_eq!(info.format, AudioFormat::Flac);
+        assert_eq!(info.spec.sample_rate, 44100);
+        assert_eq!(info.duration_seconds, Some(10.0));
+    }
+}

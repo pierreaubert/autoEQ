@@ -46,8 +46,12 @@ const mockAudioContext = {
 };
 
 // Mock global AudioContext
-(globalThis as any).AudioContext = vi.fn(() => mockAudioContext);
-(globalThis as any).webkitAudioContext = vi.fn(() => mockAudioContext);
+(globalThis as any).AudioContext = vi.fn(function () {
+  return mockAudioContext;
+});
+(globalThis as any).webkitAudioContext = vi.fn(function () {
+  return mockAudioContext;
+});
 
 // Mock Canvas API
 const mockCanvasContext = {
@@ -85,8 +89,12 @@ describe("AudioPlayer", () => {
     vi.clearAllMocks();
 
     // Restore AudioContext to working state
-    (globalThis as any).AudioContext = vi.fn(() => mockAudioContext);
-    (globalThis as any).webkitAudioContext = vi.fn(() => mockAudioContext);
+    (globalThis as any).AudioContext = vi.fn(function () {
+      return mockAudioContext;
+    });
+    (globalThis as any).webkitAudioContext = vi.fn(function () {
+      return mockAudioContext;
+    });
 
     // Create mock container
     container = document.createElement("div");
@@ -132,7 +140,7 @@ describe("AudioPlayer", () => {
 
     test("should handle audio context creation failure", async () => {
       // Mock AudioContext to throw error
-      (globalThis as any).AudioContext = vi.fn(() => {
+      (globalThis as any).AudioContext = vi.fn(function () {
         throw new Error("AudioContext not supported");
       });
       (globalThis as any).webkitAudioContext = undefined;

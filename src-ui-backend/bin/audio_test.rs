@@ -1,5 +1,8 @@
 use clap::{Parser, Subcommand};
-use sotf_backend::{AudioManager, AudioState, CamillaError, FilterParams, audio};
+use sotf_backend::{
+    AudioFormat, AudioManager, AudioState, AudioStreamingManager, CamillaError, FilterParams,
+    StreamingState, audio, probe_file,
+};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -22,9 +25,9 @@ enum Commands {
     /// List available audio devices
     Devices,
 
-    /// Play an audio file with optional EQ filters
+    /// Play an audio file with optional EQ filters (auto-detects format)
     Play {
-        /// Path to audio file (WAV, FLAC, etc.)
+        /// Path to audio file (WAV for direct play, FLAC for streaming)
         #[arg(value_name = "FILE")]
         file: PathBuf,
 
@@ -59,6 +62,45 @@ enum Commands {
         /// Duration to play in seconds (0 = play until stopped)
         #[arg(short = 't', long, default_value = "0")]
         duration: u64,
+
+        /// Buffer size in chunks (32=low latency, 128=balanced, 1024=high reliability)
+        #[arg(long = "buffer-chunks", default_value = "128")]
+        buffer_chunks: usize,
+    },
+
+    /// Play FLAC file with streaming decoder (supports seeking)
+    FlacStream {
+        /// Path to FLAC audio file
+        #[arg(value_name = "FILE")]
+        file: PathBuf,
+
+        /// Output device name (optional, uses default)
+        #[arg(short, long)]
+        device: Option<String>,
+
+        /// EQ filters in format "freq:q:gain" (e.g., "1000:1.5:3.0")
+        #[arg(short, long = "filter", value_name = "FREQ:Q:GAIN")]
+        filters: Vec<String>,
+
+        /// Hardware output channel map (comma-separated indices)
+        #[arg(long = "hwaudio-output", value_delimiter = ',')]
+        hwaudio_output: Option<Vec<u16>>,
+
+        /// Swap left and right channels
+        #[arg(long = "swap-channels", default_value_t = false)]
+        swap_channels: bool,
+
+        /// Duration to play in seconds (0 = play until stopped)
+        #[arg(short = 't', long, default_value = "0")]
+        duration: u64,
+
+        /// Start playback at specific time (seconds)
+        #[arg(short = 's', long, default_value = "0")]
+        start_time: f64,
+
+        /// Buffer size in chunks (32=low latency, 128=balanced, 1024=high reliability)
+        #[arg(long = "buffer-chunks", default_value = "128")]
+        buffer_chunks: usize,
     },
 
     /// Record audio from input device
@@ -135,6 +177,7 @@ async fn main() {
             hwaudio_output,
             swap_channels,
             duration,
+            buffer_chunks,
         } => {
             // Parse filters
             let filter_params = match parse_filters(&filters) {
@@ -162,6 +205,49 @@ async fn main() {
                 map_mode,
                 hwaudio_input,
                 hwaudio_output,
+                buffer_chunks,
+            )
+            .await
+            {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
+            }
+        }
+        Commands::FlacStream {
+            file,
+            device,
+            filters,
+            hwaudio_output,
+            swap_channels,
+            duration,
+            start_time,
+            buffer_chunks,
+        } => {
+            // Parse filters
+            let filter_params = match parse_filters(&filters) {
+                Ok(params) => params,
+                Err(e) => {
+                    eprintln!("Error parsing filters: {}", e);
+                    std::process::exit(1);
+                }
+            };
+
+            let map_mode = if swap_channels {
+                sotf_backend::camilla::ChannelMapMode::Swap
+            } else {
+                sotf_backend::camilla::ChannelMapMode::Normal
+            };
+
+            if let Err(e) = play_flac_stream(
+                binary_path,
+                file,
+                device,
+                filter_params,
+                duration,
+                start_time,
+                map_mode,
+                hwaudio_output,
+                buffer_chunks,
             )
             .await
             {
@@ -254,11 +340,49 @@ async fn play_audio(
     filters: Vec<FilterParams>,
     duration: u64,
     map_mode: sotf_backend::camilla::ChannelMapMode,
-    hwaudio_input: Option<Vec<u16>>,
+    _hwaudio_input: Option<Vec<u16>>,
     hwaudio_output: Option<Vec<u16>>,
+    buffer_chunks: usize,
 ) -> Result<(), String> {
     println!("Starting playback...");
     println!("  File: {:?}", file);
+
+    // Try to detect file format
+    match probe_file(&file) {
+        Ok((format, spec)) => {
+            println!(
+                "  Format: {} ({}Hz, {}ch, {}bit)",
+                format.as_str(),
+                spec.sample_rate,
+                spec.channels,
+                spec.bits_per_sample
+            );
+
+            // Route FLAC files to streaming manager
+            if format == AudioFormat::Flac {
+                println!("  Using FLAC streaming decoder...");
+                return play_flac_stream(
+                    binary_path,
+                    file,
+                    device,
+                    filters,
+                    duration,
+                    0.0, // start_time
+                    map_mode,
+                    hwaudio_output,
+                    buffer_chunks,
+                )
+                .await;
+            }
+        }
+        Err(e) => {
+            println!(
+                "  Warning: Could not detect format ({}), using legacy playback",
+                e
+            );
+        }
+    }
+
     println!("  Device: {:?}", device.as_deref().unwrap_or("default"));
     println!("  Sample rate: {}Hz", sample_rate);
     println!("  Channels: {}", channels);
@@ -451,4 +575,164 @@ fn parse_filters(filter_strings: &[String]) -> Result<Vec<FilterParams>, Camilla
     }
 
     Ok(filters)
+}
+
+async fn play_flac_stream(
+    binary_path: PathBuf,
+    file: PathBuf,
+    device: Option<String>,
+    filters: Vec<FilterParams>,
+    duration: u64,
+    start_time: f64,
+    map_mode: sotf_backend::camilla::ChannelMapMode,
+    hwaudio_output: Option<Vec<u16>>,
+    buffer_chunks: usize,
+) -> Result<(), String> {
+    println!("Starting FLAC streaming playback...");
+    println!("  File: {:?}", file);
+    println!("  Device: {:?}", device.as_deref().unwrap_or("default"));
+    if start_time > 0.0 {
+        println!("  Start time: {:.2}s", start_time);
+    }
+    println!("  Filters: {}", filters.len());
+
+    if !filters.is_empty() {
+        println!("\nEQ Filters:");
+        for (idx, filter) in filters.iter().enumerate() {
+            println!(
+                "  [{}] {} Hz, Q={:.2}, Gain={:.1} dB",
+                idx + 1,
+                filter.frequency,
+                filter.q,
+                filter.gain
+            );
+        }
+    }
+    println!();
+
+    // Create streaming manager
+    let mut streaming_manager = AudioStreamingManager::new(binary_path);
+
+    // Configure buffer size
+    let clamped_chunks = buffer_chunks.clamp(32, 1024);
+    streaming_manager.set_buffer_chunks(clamped_chunks);
+    println!(
+        "  Buffer: {} chunks ({} frames, ~{:.1}ms latency)",
+        clamped_chunks,
+        clamped_chunks * 1024,
+        (clamped_chunks * 1024) as f64 / 48000.0 * 1000.0
+    );
+
+    // Set up Ctrl+C handler
+    let running = Arc::new(AtomicBool::new(true));
+    let r = running.clone();
+    ctrlc::set_handler(move || {
+        println!("\n\nReceived Ctrl+C, stopping playback...");
+        r.store(false, Ordering::SeqCst);
+    })
+    .map_err(|e| format!("Failed to set Ctrl+C handler: {}", e))?;
+
+    // Load the FLAC file
+    let r_check = running.clone();
+    let audio_info = tokio::select! {
+        result = streaming_manager.load_file(&file) => {
+            result.map_err(|e| format!("Failed to load FLAC file: {}", e))?
+        }
+        _ = async {
+            while r_check.load(Ordering::SeqCst) {
+                sleep(Duration::from_millis(100)).await;
+            }
+        } => {
+            println!("Loading cancelled");
+            return Ok(());
+        }
+    };
+
+    println!("Loaded FLAC file:");
+    println!("  Format: {}", audio_info.format);
+    println!("  Sample rate: {}Hz", audio_info.spec.sample_rate);
+    println!("  Channels: {}", audio_info.spec.channels);
+    println!("  Bits per sample: {}", audio_info.spec.bits_per_sample);
+    if let Some(duration_secs) = audio_info.duration_seconds {
+        println!("  Duration: {:.2}s", duration_secs);
+    }
+    println!();
+
+    // Start playback with cancellation support
+    let r_check = running.clone();
+    tokio::select! {
+        result = streaming_manager.start_playback(device, filters, map_mode, hwaudio_output) => {
+            result.map_err(|e| format!("Failed to start streaming playback: {}", e))?;
+        }
+        _ = async {
+            while r_check.load(Ordering::SeqCst) {
+                sleep(Duration::from_millis(100)).await;
+            }
+        } => {
+            println!("Playback start cancelled");
+            return Ok(());
+        }
+    }
+
+    // Seek to start time if specified
+    if start_time > 0.0 {
+        println!("Seeking to {:.2}s...", start_time);
+        streaming_manager
+            .seek(start_time)
+            .await
+            .map_err(|e| format!("Failed to seek: {}", e))?;
+    }
+
+    println!("FLAC streaming started successfully!");
+    println!("Press Ctrl+C to stop\n");
+
+    // Monitor playback
+    let start_time_instant = std::time::Instant::now();
+    let mut last_state = StreamingState::Idle;
+
+    while running.load(Ordering::SeqCst) {
+        let current_state = streaming_manager.get_state();
+
+        // Print state changes
+        if current_state != last_state {
+            match current_state {
+                StreamingState::Loading => println!("State: Loading..."),
+                StreamingState::Ready => println!("State: Ready"),
+                StreamingState::Playing => println!("State: Playing"),
+                StreamingState::Paused => println!("State: Paused"),
+                StreamingState::Seeking => println!("State: Seeking..."),
+                StreamingState::Error => {
+                    println!("State: Error!");
+                    break;
+                }
+                StreamingState::Idle => {
+                    if last_state == StreamingState::Playing {
+                        println!("\nPlayback finished");
+                    }
+                    break;
+                }
+            }
+            last_state = current_state;
+        }
+
+        // Check duration
+        if duration > 0 && start_time_instant.elapsed().as_secs() >= duration {
+            println!("\n\nDuration reached, stopping...");
+            break;
+        }
+
+        sleep(Duration::from_millis(200)).await;
+    }
+
+    // Stop playback with timeout
+    println!("\nStopping FLAC streaming...");
+    match tokio::time::timeout(Duration::from_secs(3), streaming_manager.stop()).await {
+        Ok(result) => result.map_err(|e| format!("Failed to stop streaming: {}", e))?,
+        Err(_) => {
+            println!("Stop streaming timed out, forcing exit");
+        }
+    }
+
+    println!("FLAC streaming stopped successfully");
+    Ok(())
 }
