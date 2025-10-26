@@ -342,6 +342,79 @@ fn collect_trace_names(plot_data: &Value) -> Vec<String> {
         .unwrap_or_default()
 }
 
+/// Extract all CEA2034 curves from plot data using the original frequency grid
+///
+/// # Arguments
+/// * `plot_data` - The Plotly JSON data containing CEA2034 measurements
+/// * `measurement` - Measurement type (e.g., "CEA2034")
+///
+/// # Returns
+/// * HashMap of curve names to Curve structs with original frequency grid
+///
+/// # Details
+/// Extracts standard CEA2034 curves (On Axis, Listening Window, Early Reflections,
+/// Sound Power, etc.) using the original frequency grid from the measurement data.
+/// This is preferred for score calculations to match the Python implementation.
+pub fn extract_cea2034_curves_original(
+    plot_data: &Value,
+    measurement: &str,
+) -> Result<HashMap<String, Curve>, Box<dyn Error>> {
+    let mut curves = HashMap::new();
+
+    // List of CEA2034 curves to extract
+    let curve_names = [
+        "On Axis",
+        "Listening Window",
+        "Early Reflections",
+        "Sound Power",
+        "Early Reflections DI",
+        "Sound Power DI",
+    ];
+
+    // Extract each curve with its original frequency grid
+    for name in &curve_names {
+        match extract_curve_by_name(plot_data, measurement, name) {
+            Ok(curve) => {
+                curves.insert(name.to_string(), curve);
+            }
+            Err(e) => {
+                let available = collect_trace_names(plot_data);
+                return Err(format!(
+                    "Could not extract curve '{}' for measurement '{}': {}. Available traces: {:?}",
+                    name, measurement, e, available
+                )
+                .into());
+            }
+        }
+    }
+
+    // Ensure required curves exist for PIR computation
+    let lw_curve = curves.get("Listening Window").ok_or_else(|| {
+        std::io::Error::other("Missing 'Listening Window' curve after extraction")
+    })?;
+    let er_curve = curves.get("Early Reflections").ok_or_else(|| {
+        std::io::Error::other("Missing 'Early Reflections' curve after extraction")
+    })?;
+    let sp_curve = curves
+        .get("Sound Power")
+        .ok_or_else(|| std::io::Error::other("Missing 'Sound Power' curve after extraction"))?;
+
+    let freq = &lw_curve.freq;
+    let lw = &lw_curve.spl;
+    let er = &er_curve.spl;
+    let sp = &sp_curve.spl;
+    let pir = score::compute_pir_from_lw_er_sp(lw, er, sp);
+    curves.insert(
+        "Estimated In-Room Response".to_string(),
+        Curve {
+            freq: freq.clone(),
+            spl: pir,
+        },
+    );
+
+    Ok(curves)
+}
+
 /// Extract all CEA2034 curves from plot data and interpolate to target frequency grid
 ///
 /// # Arguments

@@ -28,11 +28,9 @@ pub async fn load_input_curve(
             // Fetch CEA2034 data to calculate PIR
             let plot_data = read::fetch_measurement_plot_data(speaker, version, "CEA2034").await?;
 
-            // Create a standard frequency grid for extraction
-            let standard_freq = read::create_log_frequency_grid(200, 20.0, 20000.0);
-
-            // Extract all CEA2034 curves (this also calculates PIR)
-            let curves = read::extract_cea2034_curves(&plot_data, "CEA2034", &standard_freq)?;
+            // Extract all CEA2034 curves using original frequency grid from API
+            // This avoids interpolation artifacts and matches Python implementation
+            let curves = read::extract_cea2034_curves_original(&plot_data, "CEA2034")?;
 
             // Store the spin data
             spin_data = Some(curves.clone());
@@ -50,12 +48,10 @@ pub async fn load_input_curve(
             let extracted_curve =
                 read::extract_curve_by_name(&plot_data, measurement, &args.curve_name)?;
 
-            // If it's CEA2034, also extract spin data
+            // If it's CEA2034, also extract spin data using original frequency grid
             if measurement == "CEA2034" {
-                spin_data = Some(read::extract_cea2034_curves(
-                    &plot_data,
-                    "CEA2034",
-                    &extracted_curve.freq,
+                spin_data = Some(read::extract_cea2034_curves_original(
+                    &plot_data, "CEA2034",
                 )?);
             }
             extracted_curve

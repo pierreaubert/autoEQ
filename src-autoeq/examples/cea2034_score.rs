@@ -49,22 +49,25 @@ async fn main() -> Result<(), Box<dyn Error>> {
     println!();
 
     // Fetch measurement data from the API
-    let plot_data = match read::fetch_measurement_plot_data(&args.speaker, &args.version, &args.measurement).await {
-        Ok(data) => data,
-        Err(e) => {
-            eprintln!("Error: Failed to fetch measurement data");
-            eprintln!("  Speaker: {}", args.speaker);
-            eprintln!("  Version: {}", args.version);
-            eprintln!("  Measurement: {}", args.measurement);
-            eprintln!("  Details: {}", e);
-            eprintln!();
-            eprintln!("Please verify:");
-            eprintln!("  - Speaker name is correct (check spinorama.org)");
-            eprintln!("  - Version exists for this speaker");
-            eprintln!("  - Measurement type is valid (typically CEA2034)");
-            return Err(e);
-        }
-    };
+    let plot_data =
+        match read::fetch_measurement_plot_data(&args.speaker, &args.version, &args.measurement)
+            .await
+        {
+            Ok(data) => data,
+            Err(e) => {
+                eprintln!("Error: Failed to fetch measurement data");
+                eprintln!("  Speaker: {}", args.speaker);
+                eprintln!("  Version: {}", args.version);
+                eprintln!("  Measurement: {}", args.measurement);
+                eprintln!("  Details: {}", e);
+                eprintln!();
+                eprintln!("Please verify:");
+                eprintln!("  - Speaker name is correct (check spinorama.org)");
+                eprintln!("  - Version exists for this speaker");
+                eprintln!("  - Measurement type is valid (typically CEA2034)");
+                return Err(e);
+            }
+        };
 
     // Extract all CEA2034 curves using the original frequency grid from the API data
     // This matches the Python implementation and avoids interpolation artifacts
@@ -74,7 +77,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
             eprintln!("Error: Failed to extract CEA2034 curves from measurement data");
             eprintln!("  Details: {}", e);
             eprintln!();
-            eprintln!("This usually means the measurement data is incomplete or in an unexpected format.");
+            eprintln!(
+                "This usually means the measurement data is incomplete or in an unexpected format."
+            );
             return Err(e);
         }
     };
@@ -106,10 +111,22 @@ async fn main() -> Result<(), Box<dyn Error>> {
     println!("{}", "-".repeat(60));
     println!();
     println!("Score Components:");
-    println!("  NBD ON  (Narrow Band Deviation - On Axis):       {:.3}", metrics.nbd_on);
-    println!("  NBD PIR (Narrow Band Deviation - In-Room):       {:.3}", metrics.nbd_pir);
-    println!("  LFX     (Low Frequency Extension):               {:.0} Hz", 10_f64.powf(metrics.lfx));
-    println!("  SM PIR  (Smoothness Metric - In-Room):           {:.3}", metrics.sm_pir);
+    println!(
+        "  NBD ON  (Narrow Band Deviation - On Axis):       {:.3}",
+        metrics.nbd_on
+    );
+    println!(
+        "  NBD PIR (Narrow Band Deviation - In-Room):       {:.3}",
+        metrics.nbd_pir
+    );
+    println!(
+        "  LFX     (Low Frequency Extension):               {:.0} Hz",
+        10_f64.powf(metrics.lfx)
+    );
+    println!(
+        "  SM PIR  (Smoothness Metric - In-Room):           {:.3}",
+        metrics.sm_pir
+    );
     println!();
     println!("{}", "=".repeat(60));
     println!();
