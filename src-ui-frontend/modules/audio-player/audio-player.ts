@@ -1,6 +1,13 @@
 // Standalone Audio Player Module
 // Extracted from audio-processor.ts and related UI components
 
+import { invoke } from "@tauri-apps/api/core";
+
+interface ReplayGainInfo {
+  gain: number; // dB
+  peak: number; // 0.0 to 1.0+
+}
+
 export interface AudioPlayerConfig {
   // Demo audio tracks configuration
   demoTracks?: { [key: string]: string };
@@ -88,6 +95,10 @@ export class AudioPlayer {
   private eqGainCompText: HTMLElement | null = null;
   private eqMiniCanvas: HTMLCanvasElement | null = null;
   private eqMiniCtx: CanvasRenderingContext2D | null = null;
+
+  // ReplayGain
+  private replayGainInfo: ReplayGainInfo | null = null;
+  private replayGainContainer: HTMLElement | null = null;
 
   // Configuration
   private config: AudioPlayerConfig;
@@ -236,13 +247,16 @@ export class AudioPlayer {
                     )
                     .join("")}
                 </select>
-                <button type="button" class="file-upload-btn" title="Load WAV file">
+                <button type="button" class="file-upload-btn" title="Load Audio file">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
                     <polyline points="13 2 13 9 20 9"></polyline>
                   </svg>
                 </button>
-                <input type="file" class="file-upload-input" accept=".wav,audio/wav" style="display: none;" />
+                <input type="file" class="file-upload-input" accept=".wav,.flac,.mp3,.ogg,.m4a,.aac,.opus,audio/*" style="display: none;" />
+              </div>
+              <div class="replay-gain-info" style="display: none; margin-top: 8px; font-size: 12px; color: var(--text-secondary);">
+                Replay Gain: <span class="info-badge replay-gain-value">--</span> • Peak: <span class="info-badge replay-peak-value">--</span>
               </div>
             </div>
           </div>
@@ -421,6 +435,9 @@ export class AudioPlayer {
       this.eqMiniCtx = this.eqMiniCanvas.getContext("2d");
       this.drawEQMiniGraph();
     }
+
+    // Cache ReplayGain elements
+    this.replayGainContainer = this.container.querySelector(".replay-gain-info");
   }
 
   private setupEventListeners(): void {
@@ -440,6 +457,22 @@ export class AudioPlayer {
         this.callbacks.onTrackChange?.(trackName);
       } else {
         this.clearAudio();
+      }
+    });
+
+    // File upload button
+    const uploadBtn = this.container.querySelector(".file-upload-btn");
+    const fileInput = this.container.querySelector(".file-upload-input") as HTMLInputElement;
+
+    uploadBtn?.addEventListener("click", () => {
+      fileInput?.click();
+    });
+
+    fileInput?.addEventListener("change", async (e) => {
+      const target = e.target as HTMLInputElement;
+      const file = target.files?.[0];
+      if (file) {
+        await this.loadAudioFile(file);
       }
     });
 
@@ -758,6 +791,16 @@ export class AudioPlayer {
       this.setStatus("Audio ready");
       this.setListenButtonEnabled(true);
       this.showAudioStatus(true);
+
+      // Analyze ReplayGain for demo track
+      // Extract filename from URL (e.g., "/demo-audio/classical.wav" -> "classical.wav")
+      const fileName = url.split("/").pop();
+      if (fileName) {
+        // Construct absolute path to demo audio file
+        // In Tauri, public assets are resolved from the app directory
+        const filePath = `public/demo-audio/${fileName}`;
+        await this.analyzeReplayGain(filePath);
+      }
     } catch (error) {
       this.setStatus("Failed to load audio");
       this.callbacks.onError?.("Failed to load demo track: " + error);
@@ -810,6 +853,12 @@ export class AudioPlayer {
     this.setListenButtonEnabled(false);
     this.showAudioStatus(false);
     this.setStatus("No audio selected");
+
+    // Hide ReplayGain display
+    if (this.replayGainContainer) {
+      this.replayGainContainer.style.display = "none";
+    }
+    this.replayGainInfo = null;
   }
 
   private setStatus(status: string): void {
@@ -1781,6 +1830,58 @@ export class AudioPlayer {
       console.error("Error loading audio file:", error);
       this.callbacks.onError?.("Failed to load audio file: " + error);
       throw error;
+    }
+  }
+
+  // ReplayGain analysis
+  private async analyzeReplayGain(filePath: string): Promise<void> {
+    try {
+      // Show loading state
+      if (this.replayGainContainer) {
+        this.replayGainContainer.style.display = "block";
+        const gainElement = this.replayGainContainer.querySelector(".replay-gain-value");
+        const peakElement = this.replayGainContainer.querySelector(".replay-peak-value");
+        if (gainElement) gainElement.textContent = "...";
+        if (peakElement) peakElement.textContent = "...";
+      }
+
+      // Call Tauri command
+      const info = await invoke<ReplayGainInfo>("analyze_replaygain", {
+        filePath,
+      });
+
+      // Store the result
+      this.replayGainInfo = info;
+
+      // Update display
+      this.updateReplayGainDisplay(info.gain, info.peak);
+    } catch (error) {
+      console.error("Failed to analyze ReplayGain:", error);
+      // Hide display on error
+      if (this.replayGainContainer) {
+        this.replayGainContainer.style.display = "none";
+      }
+      this.replayGainInfo = null;
+    }
+  }
+
+  private updateReplayGainDisplay(gain: number, peak: number): void {
+    if (!this.replayGainContainer) return;
+
+    const gainElement = this.replayGainContainer.querySelector(".replay-gain-value");
+    const peakElement = this.replayGainContainer.querySelector(".replay-peak-value");
+
+    if (gainElement && peakElement) {
+      // Format gain with sign and 1 decimal place
+      const gainText =
+        gain >= 0 ? `+${gain.toFixed(1)} dB` : `${gain.toFixed(1)} dB`;
+      gainElement.textContent = gainText;
+
+      // Format peak with 2 decimal places
+      peakElement.textContent = peak.toFixed(2);
+
+      // Show the container
+      this.replayGainContainer.style.display = "block";
     }
   }
 

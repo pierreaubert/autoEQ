@@ -8,6 +8,7 @@ use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use crate::camilla::{AudioManager, ChannelMapMode, FilterParams};
+use crate::loudness_monitor::{LoudnessInfo, LoudnessMonitor};
 use crate::{
     AudioDecoderError, AudioDecoderResult, AudioFormat, AudioSpec, create_decoder, probe_file,
 };
@@ -29,6 +30,8 @@ pub struct AudioStreamingManager {
     buffer_chunks: usize,
     /// Shared underrun counter for adaptive buffering
     underrun_count: Arc<Mutex<usize>>,
+    /// Real-time loudness monitor (optional)
+    loudness_monitor: Option<Arc<LoudnessMonitor>>,
 }
 
 /// Commands for controlling the streaming decoder
@@ -78,6 +81,7 @@ impl AudioStreamingManager {
             current_audio_info: None,
             buffer_chunks: 128, // Default: balanced performance
             underrun_count: Arc::new(Mutex::new(0)),
+            loudness_monitor: None,
         }
     }
 
@@ -286,6 +290,35 @@ impl AudioStreamingManager {
         &self.audio_manager
     }
 
+    /// Enable real-time loudness monitoring
+    pub fn enable_loudness_monitoring(&mut self) -> Result<(), String> {
+        let audio_info = self.current_audio_info.as_ref()
+            .ok_or_else(|| "No audio file loaded".to_string())?;
+        
+        let monitor = LoudnessMonitor::new(
+            audio_info.spec.channels as u32,
+            audio_info.spec.sample_rate,
+        )?;
+        
+        self.loudness_monitor = Some(Arc::new(monitor));
+        Ok(())
+    }
+
+    /// Disable real-time loudness monitoring
+    pub fn disable_loudness_monitoring(&mut self) {
+        self.loudness_monitor = None;
+    }
+
+    /// Get current loudness measurements (if monitoring is enabled)
+    pub fn get_loudness(&self) -> Option<LoudnessInfo> {
+        self.loudness_monitor.as_ref().map(|m| m.get_loudness())
+    }
+
+    /// Check if loudness monitoring is enabled
+    pub fn is_loudness_monitoring_enabled(&self) -> bool {
+        self.loudness_monitor.is_some()
+    }
+
     /// Start the decoder thread that feeds PCM data to CamillaDSP via stdin
     async fn start_decoder_thread(&mut self) -> AudioDecoderResult<()> {
         let audio_info = self.current_audio_info.as_ref().unwrap();
@@ -304,9 +337,12 @@ impl AudioStreamingManager {
                 "CamillaDSP stdin not available".to_string()
             ))?;
         
+        // Clone loudness monitor for decoder thread
+        let loudness_monitor = self.loudness_monitor.clone();
+        
         // Spawn decoder thread
         let handle = thread::spawn(move || {
-            if let Err(e) = Self::decoder_thread_main(path, state, cmd_rx, stdin, buffer_chunks, underrun_count) {
+            if let Err(e) = Self::decoder_thread_main(path, state, cmd_rx, stdin, buffer_chunks, underrun_count, loudness_monitor) {
                 eprintln!("[AudioStreamingManager] Decoder thread error: {:?}", e);
             }
         });
@@ -323,6 +359,7 @@ impl AudioStreamingManager {
         mut stdin: ChildStdin,
         mut buffer_chunks: usize,
         underrun_count: Arc<Mutex<usize>>,
+        loudness_monitor: Option<Arc<LoudnessMonitor>>,
     ) -> AudioDecoderResult<()> {
         println!(
             "[AudioStreamingManager] Decoder thread starting for: {:?}",
@@ -411,6 +448,13 @@ impl AudioStreamingManager {
             if !pre_buffered {
                 match decoder.decode_next() {
                     Ok(Some(decoded_audio)) => {
+                        // Feed samples to loudness monitor if enabled
+                        if let Some(ref monitor) = loudness_monitor {
+                            if let Err(e) = monitor.add_frames(&decoded_audio.samples) {
+                                eprintln!("[AudioStreamingManager] Loudness monitoring error: {}", e);
+                            }
+                        }
+                        
                         let pcm_bytes = decoded_audio.to_bytes_f32_le();
                         let frames_in_packet = pcm_bytes.len() / (spec.channels as usize * 4);
                         
@@ -528,6 +572,13 @@ impl AudioStreamingManager {
                 while buffered_frames < (target_buffer_frames * 3) / 4 {
                     match decoder.decode_next() {
                         Ok(Some(decoded_audio)) => {
+                            // Feed samples to loudness monitor if enabled
+                            if let Some(ref monitor) = loudness_monitor {
+                                if let Err(e) = monitor.add_frames(&decoded_audio.samples) {
+                                    eprintln!("[AudioStreamingManager] Loudness monitoring error: {}", e);
+                                }
+                            }
+                            
                             let pcm_bytes = decoded_audio.to_bytes_f32_le();
                             let frames_in_packet = pcm_bytes.len() / (spec.channels as usize * 4);
 

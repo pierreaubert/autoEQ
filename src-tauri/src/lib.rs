@@ -12,9 +12,9 @@ use sotf_backend::camilla::ChannelMapMode;
 use sotf_backend::optim::{ProgressCallback, ProgressUpdate, run_optimization_internal};
 use sotf_backend::plot::{PlotFiltersParams, PlotSpinParams, plot_to_json};
 use sotf_backend::{
-    AudioFileInfo, AudioManager, AudioStreamingManager, CancellationState, OptimizationParams,
-    OptimizationResult, ReplayGainInfo, SharedAudioState, StreamingState, analyze_file,
-    curve_data_to_curve,
+    AudioFileInfo, AudioManager, AudioStreamingManager, CancellationState, LoudnessInfo,
+    OptimizationParams, OptimizationResult, ReplayGainInfo, SharedAudioState, StreamingState,
+    analyze_file, curve_data_to_curve,
 };
 use tokio::sync::Mutex;
 
@@ -1016,6 +1016,39 @@ async fn analyze_replaygain(
     }
 }
 
+// ============================================================================
+// Real-time Loudness Monitoring Commands
+// ============================================================================
+
+#[tauri::command]
+async fn flac_enable_loudness_monitoring(
+    streaming_manager: State<'_, Mutex<AudioStreamingManager>>,
+) -> Result<(), String> {
+    println!("[LOUDNESS] Enabling real-time loudness monitoring");
+    
+    let mut manager = streaming_manager.lock().await;
+    manager.enable_loudness_monitoring()
+}
+
+#[tauri::command]
+async fn flac_disable_loudness_monitoring(
+    streaming_manager: State<'_, Mutex<AudioStreamingManager>>,
+) -> Result<(), String> {
+    println!("[LOUDNESS] Disabling real-time loudness monitoring");
+    
+    let mut manager = streaming_manager.lock().await;
+    manager.disable_loudness_monitoring();
+    Ok(())
+}
+
+#[tauri::command]
+async fn flac_get_loudness(
+    streaming_manager: State<'_, Mutex<AudioStreamingManager>>,
+) -> Result<Option<LoudnessInfo>, String> {
+    let manager = streaming_manager.lock().await;
+    Ok(manager.get_loudness())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Find CamillaDSP binary
@@ -1076,7 +1109,11 @@ pub fn run() {
             generate_rme_format,
             generate_rme_room_format,
             // ReplayGain analysis
-            analyze_replaygain
+            analyze_replaygain,
+            // Real-time loudness monitoring
+            flac_enable_loudness_monitoring,
+            flac_disable_loudness_monitoring,
+            flac_get_loudness
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
