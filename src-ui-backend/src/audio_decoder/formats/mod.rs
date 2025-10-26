@@ -121,13 +121,13 @@ mod tests {
             AudioFormat::from_path("test.FLAC").unwrap(),
             AudioFormat::Flac
         );
-        
+
         // Test MP3
         assert_eq!(
             AudioFormat::from_path("test.mp3").unwrap(),
             AudioFormat::Mp3
         );
-        
+
         // Test AAC/M4A
         assert_eq!(
             AudioFormat::from_path("test.aac").unwrap(),
@@ -137,19 +137,19 @@ mod tests {
             AudioFormat::from_path("test.m4a").unwrap(),
             AudioFormat::Aac
         );
-        
+
         // Test WAV
         assert_eq!(
             AudioFormat::from_path("test.wav").unwrap(),
             AudioFormat::Wav
         );
-        
+
         // Test Vorbis/OGG
         assert_eq!(
             AudioFormat::from_path("test.ogg").unwrap(),
             AudioFormat::Vorbis
         );
-        
+
         // Test AIFF
         assert_eq!(
             AudioFormat::from_path("test.aiff").unwrap(),
@@ -159,7 +159,7 @@ mod tests {
             AudioFormat::from_path("test.aif").unwrap(),
             AudioFormat::Aiff
         );
-        
+
         // Test with path
         assert_eq!(
             AudioFormat::from_path(PathBuf::from("path/to/music.flac")).unwrap(),
@@ -178,31 +178,31 @@ mod tests {
         assert_eq!(flac.as_str(), "FLAC");
         assert_eq!(flac.extension(), "flac");
         assert!(flac.is_lossless());
-        
+
         // Test MP3
         let mp3 = AudioFormat::Mp3;
         assert_eq!(mp3.as_str(), "MP3");
         assert_eq!(mp3.extension(), "mp3");
         assert!(!mp3.is_lossless());
-        
+
         // Test AAC
         let aac = AudioFormat::Aac;
         assert_eq!(aac.as_str(), "AAC");
         assert_eq!(aac.extension(), "m4a");
         assert!(!aac.is_lossless());
-        
+
         // Test WAV
         let wav = AudioFormat::Wav;
         assert_eq!(wav.as_str(), "WAV");
         assert_eq!(wav.extension(), "wav");
         assert!(wav.is_lossless());
-        
+
         // Test Vorbis
         let vorbis = AudioFormat::Vorbis;
         assert_eq!(vorbis.as_str(), "Vorbis");
         assert_eq!(vorbis.extension(), "ogg");
         assert!(!vorbis.is_lossless());
-        
+
         // Test AIFF
         let aiff = AudioFormat::Aiff;
         assert_eq!(aiff.as_str(), "AIFF");

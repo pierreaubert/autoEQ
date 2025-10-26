@@ -16,7 +16,7 @@ use crate::audio_decoder::formats::AudioFormat;
 /// Create a custom probe with all supported format readers registered
 fn create_probe() -> Probe {
     let mut probe = Probe::default();
-    
+
     // Register all format readers
     // Note: AAC is supported both in MP4/M4A containers (via IsoMp4Reader)
     // and as raw ADTS AAC files (via AdtsReader)
@@ -26,21 +26,21 @@ fn create_probe() -> Probe {
     probe.register_all::<symphonia_format_ogg::OggReader>();
     probe.register_all::<symphonia_format_isomp4::IsoMp4Reader>();
     probe.register_all::<symphonia_codec_aac::AdtsReader>();
-    
+
     probe
 }
 
 /// Create a custom codec registry with all supported codecs
 fn create_codec_registry() -> CodecRegistry {
     let mut registry = CodecRegistry::new();
-    
+
     // Register all codecs
     registry.register_all::<symphonia_bundle_flac::FlacDecoder>();
     registry.register_all::<symphonia_bundle_mp3::MpaDecoder>();
     registry.register_all::<symphonia_codec_pcm::PcmDecoder>();
     registry.register_all::<symphonia_codec_aac::AacDecoder>();
     registry.register_all::<symphonia_codec_vorbis::VorbisDecoder>();
-    
+
     registry
 }
 
@@ -80,7 +80,12 @@ impl SymphoniaDecoder {
         // Probe the file to determine format using our custom probe
         let probe = create_probe();
         let probe_result = probe
-            .format(&hint, media_source, &FormatOptions::default(), &MetadataOptions::default())
+            .format(
+                &hint,
+                media_source,
+                &FormatOptions::default(),
+                &MetadataOptions::default(),
+            )
             .map_err(|e| match e {
                 SymphoniaError::Unsupported(_) => AudioDecoderError::UnsupportedFormat(
                     "Audio format not supported by Symphonia".to_string(),
@@ -105,7 +110,7 @@ impl SymphoniaDecoder {
         // Create decoder for this track using our custom codec registry
         let decoder_opts = DecoderOptions::default();
         let codec_registry = create_codec_registry();
-        
+
         // Extract audio specification
         let sample_rate = codec_params
             .sample_rate
@@ -114,21 +119,20 @@ impl SymphoniaDecoder {
         // For AAC and some other codecs, channel information may not be available
         // until the first packet is decoded. Try to get it from codec params first,
         // and if that fails, decode the first packet.
-        let channels_opt = codec_params
-            .channels
-            .map(|layout| layout.count() as u16);
-        
+        let channels_opt = codec_params.channels.map(|layout| layout.count() as u16);
+
         let (final_format_reader, final_decoder, channels) = if channels_opt.is_none() {
             // Need to probe for channels - create temporary decoder
-            let mut temp_decoder = codec_registry
-                .make(&codec_params, &decoder_opts)
-                .map_err(|e| {
-                    AudioDecoderError::UnsupportedFormat(format!(
-                        "Cannot create decoder for codec: {:?}",
-                        e
-                    ))
-                })?;
-            
+            let mut temp_decoder =
+                codec_registry
+                    .make(&codec_params, &decoder_opts)
+                    .map_err(|e| {
+                        AudioDecoderError::UnsupportedFormat(format!(
+                            "Cannot create decoder for codec: {:?}",
+                            e
+                        ))
+                    })?;
+
             // Decode first packet to get channel info
             let mut detected_channels = None;
             match format_reader.next_packet() {
@@ -144,14 +148,14 @@ impl SymphoniaDecoder {
                 }
                 Err(_) => {}
             }
-            
+
             // If we still don't have channel info, fail
             let channels = detected_channels.ok_or_else(|| {
                 AudioDecoderError::InvalidFile(
-                    "No channel information found even after decoding first packet".to_string()
+                    "No channel information found even after decoding first packet".to_string(),
                 )
             })?;
-            
+
             // Reset the format reader by creating a new one
             let file = File::open(path)?;
             let media_source = MediaSourceStream::new(Box::new(file), Default::default());
@@ -161,10 +165,15 @@ impl SymphoniaDecoder {
             }
             let probe = create_probe();
             let probe_result = probe
-                .format(&hint, media_source, &FormatOptions::default(), &MetadataOptions::default())
+                .format(
+                    &hint,
+                    media_source,
+                    &FormatOptions::default(),
+                    &MetadataOptions::default(),
+                )
                 .map_err(|e| AudioDecoderError::from(e))?;
             let new_format_reader = probe_result.format;
-            
+
             // Recreate decoder for fresh state
             let new_decoder = codec_registry
                 .make(&codec_params, &decoder_opts)
@@ -174,7 +183,7 @@ impl SymphoniaDecoder {
                         e
                     ))
                 })?;
-            
+
             (new_format_reader, new_decoder, channels)
         } else {
             // Channel info is available, use as is
@@ -188,7 +197,7 @@ impl SymphoniaDecoder {
                 })?;
             (format_reader, decoder, channels_opt.unwrap())
         };
-        
+
         let bits_per_sample = codec_params.bits_per_sample.unwrap_or(16);
         let total_frames = codec_params.n_frames;
 
@@ -431,11 +440,11 @@ mod tests {
         // Test with actual FLAC file
         let flac_decoder = SymphoniaDecoder::new("test_files/test.flac").unwrap();
         assert_eq!(flac_decoder.format(), AudioFormat::Flac);
-        
+
         // Test with actual MP3 file
         let mp3_decoder = SymphoniaDecoder::new("test_files/test.mp3").unwrap();
         assert_eq!(mp3_decoder.format(), AudioFormat::Mp3);
-        
+
         // Add more format tests...
     }
     */

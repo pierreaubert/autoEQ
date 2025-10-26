@@ -14,7 +14,11 @@ fn main() {
     // Test format detection
     match AudioFormat::from_path(file_path) {
         Ok(format) => {
-            println!("✓ Detected format: {} ({})", format.as_str(), format.extension());
+            println!(
+                "✓ Detected format: {} ({})",
+                format.as_str(),
+                format.extension()
+            );
             println!("  Lossless: {}", format.is_lossless());
         }
         Err(e) => {
@@ -49,8 +53,10 @@ fn main() {
         Ok(decoder) => {
             println!("✓ Decoder created successfully");
             let spec = decoder.spec();
-            println!("  Decoder spec matches probe: {} Hz, {} channels", 
-                     spec.sample_rate, spec.channels);
+            println!(
+                "  Decoder spec matches probe: {} Hz, {} channels",
+                spec.sample_rate, spec.channels
+            );
         }
         Err(e) => {
             println!("✗ Decoder creation failed: {}", e);

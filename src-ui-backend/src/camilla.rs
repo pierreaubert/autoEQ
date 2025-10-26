@@ -215,7 +215,7 @@ pub struct CamillaDSPConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mixers: Option<serde_yaml::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub pipeline: Option<Vec<PipelineStep>>,
+    pub pipeline: Option<Vec<serde_yaml::Value>>,
 }
 
 /// Audio device configuration
@@ -276,8 +276,6 @@ pub struct PipelineStep {
     pub channel: Option<u16>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub names: Option<Vec<String>>,
 }
 
 // ============================================================================
@@ -1361,11 +1359,10 @@ pub fn generate_streaming_config(
     }
 
     // Detect device native sample rate for proper resampling
-    let device_sample_rate = get_device_native_sample_rate(output_device)
-        .unwrap_or(sample_rate); // Fallback to file rate if detection fails
-    
+    let device_sample_rate = get_device_native_sample_rate(output_device).unwrap_or(sample_rate); // Fallback to file rate if detection fails
+
     let needs_resampling = sample_rate != device_sample_rate;
-    
+
     if needs_resampling {
         println!(
             "[CamillaDSP] Sample rate mismatch detected: file={}Hz, device={}Hz. Adding resampler.",
@@ -1423,8 +1420,11 @@ pub fn generate_streaming_config(
         let resampler_yaml = r#"
             type: Synchronous
         "#;
-        Some(serde_yaml::from_str::<serde_yaml::Value>(resampler_yaml)
-            .map_err(|e| CamillaError::ConfigGenerationFailed(format!("Failed to generate resampler: {}", e)))?)
+        Some(
+            serde_yaml::from_str::<serde_yaml::Value>(resampler_yaml).map_err(|e| {
+                CamillaError::ConfigGenerationFailed(format!("Failed to generate resampler: {}", e))
+            })?,
+        )
     } else {
         None
     };
@@ -1462,7 +1462,11 @@ pub fn generate_streaming_config(
     ));
 
     // Generate pipeline - always include mixer; add filters and resampler if needed
-    let pipeline = Some(generate_pipeline(mixer_out_channels, filters, needs_resampling));
+    let pipeline = Some(generate_pipeline(
+        mixer_out_channels,
+        filters,
+        needs_resampling,
+    ));
 
     Ok(CamillaDSPConfig {
         devices,
@@ -1550,11 +1554,10 @@ pub fn generate_playback_config(
     };
 
     // Detect device native sample rate for file playback too
-    let device_sample_rate = get_device_native_sample_rate(output_device)
-        .unwrap_or(sample_rate);
-    
+    let device_sample_rate = get_device_native_sample_rate(output_device).unwrap_or(sample_rate);
+
     let needs_resampling = sample_rate != device_sample_rate;
-    
+
     if needs_resampling {
         println!(
             "[CamillaDSP] Sample rate mismatch detected: file={}Hz, device={}Hz. Adding resampler.",
@@ -1567,8 +1570,11 @@ pub fn generate_playback_config(
         let resampler_yaml = r#"
             type: Synchronous
         "#;
-        Some(serde_yaml::from_str::<serde_yaml::Value>(resampler_yaml)
-            .map_err(|e| CamillaError::ConfigGenerationFailed(format!("Failed to generate resampler: {}", e)))?)
+        Some(
+            serde_yaml::from_str::<serde_yaml::Value>(resampler_yaml).map_err(|e| {
+                CamillaError::ConfigGenerationFailed(format!("Failed to generate resampler: {}", e))
+            })?,
+        )
     } else {
         None
     };
@@ -1606,7 +1612,11 @@ pub fn generate_playback_config(
     ));
 
     // Generate pipeline - always include mixer; add filters and resampler if needed
-    let pipeline = Some(generate_pipeline(mixer_out_channels, filters, needs_resampling));
+    let pipeline = Some(generate_pipeline(
+        mixer_out_channels,
+        filters,
+        needs_resampling,
+    ));
 
     Ok(CamillaDSPConfig {
         devices,
@@ -1690,9 +1700,9 @@ pub fn generate_recording_config(
 /// Get the native sample rate of an output device
 fn get_device_native_sample_rate(device_name: Option<&str>) -> Option<u32> {
     use cpal::traits::{DeviceTrait, HostTrait};
-    
+
     let host = cpal::default_host();
-    
+
     let device = if let Some(name) = device_name {
         // Find device by name
         host.output_devices()
@@ -1702,7 +1712,7 @@ fn get_device_native_sample_rate(device_name: Option<&str>) -> Option<u32> {
         // Use default device
         host.default_output_device()
     };
-    
+
     let device = device?;
     let config = device.default_output_config().ok()?;
     Some(config.sample_rate().0)
@@ -1836,30 +1846,44 @@ fn generate_stereo_mixer_yaml(
 
 /// Generate the pipeline
 /// Note: Resampler is NOT added to pipeline when using devices.resampler - it's automatic
-fn generate_pipeline(channels: u16, filters: &[FilterParams], _needs_resampling: bool) -> Vec<PipelineStep> {
-    let mut pipeline = Vec::new();
+fn generate_pipeline(
+    channels: u16,
+    filters: &[FilterParams],
+    _needs_resampling: bool,
+) -> Vec<serde_yaml::Value> {
+    use serde_yaml::{Mapping, Number, Value};
 
-    // Always add mixer
-    pipeline.push(PipelineStep {
-        step_type: "Mixer".to_string(),
-        channel: None,
-        name: Some("stereo_mixer".to_string()),
-        names: None,
-    });
+    let mut pipeline: Vec<Value> = Vec::new();
 
-    // Add filters for each channel
+    // Always add mixer with singular `name` as required by CamillaDSP v3
+    let mut mixer_map = Mapping::new();
+    mixer_map.insert(Value::String("type".to_string()), Value::String("Mixer".to_string()));
+    mixer_map.insert(
+        Value::String("name".to_string()),
+        Value::String("stereo_mixer".to_string()),
+    );
+    pipeline.push(Value::Mapping(mixer_map));
+
+    // Add all filters for every channel, preserving order
     if !filters.is_empty() {
-        let filter_names: Vec<String> = (0..filters.len())
-            .map(|idx| format!("peq{}", idx + 1))
-            .collect();
-
-        for ch in 0..channels {
-            pipeline.push(PipelineStep {
-                step_type: "Filter".to_string(),
-                channel: Some(ch),
-                name: None,
-                names: Some(filter_names.clone()),
-            });
+        for (idx, _filter) in filters.iter().enumerate() {
+            let filter_name = format!("peq{}", idx + 1);
+            for ch in 0..channels {
+                let mut filter_map = Mapping::new();
+                filter_map.insert(
+                    Value::String("type".to_string()),
+                    Value::String("Filter".to_string()),
+                );
+                filter_map.insert(
+                    Value::String("channel".to_string()),
+                    Value::Number(Number::from(ch as u64)),
+                );
+                filter_map.insert(
+                    Value::String("name".to_string()),
+                    Value::String(filter_name.clone()),
+                );
+                pipeline.push(Value::Mapping(filter_map));
+            }
         }
     }
 

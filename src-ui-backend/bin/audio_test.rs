@@ -366,7 +366,10 @@ async fn play_audio(
 
             // Route non-WAV files to streaming manager (FLAC, MP3, AAC/M4A, Vorbis, AIFF)
             if format != AudioFormat::Wav {
-                println!("  Using streaming decoder for {} format...", format.as_str());
+                println!(
+                    "  Using streaming decoder for {} format...",
+                    format.as_str()
+                );
                 return play_stream(
                     binary_path,
                     file,
@@ -383,7 +386,10 @@ async fn play_audio(
             }
         }
         Err(e) => {
-            return Err(format!("Failed to detect file format: {}. Supported formats: WAV, FLAC, MP3, AAC/M4A (container format only, not raw ADTS AAC), Vorbis/OGG, AIFF.", e));
+            return Err(format!(
+                "Failed to detect file format: {}. Supported formats: WAV, FLAC, MP3, AAC/M4A (container format only, not raw ADTS AAC), Vorbis/OGG, AIFF.",
+                e
+            ));
         }
     }
 
@@ -665,7 +671,8 @@ async fn play_stream(
 
     // Enable loudness monitoring if requested
     if monitor_lufs {
-        streaming_manager.enable_loudness_monitoring()
+        streaming_manager
+            .enable_loudness_monitoring()
             .map_err(|e| format!("Failed to enable loudness monitoring: {}", e))?;
         println!("Real-time LUFS monitoring enabled\n");
     }
@@ -742,9 +749,7 @@ async fn play_stream(
                 };
                 print!(
                     "\rLUFS: M={} S={}  Peak={:.3}  ",
-                    momentary_str,
-                    shortterm_str,
-                    loudness.peak
+                    momentary_str, shortterm_str, loudness.peak
                 );
                 std::io::Write::flush(&mut std::io::stdout()).ok();
             }

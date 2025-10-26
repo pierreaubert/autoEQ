@@ -292,14 +292,14 @@ impl AudioStreamingManager {
 
     /// Enable real-time loudness monitoring
     pub fn enable_loudness_monitoring(&mut self) -> Result<(), String> {
-        let audio_info = self.current_audio_info.as_ref()
+        let audio_info = self
+            .current_audio_info
+            .as_ref()
             .ok_or_else(|| "No audio file loaded".to_string())?;
-        
-        let monitor = LoudnessMonitor::new(
-            audio_info.spec.channels as u32,
-            audio_info.spec.sample_rate,
-        )?;
-        
+
+        let monitor =
+            LoudnessMonitor::new(audio_info.spec.channels as u32, audio_info.spec.sample_rate)?;
+
         self.loudness_monitor = Some(Arc::new(monitor));
         Ok(())
     }
@@ -332,23 +332,30 @@ impl AudioStreamingManager {
         self.command_tx = Some(cmd_tx);
 
         // Get the CamillaDSP stdin handle from the audio manager
-        let stdin = self.audio_manager.take_stdin()
-            .ok_or_else(|| AudioDecoderError::ConfigError(
-                "CamillaDSP stdin not available".to_string()
-            ))?;
-        
+        let stdin = self.audio_manager.take_stdin().ok_or_else(|| {
+            AudioDecoderError::ConfigError("CamillaDSP stdin not available".to_string())
+        })?;
+
         // Clone loudness monitor for decoder thread
         let loudness_monitor = self.loudness_monitor.clone();
-        
+
         // Spawn decoder thread
         let handle = thread::spawn(move || {
-            if let Err(e) = Self::decoder_thread_main(path, state, cmd_rx, stdin, buffer_chunks, underrun_count, loudness_monitor) {
+            if let Err(e) = Self::decoder_thread_main(
+                path,
+                state,
+                cmd_rx,
+                stdin,
+                buffer_chunks,
+                underrun_count,
+                loudness_monitor,
+            ) {
                 eprintln!("[AudioStreamingManager] Decoder thread error: {:?}", e);
             }
         });
 
         self.decoder_thread = Some(handle);
-        
+
         Ok(())
     }
     /// Main decoder thread function with pre-buffering and adaptive buffering
@@ -397,9 +404,15 @@ impl AudioStreamingManager {
         let silence_frames = spec.sample_rate as usize * 2;
         let silence_bytes = vec![0u8; silence_frames * spec.channels as usize * 4];
         if let Err(e) = stdin.write_all(&silence_bytes) {
-            eprintln!("[AudioStreamingManager] Failed to write initial silence: {:?}", e);
+            eprintln!(
+                "[AudioStreamingManager] Failed to write initial silence: {:?}",
+                e
+            );
         } else if let Err(e) = stdin.flush() {
-            eprintln!("[AudioStreamingManager] Failed to flush initial silence: {:?}", e);
+            eprintln!(
+                "[AudioStreamingManager] Failed to flush initial silence: {:?}",
+                e
+            );
         }
 
         loop {
@@ -451,36 +464,48 @@ impl AudioStreamingManager {
                         // Feed samples to loudness monitor if enabled
                         if let Some(ref monitor) = loudness_monitor {
                             if let Err(e) = monitor.add_frames(&decoded_audio.samples) {
-                                eprintln!("[AudioStreamingManager] Loudness monitoring error: {}", e);
+                                eprintln!(
+                                    "[AudioStreamingManager] Loudness monitoring error: {}",
+                                    e
+                                );
                             }
                         }
-                        
+
                         let pcm_bytes = decoded_audio.to_bytes_f32_le();
                         let frames_in_packet = pcm_bytes.len() / (spec.channels as usize * 4);
-                        
+
                         // Write immediately to CamillaDSP to prevent initial underrun
                         if let Err(e) = stdin.write_all(&pcm_bytes) {
-                            eprintln!("[AudioStreamingManager] Failed to write during pre-buffering: {:?}", e);
+                            eprintln!(
+                                "[AudioStreamingManager] Failed to write during pre-buffering: {:?}",
+                                e
+                            );
                             let mut state_lock = state.lock().unwrap();
                             *state_lock = StreamingState::Error;
                             break;
                         }
                         if let Err(e) = stdin.flush() {
-                            eprintln!("[AudioStreamingManager] Failed to flush during pre-buffering: {:?}", e);
+                            eprintln!(
+                                "[AudioStreamingManager] Failed to flush during pre-buffering: {:?}",
+                                e
+                            );
                             let mut state_lock = state.lock().unwrap();
                             *state_lock = StreamingState::Error;
                             break;
                         }
-                        
+
                         // Also keep in buffer for smooth playback
                         audio_buffer.extend(pcm_bytes.iter());
                         buffered_frames += frames_in_packet;
 
                         // Check if we've reached the target buffer size
                         if buffered_frames >= target_buffer_frames {
-                            println!("[AudioStreamingManager] Pre-buffer complete: {} frames buffered", buffered_frames);
+                            println!(
+                                "[AudioStreamingManager] Pre-buffer complete: {} frames buffered",
+                                buffered_frames
+                            );
                             pre_buffered = true;
-                            
+
                             if playing {
                                 let mut state_lock = state.lock().unwrap();
                                 *state_lock = StreamingState::Playing;
@@ -575,10 +600,13 @@ impl AudioStreamingManager {
                             // Feed samples to loudness monitor if enabled
                             if let Some(ref monitor) = loudness_monitor {
                                 if let Err(e) = monitor.add_frames(&decoded_audio.samples) {
-                                    eprintln!("[AudioStreamingManager] Loudness monitoring error: {}", e);
+                                    eprintln!(
+                                        "[AudioStreamingManager] Loudness monitoring error: {}",
+                                        e
+                                    );
                                 }
                             }
-                            
+
                             let pcm_bytes = decoded_audio.to_bytes_f32_le();
                             let frames_in_packet = pcm_bytes.len() / (spec.channels as usize * 4);
 

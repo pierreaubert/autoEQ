@@ -1,4 +1,4 @@
-use crate::audio_decoder::{create_decoder, AudioDecoderError, AudioDecoderResult};
+use crate::audio_decoder::{AudioDecoderError, AudioDecoderResult, create_decoder};
 use ebur128::{EbuR128, Mode};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -16,7 +16,7 @@ pub struct ReplayGainInfo {
     /// ReplayGain 2.0 Track Gain in dB
     /// This value indicates how much the track should be adjusted to reach the reference level
     pub gain: f64,
-    
+
     /// ReplayGain 2.0 Track Peak (0.0 to 1.0+)
     /// The maximum sample peak across all channels
     pub peak: f64,
@@ -54,21 +54,20 @@ pub struct ReplayGainInfo {
 /// ```
 pub fn analyze_file<P: AsRef<Path>>(path: P) -> AudioDecoderResult<ReplayGainInfo> {
     let path = path.as_ref();
-    
+
     // Create decoder for the audio file
     let mut decoder = create_decoder(path)?;
-    
+
     // Get audio specifications
     let spec = decoder.spec();
     let channels = spec.channels as u32;
     let sample_rate = spec.sample_rate;
-    
+
     // Create EBU R128 analyzer with all measurement modes
-    let mut ebur128 = EbuR128::new(channels, sample_rate, Mode::all())
-        .map_err(|e| {
-            AudioDecoderError::ConfigError(format!("Failed to create EBU R128 analyzer: {:?}", e))
-        })?;
-    
+    let mut ebur128 = EbuR128::new(channels, sample_rate, Mode::all()).map_err(|e| {
+        AudioDecoderError::ConfigError(format!("Failed to create EBU R128 analyzer: {:?}", e))
+    })?;
+
     // Process audio in chunks
     loop {
         match decoder.decode_next()? {
@@ -76,73 +75,73 @@ pub fn analyze_file<P: AsRef<Path>>(path: P) -> AudioDecoderResult<ReplayGainInf
                 if decoded.is_empty() {
                     continue;
                 }
-                
+
                 // Add samples to EBU R128 analyzer
                 // Samples are already in f32 format normalized to [-1.0, 1.0]
-                ebur128.add_frames_f32(&decoded.samples)
-                    .map_err(|e| {
-                        AudioDecoderError::DecodingFailed(
-                            format!("Failed to add frames to EBU R128: {:?}", e)
-                        )
-                    })?;
+                ebur128.add_frames_f32(&decoded.samples).map_err(|e| {
+                    AudioDecoderError::DecodingFailed(format!(
+                        "Failed to add frames to EBU R128: {:?}",
+                        e
+                    ))
+                })?;
             }
             None => break, // End of stream
         }
     }
-    
+
     // Calculate global loudness
-    let loudness = ebur128.loudness_global()
-        .map_err(|e| {
-            AudioDecoderError::DecodingFailed(
-                format!("Failed to calculate loudness: {:?}", e)
-            )
-        })?;
-    
+    let loudness = ebur128.loudness_global().map_err(|e| {
+        AudioDecoderError::DecodingFailed(format!("Failed to calculate loudness: {:?}", e))
+    })?;
+
     // Calculate peak across all channels
     let mut peak = 0.0f64;
     for channel_index in 0..channels {
-        let channel_peak = ebur128.sample_peak(channel_index)
-            .map_err(|e| {
-                AudioDecoderError::DecodingFailed(
-                    format!("Failed to get peak for channel {}: {:?}", channel_index, e)
-                )
-            })?;
+        let channel_peak = ebur128.sample_peak(channel_index).map_err(|e| {
+            AudioDecoderError::DecodingFailed(format!(
+                "Failed to get peak for channel {}: {:?}",
+                channel_index, e
+            ))
+        })?;
         peak = peak.max(channel_peak);
     }
-    
+
     // Calculate ReplayGain: reference level minus the measured loudness
     let gain = REPLAYGAIN2_REFERENCE_LUFS - loudness;
-    
+
     Ok(ReplayGainInfo { gain, peak })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_analyze_nonexistent_file() {
         let result = analyze_file("nonexistent_file.flac");
         assert!(matches!(result, Err(AudioDecoderError::FileNotFound(_))));
     }
-    
+
     #[test]
     fn test_analyze_unsupported_format() {
         let result = analyze_file("test.unsupported");
-        assert!(matches!(result, Err(AudioDecoderError::UnsupportedFormat(_))));
+        assert!(matches!(
+            result,
+            Err(AudioDecoderError::UnsupportedFormat(_))
+        ));
     }
-    
+
     #[test]
     fn test_replaygain_info_serialization() {
         let info = ReplayGainInfo {
             gain: -5.5,
             peak: 0.95,
         };
-        
+
         let json = serde_json::to_string(&info).unwrap();
         assert!(json.contains("-5.5"));
         assert!(json.contains("0.95"));
-        
+
         let deserialized: ReplayGainInfo = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized.gain, info.gain);
         assert_eq!(deserialized.peak, info.peak);
