@@ -27,8 +27,8 @@ export class LayoutManager {
 
   private handleResize = (): void => {
     // Debounce resize events
-    clearTimeout((this as any).resizeTimeout);
-    (this as any).resizeTimeout = setTimeout(() => {
+    clearTimeout((this as { resizeTimeout?: number }).resizeTimeout);
+    (this as { resizeTimeout?: number }).resizeTimeout = setTimeout(() => {
       this.calculateLayout();
     }, 100);
   };
@@ -41,7 +41,7 @@ export class LayoutManager {
 
     // Get available dimensions
     const rightPanelRect = rightPanel.getBoundingClientRect();
-    const plotsGridRect = this.plotsGridElement.getBoundingClientRect();
+    void this.plotsGridElement.getBoundingClientRect();
 
     // Calculate available space for plots (excluding padding, margins, headers)
     const availableWidth = rightPanelRect.width - 40; // Account for panel padding
@@ -100,10 +100,10 @@ export class LayoutManager {
       const plotlyDiv = container.querySelector(
         ".js-plotly-plot",
       ) as HTMLElement;
-      if (plotlyDiv && (window as any).Plotly) {
+      if (plotlyDiv && (window as { Plotly?: { Plots: { resize: (el: HTMLElement) => void } } }).Plotly) {
         try {
-          (window as any).Plotly.Plots.resize(plotlyDiv);
-        } catch (e) {
+          (window as { Plotly: { Plots: { resize: (el: HTMLElement) => void } } }).Plotly.Plots.resize(plotlyDiv);
+        } catch (_e) {
           // Ignore resize errors for plots that may not be fully initialized
         }
       }
@@ -119,7 +119,7 @@ export class LayoutManager {
 
   public destroy(): void {
     window.removeEventListener("resize", this.handleResize);
-    clearTimeout((this as any).resizeTimeout);
+    clearTimeout((this as { resizeTimeout?: number }).resizeTimeout);
     this.isInitialized = false;
   }
 }

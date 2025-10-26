@@ -225,7 +225,7 @@ export function unwrapPhase(phases: number[]): number[] {
   const unwrapped = [phases[0]];
 
   for (let i = 1; i < phases.length; i++) {
-    let diff = phases[i] - phases[i - 1];
+    const diff = phases[i] - phases[i - 1];
 
     // If jump is > 180°, it's likely a wrap
     if (diff > 180) {

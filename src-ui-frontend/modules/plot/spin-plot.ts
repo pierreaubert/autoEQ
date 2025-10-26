@@ -9,7 +9,7 @@ export class SpinPlot {
     this.spinPlotElement = spinPlotElement;
   }
 
-  updateSpinPlot(plotData: any): void {
+  updateSpinPlot(plotData: { data: Plotly.Data[]; layout: Partial<Plotly.Layout> }): void {
     if (!this.spinPlotElement) {
       console.error("Spin plot element not found!");
       return;
@@ -40,15 +40,15 @@ export class SpinPlot {
             ...(plotData.layout.grid || {}),
             rows: 1,
             columns: 2,
-            pattern: "independent",
+            pattern: "independent" as const,
           },
           legend: {
             ...(plotData.layout.legend || {}),
-            orientation: "h",
+            orientation: "h" as const,
             x: 0.5,
-            xanchor: "center",
+            xanchor: "center" as const,
             y: 1.3,
-            yanchor: "top",
+            yanchor: "top" as const,
           },
         };
 

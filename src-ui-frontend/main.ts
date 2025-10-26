@@ -10,7 +10,7 @@ import {
   LayoutManager,
   generateAppHTML,
 } from "./modules";
-import { OptimizationParams, OptimizationResult } from "./types";
+import { OptimizationResult } from "./types";
 import { AutoEQPlotAPI, PlotFiltersParams, PlotSpinParams } from "./types";
 
 class AutoEQApplication {
@@ -547,7 +547,7 @@ class AutoEQApplication {
           num_filters: result.filter_params.length / 3,
           peq_model:
             ((document.getElementById("peq_model") as HTMLSelectElement)
-              ?.value as any) || "pk",
+              ?.value as "pk" | "hp-pk" | "hp-pk-lp" | "free-pk-free" | "free") || "pk",
           iir_hp_pk: false, // Deprecated
         };
 
@@ -568,7 +568,7 @@ class AutoEQApplication {
 
         try {
           // Convert curves data to CurveData format
-          const cea2034_curves: { [key: string]: any } = {};
+          const cea2034_curves: Record<string, { freq: number[]; spl: number[] }> = {};
           if (result.spin_details.curves) {
             Object.keys(result.spin_details.curves).forEach((key) => {
               const curveArray = result.spin_details!.curves[key];
@@ -659,7 +659,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const app = new AutoEQApplication();
 
   // Store app instance globally for debugging
-  (window as any).autoEQApp = app;
+  (window as unknown as { autoEQApp: AutoEQApplication }).autoEQApp = app;
 
   // Cleanup on page unload
   window.addEventListener("beforeunload", () => {

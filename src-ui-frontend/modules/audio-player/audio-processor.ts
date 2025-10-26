@@ -20,28 +20,30 @@ export class AudioProcessor {
 
   constructor() {
     console.warn(
-      "AudioProcessor is deprecated. Use CamillaAudioManager for playback."
+      "AudioProcessor is deprecated. Use CamillaAudioManager for playback.",
     );
   }
 
   // Stub methods to maintain API compatibility during migration
-  async loadAudioFile(file: File): Promise<void> {
+  async loadAudioFile(_file: File): Promise<void> {
     throw new Error(
-      "loadAudioFile() is deprecated. Use CamillaAudioManager instead."
+      "loadAudioFile() is deprecated. Use CamillaAudioManager instead.",
     );
   }
 
-  async loadAudioFromUrl(url: string): Promise<void> {
+  async loadAudioFromUrl(_url: string): Promise<void> {
     throw new Error(
-      "loadAudioFromUrl() is deprecated. Use CamillaAudioManager instead."
+      "loadAudioFromUrl() is deprecated. Use CamillaAudioManager instead.",
     );
   }
 
-  updateFilterParams(filterParams: number[]): void {
-    console.warn("updateFilterParams() is deprecated. Use CamillaAudioManager.");
+  updateFilterParams(_filterParams: number[]): void {
+    console.warn(
+      "updateFilterParams() is deprecated. Use CamillaAudioManager.",
+    );
   }
 
-  setEQEnabled(enabled: boolean): void {
+  setEQEnabled(_enabled: boolean): void {
     console.warn("setEQEnabled() is deprecated. Use CamillaAudioManager.");
   }
 
@@ -61,7 +63,7 @@ export class AudioProcessor {
     return this.capturing;
   }
 
-  setupSpectrumAnalyzer(canvas: HTMLCanvasElement): void {
+  setupSpectrumAnalyzer(_canvas: HTMLCanvasElement): void {
     console.warn("setupSpectrumAnalyzer() is deprecated.");
   }
 
@@ -76,20 +78,20 @@ export class AudioProcessor {
   // Device enumeration - replaced by backend
   async enumerateAudioDevices(): Promise<never[]> {
     console.warn(
-      "enumerateAudioDevices() removed. Use Tauri get_audio_devices() command."
+      "enumerateAudioDevices() removed. Use Tauri get_audio_devices() command.",
     );
     return [];
   }
 
   async enumerateAudioOutputDevices(): Promise<never[]> {
     console.warn(
-      "enumerateAudioOutputDevices() removed. Use Tauri get_audio_devices() command."
+      "enumerateAudioOutputDevices() removed. Use Tauri get_audio_devices() command.",
     );
     return [];
   }
 
   // Audio capture - replaced by backend recording
-  async startCapture(deviceId?: string): Promise<CaptureResult> {
+  async startCapture(_deviceId?: string): Promise<CaptureResult> {
     return {
       frequencies: [],
       magnitudes: [],
@@ -104,31 +106,31 @@ export class AudioProcessor {
     this.capturing = false;
   }
 
-  setSweepDuration(duration: number): void {
+  setSweepDuration(_duration: number): void {
     // No-op
   }
 
-  setOutputChannel(channel: "left" | "right" | "both" | "default"): void {
+  setOutputChannel(_channel: "left" | "right" | "both" | "default"): void {
     // No-op
   }
 
-  setSampleRate(rate: number): void {
+  setSampleRate(_rate: number): void {
     // No-op
   }
 
-  setSignalType(type: "sweep" | "white" | "pink"): void {
+  setSignalType(_type: "sweep" | "white" | "pink"): void {
     // No-op
   }
 
-  setCaptureVolume(volume: number): void {
+  setCaptureVolume(_volume: number): void {
     // No-op
   }
 
-  setOutputVolume(volume: number): void {
+  setOutputVolume(_volume: number): void {
     // No-op
   }
 
-  setOutputDevice(deviceId: string): void {
+  setOutputDevice(_deviceId: string): void {
     // No-op
   }
 
@@ -140,7 +142,7 @@ export class AudioProcessor {
     return false; // WebRTC removed
   }
 
-  setupAudioStatusElements(elements: any): void {
+  setupAudioStatusElements(_elements: unknown): void {
     // No-op
   }
 

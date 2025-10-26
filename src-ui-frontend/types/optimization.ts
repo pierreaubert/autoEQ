@@ -69,7 +69,7 @@ export interface OptimizationParams {
 export interface PlotData {
   frequencies: number[];
   curves: { [name: string]: number[] };
-  metadata: { [key: string]: any };
+  metadata: Record<string, unknown>;
 }
 
 export interface OptimizationResult {

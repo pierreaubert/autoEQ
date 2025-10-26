@@ -52,7 +52,7 @@ export async function displayFilterPlots(
     // Render the plot
     await Plotly.newPlot(
       containerElement,
-      finalPlotData.data,
+      finalPlotData.data as Plotly.Data[],
       finalPlotData.layout,
       config,
     );
@@ -99,7 +99,7 @@ export async function displaySpinPlots(
     // Render the plot
     await Plotly.newPlot(
       containerElement,
-      finalPlotData.data,
+      finalPlotData.data as Plotly.Data[],
       finalPlotData.layout,
       config,
     );
@@ -139,7 +139,7 @@ export async function displaySpinDetailsPlots(
 
     await Plotly.newPlot(
       containerElement,
-      finalPlotData.data,
+      finalPlotData.data as Plotly.Data[],
       finalPlotData.layout,
       config,
     );
@@ -180,7 +180,7 @@ export async function displayTonalBalancePlots(
 
     await Plotly.newPlot(
       containerElement,
-      finalPlotData.data,
+      finalPlotData.data as Plotly.Data[],
       finalPlotData.layout,
       config,
     );
@@ -218,7 +218,7 @@ export function createSampleCurveData(): CurveData {
 export async function displayOptimizationResults(
   filterContainer: HTMLElement,
   spinContainer: HTMLElement,
-  optimizationResult: any, // From the existing optimization API
+  optimizationResult: { filter_params?: number[]; filter_response?: { input_curve?: unknown; target_curve?: unknown; deviation_curve?: unknown; eq_response?: number[] }; spin_details?: { curves?: Record<string, unknown> } },
 ) {
   try {
     // Extract data from optimization result
@@ -228,9 +228,9 @@ export async function displayOptimizationResults(
       // Display filter plots
       await displayFilterPlots(
         filterContainer,
-        filter_response.input_curve,
-        filter_response.target_curve,
-        filter_response.deviation_curve,
+        filter_response.input_curve as CurveData,
+        filter_response.target_curve as CurveData,
+        filter_response.deviation_curve as CurveData,
         filter_params,
         48000, // sample rate
         filter_params.length / 3, // num filters (3 params per filter)
@@ -242,7 +242,7 @@ export async function displayOptimizationResults(
       // Display spin plots
       await displaySpinPlots(
         spinContainer,
-        spin_details.curves,
+        spin_details.curves as { [key: string]: CurveData },
         filter_response?.eq_response,
       );
     }

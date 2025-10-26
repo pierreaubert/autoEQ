@@ -22,7 +22,7 @@ export class ProgressPlot {
     if (this.progressGraphElement) {
       try {
         Plotly.purge(this.progressGraphElement);
-      } catch (e) {
+      } catch (_e) {
         // Element may not have been plotted yet
       }
       this.progressGraphElement.innerHTML = "";

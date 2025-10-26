@@ -1,6 +1,6 @@
+use autoeq::Curve;
 use autoeq::cea2034 as score;
 use autoeq::loss;
-use autoeq::Curve;
 use std::collections::HashMap;
 
 /// Pre-optimization metrics for CEA2034 or headphone loss

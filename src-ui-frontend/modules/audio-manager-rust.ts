@@ -268,9 +268,9 @@ export class AudioManagerRust {
         channels,
       });
       console.log("[AudioManager] Recording started successfully");
-    } catch (error) {
-      console.error("[AudioManager] Failed to start recording:", error);
-      throw error;
+    } catch (_error) {
+      console.error("[AudioManager] Failed to start recording:", _error);
+      throw _error;
     }
   }
 

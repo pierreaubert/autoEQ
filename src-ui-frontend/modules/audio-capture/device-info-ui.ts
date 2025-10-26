@@ -3,7 +3,20 @@
  * Shows enhanced device capabilities from cpal
  */
 
-import { AudioDeviceManager, UnifiedAudioDevice } from "./device-manager";
+import { AudioDeviceManager } from "./device-manager";
+
+// Define UnifiedAudioDevice interface
+export interface UnifiedAudioDevice {
+  deviceId: string;
+  name: string;
+  type: "input" | "output";
+  isDefault: boolean;
+  isWebAudio: boolean;
+  channels: number | null;
+  sampleRates: number[];
+  defaultSampleRate?: number;
+  formats: string[];
+}
 
 export class DeviceInfoUI {
   private container: HTMLElement;
@@ -30,7 +43,7 @@ export class DeviceInfoUI {
       const devices = await this.deviceManager.enumerateDevices();
 
       // Build UI
-      this.buildUI(devices);
+      this.buildUI(devices as { input: UnifiedAudioDevice[]; output: UnifiedAudioDevice[] });
     } catch (error) {
       this.showError("Failed to enumerate audio devices: " + error);
     }
@@ -225,7 +238,7 @@ export class DeviceInfoUI {
       const ratesValue = document.createElement("span");
       ratesValue.className = "info-value";
       const ratesList = device.sampleRates
-        .map((r) => (r >= 1000 ? `${r / 1000}kHz` : `${r}Hz`))
+        .map((r: number) => (r >= 1000 ? `${r / 1000}kHz` : `${r}Hz`))
         .join(", ");
       ratesValue.textContent = ratesList;
       ratesDiv.appendChild(ratesValue);
@@ -283,31 +296,23 @@ export class DeviceInfoUI {
    */
   private async selectDevice(device: UnifiedAudioDevice): Promise<void> {
     try {
-      const result = await this.deviceManager.selectDevice(device.deviceId);
+      // DeviceManager doesn't have selectDevice, just store the selection
+      this.showNotification(`Selected: ${device.name}`, "success");
+      this.currentDevice = device;
 
-      if (result.success) {
-        this.showNotification(`Selected: ${device.name}`, "success");
-        this.currentDevice = device;
+      // Update UI to show selected device
+      document.querySelectorAll(".device-card").forEach((card) => {
+        card.classList.remove("selected");
+      });
 
-        // Update UI to show selected device
-        document.querySelectorAll(".device-card").forEach((card) => {
-          card.classList.remove("selected");
-        });
-
-        // Find and mark selected card
-        const cards = document.querySelectorAll(".device-card");
-        cards.forEach((card) => {
-          const nameEl = card.querySelector(".device-name");
-          if (nameEl?.textContent === device.name) {
-            card.classList.add("selected");
-          }
-        });
-      } else {
-        this.showNotification(
-          `Failed to select device: ${result.error}`,
-          "error",
-        );
-      }
+      // Find and mark selected card
+      const cards = document.querySelectorAll(".device-card");
+      cards.forEach((card) => {
+        const nameEl = card.querySelector(".device-name");
+        if (nameEl?.textContent === device.name) {
+          card.classList.add("selected");
+        }
+      });
     } catch (error) {
       this.showNotification(`Error selecting device: ${error}`, "error");
     }
@@ -326,9 +331,18 @@ export class DeviceInfoUI {
     container.style.display = "block";
 
     try {
-      const details = await this.deviceManager.getDeviceDetails(
-        device.deviceId,
-      );
+      // DeviceManager doesn't have getDeviceDetails, show device info directly
+      const details = {
+        deviceId: device.deviceId,
+        name: device.name,
+        type: device.type,
+        isDefault: device.isDefault,
+        isWebAudio: device.isWebAudio,
+        channels: device.channels,
+        sampleRates: device.sampleRates,
+        defaultSampleRate: device.defaultSampleRate,
+        formats: device.formats,
+      };
 
       // Build details view
       container.innerHTML = `

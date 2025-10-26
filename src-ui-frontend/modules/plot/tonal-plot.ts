@@ -9,7 +9,7 @@ export class TonalPlot {
     this.tonalPlotElement = tonalPlotElement || null;
   }
 
-  updateTonalPlot(plotData: any): void {
+  updateTonalPlot(plotData: { data: Plotly.Data[]; layout: Partial<Plotly.Layout> }): void {
     if (!this.tonalPlotElement) {
       console.warn("Tonal plot element not available");
       return;
@@ -40,15 +40,15 @@ export class TonalPlot {
             ...(plotData.layout.grid || {}),
             rows: 2,
             columns: 4,
-            pattern: "independent",
+            pattern: "independent" as const,
           },
           legend: {
             ...(plotData.layout.legend || {}),
-            orientation: "h",
+            orientation: "h" as const,
             x: 0.5,
-            xanchor: "center",
+            xanchor: "center" as const,
             y: 1.2,
-            yanchor: "top",
+            yanchor: "top" as const,
           },
         };
 

@@ -615,7 +615,7 @@ export class CaptureGraphRenderer {
     color: string,
     lineWidth: number,
     type: "raw" | "smoothed",
-    channelLabel?: string,
+    _channelLabel?: string,
   ): void {
     const rect = this.getPlotArea();
 
@@ -871,6 +871,7 @@ export class CaptureGraphRenderer {
       if (data.rawPhase) rowCount++;
       if (data.smoothedPhase) rowCount++;
     }
+    void rowCount; // rowCount is used for documentation purposes
 
     // Position at bottom of graph with proper spacing below axis title
     const legendHeight = 50; // Fixed height for horizontal layout

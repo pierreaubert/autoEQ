@@ -1157,7 +1157,10 @@ fn enforce_rme_room_filter_constraints(peqs: &Peq) -> Peq {
         result.push(pk_filters.remove(0));
     } else {
         // Create dummy zero-gain PK filter
-        result.push((1.0, Biquad::new(BiquadFilterType::Peak, 1000.0, 48000.0, 1.0, 0.0)));
+        result.push((
+            1.0,
+            Biquad::new(BiquadFilterType::Peak, 1000.0, 48000.0, 1.0, 0.0),
+        ));
     }
 
     // Positions 2-8: PK filters only (7 slots)
@@ -1182,7 +1185,10 @@ fn enforce_rme_room_filter_constraints(peqs: &Peq) -> Peq {
         result.push(pk_filters.remove(0));
     } else {
         // Create dummy zero-gain PK filter
-        result.push((1.0, Biquad::new(BiquadFilterType::Peak, 1000.0, 48000.0, 1.0, 0.0)));
+        result.push((
+            1.0,
+            Biquad::new(BiquadFilterType::Peak, 1000.0, 48000.0, 1.0, 0.0),
+        ));
     }
 
     // Warn if we had to drop PK filters

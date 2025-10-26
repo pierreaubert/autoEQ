@@ -9,7 +9,7 @@ export class DetailsPlot {
     this.detailsPlotElement = detailsPlotElement;
   }
 
-  async generateDetailsPlot(plotData: any): Promise<void> {
+  async generateDetailsPlot(plotData: { data: Plotly.Data[]; layout: Partial<Plotly.Layout> }): Promise<void> {
     if (!this.detailsPlotElement) {
       console.warn("Details plot element not available");
       return;
@@ -34,7 +34,7 @@ export class DetailsPlot {
         };
 
         // Adjust layout for responsive display if needed
-        const layout = {
+        const layout: Partial<Plotly.Layout> = {
           ...plotData.layout,
           autosize: true,
           height: 550, // Fixed height for consistent display
@@ -43,15 +43,15 @@ export class DetailsPlot {
             ...(plotData.layout.grid || {}),
             rows: 2,
             columns: 4,
-            pattern: "independent",
+            pattern: "independent" as const,
           },
           legend: {
             ...(plotData.layout.legend || {}),
-            orientation: "h",
+            orientation: "h" as const,
             x: 0.5,
-            xanchor: "center",
+            xanchor: "center" as const,
             y: 1.2,
-            yanchor: "top",
+            yanchor: "top" as const,
           },
         };
 

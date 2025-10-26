@@ -9,7 +9,7 @@ export class FilterPlot {
     this.filterPlotElement = filterPlotElement;
   }
 
-  updateFilterPlot(plotData: any): void {
+  updateFilterPlot(plotData: { data: Plotly.Data[]; layout: Partial<Plotly.Layout> }): void {
     if (!this.filterPlotElement) {
       console.error("[FILTER PLOT] Filter plot element not found!");
       return;
@@ -31,14 +31,14 @@ export class FilterPlot {
         };
 
         // Adjust layout for responsive display
-        const layout = {
+        const layout: Partial<Plotly.Layout> = {
           ...plotData.layout,
           autosize: true,
           height: 650, // Fixed height for consistent display
           width: 800, // Fixed height for consistent display
           legend: {
             ...(plotData.layout.legend || {}),
-            orientation: "h",
+            orientation: "h" as const,
             x: 0.5,
             xanchor: "center",
             y: 1.3,
@@ -46,7 +46,7 @@ export class FilterPlot {
           },
           margin: {
             ...(plotData.layout.margin || {}),
-            top: 80,
+            t: 80,
           },
         };
 

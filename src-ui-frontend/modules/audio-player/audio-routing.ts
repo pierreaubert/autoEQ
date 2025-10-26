@@ -27,7 +27,7 @@ const CHANNEL_NAMES = [
 /**
  * Get channel name for a given index
  */
-export function getChannelName(index: number, totalChannels: number): string {
+export function getChannelName(index: number, _totalChannels: number): string {
   if (index < CHANNEL_NAMES.length) {
     return CHANNEL_NAMES[index];
   }

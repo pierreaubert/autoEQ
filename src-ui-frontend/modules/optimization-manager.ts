@@ -76,7 +76,7 @@ export class OptimizationManager {
 
       // Listen to optimization-progress events
       this.progressUnlisten = await listen("optimization-progress", (event) => {
-        const data = event.payload as any;
+        const data = event.payload as Record<string, unknown>;
         console.log(
           "[OPT DEBUG] 📊 optimization-progress event received:",
           event,
@@ -87,7 +87,7 @@ export class OptimizationManager {
 
       // Also listen to progress events (alternative name)
       await listen("progress", (event) => {
-        const data = event.payload as any;
+        const data = event.payload as Record<string, unknown>;
         console.log("[OPT DEBUG] 📈 progress event received:", event);
         console.log("[OPT DEBUG] Event payload:", data);
         this.handleProgressEvent(data);
@@ -95,7 +95,7 @@ export class OptimizationManager {
 
       // Listen to optimization_progress events (underscore variant)
       await listen("optimization_progress", (event) => {
-        const data = event.payload as any;
+        const data = event.payload as Record<string, unknown>;
         console.log(
           "[OPT DEBUG] 📉 optimization_progress event received:",
           event,
@@ -106,7 +106,7 @@ export class OptimizationManager {
 
       // Listen to iteration events (another possible name)
       await listen("iteration", (event) => {
-        const data = event.payload as any;
+        const data = event.payload as Record<string, unknown>;
         console.log("[OPT DEBUG] 🔄 iteration event received:", event);
         console.log("[OPT DEBUG] Event payload:", data);
         this.handleProgressEvent(data);
@@ -114,7 +114,7 @@ export class OptimizationManager {
 
       // Listen to progress_update events (the actual event name from Rust!)
       await listen("progress_update", (event) => {
-        const data = event.payload as any;
+        const data = event.payload as Record<string, unknown>;
         console.log("[OPT DEBUG] 🎯 progress_update event received!");
         console.log("[OPT DEBUG] Event payload:", data);
         this.handleProgressEvent(data);
@@ -127,7 +127,7 @@ export class OptimizationManager {
     }
   }
 
-  private handleProgressEvent(data: any): void {
+  private handleProgressEvent(data: Record<string, unknown>): void {
     // Handle both old format (stage/status) and new format (direct progress data)
     if (data.stage && data.status) {
       this.handleProgressUpdate(data);
@@ -140,22 +140,30 @@ export class OptimizationManager {
     }
   }
 
-  private handleProgressUpdate(data: any): void {
+  private handleProgressUpdate(data: Record<string, unknown>): void {
     console.log("[OPT DEBUG] handleProgressUpdate called with data:", data);
     const { stage, status, details = "", percentage } = data;
 
     // Calculate percentage if we have iteration data
-    let calculatedPercentage = percentage || 0;
+    let calculatedPercentage = (typeof percentage === 'number' ? percentage : 0);
 
     // Update optimization stages
-    this.updateOptimizationStage(stage, status, details);
+    this.updateOptimizationStage(
+      typeof stage === 'string' ? stage : '',
+      typeof status === 'string' ? status : '',
+      typeof details === 'string' ? String(details) : ''
+    );
 
     // Store progress data if it contains fitness information
     if (data.iteration !== undefined && data.fitness !== undefined) {
-      const progressEntry = {
-        iteration: data.iteration,
-        fitness: data.fitness,
-        convergence: data.convergence || 0,
+      const iteration = typeof data.iteration === 'number' ? data.iteration : 0;
+      const fitness = typeof data.fitness === 'number' ? data.fitness : 0;
+      const convergence = typeof data.convergence === 'number' ? data.convergence : 0;
+      
+      const progressEntry: ProgressData = {
+        iteration,
+        fitness,
+        convergence,
       };
 
       console.log("[OPT DEBUG] Adding progress entry:", progressEntry);
@@ -166,7 +174,7 @@ export class OptimizationManager {
       const estimatedMaxIterations = 300;
       calculatedPercentage = Math.min(
         100,
-        (progressEntry.iteration / estimatedMaxIterations) * 100,
+        (iteration / estimatedMaxIterations) * 100,
       );
       console.log(
         "[OPT DEBUG] Calculated percentage from iteration:",
@@ -177,9 +185,9 @@ export class OptimizationManager {
       if (this.onProgressDataUpdate) {
         console.log("[OPT DEBUG] Calling onProgressDataUpdate callback");
         this.onProgressDataUpdate(
-          progressEntry.iteration,
-          progressEntry.fitness,
-          progressEntry.convergence,
+          iteration,
+          fitness,
+          convergence,
         );
       } else {
         console.warn("[OPT DEBUG] No onProgressDataUpdate callback set!");
@@ -198,9 +206,9 @@ export class OptimizationManager {
         calculatedPercentage,
       );
       this.onProgressUpdate(
-        stage || "Optimization",
-        status || "running",
-        details,
+        typeof stage === 'string' ? stage : "Optimization",
+        typeof status === 'string' ? status : "running",
+        typeof details === 'string' ? String(details) : '',
         calculatedPercentage,
       );
     }

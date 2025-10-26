@@ -3,7 +3,7 @@
 // Extend Window interface for Tauri internals
 declare global {
   interface Window {
-    __TAURI_INTERNALS__?: any;
+    __TAURI_INTERNALS__?: unknown;
   }
 }
 

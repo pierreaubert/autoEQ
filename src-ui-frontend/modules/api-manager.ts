@@ -43,13 +43,13 @@ export class APIManager {
       // Method 3: Force complete DOM reflow with multiple techniques
       const originalDisplay = selectElement.style.display;
       selectElement.style.display = "none";
-      selectElement.offsetHeight; // Force reflow
+      void selectElement.offsetHeight; // Force reflow
       selectElement.style.display = originalDisplay || "";
 
       // Method 4: Force style recalculation by changing and reverting a style
       const originalPosition = selectElement.style.position;
       selectElement.style.position = "relative";
-      selectElement.offsetWidth; // Force style recalculation
+      void selectElement.offsetWidth; // Force style recalculation
       selectElement.style.position = originalPosition || "";
 
       // Method 5: Use requestAnimationFrame to ensure DOM updates are processed
@@ -169,7 +169,7 @@ export class APIManager {
       if (Array.isArray(result)) {
         versions = result as string[];
       } else if (result && typeof result === "object" && "versions" in result) {
-        versions = (result as any).versions;
+        versions = (result as Record<string, unknown>).versions as string[];
       } else {
         throw new Error("Invalid response format from backend");
       }
@@ -236,7 +236,7 @@ export class APIManager {
         typeof result === "object" &&
         "measurements" in result
       ) {
-        measurements = (result as any).measurements;
+        measurements = (result as Record<string, unknown>).measurements as string[];
       } else {
         throw new Error("Invalid response format from backend");
       }
@@ -767,7 +767,7 @@ export class APIManager {
       // Try to get demo audio list from backend first
       audioList = (await invoke("get_demo_audio_list")) as string[];
       console.log("Loaded demo audio list from backend:", audioList);
-    } catch (error) {
+    } catch (_error) {
       console.log("Backend demo audio list not available, using local files");
       // Fallback: Use actual demo audio files from public/demo-audio/
       audioList = [
@@ -825,7 +825,7 @@ export class APIManager {
       })) as string;
       console.log("Got demo audio URL from backend:", url);
       return url;
-    } catch (error) {
+    } catch (_error) {
       console.log(
         "Backend demo audio URL not available, using local file path",
       );
@@ -857,8 +857,8 @@ export class APIManager {
     const getNumericValue = (
       key: string,
       defaultValue: number,
-      min?: number,
-      max?: number,
+      _min?: number,
+      _max?: number,
     ): number => {
       const str = formData.get(key) as string;
       if (!str || str.trim() === "") {
@@ -976,9 +976,10 @@ export class APIManager {
     }
   }
 
-  private showFileDialogError(error: any): void {
+  private showFileDialogError(error: unknown): void {
     console.error("File dialog error details:", error);
-    const message = `File dialog failed: ${error?.message || error}. Using fallback file picker.`;
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const message = `File dialog failed: ${errorMessage}. Using fallback file picker.`;
     console.warn(message);
     this.showTemporaryMessage(message, "error");
   }

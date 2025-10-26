@@ -6,7 +6,7 @@ This file provides guidance to WARP (warp.dev) when working with code in this re
 
 ## Project Overview
 
-AutoEQ is a Rust-based automatic equalization system for speakers and headphones that uses global optimization algorithms to find optimal IIR filters. The project integrates with spinorama.org to fetch speaker measurement data and includes both CLI tools and a Tauri-based desktop application (UI).
+AutoEQ is an automatic equalization system for speakers, headphones and rooms that allows you to correct the sound first and then to tune it to your taste.
 
 ## Core Architecture
 
@@ -18,7 +18,9 @@ The project uses a workspace structure with specialized crates:
 - **src-cea2034**: CEA2034 scoring and metrics computation
 - **src-testfunctions**: Test functions for optimization benchmarking
 - **src-env**: Environment utilities for test infrastructure
-- **src-ui**: Tauri desktop application with TypeScript/Vite frontend
+- **src-ui-frontend**: Tauri desktop application with TypeScript/Vite frontend
+- **src-ui-backend**: Pure rust backend doing all the audio stuff
+- **src-tauri**: Gluing the backend and the frontend
 
 ### Data Flow
 

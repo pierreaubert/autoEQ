@@ -2,19 +2,12 @@
 
 import {
   OPTIMIZATION_DEFAULTS,
-  OPTIMIZATION_LIMITS,
-  OPTIMIZATION_STEPS,
   LOSS_OPTIONS,
   SPEAKER_LOSS_OPTIONS,
   HEADPHONE_LOSS_OPTIONS,
 } from "./optimization-constants";
 import { CaptureModalManager } from "@audio-capture/capture-modal-manager";
-import { RoutingMatrix } from "@audio-player/audio-routing";
 import { AudioProcessor } from "@audio-player/audio-processor";
-import {
-  CaptureStorage,
-  type StoredCapture,
-} from "@audio-capture/capture-storage";
 import { exportEQ, type ExportFormat } from "./apo-export";
 
 export class UIManager {
@@ -628,6 +621,7 @@ export class UIManager {
       `[UI DEBUG] updateProgress called: stage="${stage}", status="${status}", details="${details}"`,
     );
 
+    void percentage; // percentage is documented
     if (this.progressStatus) {
       this.progressStatus.textContent = `${stage}: ${status}`;
       console.log(
@@ -1063,7 +1057,7 @@ export class UIManager {
     }
   }
 
-  private async populateAudioDevices(audioProcessor: any): Promise<void> {
+  private async populateAudioDevices(audioProcessor: AudioProcessor): Promise<void> {
     if (!this.captureDeviceSelect) return;
 
     try {

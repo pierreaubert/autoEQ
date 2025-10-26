@@ -3,7 +3,6 @@
 import {
   CaptureController,
   type CaptureParameters,
-  type DeviceInfo,
 } from "./capture-controller";
 import { CaptureStorage } from "./capture-storage";
 import { CSVExporter } from "./csv-export";
@@ -453,7 +452,7 @@ export class CaptureModalManager {
         this.captureGraphRenderer.renderPlaceholder();
 
         // Expose renderer for debugging
-        (window as any).debugCaptureGraphRenderer = this.captureGraphRenderer;
+        (window as unknown as { debugCaptureGraphRenderer: CaptureGraphRenderer }).debugCaptureGraphRenderer = this.captureGraphRenderer;
       } catch (error) {
         console.error("Error initializing capture graph:", error);
       }
@@ -711,7 +710,7 @@ export class CaptureModalManager {
   }
 
   private async handleSuccessfulCapture(
-    result: any,
+    result: { frequencies: number[]; magnitudes: number[]; phases?: number[]; success: boolean; error?: string },
     params: CaptureParameters,
   ): Promise<void> {
     console.log("Processing successful capture...");
@@ -819,7 +818,7 @@ export class CaptureModalManager {
     console.log("Capture completed successfully");
   }
 
-  private handleCaptureError(error: any): void {
+  private handleCaptureError(error: unknown): void {
     console.error("Capture failed:", error);
 
     const errorMessage =
@@ -1298,7 +1297,7 @@ export class CaptureModalManager {
     try {
       // Get the audio context to check the current sample rate
       const audioContext = new (window.AudioContext ||
-        (window as any).webkitAudioContext)();
+        (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext || AudioContext)();
       const deviceSampleRate = audioContext.sampleRate;
       audioContext.close(); // Clean up
 
@@ -1339,7 +1338,7 @@ export class CaptureModalManager {
       const deviceId = this.modalOutputDevice.value;
 
       // Get device details
-      let deviceInfo: any = null;
+      let deviceInfo: { outputChannels: number | null; deviceLabel: string } | null = null;
 
       if (deviceId === "default") {
         // For default device, assume stereo
@@ -1528,7 +1527,7 @@ export class CaptureModalManager {
     try {
       // Get the audio context to check the current sample rate
       const audioContext = new (window.AudioContext ||
-        (window as any).webkitAudioContext)();
+        (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext || AudioContext)();
       const deviceSampleRate = audioContext.sampleRate;
       audioContext.close(); // Clean up
 
@@ -1662,7 +1661,7 @@ export class CaptureModalManager {
     }
   }
 
-  private formatRecordMeta(capture: any): string {
+  private formatRecordMeta(capture: { outputChannel: string; timestamp: string | Date }): string {
     const channel =
       capture.outputChannel === "both"
         ? "Stereo"

@@ -2,6 +2,9 @@
 // Extracted from audio-processor.ts and related UI components
 
 import { invoke } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-dialog";
+import { resolveResource } from "@tauri-apps/api/path";
+import { CamillaAudioManager, AudioFileInfo } from "../audio-manager-camilla";
 
 interface ReplayGainInfo {
   gain: number; // dB
@@ -53,6 +56,8 @@ export class AudioPlayer {
   private audioStartTime: number = 0;
   private audioPauseTime: number = 0;
   private audioAnimationFrame: number | null = null;
+  private currentAudioPath: string | null = null; // Track current audio file path for Rust backend
+  private camillaManager: CamillaAudioManager | null = null; // Camilla backend manager
   private currentFilterParams: FilterParam[] = [
     { frequency: 100, q: 1.0, gain: 0, enabled: true },
     { frequency: 1000, q: 1.0, gain: 0, enabled: true },
@@ -61,7 +66,7 @@ export class AudioPlayer {
   private eqEnabled: boolean = true;
   private outputDeviceId: string = "default"; // Selected output device ID
   private audioElement: HTMLAudioElement | null = null; // For device routing
-  
+
   // Playback configuration
   private loudnessCompensation: boolean = false;
   private splAmplitude: number = -20; // dB range: -30 to 0
@@ -195,6 +200,7 @@ export class AudioPlayer {
   private async init(): Promise<void> {
     try {
       await this.setupAudioContext();
+      this.setupCamillaManager();
       this._createEQModal();
       this.createUI();
       this.setupEventListeners();
@@ -205,10 +211,52 @@ export class AudioPlayer {
     }
   }
 
+  private setupCamillaManager(): void {
+    this.camillaManager = new CamillaAudioManager({
+      onStateChange: (state) => {
+        console.log("[AudioPlayer] Camilla state changed:", state);
+        if (state === "playing") {
+          this.isAudioPlaying = true;
+          this.isAudioPaused = false;
+        } else if (state === "paused") {
+          this.isAudioPlaying = false;
+          this.isAudioPaused = true;
+        } else if (state === "idle") {
+          this.isAudioPlaying = false;
+          this.isAudioPaused = false;
+        }
+        this.updatePlaybackUI();
+      },
+      onPositionUpdate: (position, duration) => {
+        if (this.positionText) {
+          this.positionText.textContent = this.formatTime(position);
+        }
+        if (this.durationText && duration) {
+          this.durationText.textContent = this.formatTime(duration);
+        }
+        if (this.progressFill && duration) {
+          const progress = (position / duration) * 100;
+          this.progressFill.style.width = `${Math.min(progress, 100)}%`;
+        }
+      },
+      onError: (error) => {
+        console.error("[AudioPlayer] Camilla error:", error);
+        this.callbacks.onError?.(error);
+        this.setStatus("Error: " + error);
+      },
+      onFileLoaded: (info: AudioFileInfo) => {
+        console.log("[AudioPlayer] File loaded:", info);
+        if (this.durationText && info.duration_seconds) {
+          this.durationText.textContent = this.formatTime(info.duration_seconds);
+        }
+      },
+    });
+  }
+
   private async setupAudioContext(): Promise<void> {
     try {
       this.audioContext = new (window.AudioContext ||
-        (window as any).webkitAudioContext)();
+        (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext || AudioContext)();
       this.gainNode = this.audioContext.createGain();
 
       if (this.config.enableSpectrum) {
@@ -253,7 +301,6 @@ export class AudioPlayer {
                     <polyline points="13 2 13 9 20 9"></polyline>
                   </svg>
                 </button>
-                <input type="file" class="file-upload-input" accept=".wav,.flac,.mp3,.ogg,.m4a,.aac,.opus,audio/*" style="display: none;" />
               </div>
               <div class="replay-gain-info" style="display: none; margin-top: 8px; font-size: 12px; color: var(--text-secondary);">
                 Replay Gain: <span class="info-badge replay-gain-value">--</span> • Peak: <span class="info-badge replay-peak-value">--</span>
@@ -413,7 +460,9 @@ export class AudioPlayer {
     console.log("[EQ Debug] Backdrop element found:", this.eqBackdrop);
     if (this.eqModal) {
       this.eqModalCloseBtn = this.eqModal.querySelector(".eq-modal-close-btn");
-      this.playbackOptionsContainer = this.eqModal.querySelector(".playback-options-container");
+      this.playbackOptionsContainer = this.eqModal.querySelector(
+        ".playback-options-container",
+      );
       this.eqTableContainer = this.eqModal.querySelector(".eq-table-container");
     }
 
@@ -437,7 +486,8 @@ export class AudioPlayer {
     }
 
     // Cache ReplayGain elements
-    this.replayGainContainer = this.container.querySelector(".replay-gain-info");
+    this.replayGainContainer =
+      this.container.querySelector(".replay-gain-info");
   }
 
   private setupEventListeners(): void {
@@ -462,17 +512,24 @@ export class AudioPlayer {
 
     // File upload button
     const uploadBtn = this.container.querySelector(".file-upload-btn");
-    const fileInput = this.container.querySelector(".file-upload-input") as HTMLInputElement;
+    uploadBtn?.addEventListener("click", async () => {
+      try {
+        const selectedPath = await open({
+          multiple: false,
+          filters: [
+            {
+              name: "Audio",
+              extensions: ["wav", "flac", "mp3", "ogg", "m4a", "aac", "opus"],
+            },
+          ],
+        });
 
-    uploadBtn?.addEventListener("click", () => {
-      fileInput?.click();
-    });
-
-    fileInput?.addEventListener("change", async (e) => {
-      const target = e.target as HTMLInputElement;
-      const file = target.files?.[0];
-      if (file) {
-        await this.loadAudioFile(file);
+        if (typeof selectedPath === "string") {
+          await this.loadAudioFilePath(selectedPath);
+        }
+      } catch (error) {
+        console.error("File selection failed:", error);
+        this.callbacks.onError?.("File selection failed: " + error);
       }
     });
 
@@ -524,7 +581,9 @@ export class AudioPlayer {
     this.eqBackdrop?.addEventListener("click", () => this.closeEQModal());
 
     // Keyboard controls for EQ buttons
-    const eqButtonsContainer = this.container.querySelector(".eq-toggle-buttons") as HTMLElement;
+    const eqButtonsContainer = this.container.querySelector(
+      ".eq-toggle-buttons",
+    ) as HTMLElement;
     if (eqButtonsContainer) {
       eqButtonsContainer.addEventListener("keydown", (e: KeyboardEvent) => {
         switch (e.key) {
@@ -628,10 +687,13 @@ export class AudioPlayer {
 
   private renderEQTable(): void {
     console.log("[EQ Debug] Rendering playback configuration");
-    console.log("[EQ Debug] Playback options container:", this.playbackOptionsContainer);
+    console.log(
+      "[EQ Debug] Playback options container:",
+      this.playbackOptionsContainer,
+    );
     console.log("[EQ Debug] EQ table container:", this.eqTableContainer);
     console.log("[EQ Debug] Current filter params:", this.currentFilterParams);
-    
+
     if (!this.playbackOptionsContainer || !this.eqTableContainer) {
       console.error("[EQ Debug] Container not found");
       return;
@@ -639,14 +701,14 @@ export class AudioPlayer {
 
     // Render playback options section
     this.renderPlaybackOptions();
-    
+
     // Render EQ table section
     const eqSection = document.createElement("div");
     eqSection.className = "eq-section";
-    
+
     const header = document.createElement("h4");
     header.textContent = "Equalizer Configuration";
-    
+
     const table = document.createElement("table");
     table.innerHTML = `
       <thead>
@@ -715,18 +777,32 @@ export class AudioPlayer {
     this.playbackOptionsContainer.innerHTML = optionsHTML;
 
     // Attach event listeners
-    const loudnessToggle = this.playbackOptionsContainer.querySelector(".loudness-compensation-toggle") as HTMLInputElement;
-    const splSliderContainer = this.playbackOptionsContainer.querySelector(".spl-slider-container") as HTMLElement;
-    const splSlider = this.playbackOptionsContainer.querySelector(".spl-slider") as HTMLInputElement;
-    const splValueDisplay = this.playbackOptionsContainer.querySelector(".spl-value") as HTMLElement;
-    const autoGainToggle = this.playbackOptionsContainer.querySelector(".auto-gain-toggle") as HTMLInputElement;
-    const autoGainWarning = this.playbackOptionsContainer.querySelector(".auto-gain-warning") as HTMLElement;
+    const loudnessToggle = this.playbackOptionsContainer.querySelector(
+      ".loudness-compensation-toggle",
+    ) as HTMLInputElement;
+    const splSliderContainer = this.playbackOptionsContainer.querySelector(
+      ".spl-slider-container",
+    ) as HTMLElement;
+    const splSlider = this.playbackOptionsContainer.querySelector(
+      ".spl-slider",
+    ) as HTMLInputElement;
+    const splValueDisplay = this.playbackOptionsContainer.querySelector(
+      ".spl-value",
+    ) as HTMLElement;
+    const autoGainToggle = this.playbackOptionsContainer.querySelector(
+      ".auto-gain-toggle",
+    ) as HTMLInputElement;
+    const autoGainWarning = this.playbackOptionsContainer.querySelector(
+      ".auto-gain-warning",
+    ) as HTMLElement;
 
     if (loudnessToggle) {
       loudnessToggle.addEventListener("change", (e) => {
         this.loudnessCompensation = (e.target as HTMLInputElement).checked;
         if (splSliderContainer) {
-          splSliderContainer.style.display = this.loudnessCompensation ? "flex" : "none";
+          splSliderContainer.style.display = this.loudnessCompensation
+            ? "flex"
+            : "none";
         }
         console.log("Loudness compensation:", this.loudnessCompensation);
       });
@@ -764,7 +840,8 @@ export class AudioPlayer {
       if (isNaN(value)) return;
     }
 
-    (this.currentFilterParams[index] as any)[type] = value;
+    // Update the filter parameter - using type assertion for dynamic property access
+    (this.currentFilterParams[index] as unknown as Record<string, number | boolean>)[type] = value;
 
     // Update filter parameters - this will also update the display
     this.updateFilterParams(this.currentFilterParams);
@@ -783,24 +860,13 @@ export class AudioPlayer {
       throw new Error(`Demo track '${trackName}' not found`);
     }
 
-    this.setStatus("Loading audio...");
-    this.setListenButtonEnabled(false);
-
     try {
-      await this.loadAudioFromUrl(url);
-      this.setStatus("Audio ready");
-      this.setListenButtonEnabled(true);
-      this.showAudioStatus(true);
-
-      // Analyze ReplayGain for demo track
-      // Extract filename from URL (e.g., "/demo-audio/classical.wav" -> "classical.wav")
       const fileName = url.split("/").pop();
-      if (fileName) {
-        // Construct absolute path to demo audio file
-        // In Tauri, public assets are resolved from the app directory
-        const filePath = `public/demo-audio/${fileName}`;
-        await this.analyzeReplayGain(filePath);
+      if (!fileName) {
+        throw new Error("Invalid demo track URL");
       }
+      const filePath = await resolveResource(`demo-audio/${fileName}`);
+      await this.loadAudioFilePath(filePath);
     } catch (error) {
       this.setStatus("Failed to load audio");
       this.callbacks.onError?.("Failed to load demo track: " + error);
@@ -808,40 +874,27 @@ export class AudioPlayer {
     }
   }
 
-  private async loadAudioFromUrl(url: string): Promise<void> {
-    this.stop(); // Stop any currently playing audio
-
-    if (!this.audioContext) {
-      throw new Error("Audio context not initialized");
-    }
+  public async loadAudioFilePath(filePath: string): Promise<void> {
+    this.setStatus("Loading audio...");
+    this.setListenButtonEnabled(false);
 
     try {
-      console.log("Loading audio from URL:", url);
-      const response = await fetch(url);
+      // Use Camilla backend to load the audio file
+      if (this.camillaManager) {
+        await this.camillaManager.loadAudioFilePath(filePath);
+        this.currentAudioPath = filePath;
+        this.setStatus("Audio ready");
+        this.setListenButtonEnabled(true);
+        this.showAudioStatus(true);
 
-      if (!response.ok) {
-        throw new Error(
-          `Failed to fetch audio: ${response.status} ${response.statusText}`,
-        );
-      }
-
-      const arrayBuffer = await response.arrayBuffer();
-      console.log("Audio data fetched, decoding...");
-
-      this.audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
-      console.log("Audio loaded successfully:", {
-        duration: this.audioBuffer.duration,
-        sampleRate: this.audioBuffer.sampleRate,
-        channels: this.audioBuffer.numberOfChannels,
-      });
-
-      this.updateAudioInfo();
-
-      if (this.config.enableSpectrum) {
-        this.startSpectrumAnalysis();
+        // Analyze ReplayGain for demo track
+        await this.analyzeReplayGain(filePath);
+      } else {
+        throw new Error("Camilla audio manager not initialized");
       }
     } catch (error) {
-      console.error("Error loading audio from URL:", error);
+      this.setStatus("Failed to load audio");
+      this.callbacks.onError?.("Failed to load audio file: " + error);
       throw error;
     }
   }
@@ -878,7 +931,7 @@ export class AudioPlayer {
     }
   }
 
-  private showAudioStatus(show: boolean): void {
+  private showAudioStatus(_show: boolean): void {
     // Progress bar is always visible now, so we don't hide it
     // This method is kept for backward compatibility but does nothing
     const audioStatus = this.container.querySelector(
@@ -1031,9 +1084,9 @@ export class AudioPlayer {
 
         // Set the output device
         if ("setSinkId" in this.audioElement) {
-          (this.audioElement as any)
+          (this.audioElement as HTMLAudioElement & { setSinkId: (id: string) => Promise<void> })
             .setSinkId(this.outputDeviceId)
-            .catch((error: any) => {
+            .catch((error: unknown) => {
               console.warn("Failed to set audio element sink ID:", error);
             });
         }
@@ -1119,9 +1172,9 @@ export class AudioPlayer {
 
     // If we have an audio element, update its sink ID
     if (this.audioElement && "setSinkId" in this.audioElement) {
-      (this.audioElement as any)
+      (this.audioElement as HTMLAudioElement & { setSinkId: (id: string) => Promise<void> })
         .setSinkId(this.outputDeviceId)
-        .catch((error: any) => {
+        .catch((error: unknown) => {
           console.warn("Failed to set audio element sink ID:", error);
         });
     }
@@ -1215,7 +1268,7 @@ export class AudioPlayer {
         if (param.enabled && Math.abs(param.gain) > 0.1) {
           // Simplified peaking filter response calculation
           const relativeFreq = freq / param.frequency;
-          const bandwidth = param.frequency / param.q;
+          void relativeFreq; // Used for documentation
           const distance = Math.abs(Math.log2(relativeFreq));
           const attenuation = Math.exp(-Math.pow(distance * param.q, 2));
           totalGain += param.gain * attenuation;
@@ -1582,7 +1635,7 @@ export class AudioPlayer {
     if (this.audioSource) {
       try {
         this.audioSource.stop();
-      } catch (error) {
+      } catch (_error) {
         // Ignore errors if already stopped
       }
       this.audioSource = null;
@@ -1633,52 +1686,85 @@ export class AudioPlayer {
   async play(): Promise<void> {
     console.log("Play method called");
 
-    if (!this.audioContext) {
-      throw new Error("Audio context not initialized");
+    if (!this.camillaManager) {
+      throw new Error("Camilla audio manager not initialized");
     }
-
-    if (!this.audioBuffer) {
-      throw new Error("No audio loaded for playback");
-    }
-
-    // Resume audio context if suspended
-    if (this.audioContext.state === "suspended") {
-      console.log("Resuming suspended audio context...");
-      await this.audioContext.resume();
-    }
-
-    this.stop(); // Stop any currently playing audio
 
     try {
-      this.audioSource = this.audioContext.createBufferSource();
-      this.audioSource.buffer = this.audioBuffer;
+      // Convert current filter params to the format Camilla expects
+      const filters = this.eqEnabled
+        ? this.currentFilterParams
+            .filter((p) => p.enabled)
+            .map((p) => ({
+              frequency: p.frequency,
+              q: p.q,
+              gain: p.gain,
+            }))
+        : [];
 
-      this.connectAudioChain();
-
-      this.audioSource.start();
-      this.audioStartTime = this.audioContext.currentTime;
-      this.isAudioPlaying = true;
-
-      this.audioSource.onended = () => {
-        console.log("Audio playback ended");
-        this.isAudioPlaying = false;
-        this.audioSource = null;
-        this.updatePlaybackUI();
-        if (this.audioAnimationFrame) {
-          cancelAnimationFrame(this.audioAnimationFrame);
-          this.audioAnimationFrame = null;
-        }
-      };
-
-      this.updatePlaybackUI();
-      this.startPositionUpdates();
-
+      await this.camillaManager.play(filters, this.outputDeviceId === "default" ? undefined : this.outputDeviceId);
       this.callbacks.onPlay?.();
-      console.log("Audio playback started successfully");
+      console.log("Audio playback started successfully via Camilla backend");
     } catch (error) {
       console.error("Error during audio playback:", error);
       this.callbacks.onError?.("Playback failed: " + error);
       throw error;
+    }
+  }
+
+
+  async pause(): Promise<void> {
+    if (!this.camillaManager) {
+      console.warn("Camilla audio manager not initialized");
+      return;
+    }
+
+    try {
+      await this.camillaManager.pause();
+      console.log("Audio playback paused via Camilla backend");
+    } catch (error) {
+      console.error("Error pausing playback:", error);
+      this.callbacks.onError?.("Failed to pause: " + error);
+    }
+  }
+
+  private restart(): void {
+    console.log("Restarting audio playback");
+    this.stop();
+    // Small delay to ensure stop is complete
+    setTimeout(() => {
+      this.play();
+    }, 50);
+  }
+
+  async resume(): Promise<void> {
+    if (!this.camillaManager) {
+      console.warn("Camilla audio manager not initialized");
+      return;
+    }
+
+    try {
+      await this.camillaManager.resume();
+      console.log("Audio playback resumed via Camilla backend");
+    } catch (error) {
+      console.error("Error resuming playback:", error);
+      this.callbacks.onError?.("Failed to resume: " + error);
+    }
+  }
+
+  async stop(): Promise<void> {
+    if (!this.camillaManager) {
+      console.warn("Camilla audio manager not initialized");
+      return;
+    }
+
+    try {
+      await this.camillaManager.stop();
+      this.callbacks.onStop?.();
+      console.log("Audio playback stopped via Camilla backend");
+    } catch (error) {
+      console.error("Error stopping playback:", error);
+      this.callbacks.onError?.("Failed to stop: " + error);
     }
   }
 
@@ -1703,66 +1789,6 @@ export class AudioPlayer {
       this.pauseClickCount = 0;
       this.restart();
     }
-  }
-
-  pause(): void {
-    if (this.audioContext && this.audioContext.state === "running") {
-      // Save the current playback time before pausing
-      this.audioPauseTime = this.audioContext.currentTime - this.audioStartTime;
-      this.audioContext.suspend();
-      this.isAudioPlaying = false;
-      this.isAudioPaused = true;
-      this.updatePlaybackUI();
-      console.log("Audio playback paused at:", this.audioPauseTime);
-    }
-  }
-
-  private restart(): void {
-    console.log("Restarting audio playback");
-    this.stop();
-    // Small delay to ensure stop is complete
-    setTimeout(() => {
-      this.play();
-    }, 50);
-  }
-
-  resume(): void {
-    if (
-      this.audioContext &&
-      this.audioContext.state === "suspended" &&
-      this.isAudioPaused
-    ) {
-      this.audioContext.resume();
-      this.isAudioPlaying = true;
-      this.isAudioPaused = false;
-      this.audioPauseTime = 0; // Clear pause time when resuming
-      this.updatePlaybackUI();
-      console.log("Audio playback resumed");
-    }
-  }
-
-  stop(): void {
-    if (this.audioSource) {
-      try {
-        this.audioSource.stop();
-      } catch (error) {
-        // Ignore errors if already stopped
-      }
-      this.audioSource = null;
-    }
-
-    this.isAudioPlaying = false;
-    this.isAudioPaused = false;
-    this.audioPauseTime = 0; // Reset pause time when stopping
-
-    if (this.audioAnimationFrame) {
-      cancelAnimationFrame(this.audioAnimationFrame);
-      this.audioAnimationFrame = null;
-    }
-
-    this.updatePlaybackUI();
-    this.callbacks.onStop?.();
-    console.log("Audio playback stopped");
   }
 
   private updatePlaybackUI(): void {
@@ -1806,32 +1832,6 @@ export class AudioPlayer {
     return this.demoSelect?.value || null;
   }
 
-  // Load external audio file
-  async loadAudioFile(file: File): Promise<void> {
-    this.stop(); // Stop any currently playing audio
-
-    if (!this.audioContext) {
-      throw new Error("Audio context not initialized");
-    }
-
-    try {
-      const arrayBuffer = await file.arrayBuffer();
-      this.audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
-      console.log("Audio file loaded successfully");
-
-      this.updateAudioInfo();
-      this.setListenButtonEnabled(true);
-      this.setStatus("Audio ready");
-
-      if (this.config.enableSpectrum) {
-        this.startSpectrumAnalysis();
-      }
-    } catch (error) {
-      console.error("Error loading audio file:", error);
-      this.callbacks.onError?.("Failed to load audio file: " + error);
-      throw error;
-    }
-  }
 
   // ReplayGain analysis
   private async analyzeReplayGain(filePath: string): Promise<void> {
@@ -1839,8 +1839,10 @@ export class AudioPlayer {
       // Show loading state
       if (this.replayGainContainer) {
         this.replayGainContainer.style.display = "block";
-        const gainElement = this.replayGainContainer.querySelector(".replay-gain-value");
-        const peakElement = this.replayGainContainer.querySelector(".replay-peak-value");
+        const gainElement =
+          this.replayGainContainer.querySelector(".replay-gain-value");
+        const peakElement =
+          this.replayGainContainer.querySelector(".replay-peak-value");
         if (gainElement) gainElement.textContent = "...";
         if (peakElement) peakElement.textContent = "...";
       }
@@ -1868,8 +1870,10 @@ export class AudioPlayer {
   private updateReplayGainDisplay(gain: number, peak: number): void {
     if (!this.replayGainContainer) return;
 
-    const gainElement = this.replayGainContainer.querySelector(".replay-gain-value");
-    const peakElement = this.replayGainContainer.querySelector(".replay-peak-value");
+    const gainElement =
+      this.replayGainContainer.querySelector(".replay-gain-value");
+    const peakElement =
+      this.replayGainContainer.querySelector(".replay-peak-value");
 
     if (gainElement && peakElement) {
       // Format gain with sign and 1 decimal place

@@ -129,7 +129,7 @@ export class PlotBase {
     if (element) {
       try {
         Plotly.purge(element);
-      } catch (e) {
+        } catch (_e) {
         // Element may not have been plotted yet
       }
       element.innerHTML =

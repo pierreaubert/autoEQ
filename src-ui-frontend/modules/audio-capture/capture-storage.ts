@@ -87,7 +87,7 @@ export class CaptureStorage {
       }
 
       // Convert timestamp strings back to Date objects
-      const captures = parsed.captures.map((capture: any) => ({
+      const captures = parsed.captures.map((capture: StoredCapture & { timestamp: string | Date }) => ({
         ...capture,
         timestamp: new Date(capture.timestamp),
       }));
@@ -302,7 +302,7 @@ export class CaptureStorage {
     }
   }
 
-  private static generateCSV(data: any): string {
+  private static generateCSV(data: { frequencies: number[]; rawMagnitudes: number[]; smoothedMagnitudes: number[]; rawPhase?: number[]; smoothedPhase?: number[]; metadata: { timestamp: Date; deviceName: string; signalType: string; duration: number; sampleRate: number; outputChannel: string } }): string {
     const lines: string[] = [];
 
     // Add header comments with metadata

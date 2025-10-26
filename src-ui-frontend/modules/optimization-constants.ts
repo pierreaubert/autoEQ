@@ -289,7 +289,7 @@ export const WARNING_THRESHOLDS = {
 };
 
 // Helper function to get default value for a parameter
-export function getDefaultValue(paramName: keyof OptimizationDefaults): any {
+export function getDefaultValue(paramName: keyof OptimizationDefaults): number | string | boolean {
   return OPTIMIZATION_DEFAULTS[paramName];
 }
 

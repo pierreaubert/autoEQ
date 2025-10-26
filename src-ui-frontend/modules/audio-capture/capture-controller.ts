@@ -45,7 +45,7 @@ export class CaptureController {
     input: DeviceInfo[];
     output: DeviceInfo[];
   }> {
-    const devices = await this.deviceManager.enumerateDevices();
+    await this.deviceManager.enumerateDevices();
 
     const inputList = this.deviceManager.getDeviceList("input");
     const outputList = this.deviceManager.getDeviceList("output");

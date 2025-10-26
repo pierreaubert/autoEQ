@@ -1,13 +1,12 @@
 // Main PlotManager export - combines all plot modules
 
-import Plotly from "plotly.js-dist-min";
-import { PlotData } from "../../types";
 import { PlotBase } from "./base";
 import { FilterPlot } from "./filter-plot";
 import { SpinPlot } from "./spin-plot";
 import { DetailsPlot } from "./details-plot";
 import { TonalPlot } from "./tonal-plot";
 import { ProgressPlot } from "./progress-plot";
+import Plotly from "plotly.js-dist-min";
 
 export class PlotManager extends PlotBase {
   private filterPlot: FilterPlot;
@@ -66,22 +65,22 @@ export class PlotManager extends PlotBase {
   }
 
   // Filter plot methods
-  updateFilterPlot(plotData: any): void {
+  updateFilterPlot(plotData: { data: Plotly.Data[]; layout: Partial<Plotly.Layout>; config?: Record<string, unknown> }): void {
     this.filterPlot.updateFilterPlot(plotData);
   }
 
   // Spin plot methods
-  updateSpinPlot(plotData: any): void {
+  updateSpinPlot(plotData: { data: Plotly.Data[]; layout: Partial<Plotly.Layout>; config?: Record<string, unknown> }): void {
     this.spinPlot.updateSpinPlot(plotData);
   }
 
   // Details plot methods
-  async generateDetailsPlot(plotData: any): Promise<void> {
+  async generateDetailsPlot(plotData: { data: Plotly.Data[]; layout: Partial<Plotly.Layout>; config?: Record<string, unknown> }): Promise<void> {
     await this.detailsPlot.generateDetailsPlot(plotData);
   }
 
   // Tonal plot methods
-  updateTonalPlot(plotData: any): void {
+  updateTonalPlot(plotData: { data: Plotly.Data[]; layout: Partial<Plotly.Layout>; config?: Record<string, unknown> }): void {
     this.tonalPlot.updateTonalPlot(plotData);
   }
 
@@ -102,7 +101,7 @@ export class PlotManager extends PlotBase {
     await this.progressPlot.updateProgressGraph();
   }
 
-  getProgressData(): any[] {
+  getProgressData(): Array<{ iteration: number; fitness: number; convergence: number }> {
     return this.progressPlot.getProgressData();
   }
 }

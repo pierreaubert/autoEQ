@@ -18,12 +18,6 @@ use sotf_backend::{
 };
 use tokio::sync::Mutex;
 
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-#[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
-}
-
 #[tauri::command]
 async fn get_speakers() -> Result<Vec<String>, String> {
     match reqwest::get("https://api.spinorama.org/v1/speakers").await {
@@ -995,9 +989,7 @@ async fn generate_rme_room_format(
 // ============================================================================
 
 #[tauri::command]
-async fn analyze_replaygain(
-    file_path: String,
-) -> Result<ReplayGainInfo, String> {
+async fn analyze_replaygain(file_path: String) -> Result<ReplayGainInfo, String> {
     println!("[REPLAYGAIN] Analyzing file: {}", file_path);
 
     match analyze_file(&file_path) {
@@ -1025,7 +1017,7 @@ async fn flac_enable_loudness_monitoring(
     streaming_manager: State<'_, Mutex<AudioStreamingManager>>,
 ) -> Result<(), String> {
     println!("[LOUDNESS] Enabling real-time loudness monitoring");
-    
+
     let mut manager = streaming_manager.lock().await;
     manager.enable_loudness_monitoring()
 }
@@ -1035,7 +1027,7 @@ async fn flac_disable_loudness_monitoring(
     streaming_manager: State<'_, Mutex<AudioStreamingManager>>,
 ) -> Result<(), String> {
     println!("[LOUDNESS] Disabling real-time loudness monitoring");
-    
+
     let mut manager = streaming_manager.lock().await;
     manager.disable_loudness_monitoring();
     Ok(())
@@ -1072,7 +1064,6 @@ pub fn run() {
         .manage(audio_manager)
         .manage(streaming_manager)
         .invoke_handler(tauri::generate_handler![
-            greet,
             run_optimization,
             cancel_optimization,
             get_speakers,

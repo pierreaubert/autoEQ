@@ -23,16 +23,18 @@ export interface PlotSpinParams {
 }
 
 // Plotly plot data structure (simplified)
+import Plotly from "plotly.js-dist-min";
+
 export interface PlotlyData {
-  data: any[];
-  layout: any;
-  config?: any;
+  data: Plotly.Data[];
+  layout: Partial<Plotly.Layout>;
+  config?: Record<string, unknown>;
 }
 
 // AutoEQ plot API functions
 export class AutoEQPlotAPI {
-  private static async invoke<T>(command: string, params: any): Promise<T> {
-    // @ts-ignore - Tauri invoke function
+  private static async invoke<T>(command: string, params: unknown): Promise<T> {
+    // @ts-expect-error - Tauri invoke function
     return window.__TAURI__.core.invoke(command, params);
   }
 
@@ -78,7 +80,7 @@ export class PlotUtils {
    */
   static applyUILayout(
     plotData: PlotlyData,
-    customLayout: Partial<any>,
+    customLayout: Partial<Record<string, unknown>>,
   ): PlotlyData {
     return {
       ...plotData,
@@ -92,7 +94,7 @@ export class PlotUtils {
   /**
    * Create a responsive layout configuration
    */
-  static createResponsiveLayout(width?: number, height?: number): Partial<any> {
+  static createResponsiveLayout(width?: number, height?: number): Partial<Record<string, unknown>> {
     return {
       autosize: true,
       responsive: true,
@@ -110,7 +112,7 @@ export class PlotUtils {
   /**
    * Create default config for Plotly plots
    */
-  static createDefaultConfig(): any {
+  static createDefaultConfig(): Record<string, unknown> {
     return {
       displayModeBar: true,
       modeBarButtonsToRemove: ["pan2d", "lasso2d"],

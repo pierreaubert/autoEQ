@@ -52,13 +52,13 @@ export interface DeviceProperties {
     max_sample_rate: number;
     channels: number;
     sample_format: string;
-    buffer_size_range?: any;
+    buffer_size_range?: unknown;
   }>;
   default_config?: {
     sample_rate: number;
     channels: number;
     sample_format: string;
-    buffer_size?: any;
+    buffer_size?: unknown;
   };
 }
 

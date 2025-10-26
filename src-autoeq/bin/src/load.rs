@@ -76,5 +76,11 @@ pub(super) async fn load_and_prepare(
             .collect()
     });
 
-    Ok((standard_freq, input_curve, target_curve, deviation_curve, spin_data))
+    Ok((
+        standard_freq,
+        input_curve,
+        target_curve,
+        deviation_curve,
+        spin_data,
+    ))
 }
