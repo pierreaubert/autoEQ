@@ -226,6 +226,9 @@ pub struct DeviceConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub capture: Option<CaptureDevice>,
     pub playback: PlaybackDevice,
+    /// Enable automatic sample rate adjustment (allows CamillaDSP to adapt to device rate)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enable_rate_adjust: Option<bool>,
 }
 
 /// Capture device configuration
@@ -1405,6 +1408,7 @@ pub fn generate_streaming_config(
         chunksize: 1024,
         capture: Some(capture),
         playback,
+        enable_rate_adjust: Some(true), // Allow CamillaDSP to adapt to device's native sample rate
     };
 
     // Generate filters section
@@ -1523,6 +1527,7 @@ pub fn generate_playback_config(
         chunksize: 1024,
         capture: Some(capture),
         playback,
+        enable_rate_adjust: Some(true), // Allow CamillaDSP to adapt to device's native sample rate
     };
 
     // Generate filters section
@@ -1618,6 +1623,7 @@ pub fn generate_recording_config(
         chunksize: 1024,
         capture: Some(capture),
         playback,
+        enable_rate_adjust: Some(true), // Allow CamillaDSP to adapt to device's native sample rate
     };
 
     Ok(CamillaDSPConfig {
