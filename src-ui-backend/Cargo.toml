@@ -11,6 +11,10 @@ path = "src/lib.rs"
 name = "sotf_audio_test"
 path = "bin/audio_test.rs"
 
+[[bin]]
+name = "sotf_audio_decoder_test"
+path = "bin/audio_decoder_test.rs"
+
 [dependencies]
 autoeq = { workspace = true }
 ndarray = { workspace = true }
@@ -31,9 +35,17 @@ ctrlc = { workspace = true }
 reqwest = { workspace = true }
 
 # Audio decoding
-symphonia = { version = "0.5", features = ["flac"] }
+symphonia = { version = "0.5", default-features = false }
 symphonia-core = "0.5"
 symphonia-metadata = "0.5"
+symphonia-bundle-flac = "0.5"
+symphonia-bundle-mp3 = "0.5"
+symphonia-codec-aac = "0.5"
+symphonia-codec-pcm = "0.5"
+symphonia-codec-vorbis = "0.5"
+symphonia-format-riff = "0.5"
+symphonia-format-ogg = "0.5"
+symphonia-format-isomp4 = "0.5"
 
 plotly_static = { version = "0.1", features = ["chromedriver", "webdriver_download"], optional = true }
 
@@ -46,6 +58,12 @@ plotly_static = ["dep:plotly_static"]
 blas-src = { version = "0.14", features = ["accelerate"] }
 accelerate-src = "0.3"
 signal-hook-tokio = { workspace = true }
+
+[target.'cfg(all(target_os = "macos", target_arch = "x86_64"))'.build]
+rustflags = ["-C", "target-feature=+sse,+sse2,+sse3,+ssse3,+sse4.1,+sse4.2,+avx,+avx2"]
+
+[target.'cfg(all(target_os = "macos", target_arch = "aarch64"))'.build]
+rustflags = ["-C", "target-feature=+neon"]
 
 [target.'cfg(all(target_os = "linux", target_arch="x86_64"))'.dependencies]
 # blas folklore

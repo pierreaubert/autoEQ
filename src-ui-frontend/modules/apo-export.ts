@@ -195,6 +195,7 @@ function getFileFilters(
         { name: "All Files", extensions: ["*"] },
       ];
     case "rme":
+      return [
         { name: "TotalMix Channel EQ", extensions: ["tmeq"] },
         { name: "All Files", extensions: ["*"] },
       ];

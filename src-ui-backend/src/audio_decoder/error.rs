@@ -89,7 +89,10 @@ pub fn user_friendly_error(error: &AudioDecoderError) -> String {
             "The selected audio file could not be found. Please check if the file still exists.".to_string()
         }
         AudioDecoderError::UnsupportedFormat(_) => {
-            "This audio format is not supported. Currently supported formats: FLAC".to_string()
+            format!(
+                "This audio format is not supported. Currently supported formats: {}", 
+                crate::audio_decoder::formats::AudioFormat::supported_formats_string()
+            )
         }
         AudioDecoderError::InvalidFile(_) => {
             "The audio file appears to be corrupted or invalid. Please try a different file.".to_string()

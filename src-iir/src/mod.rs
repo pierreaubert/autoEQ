@@ -1010,6 +1010,7 @@ pub fn peq_format_rme_channel(peq: &Peq) -> String {
 /// - Bandpass: 5 (lower priority)
 /// - Peak: 3 (lowest priority, most common)
 /// - Default: 1
+#[allow(dead_code)]
 fn get_filter_priority(filter_type: BiquadFilterType) -> u8 {
     match filter_type {
         BiquadFilterType::Lowshelf | BiquadFilterType::Highshelf => 9,
@@ -1034,6 +1035,7 @@ fn get_filter_priority(filter_type: BiquadFilterType) -> u8 {
 /// If the input has fewer than or equal to max_count items, returns a clone.
 /// Otherwise, sorts by priority (descending) then by absolute gain (descending),
 /// takes the top max_count items, and returns them in their original order.
+#[allow(dead_code)]
 fn filter_peqs_by_gain(peqs: &Peq, max_count: usize) -> Peq {
     if peqs.len() <= max_count {
         return peqs.clone();

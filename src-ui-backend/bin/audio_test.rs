@@ -27,7 +27,7 @@ enum Commands {
 
     /// Play an audio file with optional EQ filters (auto-detects format)
     Play {
-        /// Path to audio file (WAV for direct play, FLAC for streaming)
+        /// Path to audio file (supports WAV, FLAC, MP3, AAC/M4A, Vorbis/OGG, AIFF)
         #[arg(value_name = "FILE")]
         file: PathBuf,
 
@@ -68,9 +68,9 @@ enum Commands {
         buffer_chunks: usize,
     },
 
-    /// Play FLAC file with streaming decoder (supports seeking)
-    FlacStream {
-        /// Path to FLAC audio file
+    /// Play audio file with streaming decoder (supports seeking for all formats)
+    Stream {
+        /// Path to audio file (supports FLAC, MP3, AAC/M4A, Vorbis/OGG, AIFF)
         #[arg(value_name = "FILE")]
         file: PathBuf,
 
@@ -213,7 +213,7 @@ async fn main() {
                 std::process::exit(1);
             }
         }
-        Commands::FlacStream {
+        Commands::Stream {
             file,
             device,
             filters,
@@ -238,7 +238,7 @@ async fn main() {
                 sotf_backend::camilla::ChannelMapMode::Normal
             };
 
-            if let Err(e) = play_flac_stream(
+            if let Err(e) = play_stream(
                 binary_path,
                 file,
                 device,
@@ -358,10 +358,10 @@ async fn play_audio(
                 spec.bits_per_sample
             );
 
-            // Route FLAC files to streaming manager
-            if format == AudioFormat::Flac {
-                println!("  Using FLAC streaming decoder...");
-                return play_flac_stream(
+            // Route non-WAV files to streaming manager (FLAC, MP3, AAC/M4A, Vorbis, AIFF)
+            if format != AudioFormat::Wav {
+                println!("  Using streaming decoder for {} format...", format.as_str());
+                return play_stream(
                     binary_path,
                     file,
                     device,
@@ -376,10 +376,7 @@ async fn play_audio(
             }
         }
         Err(e) => {
-            println!(
-                "  Warning: Could not detect format ({}), using legacy playback",
-                e
-            );
+            return Err(format!("Failed to detect file format: {}. Supported formats: WAV, FLAC, MP3, AAC/M4A (container format only, not raw ADTS AAC), Vorbis/OGG, AIFF.", e));
         }
     }
 
@@ -577,7 +574,7 @@ fn parse_filters(filter_strings: &[String]) -> Result<Vec<FilterParams>, Camilla
     Ok(filters)
 }
 
-async fn play_flac_stream(
+async fn play_stream(
     binary_path: PathBuf,
     file: PathBuf,
     device: Option<String>,
@@ -588,7 +585,7 @@ async fn play_flac_stream(
     hwaudio_output: Option<Vec<u16>>,
     buffer_chunks: usize,
 ) -> Result<(), String> {
-    println!("Starting FLAC streaming playback...");
+    println!("Starting streaming playback...");
     println!("  File: {:?}", file);
     println!("  Device: {:?}", device.as_deref().unwrap_or("default"));
     if start_time > 0.0 {
@@ -632,11 +629,11 @@ async fn play_flac_stream(
     })
     .map_err(|e| format!("Failed to set Ctrl+C handler: {}", e))?;
 
-    // Load the FLAC file
+    // Load the audio file
     let r_check = running.clone();
     let audio_info = tokio::select! {
         result = streaming_manager.load_file(&file) => {
-            result.map_err(|e| format!("Failed to load FLAC file: {}", e))?
+            result.map_err(|e| format!("Failed to load audio file: {}", e))?
         }
         _ = async {
             while r_check.load(Ordering::SeqCst) {
@@ -648,7 +645,7 @@ async fn play_flac_stream(
         }
     };
 
-    println!("Loaded FLAC file:");
+    println!("Loaded audio file:");
     println!("  Format: {}", audio_info.format);
     println!("  Sample rate: {}Hz", audio_info.spec.sample_rate);
     println!("  Channels: {}", audio_info.spec.channels);
@@ -683,7 +680,7 @@ async fn play_flac_stream(
             .map_err(|e| format!("Failed to seek: {}", e))?;
     }
 
-    println!("FLAC streaming started successfully!");
+    println!("Streaming playback started successfully!");
     println!("Press Ctrl+C to stop\n");
 
     // Monitor playback
@@ -725,7 +722,7 @@ async fn play_flac_stream(
     }
 
     // Stop playback with timeout
-    println!("\nStopping FLAC streaming...");
+    println!("\nStopping streaming playback...");
     match tokio::time::timeout(Duration::from_secs(3), streaming_manager.stop()).await {
         Ok(result) => result.map_err(|e| format!("Failed to stop streaming: {}", e))?,
         Err(_) => {
@@ -733,6 +730,6 @@ async fn play_flac_stream(
         }
     }
 
-    println!("FLAC streaming stopped successfully");
+    println!("Streaming playback stopped successfully");
     Ok(())
 }

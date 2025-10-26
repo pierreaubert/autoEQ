@@ -523,8 +523,9 @@ impl AudioStreamingManager {
                     buffered_frames = buffered_frames.saturating_sub(frames_written);
                 }
 
-                // Decode ahead to maintain buffer (keep it at least half full)
-                if buffered_frames < target_buffer_frames / 2 {
+                // Decode ahead to maintain buffer (keep it at least 75% full for smooth playback)
+                // For AAC, batch decode multiple packets at once for better performance
+                while buffered_frames < (target_buffer_frames * 3) / 4 {
                     match decoder.decode_next() {
                         Ok(Some(decoded_audio)) => {
                             let pcm_bytes = decoded_audio.to_bytes_f32_le();
@@ -540,6 +541,7 @@ impl AudioStreamingManager {
                                 *state_lock = StreamingState::Idle;
                                 playing = false;
                             }
+                            break;
                         }
                         Err(e) => {
                             eprintln!("[AudioStreamingManager] Decode error: {:?}", e);
@@ -548,9 +550,6 @@ impl AudioStreamingManager {
                             break;
                         }
                     }
-                } else {
-                    // Buffer is healthy, small sleep to prevent busy-waiting
-                    thread::sleep(Duration::from_micros(100));
                 }
             } else if !playing {
                 // Sleep when paused

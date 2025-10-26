@@ -1,5 +1,5 @@
 use crate::audio_decoder::error::{AudioDecoderError, AudioDecoderResult};
-use crate::audio_decoder::formats::{AudioFormat, flac::FlacDecoder};
+use crate::audio_decoder::formats::{AudioFormat, symphonia::SymphoniaDecoder};
 use std::path::Path;
 use std::time::Duration;
 
@@ -115,30 +115,9 @@ pub fn create_decoder<P: AsRef<Path>>(path: P) -> AudioDecoderResult<Box<dyn Aud
         ));
     }
 
-    // Detect format from file extension
-    let format = AudioFormat::from_path(path)?;
-
-    println!(
-        "[AudioDecoder] Creating decoder for {} file: {:?}",
-        format.as_str(),
-        path
-    );
-
-    // Create appropriate decoder based on format
-    match format {
-        AudioFormat::Flac => {
-            let decoder = FlacDecoder::new(path)?;
-            Ok(Box::new(decoder))
-        } // Future format support:
-          // AudioFormat::Mp3 => {
-          //     let decoder = Mp3Decoder::new(path)?;
-          //     Ok(Box::new(decoder))
-          // }
-          // AudioFormat::Ogg => {
-          //     let decoder = OggDecoder::new(path)?;
-          //     Ok(Box::new(decoder))
-          // }
-    }
+    // Create unified Symphonia decoder that handles format detection internally
+    let decoder = SymphoniaDecoder::new(path)?;
+    Ok(Box::new(decoder))
 }
 
 /// Probe an audio file to get basic information without creating a full decoder
