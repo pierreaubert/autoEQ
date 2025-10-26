@@ -101,6 +101,10 @@ enum Commands {
         /// Buffer size in chunks (32=low latency, 128=balanced, 1024=high reliability)
         #[arg(long = "buffer-chunks", default_value = "128")]
         buffer_chunks: usize,
+
+        /// Enable real-time LUFS monitoring (prints momentary/short-term loudness)
+        #[arg(long = "monitor-lufs", default_value_t = false)]
+        monitor_lufs: bool,
     },
 
     /// Record audio from input device
@@ -222,6 +226,7 @@ async fn main() {
             duration,
             start_time,
             buffer_chunks,
+            monitor_lufs,
         } => {
             // Parse filters
             let filter_params = match parse_filters(&filters) {
@@ -248,6 +253,7 @@ async fn main() {
                 map_mode,
                 hwaudio_output,
                 buffer_chunks,
+                monitor_lufs,
             )
             .await
             {
@@ -371,6 +377,7 @@ async fn play_audio(
                     map_mode,
                     hwaudio_output,
                     buffer_chunks,
+                    false, // monitor_lufs (not supported in play mode, use stream mode)
                 )
                 .await;
             }
@@ -584,6 +591,7 @@ async fn play_stream(
     map_mode: sotf_backend::camilla::ChannelMapMode,
     hwaudio_output: Option<Vec<u16>>,
     buffer_chunks: usize,
+    monitor_lufs: bool,
 ) -> Result<(), String> {
     println!("Starting streaming playback...");
     println!("  File: {:?}", file);
@@ -655,6 +663,13 @@ async fn play_stream(
     }
     println!();
 
+    // Enable loudness monitoring if requested
+    if monitor_lufs {
+        streaming_manager.enable_loudness_monitoring()
+            .map_err(|e| format!("Failed to enable loudness monitoring: {}", e))?;
+        println!("Real-time LUFS monitoring enabled\n");
+    }
+
     // Start playback with cancellation support
     let r_check = running.clone();
     tokio::select! {
@@ -712,13 +727,36 @@ async fn play_stream(
             last_state = current_state;
         }
 
+        // Print loudness measurements if monitoring is enabled
+        if monitor_lufs && current_state == StreamingState::Playing {
+            if let Some(loudness) = streaming_manager.get_loudness() {
+                let momentary_str = if loudness.momentary_lufs.is_infinite() {
+                    "-∞".to_string()
+                } else {
+                    format!("{:5.1}", loudness.momentary_lufs)
+                };
+                let shortterm_str = if loudness.shortterm_lufs.is_infinite() {
+                    "-∞".to_string()
+                } else {
+                    format!("{:5.1}", loudness.shortterm_lufs)
+                };
+                print!(
+                    "\rLUFS: M={} S={}  Peak={:.3}  ",
+                    momentary_str,
+                    shortterm_str,
+                    loudness.peak
+                );
+                std::io::Write::flush(&mut std::io::stdout()).ok();
+            }
+        }
+
         // Check duration
         if duration > 0 && start_time_instant.elapsed().as_secs() >= duration {
             println!("\n\nDuration reached, stopping...");
             break;
         }
 
-        sleep(Duration::from_millis(200)).await;
+        sleep(Duration::from_millis(100)).await;
     }
 
     // Stop playback with timeout
