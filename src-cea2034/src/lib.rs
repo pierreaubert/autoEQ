@@ -290,8 +290,10 @@ pub fn octave_intervals(count: usize, freq: &Array1<f64>) -> Vec<(usize, usize)>
         if center < band_min_freq || center > 12000.0 {
             continue; // skip bands outside desired range
         }
+        // Match Python: dfu.loc[(dfu.Freq >= band_min) & (dfu.Freq <= band_max)]
+        // Python uses inclusive bounds on both ends
         let imin = freq.iter().position(|&f| f >= low).unwrap_or(freq.len());
-        let imax = freq.iter().position(|&f| f >= high).unwrap_or(freq.len());
+        let imax = freq.iter().position(|&f| f > high).unwrap_or(freq.len());
         out.push((imin, imax));
     }
     out
