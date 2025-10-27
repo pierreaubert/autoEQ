@@ -392,6 +392,7 @@ async fn audio_start_playback(
             filters,
             ChannelMapMode::Normal,
             None,
+            None,
         )
         .await;
 
@@ -647,7 +648,13 @@ async fn flac_start_playback(
 
     let mut manager = streaming_manager.lock().await;
     match manager
-        .start_playback(output_device.clone(), filters, ChannelMapMode::Normal, None)
+        .start_playback(
+            output_device.clone(),
+            filters,
+            ChannelMapMode::Normal,
+            None,
+            None,
+        )
         .await
     {
         Ok(_) => {
@@ -1056,7 +1063,14 @@ pub fn run() {
     // Create AudioStreamingManager for FLAC playback
     let streaming_manager = Mutex::new(AudioStreamingManager::new(camilla_binary));
 
-    tauri::Builder::default()
+    let mut builder = tauri::Builder::default();
+
+    #[cfg(debug_assertions)]
+    {
+        builder = builder.plugin(tauri_plugin_devtools::init());
+    }
+
+    builder
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(CancellationState::new())

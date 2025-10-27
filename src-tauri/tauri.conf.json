@@ -26,7 +26,10 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "resources": ["../public/demo-audio/*.wav"],
+    "resources": [
+      "public/demo-audio/*.flac",
+      "public/headphone-targets/*.csv"
+    ],
     "externalBin": [
       "binaries/camilladsp"
     ],
@@ -58,7 +61,7 @@
       "signingIdentity": "Developer ID Application: Pierre Aubert (RTH7ZJXLT6)",
       "providerShortName": null,
       "exceptionDomain": "",
-      "frameworks": []
+      "frameworks": ["Accelerate"]
     },
     "windows": {
       "certificateThumbprint": null,
