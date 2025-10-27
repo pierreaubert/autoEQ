@@ -8,8 +8,8 @@ name = "sotf_backend"
 path = "src/lib.rs"
 
 [[bin]]
-name = "sotf_audio_test"
-path = "bin/audio_test.rs"
+name = "sotf_audio"
+path = "bin/sotf_audio.rs"
 
 [[bin]]
 name = "sotf_audio_decoder_test"
@@ -60,11 +60,6 @@ blas-src = { version = "0.14", features = ["accelerate"] }
 accelerate-src = "0.3"
 signal-hook-tokio = { workspace = true }
 
-[target.'cfg(all(target_os = "macos", target_arch = "x86_64"))'.build]
-rustflags = ["-C", "target-feature=+sse,+sse2,+sse3,+ssse3,+sse4.1,+sse4.2,+avx,+avx2"]
-
-[target.'cfg(all(target_os = "macos", target_arch = "aarch64"))'.build]
-rustflags = ["-C", "target-feature=+neon"]
 
 [target.'cfg(all(target_os = "linux", target_arch="x86_64"))'.dependencies]
 # blas folklore
@@ -90,3 +85,7 @@ openblas-src = { version = "0.10", features = ["cblas", "system"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
+
+[dev-dependencies]
+# Needed for async integration tests
+tokio = { workspace = true, features = ["rt-multi-thread", "tracing"] }

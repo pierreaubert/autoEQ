@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
-use crate::camilla::{AudioManager, ChannelMapMode, FilterParams};
+use crate::camilla::{AudioManager, ChannelMapMode, FilterParams, LoudnessCompensation};
 use crate::loudness_monitor::{LoudnessInfo, LoudnessMonitor};
 use crate::{
     AudioDecoderError, AudioDecoderResult, AudioFormat, AudioSpec, create_decoder, probe_file,
@@ -154,6 +154,7 @@ impl AudioStreamingManager {
         filters: Vec<FilterParams>,
         channel_map_mode: ChannelMapMode,
         output_map: Option<Vec<u16>>,
+        loudness: Option<LoudnessCompensation>,
     ) -> AudioDecoderResult<()> {
         let audio_info = self
             .current_audio_info
@@ -170,6 +171,7 @@ impl AudioStreamingManager {
                 filters,
                 channel_map_mode,
                 output_map,
+                loudness,
             )
             .await
             .map_err(|e| AudioDecoderError::ConfigError(format!("CamillaDSP error: {}", e)))?;
@@ -417,40 +419,40 @@ impl AudioStreamingManager {
 
         loop {
             // Check for commands (batched - check every 10 packets to reduce overhead)
-            if packet_count % 10 == 0 {
-                if let Ok(command) = cmd_rx.try_recv() {
-                    match command {
-                        StreamingCommand::Start | StreamingCommand::Resume => {
-                            playing = true;
-                            if pre_buffered {
-                                let mut state_lock = state.lock().unwrap();
-                                *state_lock = StreamingState::Playing;
-                            }
-                        }
-                        StreamingCommand::Pause => {
-                            playing = false;
+            if packet_count.is_multiple_of(10)
+                && let Ok(command) = cmd_rx.try_recv()
+            {
+                match command {
+                    StreamingCommand::Start | StreamingCommand::Resume => {
+                        playing = true;
+                        if pre_buffered {
                             let mut state_lock = state.lock().unwrap();
-                            *state_lock = StreamingState::Paused;
+                            *state_lock = StreamingState::Playing;
                         }
-                        StreamingCommand::Stop => {
-                            break;
-                        }
-                        StreamingCommand::SeekSeconds(seconds) => {
-                            let frame_position = (seconds * spec.sample_rate as f64) as u64;
-                            if let Err(e) = decoder.seek(frame_position) {
-                                eprintln!("[AudioStreamingManager] Seek error: {:?}", e);
+                    }
+                    StreamingCommand::Pause => {
+                        playing = false;
+                        let mut state_lock = state.lock().unwrap();
+                        *state_lock = StreamingState::Paused;
+                    }
+                    StreamingCommand::Stop => {
+                        break;
+                    }
+                    StreamingCommand::SeekSeconds(seconds) => {
+                        let frame_position = (seconds * spec.sample_rate as f64) as u64;
+                        if let Err(e) = decoder.seek(frame_position) {
+                            eprintln!("[AudioStreamingManager] Seek error: {:?}", e);
+                        } else {
+                            // Clear buffer after seek
+                            audio_buffer.clear();
+                            buffered_frames = 0;
+                            pre_buffered = false;
+                            let mut state_lock = state.lock().unwrap();
+                            *state_lock = if playing {
+                                StreamingState::Playing
                             } else {
-                                // Clear buffer after seek
-                                audio_buffer.clear();
-                                buffered_frames = 0;
-                                pre_buffered = false;
-                                let mut state_lock = state.lock().unwrap();
-                                *state_lock = if playing {
-                                    StreamingState::Playing
-                                } else {
-                                    StreamingState::Paused
-                                };
-                            }
+                                StreamingState::Paused
+                            };
                         }
                     }
                 }
@@ -462,13 +464,10 @@ impl AudioStreamingManager {
                 match decoder.decode_next() {
                     Ok(Some(decoded_audio)) => {
                         // Feed samples to loudness monitor if enabled
-                        if let Some(ref monitor) = loudness_monitor {
-                            if let Err(e) = monitor.add_frames(&decoded_audio.samples) {
-                                eprintln!(
-                                    "[AudioStreamingManager] Loudness monitoring error: {}",
-                                    e
-                                );
-                            }
+                        if let Some(ref monitor) = loudness_monitor
+                            && let Err(e) = monitor.add_frames(&decoded_audio.samples)
+                        {
+                            eprintln!("[AudioStreamingManager] Loudness monitoring error: {}", e);
                         }
 
                         let pcm_bytes = decoded_audio.to_bytes_f32_le();
@@ -598,13 +597,13 @@ impl AudioStreamingManager {
                     match decoder.decode_next() {
                         Ok(Some(decoded_audio)) => {
                             // Feed samples to loudness monitor if enabled
-                            if let Some(ref monitor) = loudness_monitor {
-                                if let Err(e) = monitor.add_frames(&decoded_audio.samples) {
-                                    eprintln!(
-                                        "[AudioStreamingManager] Loudness monitoring error: {}",
-                                        e
-                                    );
-                                }
+                            if let Some(ref monitor) = loudness_monitor
+                                && let Err(e) = monitor.add_frames(&decoded_audio.samples)
+                            {
+                                eprintln!(
+                                    "[AudioStreamingManager] Loudness monitoring error: {}",
+                                    e
+                                );
                             }
 
                             let pcm_bytes = decoded_audio.to_bytes_f32_le();

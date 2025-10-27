@@ -69,24 +69,16 @@ pub fn analyze_file<P: AsRef<Path>>(path: P) -> AudioDecoderResult<ReplayGainInf
     })?;
 
     // Process audio in chunks
-    loop {
-        match decoder.decode_next()? {
-            Some(decoded) => {
-                if decoded.is_empty() {
-                    continue;
-                }
-
-                // Add samples to EBU R128 analyzer
-                // Samples are already in f32 format normalized to [-1.0, 1.0]
-                ebur128.add_frames_f32(&decoded.samples).map_err(|e| {
-                    AudioDecoderError::DecodingFailed(format!(
-                        "Failed to add frames to EBU R128: {:?}",
-                        e
-                    ))
-                })?;
-            }
-            None => break, // End of stream
+    while let Some(decoded) = decoder.decode_next()? {
+        if decoded.is_empty() {
+            continue;
         }
+
+        // Add samples to EBU R128 analyzer
+        // Samples are already in f32 format normalized to [-1.0, 1.0]
+        ebur128.add_frames_f32(&decoded.samples).map_err(|e| {
+            AudioDecoderError::DecodingFailed(format!("Failed to add frames to EBU R128: {:?}", e))
+        })?;
     }
 
     // Calculate global loudness

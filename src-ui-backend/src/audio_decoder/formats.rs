@@ -1,3 +1,4 @@
+use crate::audio_decoder::error::{AudioDecoderError, AudioDecoderResult};
 use std::fs::File;
 use std::path::Path;
 
@@ -10,8 +11,6 @@ use symphonia::core::meta::MetadataOptions;
 use symphonia::core::probe::{Hint, Probe};
 
 use crate::audio_decoder::decoder::{AudioDecoder, AudioSpec, DecodedAudio};
-use crate::audio_decoder::error::{AudioDecoderError, AudioDecoderResult};
-use crate::audio_decoder::formats::AudioFormat;
 
 /// Create a custom probe with all supported format readers registered
 fn create_probe() -> Probe {
@@ -121,10 +120,69 @@ impl SymphoniaDecoder {
         // and if that fails, decode the first packet.
         let channels_opt = codec_params.channels.map(|layout| layout.count() as u16);
 
-        let (final_format_reader, final_decoder, channels) = if channels_opt.is_none() {
-            // Need to probe for channels - create temporary decoder
-            let mut temp_decoder =
-                codec_registry
+        let (final_format_reader, final_decoder, channels) = match channels_opt {
+            None => {
+                // Need to probe for channels - create temporary decoder
+                let mut temp_decoder =
+                    codec_registry
+                        .make(&codec_params, &decoder_opts)
+                        .map_err(|e| {
+                            AudioDecoderError::UnsupportedFormat(format!(
+                                "Cannot create decoder for codec: {:?}",
+                                e
+                            ))
+                        })?;
+
+                // Decode first packet to get channel info
+                let mut detected_channels = None;
+                if let Ok(packet) = format_reader.next_packet()
+                    && packet.track_id() == track_id
+                    && let Ok(decoded) = temp_decoder.decode(&packet)
+                {
+                    detected_channels = Some(decoded.spec().channels.count() as u16);
+                }
+
+                // If we still don't have channel info, fail
+                let channels = detected_channels.ok_or_else(|| {
+                    AudioDecoderError::InvalidFile(
+                        "No channel information found even after decoding first packet".to_string(),
+                    )
+                })?;
+
+                // Reset the format reader by creating a new one
+                let file = File::open(path)?;
+                let media_source = MediaSourceStream::new(Box::new(file), Default::default());
+                let mut hint = Hint::new();
+                if let Some(extension) = path.extension().and_then(|ext| ext.to_str()) {
+                    hint.with_extension(extension);
+                }
+                let probe = create_probe();
+                let probe_result = probe
+                    .format(
+                        &hint,
+                        media_source,
+                        &FormatOptions::default(),
+                        &MetadataOptions::default(),
+                    )
+                    .map_err(AudioDecoderError::from)?;
+                let new_format_reader = probe_result.format;
+
+                // Recreate decoder for fresh state
+                let new_decoder =
+                    codec_registry
+                        .make(&codec_params, &decoder_opts)
+                        .map_err(|e| {
+                            AudioDecoderError::UnsupportedFormat(format!(
+                                "Cannot create decoder for codec: {:?}",
+                                e
+                            ))
+                        })?;
+
+                (new_format_reader, new_decoder, channels)
+            }
+            Some(channels) => {
+                // Channel info is available, use as is
+                let decoder = codec_registry
                     .make(&codec_params, &decoder_opts)
                     .map_err(|e| {
                         AudioDecoderError::UnsupportedFormat(format!(
@@ -132,70 +190,8 @@ impl SymphoniaDecoder {
                             e
                         ))
                     })?;
-
-            // Decode first packet to get channel info
-            let mut detected_channels = None;
-            match format_reader.next_packet() {
-                Ok(packet) => {
-                    if packet.track_id() == track_id {
-                        match temp_decoder.decode(&packet) {
-                            Ok(decoded) => {
-                                detected_channels = Some(decoded.spec().channels.count() as u16);
-                            }
-                            Err(_) => {}
-                        }
-                    }
-                }
-                Err(_) => {}
+                (format_reader, decoder, channels)
             }
-
-            // If we still don't have channel info, fail
-            let channels = detected_channels.ok_or_else(|| {
-                AudioDecoderError::InvalidFile(
-                    "No channel information found even after decoding first packet".to_string(),
-                )
-            })?;
-
-            // Reset the format reader by creating a new one
-            let file = File::open(path)?;
-            let media_source = MediaSourceStream::new(Box::new(file), Default::default());
-            let mut hint = Hint::new();
-            if let Some(extension) = path.extension().and_then(|ext| ext.to_str()) {
-                hint.with_extension(extension);
-            }
-            let probe = create_probe();
-            let probe_result = probe
-                .format(
-                    &hint,
-                    media_source,
-                    &FormatOptions::default(),
-                    &MetadataOptions::default(),
-                )
-                .map_err(|e| AudioDecoderError::from(e))?;
-            let new_format_reader = probe_result.format;
-
-            // Recreate decoder for fresh state
-            let new_decoder = codec_registry
-                .make(&codec_params, &decoder_opts)
-                .map_err(|e| {
-                    AudioDecoderError::UnsupportedFormat(format!(
-                        "Cannot create decoder for codec: {:?}",
-                        e
-                    ))
-                })?;
-
-            (new_format_reader, new_decoder, channels)
-        } else {
-            // Channel info is available, use as is
-            let decoder = codec_registry
-                .make(&codec_params, &decoder_opts)
-                .map_err(|e| {
-                    AudioDecoderError::UnsupportedFormat(format!(
-                        "Cannot create decoder for codec: {:?}",
-                        e
-                    ))
-                })?;
-            (format_reader, decoder, channels_opt.unwrap())
         };
 
         let bits_per_sample = codec_params.bits_per_sample.unwrap_or(16);
@@ -379,13 +375,12 @@ impl AudioDecoder for SymphoniaDecoder {
 
     fn seek(&mut self, frame_position: u64) -> AudioDecoderResult<()> {
         // Use Symphonia's seek functionality
-        let timestamp = frame_position;
-
+        // frame_position is in PCM frames (track time-base). Use TimeStamp, not Time-in-seconds.
         match self.format_reader.seek(
             symphonia::core::formats::SeekMode::Accurate,
-            symphonia::core::formats::SeekTo::Time {
-                time: symphonia::core::units::Time::from(timestamp),
-                track_id: Some(self.track_id),
+            symphonia::core::formats::SeekTo::TimeStamp {
+                ts: frame_position,
+                track_id: self.track_id,
             },
         ) {
             Ok(seeked) => {
@@ -412,7 +407,7 @@ impl AudioDecoder for SymphoniaDecoder {
 }
 
 #[cfg(test)]
-mod tests {
+mod tests_decoder {
     use super::*;
 
     #[test]
@@ -448,4 +443,232 @@ mod tests {
         // Add more format tests...
     }
     */
+}
+
+/// Supported audio formats
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AudioFormat {
+    Flac,
+    Mp3,
+    Aac,
+    Wav,
+    Vorbis,
+    Aiff,
+}
+
+impl AudioFormat {
+    /// Detect audio format from file extension
+    pub fn from_path<P: AsRef<Path>>(path: P) -> AudioDecoderResult<Self> {
+        let path = path.as_ref();
+        let extension = path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .map(|ext| ext.to_lowercase())
+            .ok_or_else(|| {
+                AudioDecoderError::UnsupportedFormat("No file extension found".to_string())
+            })?;
+
+        match extension.as_str() {
+            "flac" => Ok(AudioFormat::Flac),
+            "mp3" => Ok(AudioFormat::Mp3),
+            // AAC in MP4/M4A containers and raw ADTS AAC (.aac) are both supported
+            "aac" | "m4a" | "mp4" => Ok(AudioFormat::Aac),
+            "wav" => Ok(AudioFormat::Wav),
+            "ogg" | "oga" => Ok(AudioFormat::Vorbis),
+            "aiff" | "aif" => Ok(AudioFormat::Aiff),
+            _ => Err(AudioDecoderError::UnsupportedFormat(format!(
+                "Unsupported file extension: {}",
+                extension
+            ))),
+        }
+    }
+
+    /// Get the format name as a string
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            AudioFormat::Flac => "FLAC",
+            AudioFormat::Mp3 => "MP3",
+            AudioFormat::Aac => "AAC",
+            AudioFormat::Wav => "WAV",
+            AudioFormat::Vorbis => "Vorbis",
+            AudioFormat::Aiff => "AIFF",
+        }
+    }
+
+    /// Get the file extension for this format
+    pub fn extension(&self) -> &'static str {
+        match self {
+            AudioFormat::Flac => "flac",
+            AudioFormat::Mp3 => "mp3",
+            AudioFormat::Aac => "m4a",
+            AudioFormat::Wav => "wav",
+            AudioFormat::Vorbis => "ogg",
+            AudioFormat::Aiff => "aiff",
+        }
+    }
+
+    /// Check if the format is lossless
+    pub fn is_lossless(&self) -> bool {
+        match self {
+            AudioFormat::Flac => true,
+            AudioFormat::Mp3 => false,
+            AudioFormat::Aac => false, // Usually not, could be ALAC but we'll assume lossy
+            AudioFormat::Wav => true,
+            AudioFormat::Vorbis => false,
+            AudioFormat::Aiff => true,
+        }
+    }
+
+    /// Get all supported formats
+    pub fn supported_formats() -> Vec<AudioFormat> {
+        vec![
+            AudioFormat::Flac,
+            AudioFormat::Mp3,
+            AudioFormat::Aac,
+            AudioFormat::Wav,
+            AudioFormat::Vorbis,
+            AudioFormat::Aiff,
+        ]
+    }
+
+    /// Get a user-friendly description of supported formats
+    pub fn supported_formats_string() -> String {
+        let formats: Vec<&str> = Self::supported_formats()
+            .iter()
+            .map(|f| f.as_str())
+            .collect();
+        formats.join(", ")
+    }
+}
+
+impl std::fmt::Display for AudioFormat {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    #[test]
+    fn test_format_detection() {
+        // Test FLAC
+        assert_eq!(
+            AudioFormat::from_path("test.flac").unwrap(),
+            AudioFormat::Flac
+        );
+        assert_eq!(
+            AudioFormat::from_path("test.FLAC").unwrap(),
+            AudioFormat::Flac
+        );
+
+        // Test MP3
+        assert_eq!(
+            AudioFormat::from_path("test.mp3").unwrap(),
+            AudioFormat::Mp3
+        );
+
+        // Test AAC/M4A
+        assert_eq!(
+            AudioFormat::from_path("test.aac").unwrap(),
+            AudioFormat::Aac
+        );
+        assert_eq!(
+            AudioFormat::from_path("test.m4a").unwrap(),
+            AudioFormat::Aac
+        );
+
+        // Test WAV
+        assert_eq!(
+            AudioFormat::from_path("test.wav").unwrap(),
+            AudioFormat::Wav
+        );
+
+        // Test Vorbis/OGG
+        assert_eq!(
+            AudioFormat::from_path("test.ogg").unwrap(),
+            AudioFormat::Vorbis
+        );
+
+        // Test AIFF
+        assert_eq!(
+            AudioFormat::from_path("test.aiff").unwrap(),
+            AudioFormat::Aiff
+        );
+        assert_eq!(
+            AudioFormat::from_path("test.aif").unwrap(),
+            AudioFormat::Aiff
+        );
+
+        // Test with path
+        assert_eq!(
+            AudioFormat::from_path(PathBuf::from("path/to/music.flac")).unwrap(),
+            AudioFormat::Flac
+        );
+
+        // Test unsupported format
+        assert!(AudioFormat::from_path("test.xyz").is_err());
+        assert!(AudioFormat::from_path("test").is_err());
+    }
+
+    #[test]
+    fn test_format_properties() {
+        // Test FLAC
+        let flac = AudioFormat::Flac;
+        assert_eq!(flac.as_str(), "FLAC");
+        assert_eq!(flac.extension(), "flac");
+        assert!(flac.is_lossless());
+
+        // Test MP3
+        let mp3 = AudioFormat::Mp3;
+        assert_eq!(mp3.as_str(), "MP3");
+        assert_eq!(mp3.extension(), "mp3");
+        assert!(!mp3.is_lossless());
+
+        // Test AAC
+        let aac = AudioFormat::Aac;
+        assert_eq!(aac.as_str(), "AAC");
+        assert_eq!(aac.extension(), "m4a");
+        assert!(!aac.is_lossless());
+
+        // Test WAV
+        let wav = AudioFormat::Wav;
+        assert_eq!(wav.as_str(), "WAV");
+        assert_eq!(wav.extension(), "wav");
+        assert!(wav.is_lossless());
+
+        // Test Vorbis
+        let vorbis = AudioFormat::Vorbis;
+        assert_eq!(vorbis.as_str(), "Vorbis");
+        assert_eq!(vorbis.extension(), "ogg");
+        assert!(!vorbis.is_lossless());
+
+        // Test AIFF
+        let aiff = AudioFormat::Aiff;
+        assert_eq!(aiff.as_str(), "AIFF");
+        assert_eq!(aiff.extension(), "aiff");
+        assert!(aiff.is_lossless());
+    }
+
+    #[test]
+    fn test_supported_formats() {
+        let formats = AudioFormat::supported_formats();
+        assert_eq!(formats.len(), 6);
+        assert!(formats.contains(&AudioFormat::Flac));
+        assert!(formats.contains(&AudioFormat::Mp3));
+        assert!(formats.contains(&AudioFormat::Aac));
+        assert!(formats.contains(&AudioFormat::Wav));
+        assert!(formats.contains(&AudioFormat::Vorbis));
+        assert!(formats.contains(&AudioFormat::Aiff));
+
+        let formats_string = AudioFormat::supported_formats_string();
+        assert!(formats_string.contains("FLAC"));
+        assert!(formats_string.contains("MP3"));
+        assert!(formats_string.contains("AAC"));
+        assert!(formats_string.contains("WAV"));
+        assert!(formats_string.contains("Vorbis"));
+        assert!(formats_string.contains("AIFF"));
+    }
 }

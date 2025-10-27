@@ -1,5 +1,6 @@
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
+use serde_yaml::{Mapping, Value};
 use std::fs;
 use std::io::Write;
 use std::net::TcpListener;
@@ -78,6 +79,51 @@ pub type CamillaResult<T> = Result<T, CamillaError>;
 // Filter Parameters
 // ============================================================================
 
+/// Loudness compensation settings (CamillaDSP Loudness filter)
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct LoudnessCompensation {
+    pub reference_level: f64, // -100 .. +20
+    pub low_boost: f64,       // 0 .. 20
+    pub high_boost: f64,      // 0 .. 20
+    #[serde(default)]
+    pub attenuate_mid: bool,
+}
+
+impl LoudnessCompensation {
+    pub fn new(reference_level: f64, low_boost: f64, high_boost: f64) -> CamillaResult<Self> {
+        let lc = Self {
+            reference_level,
+            low_boost,
+            high_boost,
+            attenuate_mid: false,
+        };
+        lc.validate()?;
+        Ok(lc)
+    }
+
+    pub fn validate(&self) -> CamillaResult<()> {
+        if !(self.reference_level >= -100.0 && self.reference_level <= 20.0) {
+            return Err(CamillaError::InvalidConfiguration(format!(
+                "reference_level out of range (-100..20): {}",
+                self.reference_level
+            )));
+        }
+        if !(self.low_boost >= 0.0 && self.low_boost <= 20.0) {
+            return Err(CamillaError::InvalidConfiguration(format!(
+                "low_boost out of range (0..20): {}",
+                self.low_boost
+            )));
+        }
+        if !(self.high_boost >= 0.0 && self.high_boost <= 20.0) {
+            return Err(CamillaError::InvalidConfiguration(format!(
+                "high_boost out of range (0..20): {}",
+                self.high_boost
+            )));
+        }
+        Ok(())
+    }
+}
+
 /// Parametric EQ filter parameters (Biquad)
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct FilterParams {
@@ -134,19 +180,14 @@ impl FilterParams {
 // ============================================================================
 
 /// Current state of the audio stream
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub enum AudioState {
+    #[default]
     Idle,
     Playing,
     Paused,
     Recording,
     Error,
-}
-
-impl Default for AudioState {
-    fn default() -> Self {
-        AudioState::Idle
-    }
 }
 
 /// Complete audio stream state including playback/recording info
@@ -516,7 +557,7 @@ impl CamillaDSPProcess {
         let config_path = self
             .config_path
             .clone()
-            .ok_or_else(|| CamillaError::ProcessNotRunning)?;
+            .ok_or(CamillaError::ProcessNotRunning)?;
 
         // Stop the current process
         self.stop()?;
@@ -545,10 +586,10 @@ fn find_available_port() -> Option<u16> {
 
     for i in 0..200u16 {
         let port = 1025 + ((start + i) % (65535 - 1025));
-        if let Ok(listener) = TcpListener::bind(("127.0.0.1", port as u16)) {
+        if let Ok(listener) = TcpListener::bind(("127.0.0.1", port)) {
             // Successfully bound; release immediately and use this port
             drop(listener);
-            return Some(port as u16);
+            return Some(port);
         }
     }
     None
@@ -912,6 +953,7 @@ impl AudioManager {
     }
 
     /// Start streaming playback from decoded audio (FLAC, MP3, etc.)
+    #[allow(clippy::too_many_arguments)]
     pub async fn start_streaming_playback(
         &self,
         audio_spec: crate::audio_decoder::decoder::AudioSpec,
@@ -919,6 +961,7 @@ impl AudioManager {
         filters: Vec<FilterParams>,
         channel_map_mode: ChannelMapMode,
         output_map: Option<Vec<u16>>,
+        loudness: Option<LoudnessCompensation>,
     ) -> CamillaResult<()> {
         println!(
             "[AudioManager] Starting streaming playback: {}Hz, {}ch, {} filters",
@@ -951,6 +994,7 @@ impl AudioManager {
             &filters,
             channel_map_mode,
             output_map.as_deref(),
+            loudness.as_ref(),
         )?;
 
         // Write config to temp file
@@ -1004,6 +1048,7 @@ impl AudioManager {
     }
 
     /// Start playback with the given audio file and filters
+    #[allow(clippy::too_many_arguments)]
     pub async fn start_playback(
         &self,
         audio_file: PathBuf,
@@ -1013,6 +1058,7 @@ impl AudioManager {
         filters: Vec<FilterParams>,
         channel_map_mode: ChannelMapMode,
         output_map: Option<Vec<u16>>,
+        loudness: Option<LoudnessCompensation>,
     ) -> CamillaResult<()> {
         println!(
             "[AudioManager] Starting playback: {:?} ({}Hz, {}ch, {} filters)",
@@ -1054,6 +1100,7 @@ impl AudioManager {
             &filters,
             channel_map_mode,
             output_map.as_deref(),
+            loudness.as_ref(),
         )?;
 
         // Write config to temp file
@@ -1183,7 +1230,7 @@ impl AudioManager {
             let file = state
                 .current_file
                 .clone()
-                .ok_or_else(|| CamillaError::ProcessNotRunning)?;
+                .ok_or(CamillaError::ProcessNotRunning)?;
 
             (
                 file,
@@ -1204,6 +1251,7 @@ impl AudioManager {
             &filters,
             channel_map_mode,
             playback_channel_map.as_deref(),
+            None,
         )?;
 
         let config_yaml = serde_yaml::to_string(&config)?;
@@ -1352,6 +1400,7 @@ pub fn generate_streaming_config(
     filters: &[FilterParams],
     map_mode: ChannelMapMode,
     output_map: Option<&[u16]>,
+    loudness: Option<&LoudnessCompensation>,
 ) -> CamillaResult<CamillaDSPConfig> {
     // Validate all filters
     for filter in filters {
@@ -1401,7 +1450,7 @@ pub fn generate_streaming_config(
 
     // Determine total number of output channels required
     let mixer_out_channels: u16 = if let Some(ref outs) = effective_output_map {
-        outs.iter().copied().max().unwrap_or(1) as u16 + 1
+        outs.iter().copied().max().unwrap_or(1) + 1
     } else {
         channels
     };
@@ -1417,8 +1466,11 @@ pub fn generate_streaming_config(
 
     // Generate resampler config if needed
     let resampler_config = if needs_resampling {
+        // CamillaDSP v3 expects explicit parameters per resampler type.
+        // Use AsyncPoly with linear interpolation for broad compatibility.
         let resampler_yaml = r#"
-            type: Synchronous
+            type: AsyncPoly
+            interpolation: Linear
         "#;
         Some(
             serde_yaml::from_str::<serde_yaml::Value>(resampler_yaml).map_err(|e| {
@@ -1438,27 +1490,80 @@ pub fn generate_streaming_config(
         resampler: resampler_config,
     };
 
-    // Generate filters section
-    let filters_section = if !filters.is_empty() {
-        Some(generate_filters_yaml(filters)?)
-    } else {
-        None
+    // Generate filters section, optionally including Loudness filter
+    let filters_section = {
+        let mut fm = serde_yaml::Mapping::new();
+
+        if let Some(lc) = loudness {
+            let loud_yaml = format!(
+                r#"
+                loudness:
+                  type: Loudness
+                  parameters:
+                    fader: Main
+                    reference_level: {ref_level}
+                    high_boost: {high}
+                    low_boost: {low}
+                    attenuate_mid: {atten}
+                "#,
+                ref_level = lc.reference_level,
+                high = lc.high_boost,
+                low = lc.low_boost,
+                atten = if lc.attenuate_mid { "true" } else { "false" }
+            );
+            let v: serde_yaml::Value = serde_yaml::from_str(&loud_yaml).map_err(|e| {
+                CamillaError::ConfigGenerationFailed(format!(
+                    "Failed to generate loudness filter: {}",
+                    e
+                ))
+            })?;
+            if let serde_yaml::Value::Mapping(m) = v {
+                for (k, val) in m {
+                    fm.insert(k, val);
+                }
+            }
+        }
+
+        if !filters.is_empty() {
+            let peq_val = generate_filters_yaml(filters)?;
+            if let serde_yaml::Value::Mapping(m) = peq_val {
+                for (k, val) in m {
+                    fm.insert(k, val);
+                }
+            }
+        }
+
+        if fm.is_empty() {
+            None
+        } else {
+            Some(serde_yaml::Value::Mapping(fm))
+        }
     };
 
-    // Determine mixer output channel count and destinations
-    let (mixer_out_channels, left_dest, right_dest) = if let Some(ref outs) = effective_output_map {
-        let max_idx = outs.iter().copied().max().unwrap_or(1) as u16;
-        (max_idx + 1, outs[0], outs[1])
-    } else {
-        (2u16, 0u16, 1u16)
+    // Build destination map per input channel
+    let dest_map: Vec<u16> = {
+        let mut base: Vec<u16> = (0..channels).collect();
+        if let Some(ref outs) = effective_output_map {
+            if outs.len() as u16 >= channels {
+                let start = outs.len() - channels as usize;
+                base = outs[start..].to_vec();
+            }
+        }
+        // Optional swap for first two channels
+        if map_mode == ChannelMapMode::Swap && channels >= 2 {
+            let mut swapped = base.clone();
+            swapped.swap(0, 1);
+            swapped
+        } else {
+            base
+        }
     };
 
-    // Generate mixers section (stereo routing)
-    let mixers_section = Some(generate_stereo_mixer_yaml(
-        map_mode,
+    // Generate mixers section (matrix routing)
+    let mixers_section = Some(generate_matrix_mixer_yaml(
+        channels,
         mixer_out_channels,
-        left_dest,
-        right_dest,
+        &dest_map,
     ));
 
     // Generate pipeline - always include mixer; add filters and resampler if needed
@@ -1466,6 +1571,7 @@ pub fn generate_streaming_config(
         mixer_out_channels,
         filters,
         needs_resampling,
+        loudness.is_some(),
     ));
 
     Ok(CamillaDSPConfig {
@@ -1485,6 +1591,7 @@ pub fn generate_playback_config(
     filters: &[FilterParams],
     map_mode: ChannelMapMode,
     output_map: Option<&[u16]>,
+    loudness: Option<&LoudnessCompensation>,
 ) -> CamillaResult<CamillaDSPConfig> {
     // Validate all filters
     for filter in filters {
@@ -1492,29 +1599,31 @@ pub fn generate_playback_config(
     }
 
     // Create capture device (file input)
-    // Convert to absolute path so CamillaDSP can find the file
-    let absolute_path = audio_file.canonicalize().map_err(|e| {
-        CamillaError::ConfigGenerationFailed(format!(
-            "Failed to resolve audio file path {:?}: {}",
-            audio_file, e
-        ))
-    })?;
+    // Prefer absolute path if the file exists; otherwise, use the provided path without failing
+    let filename_str = if audio_file.exists() {
+        audio_file
+            .canonicalize()
+            .map_err(|e| {
+                CamillaError::ConfigGenerationFailed(format!(
+                    "Failed to resolve audio file path {:?}: {}",
+                    audio_file, e
+                ))
+            })?
+            .to_str()
+            .ok_or_else(|| {
+                CamillaError::ConfigGenerationFailed("Invalid audio file path encoding".to_string())
+            })?
+            .to_string()
+    } else {
+        audio_file.to_string_lossy().to_string()
+    };
 
     let capture = CaptureDevice {
-        device_type: "WavFile".to_string(),
+        device_type: "File".to_string(),
         device: None,
-        filename: Some(
-            absolute_path
-                .to_str()
-                .ok_or_else(|| {
-                    CamillaError::ConfigGenerationFailed(
-                        "Invalid audio file path encoding".to_string(),
-                    )
-                })?
-                .to_string(),
-        ),
-        channels: None, // WavFile infers channels from file
-        format: None,   // WavFile infers format from file
+        filename: Some(filename_str),
+        channels: None, // File input infers channels from file
+        format: None,   // File input infers format from file
         channel_map: None,
     };
 
@@ -1539,7 +1648,7 @@ pub fn generate_playback_config(
 
     // Determine total number of output channels required
     let mixer_out_channels: u16 = if let Some(ref outs) = effective_output_map {
-        outs.iter().copied().max().unwrap_or(1) as u16 + 1
+        outs.iter().copied().max().unwrap_or(1) + 1
     } else {
         channels
     };
@@ -1567,8 +1676,11 @@ pub fn generate_playback_config(
 
     // Generate resampler config if needed
     let resampler_config = if needs_resampling {
+        // CamillaDSP v3 expects explicit parameters per resampler type.
+        // Use AsyncPoly with linear interpolation for broad compatibility.
         let resampler_yaml = r#"
-            type: Synchronous
+            type: AsyncPoly
+            interpolation: Linear
         "#;
         Some(
             serde_yaml::from_str::<serde_yaml::Value>(resampler_yaml).map_err(|e| {
@@ -1580,7 +1692,8 @@ pub fn generate_playback_config(
     };
 
     let devices = DeviceConfig {
-        samplerate: device_sample_rate, // Use device's native rate (output side)
+        // Use the requested playback sample rate in the config; add a resampler if needed
+        samplerate: sample_rate,
         chunksize: 1024,
         capture: Some(capture),
         playback,
@@ -1588,34 +1701,87 @@ pub fn generate_playback_config(
         resampler: resampler_config,
     };
 
-    // Generate filters section
-    let filters_section = if !filters.is_empty() {
-        Some(generate_filters_yaml(filters)?)
-    } else {
-        None
+    // Generate filters section, optionally including Loudness filter
+    let filters_section = {
+        let mut fm = serde_yaml::Mapping::new();
+
+        if let Some(lc) = loudness {
+            let loud_yaml = format!(
+                r#"
+                loudness:
+                  type: Loudness
+                  parameters:
+                    fader: Main
+                    reference_level: {ref_level}
+                    high_boost: {high}
+                    low_boost: {low}
+                    attenuate_mid: {atten}
+                "#,
+                ref_level = lc.reference_level,
+                high = lc.high_boost,
+                low = lc.low_boost,
+                atten = if lc.attenuate_mid { "true" } else { "false" }
+            );
+            let v: serde_yaml::Value = serde_yaml::from_str(&loud_yaml).map_err(|e| {
+                CamillaError::ConfigGenerationFailed(format!(
+                    "Failed to generate loudness filter: {}",
+                    e
+                ))
+            })?;
+            if let serde_yaml::Value::Mapping(m) = v {
+                for (k, val) in m {
+                    fm.insert(k, val);
+                }
+            }
+        }
+
+        if !filters.is_empty() {
+            let peq_val = generate_filters_yaml(filters)?;
+            if let serde_yaml::Value::Mapping(m) = peq_val {
+                for (k, val) in m {
+                    fm.insert(k, val);
+                }
+            }
+        }
+
+        if fm.is_empty() {
+            None
+        } else {
+            Some(serde_yaml::Value::Mapping(fm))
+        }
     };
 
-    // Determine mixer output channel count and destinations
-    let (mixer_out_channels, left_dest, right_dest) = if let Some(ref outs) = effective_output_map {
-        let max_idx = outs.iter().copied().max().unwrap_or(1) as u16;
-        (max_idx + 1, outs[0], outs[1])
-    } else {
-        (2u16, 0u16, 1u16)
+    // Build destination map per input channel
+    let dest_map: Vec<u16> = {
+        let mut base: Vec<u16> = (0..channels).collect();
+        if let Some(ref outs) = effective_output_map {
+            if outs.len() as u16 >= channels {
+                let start = outs.len() - channels as usize;
+                base = outs[start..].to_vec();
+            }
+        }
+        if map_mode == ChannelMapMode::Swap && channels >= 2 {
+            let mut swapped = base.clone();
+            swapped.swap(0, 1);
+            swapped
+        } else {
+            base
+        }
     };
 
-    // Generate mixers section (stereo routing)
-    let mixers_section = Some(generate_stereo_mixer_yaml(
-        map_mode,
+    // Generate mixers section (matrix routing)
+    let mixers_section = Some(generate_matrix_mixer_yaml(
+        channels,
         mixer_out_channels,
-        left_dest,
-        right_dest,
+        &dest_map,
     ));
 
-    // Generate pipeline - always include mixer; add filters and resampler if needed
+    // Always include pipeline with at least the mixer
     let pipeline = Some(generate_pipeline(
         mixer_out_channels,
         filters,
         needs_resampling,
+        loudness.is_some(),
     ));
 
     Ok(CamillaDSPConfig {
@@ -1628,7 +1794,7 @@ pub fn generate_playback_config(
 
 /// Generate a CamillaDSP config for recording
 pub fn generate_recording_config(
-    output_file: &PathBuf,
+    output_file: &std::path::Path,
     input_device: Option<&str>,
     sample_rate: u32,
     channels: u16,
@@ -1657,13 +1823,13 @@ pub fn generate_recording_config(
         device: device_name,
         filename: None,
         channels: Some(channels), // CoreAudio needs explicit channel count
-        format: Some("FLOAT32LE".to_string()),
+        format: None,             // Let backend pick a compatible native format
         channel_map: effective_input_map,
     };
 
     // Create playback device (file output)
     let playback = PlaybackDevice {
-        device_type: "WavFile".to_string(),
+        device_type: "File".to_string(),
         device: None,
         filename: Some(
             output_file
@@ -1675,7 +1841,7 @@ pub fn generate_recording_config(
                 })?
                 .to_string(),
         ),
-        channels: Some(channels), // Specify channels for WAV output
+        channels: Some(channels), // Specify channels for file output
         format: Some("FLOAT32LE".to_string()),
         channel_map: None,
     };
@@ -1806,85 +1972,95 @@ fn generate_filters_yaml(filters: &[FilterParams]) -> CamillaResult<serde_yaml::
 }
 
 /// Generate a stereo mixer configuration
-fn generate_stereo_mixer_yaml(
-    map_mode: ChannelMapMode,
+/// Generate a generic N-in / M-out matrix mixer configuration
+/// mapping[i] gives the destination output channel index for input channel i
+fn generate_matrix_mixer_yaml(
+    in_channels: u16,
     out_channels: u16,
-    left_dest: u16,
-    right_dest: u16,
+    mapping: &[u16],
 ) -> serde_yaml::Value {
-    let (l_src, r_src) = match map_mode {
-        ChannelMapMode::Normal => (0, 1),
-        ChannelMapMode::Swap => (1, 0),
-    };
-    // Build YAML dynamically
-    let yaml = format!(
-        r#"
-        stereo_mixer:
-          channels:
-            in: 2
-            out: {out}
-          mapping:
-            - dest: {ld}
-              sources:
-                - channel: {ls}
-                  gain: 0
-                  inverted: false
-            - dest: {rd}
-              sources:
-                - channel: {rs}
-                  gain: 0
-                  inverted: false
-        "#,
-        out = out_channels,
-        ld = left_dest,
-        ls = l_src,
-        rd = right_dest,
-        rs = r_src
-    );
-    serde_yaml::from_str::<serde_yaml::Value>(&yaml).unwrap()
+    // Build YAML mapping entries
+    // For each destination output channel, collect sources referencing it
+    let mut dest_sources: Vec<Vec<u16>> = vec![Vec::new(); out_channels as usize];
+    for (src, &dst) in mapping.iter().enumerate() {
+        if (dst as usize) < dest_sources.len() {
+            dest_sources[dst as usize].push(src as u16);
+        }
+    }
+
+    // Compose YAML string manually to keep dependency surface small
+    let mut s = String::new();
+    s.push_str("matrix_mixer:\n");
+    s.push_str("  channels:\n");
+    s.push_str(&format!("    in: {}\n", in_channels));
+    s.push_str(&format!("    out: {}\n", out_channels));
+    s.push_str("  mapping:\n");
+
+    for (dest, sources) in dest_sources.iter().enumerate() {
+        s.push_str(&format!("    - dest: {}\n", dest));
+        s.push_str("      sources:\n");
+        if sources.is_empty() {
+            // Leave empty sources list (silence on this destination)
+            s.push_str("        []\n");
+        } else {
+            for &src in sources {
+                s.push_str(&format!(
+                    "        - channel: {}\n          gain: 0\n          inverted: false\n",
+                    src
+                ));
+            }
+        }
+    }
+
+    serde_yaml::from_str::<serde_yaml::Value>(&s).unwrap()
 }
 
 /// Generate the pipeline
 /// Note: Resampler is NOT added to pipeline when using devices.resampler - it's automatic
 fn generate_pipeline(
-    channels: u16,
+    _channels: u16,
     filters: &[FilterParams],
     _needs_resampling: bool,
+    include_loudness: bool,
 ) -> Vec<serde_yaml::Value> {
-    use serde_yaml::{Mapping, Number, Value};
-
     let mut pipeline: Vec<Value> = Vec::new();
 
     // Always add mixer with singular `name` as required by CamillaDSP v3
     let mut mixer_map = Mapping::new();
-    mixer_map.insert(Value::String("type".to_string()), Value::String("Mixer".to_string()));
+    mixer_map.insert(
+        Value::String("type".to_string()),
+        Value::String("Mixer".to_string()),
+    );
     mixer_map.insert(
         Value::String("name".to_string()),
-        Value::String("stereo_mixer".to_string()),
+        Value::String("matrix_mixer".to_string()),
     );
     pipeline.push(Value::Mapping(mixer_map));
 
-    // Add all filters for every channel, preserving order
-    if !filters.is_empty() {
-        for (idx, _filter) in filters.iter().enumerate() {
-            let filter_name = format!("peq{}", idx + 1);
-            for ch in 0..channels {
-                let mut filter_map = Mapping::new();
-                filter_map.insert(
-                    Value::String("type".to_string()),
-                    Value::String("Filter".to_string()),
-                );
-                filter_map.insert(
-                    Value::String("channel".to_string()),
-                    Value::Number(Number::from(ch as u64)),
-                );
-                filter_map.insert(
-                    Value::String("name".to_string()),
-                    Value::String(filter_name.clone()),
-                );
-                pipeline.push(Value::Mapping(filter_map));
-            }
-        }
+    let mut filter_names: Vec<Value> = Vec::new();
+
+    // Optional Loudness filter
+    if include_loudness {
+        filter_names.push(Value::String("loudness".to_string()));
+    }
+
+    // Add all PEQ filters
+    for (idx, _filter) in filters.iter().enumerate() {
+        filter_names.push(Value::String(format!("peq{}", idx + 1)));
+    }
+
+    // Add a single Filter step with all the filter names
+    if !filter_names.is_empty() {
+        let mut filter_map = Mapping::new();
+        filter_map.insert(
+            Value::String("type".to_string()),
+            Value::String("Filter".to_string()),
+        );
+        filter_map.insert(
+            Value::String("names".to_string()),
+            Value::Sequence(filter_names),
+        );
+        pipeline.push(Value::Mapping(filter_map));
     }
 
     pipeline
@@ -1929,30 +2105,29 @@ pub fn write_config_to_file(config: &CamillaDSPConfig, path: &PathBuf) -> Camill
 pub fn find_camilladsp_binary() -> CamillaResult<PathBuf> {
     // Try bundled binary first (Tauri sidecar)
     // In production, the sidecar is in the same directory as the executable
-    if let Ok(exe_path) = std::env::current_exe() {
-        if let Some(exe_dir) = exe_path.parent() {
-            let bundled_name = if cfg!(windows) {
-                "camilladsp.exe"
-            } else {
-                "camilladsp"
-            };
+    if let Ok(exe_path) = std::env::current_exe()
+        && let Some(exe_dir) = exe_path.parent()
+    {
+        let bundled_name = if cfg!(windows) {
+            "camilladsp.exe"
+        } else {
+            "camilladsp"
+        };
 
-            let bundled_path = exe_dir.join(bundled_name);
-            if bundled_path.exists() {
-                println!("[CamillaDSP] Using bundled binary: {:?}", bundled_path);
-                return Ok(bundled_path);
-            }
+        let bundled_path = exe_dir.join(bundled_name);
+        if bundled_path.exists() {
+            println!("[CamillaDSP] Using bundled binary: {:?}", bundled_path);
+            return Ok(bundled_path);
+        }
 
-            // Also check for Tauri sidecar naming (with hash suffix)
-            let bundled_path_sidecar =
-                exe_dir.join(format!("camilladsp-{}", std::env::consts::ARCH));
-            if bundled_path_sidecar.exists() {
-                println!(
-                    "[CamillaDSP] Using bundled sidecar binary: {:?}",
-                    bundled_path_sidecar
-                );
-                return Ok(bundled_path_sidecar);
-            }
+        // Also check for Tauri sidecar naming (with hash suffix)
+        let bundled_path_sidecar = exe_dir.join(format!("camilladsp-{}", std::env::consts::ARCH));
+        if bundled_path_sidecar.exists() {
+            println!(
+                "[CamillaDSP] Using bundled sidecar binary: {:?}",
+                bundled_path_sidecar
+            );
+            return Ok(bundled_path_sidecar);
         }
     }
 
@@ -2078,6 +2253,8 @@ mod tests {
             2,
             &filters,
             ChannelMapMode::Normal,
+            None,
+            None,
         )
         .unwrap();
 
@@ -2101,23 +2278,27 @@ mod tests {
             2,
             &filters,
             ChannelMapMode::Normal,
+            None,
+            None,
         )
         .unwrap();
 
         assert_eq!(config.devices.samplerate, 44100);
         assert!(config.filters.is_none());
-        assert!(config.pipeline.is_none());
+        // Pipeline should include at least the mixer now
+        assert!(config.pipeline.is_some());
+        assert!(config.mixers.is_some());
     }
 
     #[test]
     fn test_generate_recording_config() {
         let output_file = PathBuf::from("/tmp/recording.wav");
-        let config = generate_recording_config(&output_file, None, 48000, 2).unwrap();
+        let config = generate_recording_config(&output_file, None, 48000, 2, None).unwrap();
 
         assert_eq!(config.devices.samplerate, 48000);
         assert_eq!(config.devices.playback.channels, Some(2));
         assert!(config.devices.capture.is_some());
-        assert_eq!(config.devices.playback.device_type, "WavFile");
+        assert_eq!(config.devices.playback.device_type, "File");
     }
 
     #[test]
@@ -2132,6 +2313,8 @@ mod tests {
             2,
             &filters,
             ChannelMapMode::Normal,
+            None,
+            None,
         )
         .unwrap();
         let yaml = serde_yaml::to_string(&config).unwrap();
@@ -2139,6 +2322,8 @@ mod tests {
         // Verify YAML contains expected fields
         assert!(yaml.contains("devices"));
         assert!(yaml.contains("samplerate: 48000"));
+        assert!(yaml.contains("mixers"));
+        assert!(yaml.contains("matrix_mixer"));
         assert!(yaml.contains("filters"));
         assert!(yaml.contains("peq1"));
     }
@@ -2217,6 +2402,14 @@ mod tests {
 
     #[test]
     fn test_response_deserialization() {
+        #[derive(serde::Deserialize)]
+        #[serde(untagged)]
+        enum CamillaResponse {
+            State { state: String },
+            Error { error: String },
+            SignalPeak { value: f64 },
+        }
+
         // Test State response
         let json = r#"{"state":"Playing"}"#;
         let response: CamillaResponse = serde_json::from_str(json).unwrap();
@@ -2282,5 +2475,17 @@ mod tests {
         let state = manager.get_state().unwrap();
         assert_eq!(state.state, AudioState::Error);
         assert_eq!(state.error_message, Some("Test error".to_string()));
+    }
+    #[test]
+    fn test_generate_matrix_mixer_16ch_identity() {
+        // Identity mapping for 16 channels
+        let in_ch = 16u16;
+        let out_ch = 16u16;
+        let mapping: Vec<u16> = (0..in_ch).collect();
+        let v = generate_matrix_mixer_yaml(in_ch, out_ch, &mapping);
+        let yaml = serde_yaml::to_string(&v).unwrap();
+        assert!(yaml.contains("matrix_mixer"));
+        assert!(yaml.contains("in: 16"));
+        assert!(yaml.contains("out: 16"));
     }
 }

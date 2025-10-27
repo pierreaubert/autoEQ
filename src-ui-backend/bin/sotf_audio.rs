@@ -1,16 +1,54 @@
 use clap::{Parser, Subcommand};
+use sotf_backend::camilla::LoudnessCompensation;
 use sotf_backend::{
-    AudioFormat, AudioManager, AudioState, AudioStreamingManager, CamillaError, FilterParams,
-    StreamingState, audio, probe_file,
+    AudioManager, AudioStreamingManager, CamillaError, FilterParams, StreamingState, audio,
 };
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::time::{Duration, sleep};
 
+fn parse_loudness_compensation(vals: &Vec<f64>) -> Result<Option<LoudnessCompensation>, String> {
+    let (ref_level, low, high) = match vals.as_slice() {
+        [r, l] => (*r, *l, *l),
+        [r, l, h] => (*r, *l, *h),
+        _ => return Err("Expected 2 or 3 values: REF,LOW[,HIGH]".to_string()),
+    };
+    LoudnessCompensation::new(ref_level, low, high)
+        .map(Some)
+        .map_err(|e| e.to_string())
+}
+
+#[cfg(unix)]
+fn install_shutdown_handler(running: Arc<AtomicBool>) -> Result<(), String> {
+    // Handle SIGINT/SIGTERM via signal-hook-tokio (async-friendly)
+    use futures_util::StreamExt;
+    let signals = signal_hook_tokio::Signals::new([libc::SIGINT, libc::SIGTERM])
+        .map_err(|e| format!("Failed to set signal handler: {}", e))?;
+    tokio::spawn(async move {
+        let mut signals = signals;
+        if signals.next().await.is_some() {
+            println!("\n\nReceived termination signal, stopping playback...");
+            running.store(false, Ordering::SeqCst);
+        }
+    });
+    Ok(())
+}
+
+#[cfg(windows)]
+fn install_shutdown_handler(running: Arc<AtomicBool>) -> Result<(), String> {
+    // Handle Ctrl+C/Ctrl+Break via ctrlc
+    ctrlc::set_handler(move || {
+        println!("\n\nReceived Ctrl+C, stopping playback...");
+        running.store(false, Ordering::SeqCst);
+    })
+    .map_err(|e| format!("Failed to set Ctrl+C handler: {}", e))?;
+    Ok(())
+}
+
 #[derive(Parser)]
-#[command(name = "audio_test")]
-#[command(about = "Test CamillaDSP audio wrapper without Tauri", long_about = None)]
+#[command(name = "sotf_audio")]
+#[command(about = "CamillaDSP audio tool (streaming-only playback)", long_about = None)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -25,7 +63,19 @@ enum Commands {
     /// List available audio devices
     Devices,
 
-    /// Play an audio file with optional EQ filters (auto-detects format)
+    /// Analyze an audio file and print ReplayGain data (gain and peak)
+    #[command(name = "replay-gain")]
+    ReplayGain {
+        /// Path to audio file (supports WAV, FLAC, MP3, AAC/M4A, Vorbis/OGG, AIFF)
+        #[arg(value_name = "FILE")]
+        file: PathBuf,
+    },
+
+    /// Play an audio file using the streaming decoder (supports seeking and LUFS)
+    ///
+    /// Notes:
+    /// - This subcommand always uses the streaming backend.
+    /// - Sample rate, channels, and hwaudio-input flags are ignored.
     Play {
         /// Path to audio file (supports WAV, FLAC, MP3, AAC/M4A, Vorbis/OGG, AIFF)
         #[arg(value_name = "FILE")]
@@ -35,11 +85,11 @@ enum Commands {
         #[arg(short, long)]
         device: Option<String>,
 
-        /// Sample rate in Hz
+        /// Sample rate in Hz (ignored; always streamed)
         #[arg(short = 'r', long, default_value = "48000")]
         sample_rate: u32,
 
-        /// Number of channels
+        /// Number of channels (ignored; always streamed)
         #[arg(short, long, default_value = "2")]
         channels: u16,
 
@@ -47,40 +97,9 @@ enum Commands {
         #[arg(short, long = "filter", value_name = "FREQ:Q:GAIN")]
         filters: Vec<String>,
 
-        /// Hardware input channel map (comma-separated indices)
+        /// Hardware input channel map (ignored; always streamed)
         #[arg(long = "hwaudio-input", value_delimiter = ',')]
         hwaudio_input: Option<Vec<u16>>,
-
-        /// Hardware output channel map (comma-separated indices)
-        #[arg(long = "hwaudio-output", value_delimiter = ',')]
-        hwaudio_output: Option<Vec<u16>>,
-
-        /// Swap left and right channels (useful to check channel mapping)
-        #[arg(long = "swap-channels", default_value_t = false)]
-        swap_channels: bool,
-
-        /// Duration to play in seconds (0 = play until stopped)
-        #[arg(short = 't', long, default_value = "0")]
-        duration: u64,
-
-        /// Buffer size in chunks (32=low latency, 128=balanced, 1024=high reliability)
-        #[arg(long = "buffer-chunks", default_value = "128")]
-        buffer_chunks: usize,
-    },
-
-    /// Play audio file with streaming decoder (supports seeking for all formats)
-    Stream {
-        /// Path to audio file (supports FLAC, MP3, AAC/M4A, Vorbis/OGG, AIFF)
-        #[arg(value_name = "FILE")]
-        file: PathBuf,
-
-        /// Output device name (optional, uses default)
-        #[arg(short, long)]
-        device: Option<String>,
-
-        /// EQ filters in format "freq:q:gain" (e.g., "1000:1.5:3.0")
-        #[arg(short, long = "filter", value_name = "FREQ:Q:GAIN")]
-        filters: Vec<String>,
 
         /// Hardware output channel map (comma-separated indices)
         #[arg(long = "hwaudio-output", value_delimiter = ',')]
@@ -103,8 +122,12 @@ enum Commands {
         buffer_chunks: usize,
 
         /// Enable real-time LUFS monitoring (prints momentary/short-term loudness)
-        #[arg(long = "monitor-lufs", default_value_t = false)]
-        monitor_lufs: bool,
+        #[arg(long = "lufs", alias = "monitor-lufs", default_value_t = false)]
+        lufs: bool,
+
+        /// Loudness compensation: 2 or 3 floats: REF LOW [HIGH] (dB; REF -100..20, boosts 0..20)
+        #[arg(long = "loudness-compensation", value_name = "REF,LOW[,HIGH]", value_parser = clap::value_parser!(f64), value_delimiter = ',')]
+        loudness_compensation: Option<Vec<f64>>,
     },
 
     /// Record audio from input device
@@ -171,62 +194,32 @@ async fn main() {
                 std::process::exit(1);
             }
         }
-        Commands::Play {
-            file,
-            device,
-            sample_rate,
-            channels,
-            filters,
-            hwaudio_input,
-            hwaudio_output,
-            swap_channels,
-            duration,
-            buffer_chunks,
-        } => {
-            // Parse filters
-            let filter_params = match parse_filters(&filters) {
-                Ok(params) => params,
-                Err(e) => {
-                    eprintln!("Error parsing filters: {}", e);
-                    std::process::exit(1);
-                }
-            };
-
-            let map_mode = if swap_channels {
-                sotf_backend::camilla::ChannelMapMode::Swap
-            } else {
-                sotf_backend::camilla::ChannelMapMode::Normal
-            };
-
-            if let Err(e) = play_audio(
-                binary_path,
-                file,
-                device,
-                sample_rate,
-                channels,
-                filter_params,
-                duration,
-                map_mode,
-                hwaudio_input,
-                hwaudio_output,
-                buffer_chunks,
-            )
-            .await
-            {
+        Commands::ReplayGain { file } => match sotf_backend::replaygain::analyze_file(&file) {
+            Ok(info) => {
+                println!("ReplayGain analysis:");
+                println!("  File: {:?}", file);
+                println!("  Gain: {:+.2} dB", info.gain);
+                println!("  Peak: {:.6}", info.peak);
+            }
+            Err(e) => {
                 eprintln!("Error: {}", e);
                 std::process::exit(1);
             }
-        }
-        Commands::Stream {
+        },
+        Commands::Play {
             file,
             device,
+            sample_rate: _,
+            channels: _,
             filters,
+            hwaudio_input: _,
             hwaudio_output,
             swap_channels,
             duration,
             start_time,
             buffer_chunks,
-            monitor_lufs,
+            lufs,
+            loudness_compensation,
         } => {
             // Parse filters
             let filter_params = match parse_filters(&filters) {
@@ -241,6 +234,15 @@ async fn main() {
                 sotf_backend::camilla::ChannelMapMode::Swap
             } else {
                 sotf_backend::camilla::ChannelMapMode::Normal
+            };
+
+            // Parse loudness compensation
+            let loudness: Option<LoudnessCompensation> = match loudness_compensation {
+                Some(ref vals) => parse_loudness_compensation(vals).unwrap_or_else(|e| {
+                    eprintln!("Error in --loudness-compensation: {}", e);
+                    std::process::exit(1);
+                }),
+                None => None,
             };
 
             if let Err(e) = play_stream(
@@ -253,7 +255,8 @@ async fn main() {
                 map_mode,
                 hwaudio_output,
                 buffer_chunks,
-                monitor_lufs,
+                lufs,
+                loudness,
             )
             .await
             {
@@ -337,160 +340,6 @@ async fn list_devices() -> Result<(), String> {
     Ok(())
 }
 
-async fn play_audio(
-    binary_path: PathBuf,
-    file: PathBuf,
-    device: Option<String>,
-    sample_rate: u32,
-    channels: u16,
-    filters: Vec<FilterParams>,
-    duration: u64,
-    map_mode: sotf_backend::camilla::ChannelMapMode,
-    _hwaudio_input: Option<Vec<u16>>,
-    hwaudio_output: Option<Vec<u16>>,
-    buffer_chunks: usize,
-) -> Result<(), String> {
-    println!("Starting playback...");
-    println!("  File: {:?}", file);
-
-    // Try to detect file format
-    match probe_file(&file) {
-        Ok((format, spec)) => {
-            println!(
-                "  Format: {} ({}Hz, {}ch, {}bit)",
-                format.as_str(),
-                spec.sample_rate,
-                spec.channels,
-                spec.bits_per_sample
-            );
-
-            // Route non-WAV files to streaming manager (FLAC, MP3, AAC/M4A, Vorbis, AIFF)
-            if format != AudioFormat::Wav {
-                println!(
-                    "  Using streaming decoder for {} format...",
-                    format.as_str()
-                );
-                return play_stream(
-                    binary_path,
-                    file,
-                    device,
-                    filters,
-                    duration,
-                    0.0, // start_time
-                    map_mode,
-                    hwaudio_output,
-                    buffer_chunks,
-                    false, // monitor_lufs (not supported in play mode, use stream mode)
-                )
-                .await;
-            }
-        }
-        Err(e) => {
-            return Err(format!(
-                "Failed to detect file format: {}. Supported formats: WAV, FLAC, MP3, AAC/M4A (container format only, not raw ADTS AAC), Vorbis/OGG, AIFF.",
-                e
-            ));
-        }
-    }
-
-    println!("  Device: {:?}", device.as_deref().unwrap_or("default"));
-    println!("  Sample rate: {}Hz", sample_rate);
-    println!("  Channels: {}", channels);
-    println!("  Filters: {}", filters.len());
-
-    if !filters.is_empty() {
-        println!("\nEQ Filters:");
-        for (idx, filter) in filters.iter().enumerate() {
-            println!(
-                "  [{}] {} Hz, Q={:.2}, Gain={:.1} dB",
-                idx + 1,
-                filter.frequency,
-                filter.q,
-                filter.gain
-            );
-        }
-    }
-    println!();
-
-    // Create audio manager
-    let manager = AudioManager::new(binary_path);
-
-    // Set up Ctrl+C handler
-    let running = Arc::new(AtomicBool::new(true));
-    let r = running.clone();
-    ctrlc::set_handler(move || {
-        println!("\n\nReceived Ctrl+C, stopping playback...");
-        r.store(false, Ordering::SeqCst);
-    })
-    .map_err(|e| format!("Failed to set Ctrl+C handler: {}", e))?;
-
-    // Start playback with cancellation support
-    let r_check = running.clone();
-    tokio::select! {
-        result = manager.start_playback(file, device, sample_rate, channels, filters, map_mode, hwaudio_output) => {
-            result.map_err(|e| format!("Failed to start playback: {}", e))?;
-        }
-        _ = async {
-            while r_check.load(Ordering::SeqCst) {
-                sleep(Duration::from_millis(100)).await;
-            }
-        } => {
-            println!("Playback start cancelled");
-            return Ok(());
-        }
-    }
-
-    println!("Playback started successfully!");
-    println!("Press Ctrl+C to stop\n");
-
-    // Monitor playback
-    let start_time = std::time::Instant::now();
-    let mut last_peak = 0.0f32;
-
-    while running.load(Ordering::SeqCst) {
-        // Get current state
-        let state = manager
-            .get_state()
-            .map_err(|e| format!("Failed to get state: {}", e))?;
-
-        // Check if still playing
-        if state.state != AudioState::Playing {
-            println!("Playback stopped (state: {:?})", state.state);
-            break;
-        }
-
-        // Get signal peak
-        if let Ok(peak) = manager.get_signal_peak().await {
-            if (peak - last_peak).abs() > 1.0 {
-                // Only print if change is significant
-                last_peak = peak;
-                print!("\rSignal: {:.1} dB    ", peak);
-                std::io::Write::flush(&mut std::io::stdout()).ok();
-            }
-        }
-
-        // Check duration
-        if duration > 0 && start_time.elapsed().as_secs() >= duration {
-            println!("\n\nDuration reached, stopping...");
-            break;
-        }
-
-        sleep(Duration::from_millis(100)).await;
-    }
-
-    // Stop playback with timeout
-    println!("\nStopping playback...");
-    match tokio::time::timeout(Duration::from_secs(3), manager.stop_playback()).await {
-        Ok(result) => result.map_err(|e| format!("Failed to stop playback: {}", e))?,
-        Err(_) => {
-            println!("Stop playback timed out, forcing exit");
-        }
-    }
-
-    println!("Playback stopped successfully");
-    Ok(())
-}
-
 async fn record_audio(
     binary_path: PathBuf,
     output: PathBuf,
@@ -511,14 +360,9 @@ async fn record_audio(
     // Create audio manager
     let manager = AudioManager::new(binary_path);
 
-    // Set up Ctrl+C handler
+    // Set up shutdown handler (Ctrl+C / SIGTERM)
     let running = Arc::new(AtomicBool::new(true));
-    let r = running.clone();
-    ctrlc::set_handler(move || {
-        println!("\n\nReceived Ctrl+C, stopping recording...");
-        r.store(false, Ordering::SeqCst);
-    })
-    .map_err(|e| format!("Failed to set Ctrl+C handler: {}", e))?;
+    install_shutdown_handler(running.clone())?;
 
     // Start recording
     manager
@@ -587,6 +431,7 @@ fn parse_filters(filter_strings: &[String]) -> Result<Vec<FilterParams>, Camilla
     Ok(filters)
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn play_stream(
     binary_path: PathBuf,
     file: PathBuf,
@@ -597,7 +442,8 @@ async fn play_stream(
     map_mode: sotf_backend::camilla::ChannelMapMode,
     hwaudio_output: Option<Vec<u16>>,
     buffer_chunks: usize,
-    monitor_lufs: bool,
+    lufs: bool,
+    loudness: Option<LoudnessCompensation>,
 ) -> Result<(), String> {
     println!("Starting streaming playback...");
     println!("  File: {:?}", file);
@@ -634,14 +480,9 @@ async fn play_stream(
         (clamped_chunks * 1024) as f64 / 48000.0 * 1000.0
     );
 
-    // Set up Ctrl+C handler
+    // Set up shutdown handler (Ctrl+C / SIGTERM)
     let running = Arc::new(AtomicBool::new(true));
-    let r = running.clone();
-    ctrlc::set_handler(move || {
-        println!("\n\nReceived Ctrl+C, stopping playback...");
-        r.store(false, Ordering::SeqCst);
-    })
-    .map_err(|e| format!("Failed to set Ctrl+C handler: {}", e))?;
+    install_shutdown_handler(running.clone())?;
 
     // Load the audio file
     let r_check = running.clone();
@@ -670,7 +511,7 @@ async fn play_stream(
     println!();
 
     // Enable loudness monitoring if requested
-    if monitor_lufs {
+    if lufs {
         streaming_manager
             .enable_loudness_monitoring()
             .map_err(|e| format!("Failed to enable loudness monitoring: {}", e))?;
@@ -680,7 +521,7 @@ async fn play_stream(
     // Start playback with cancellation support
     let r_check = running.clone();
     tokio::select! {
-        result = streaming_manager.start_playback(device, filters, map_mode, hwaudio_output) => {
+        result = streaming_manager.start_playback(device, filters, map_mode, hwaudio_output, loudness) => {
             result.map_err(|e| format!("Failed to start streaming playback: {}", e))?;
         }
         _ = async {
@@ -708,6 +549,7 @@ async fn play_stream(
     // Monitor playback
     let start_time_instant = std::time::Instant::now();
     let mut last_state = StreamingState::Idle;
+    let mut last_shortterm: Option<f64> = None;
 
     while running.load(Ordering::SeqCst) {
         let current_state = streaming_manager.get_state();
@@ -735,23 +577,34 @@ async fn play_stream(
         }
 
         // Print loudness measurements if monitoring is enabled
-        if monitor_lufs && current_state == StreamingState::Playing {
-            if let Some(loudness) = streaming_manager.get_loudness() {
+        if lufs
+            && current_state == StreamingState::Playing
+            && let Some(loudness) = streaming_manager.get_loudness()
+        {
+            let st = loudness.shortterm_lufs;
+            let changed = match last_shortterm {
+                None => true,
+                Some(prev) => (st - prev).abs() >= 0.1,
+            };
+            if changed {
                 let momentary_str = if loudness.momentary_lufs.is_infinite() {
                     "-∞".to_string()
                 } else {
                     format!("{:5.1}", loudness.momentary_lufs)
                 };
-                let shortterm_str = if loudness.shortterm_lufs.is_infinite() {
+                let shortterm_str = if st.is_infinite() {
                     "-∞".to_string()
                 } else {
-                    format!("{:5.1}", loudness.shortterm_lufs)
+                    format!("{:5.1}", st)
                 };
+                // Dynamic ReplayGain relative to -18.0 LUFS reference
+                let rg = if st.is_infinite() { 0.0 } else { -18.0 - st };
                 print!(
-                    "\rLUFS: M={} S={}  Peak={:.3}  ",
-                    momentary_str, shortterm_str, loudness.peak
+                    "\rLUFS: M={} S={}  RG={:+4.1} dB  Peak={:.3}  ",
+                    momentary_str, shortterm_str, rg, loudness.peak
                 );
                 std::io::Write::flush(&mut std::io::stdout()).ok();
+                last_shortterm = Some(st);
             }
         }
 

@@ -1,5 +1,5 @@
 use crate::audio_decoder::error::{AudioDecoderError, AudioDecoderResult};
-use crate::audio_decoder::formats::{AudioFormat, symphonia::SymphoniaDecoder};
+use crate::audio_decoder::formats::{AudioFormat, SymphoniaDecoder};
 use std::path::Path;
 use std::time::Duration;
 
@@ -108,7 +108,16 @@ pub trait AudioDecoder {
 pub fn create_decoder<P: AsRef<Path>>(path: P) -> AudioDecoderResult<Box<dyn AudioDecoder>> {
     let path = path.as_ref();
 
-    // Validate file exists
+    // First, validate the file extension to detect unsupported formats early
+    if let Err(err) = AudioFormat::from_path(path) {
+        // If the error is specifically UnsupportedFormat, return it now even if the file
+        // doesn't exist. This matches test expectations where extension validation is prioritized.
+        if matches!(err, AudioDecoderError::UnsupportedFormat(_)) {
+            return Err(err);
+        }
+    }
+
+    // Validate file exists (for supported extensions)
     if !path.exists() {
         return Err(AudioDecoderError::FileNotFound(
             path.to_string_lossy().to_string(),
