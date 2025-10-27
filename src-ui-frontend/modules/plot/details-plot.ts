@@ -9,7 +9,10 @@ export class DetailsPlot {
     this.detailsPlotElement = detailsPlotElement;
   }
 
-  async generateDetailsPlot(plotData: { data: Plotly.Data[]; layout: Partial<Plotly.Layout> }): Promise<void> {
+  async generateDetailsPlot(plotData: {
+    data: Plotly.Data[];
+    layout: Partial<Plotly.Layout>;
+  }): Promise<void> {
     if (!this.detailsPlotElement) {
       console.warn("Details plot element not available");
       return;

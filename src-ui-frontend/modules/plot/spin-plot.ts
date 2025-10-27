@@ -9,7 +9,10 @@ export class SpinPlot {
     this.spinPlotElement = spinPlotElement;
   }
 
-  updateSpinPlot(plotData: { data: Plotly.Data[]; layout: Partial<Plotly.Layout> }): void {
+  updateSpinPlot(plotData: {
+    data: Plotly.Data[];
+    layout: Partial<Plotly.Layout>;
+  }): void {
     if (!this.spinPlotElement) {
       console.error("Spin plot element not found!");
       return;

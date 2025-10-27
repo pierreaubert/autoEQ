@@ -30,10 +30,10 @@ fn extract_speaker_name_from_error(error_message: &str) -> Option<String> {
     // Pattern: "Speaker <name> is not in our database!"
     if error_message.starts_with("Speaker ") && error_message.contains(" is not in our database!") {
         let start = "Speaker ".len();
-        if let Some(end) = error_message.find(" is not in our database!") {
-            if end > start {
-                return Some(error_message[start..end].to_string());
-            }
+        if let Some(end) = error_message.find(" is not in our database!")
+            && end > start
+        {
+            return Some(error_message[start..end].to_string());
         }
     }
     None

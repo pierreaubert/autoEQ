@@ -39,19 +39,23 @@ fmt-ts:
 
 alias build := prod
 
-prod: prod-workspace prod-autoeq
+prod: prod-workspace prod-autoeq prod-sotf-audio
 	cargo build --release --bin plot_functions
 	cargo build --release --bin download
 	cargo build --release --bin benchmark_autoeq_speaker
 	cargo build --release --bin benchmark_convergence
 	cargo build --release --bin plot_autoeq_de
 	cargo build --release --bin run_autoeq_de
+	cargo build --release --bin sotf_audio
 
 prod-workspace:
 	cargo build --release --workspace
 
 prod-autoeq:
 	cargo build --release --bin autoeq
+
+prod-sotf-audio:
+	cargo build --release --bin sotf_audio
 
 # ----------------------------------------------------------------------
 # BENCH
@@ -94,7 +98,7 @@ dev:
 	cargo build --bin run_autoeq_de
 	cargo build --bin sotf_audio_test
 
-download:
+download-once:
 	cargo run --bin download
 
 # ----------------------------------------------------------------------

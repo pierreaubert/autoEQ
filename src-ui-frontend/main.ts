@@ -547,7 +547,12 @@ class AutoEQApplication {
           num_filters: result.filter_params.length / 3,
           peq_model:
             ((document.getElementById("peq_model") as HTMLSelectElement)
-              ?.value as "pk" | "hp-pk" | "hp-pk-lp" | "free-pk-free" | "free") || "pk",
+              ?.value as
+              | "pk"
+              | "hp-pk"
+              | "hp-pk-lp"
+              | "free-pk-free"
+              | "free") || "pk",
           iir_hp_pk: false, // Deprecated
         };
 
@@ -568,7 +573,10 @@ class AutoEQApplication {
 
         try {
           // Convert curves data to CurveData format
-          const cea2034_curves: Record<string, { freq: number[]; spl: number[] }> = {};
+          const cea2034_curves: Record<
+            string,
+            { freq: number[]; spl: number[] }
+          > = {};
           if (result.spin_details.curves) {
             Object.keys(result.spin_details.curves).forEach((key) => {
               const curveArray = result.spin_details!.curves[key];

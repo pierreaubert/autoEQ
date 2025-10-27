@@ -100,9 +100,20 @@ export class LayoutManager {
       const plotlyDiv = container.querySelector(
         ".js-plotly-plot",
       ) as HTMLElement;
-      if (plotlyDiv && (window as { Plotly?: { Plots: { resize: (el: HTMLElement) => void } } }).Plotly) {
+      if (
+        plotlyDiv &&
+        (
+          window as {
+            Plotly?: { Plots: { resize: (el: HTMLElement) => void } };
+          }
+        ).Plotly
+      ) {
         try {
-          (window as { Plotly: { Plots: { resize: (el: HTMLElement) => void } } }).Plotly.Plots.resize(plotlyDiv);
+          (
+            window as {
+              Plotly: { Plots: { resize: (el: HTMLElement) => void } };
+            }
+          ).Plotly.Plots.resize(plotlyDiv);
         } catch (_e) {
           // Ignore resize errors for plots that may not be fully initialized
         }

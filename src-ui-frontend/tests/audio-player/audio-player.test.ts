@@ -1,5 +1,52 @@
 // Tests for AudioPlayer functionality
 import { describe, test, expect, beforeEach, vi, afterEach } from "vitest";
+
+// Mock Tauri APIs before importing modules under test
+;(globalThis as any).__TAURI__ = (globalThis as any).__TAURI__ || {};
+
+vi.mock("@tauri-apps/api/core", () => {
+  return {
+    invoke: vi.fn(async (cmd: string, args: any) => {
+      switch (cmd) {
+        case "flac_load_file":
+          return {
+            path: args.filePath,
+            format: "flac",
+            sample_rate: 48000,
+            channels: 2,
+            bits_per_sample: 16,
+            duration_seconds: 10,
+          };
+        case "flac_start_playback":
+        case "flac_stop_playback":
+        case "flac_pause_playback":
+        case "flac_resume_playback":
+        case "flac_seek":
+        case "flac_get_state":
+          return undefined as any;
+        case "flac_get_file_info":
+          return null as any;
+        default:
+          return undefined as any;
+      }
+    }),
+  };
+});
+
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn(async () => {
+    return () => {};
+  }),
+}));
+
+vi.mock("@tauri-apps/api/path", () => ({
+  resolveResource: vi.fn(async (p: string) => p),
+}));
+
+vi.mock("@tauri-apps/plugin-dialog", () => ({
+  open: vi.fn(async () => "/tmp/mock.wav"),
+}));
+
 import {
   AudioPlayer,
   type AudioPlayerConfig,
@@ -56,8 +103,16 @@ const mockAudioContext = {
 // Mock Canvas API
 const mockCanvasContext = {
   fillStyle: "",
+  strokeStyle: "",
+  lineWidth: 1,
   fillRect: vi.fn(),
   clearRect: vi.fn(),
+  beginPath: vi.fn(),
+  moveTo: vi.fn(),
+  lineTo: vi.fn(),
+  stroke: vi.fn(),
+  arc: vi.fn(),
+  fill: vi.fn(),
 };
 
 // Mock canvas getContext method
@@ -99,7 +154,6 @@ describe("AudioPlayer", () => {
     // Create mock container
     container = document.createElement("div");
     container.innerHTML = "";
-    container.querySelector = vi.fn();
 
     // Mock callbacks
     mockCallbacks = {
@@ -225,125 +279,70 @@ describe("AudioPlayer", () => {
     });
 
     test("should load audio file successfully", async () => {
-      const mockArrayBuffer = new ArrayBuffer(1024);
-      const mockAudioBuffer = {
-        duration: 10,
-        sampleRate: 44100,
-        numberOfChannels: 2,
-      };
-
-      const mockFile = new File([mockArrayBuffer], "test.wav", {
-        type: "audio/wav",
-      });
-      mockFile.arrayBuffer = vi.fn().mockResolvedValue(mockArrayBuffer);
-
-      mockAudioContext.decodeAudioData.mockResolvedValue(mockAudioBuffer);
-
-      await audioPlayer.loadAudioFile(mockFile);
-
-      expect(mockAudioContext.decodeAudioData).toHaveBeenCalledWith(
-        mockArrayBuffer,
-      );
+      await expect(
+        audioPlayer.loadAudioFilePath("/tmp/test.wav"),
+      ).resolves.not.toThrow();
+      const statusEl = container.querySelector(
+        ".audio-status-text",
+      ) as HTMLElement;
+      expect(statusEl?.textContent).toContain("Audio ready");
     });
 
     test("should handle audio file loading error", async () => {
-      const mockFile = new File([""], "test.wav", { type: "audio/wav" });
-      mockFile.arrayBuffer = vi
-        .fn()
-        .mockRejectedValue(new Error("File read error"));
-
-      await expect(audioPlayer.loadAudioFile(mockFile)).rejects.toThrow(
-        "File read error",
+      const { invoke } = await import("@tauri-apps/api/core");
+      (invoke as any).mockImplementationOnce(() =>
+        Promise.reject(new Error("File read error")),
       );
+
+      await expect(
+        audioPlayer.loadAudioFilePath("/invalid.wav"),
+      ).rejects.toThrow("File read error");
       expect(mockCallbacks.onError).toHaveBeenCalledWith(
         expect.stringContaining("Failed to load audio file"),
       );
     });
 
     test("should load demo track from URL", async () => {
-      const mockArrayBuffer = new ArrayBuffer(1024);
-      const mockAudioBuffer = {
-        duration: 10,
-        sampleRate: 44100,
-        numberOfChannels: 2,
-      };
-
-      (globalThis.fetch as any).mockResolvedValue({
-        ok: true,
-        arrayBuffer: () => Promise.resolve(mockArrayBuffer),
-      });
-
-      mockAudioContext.decodeAudioData.mockResolvedValue(mockAudioBuffer);
-
       const config: AudioPlayerConfig = {
-        demoTracks: { test: "/demo-audio/test.wav" },
+        demoTracks: { test: "/public/demo-audio/test.wav" },
       };
 
       audioPlayer = new AudioPlayer(container, config, mockCallbacks);
 
-      // Call loadDemoTrack and verify fetch was called
-      await audioPlayer["loadDemoTrack"]("test");
-
-      expect(globalThis.fetch).toHaveBeenCalledWith("/demo-audio/test.wav");
-      // onTrackChange may not be called in the current implementation, remove assertion
+      await expect(audioPlayer["loadDemoTrack"]("test")).resolves.not.toThrow();
     });
   });
 
   describe("Playback Controls", () => {
     beforeEach(() => {
       audioPlayer = new AudioPlayer(container, {}, mockCallbacks);
-
-      // Mock audio buffer
-      audioPlayer["audioBuffer"] = {
-        duration: 10,
-        sampleRate: 44100,
-        numberOfChannels: 2,
-      } as AudioBuffer;
     });
 
     test("should start playback successfully", async () => {
-      const mockSource = mockAudioContext.createBufferSource();
-      mockAudioContext.createBufferSource.mockReturnValue(mockSource);
-
+      await audioPlayer.loadAudioFilePath("/tmp/test.wav");
       await audioPlayer.play();
-
-      expect(mockSource.start).toHaveBeenCalled();
       expect(mockCallbacks.onPlay).toHaveBeenCalled();
       expect(audioPlayer.isPlaying()).toBe(true);
     });
 
-    test("should stop playback successfully", () => {
-      // Set up playing state
-      audioPlayer["isAudioPlaying"] = true;
-      const mockSource = mockAudioContext.createBufferSource();
-      mockSource.stop = vi.fn(); // Ensure stop is a spy
-      audioPlayer["audioSource"] =
-        mockSource as unknown as AudioBufferSourceNode;
-
-      audioPlayer.stop();
-
-      expect(mockSource.stop).toHaveBeenCalled();
+    test("should stop playback successfully", async () => {
+      await audioPlayer.loadAudioFilePath("/tmp/test.wav");
+      await audioPlayer.play();
+      await audioPlayer.stop();
       expect(mockCallbacks.onStop).toHaveBeenCalled();
       expect(audioPlayer.isPlaying()).toBe(false);
     });
 
     test("should handle playback without audio buffer", async () => {
-      audioPlayer["audioBuffer"] = null;
-
-      await expect(audioPlayer.play()).rejects.toThrow(
-        "No audio loaded for playback",
-      );
+      await expect(audioPlayer.play()).rejects.toThrow("No audio file loaded");
     });
 
     test("should resume suspended audio context", async () => {
-      mockAudioContext.state = "suspended";
-
-      const mockSource = mockAudioContext.createBufferSource();
-      mockAudioContext.createBufferSource.mockReturnValue(mockSource);
-
+      await audioPlayer.loadAudioFilePath("/tmp/test.wav");
       await audioPlayer.play();
-
-      expect(mockAudioContext.resume).toHaveBeenCalled();
+      await audioPlayer.pause();
+      await audioPlayer.resume();
+      expect(audioPlayer.isPlaying()).toBe(true);
     });
   });
 
@@ -465,10 +464,13 @@ describe("AudioPlayer", () => {
     });
 
     test("should handle fetch errors gracefully", async () => {
-      (globalThis.fetch as any).mockRejectedValue(new Error("Network error"));
+      const { resolveResource } = await import("@tauri-apps/api/path");
+      (resolveResource as any).mockImplementationOnce(() =>
+        Promise.reject(new Error("Network error")),
+      );
 
       const config: AudioPlayerConfig = {
-        demoTracks: { test: "/demo-audio/test.wav" },
+        demoTracks: { test: "/public/demo-audio/test.wav" },
       };
 
       audioPlayer = new AudioPlayer(container, config, mockCallbacks);
@@ -478,19 +480,14 @@ describe("AudioPlayer", () => {
     });
 
     test("should handle audio decoding errors", async () => {
-      const mockArrayBuffer = new ArrayBuffer(1024);
-      const mockFile = new File([mockArrayBuffer], "test.wav", {
-        type: "audio/wav",
-      });
-      mockFile.arrayBuffer = vi.fn().mockResolvedValue(mockArrayBuffer);
-
-      mockAudioContext.decodeAudioData.mockRejectedValue(
-        new Error("Decode error"),
+      const { invoke } = await import("@tauri-apps/api/core");
+      (invoke as any).mockImplementationOnce(() =>
+        Promise.reject(new Error("Decode error")),
       );
 
-      await expect(audioPlayer.loadAudioFile(mockFile)).rejects.toThrow(
-        "Decode error",
-      );
+      await expect(
+        audioPlayer.loadAudioFilePath("/tmp/test.wav"),
+      ).rejects.toThrow("Decode error");
       expect(mockCallbacks.onError).toHaveBeenCalled();
     });
   });

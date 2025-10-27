@@ -139,13 +139,13 @@ export class AudioPlayer {
       showFrequencyLabels: true,
       compactMode: false,
       demoTracks: {
-        classical: "/demo-audio/classical.wav",
-        country: "/demo-audio/country.wav",
-        edm: "/demo-audio/edm.wav",
-        female_vocal: "/demo-audio/female_vocal.wav",
-        jazz: "/demo-audio/jazz.wav",
-        piano: "/demo-audio/piano.wav",
-        rock: "/demo-audio/rock.wav",
+        classical: "public/demo-audio/classical.flac",
+        country: "public/demo-audio/country.flac",
+        edm: "public/demo-audio/edm.flac",
+        female_vocal: "public/demo-audio/female_vocal.flac",
+        jazz: "public/demo-audio/jazz.flac",
+        piano: "public/demo-audio/piano.flac",
+        rock: "public/demo-audio/rock.flac",
       },
       ...config,
     };
@@ -247,7 +247,9 @@ export class AudioPlayer {
       onFileLoaded: (info: AudioFileInfo) => {
         console.log("[AudioPlayer] File loaded:", info);
         if (this.durationText && info.duration_seconds) {
-          this.durationText.textContent = this.formatTime(info.duration_seconds);
+          this.durationText.textContent = this.formatTime(
+            info.duration_seconds,
+          );
         }
       },
     });
@@ -256,7 +258,9 @@ export class AudioPlayer {
   private async setupAudioContext(): Promise<void> {
     try {
       this.audioContext = new (window.AudioContext ||
-        (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext || AudioContext)();
+        (window as typeof window & { webkitAudioContext?: typeof AudioContext })
+          .webkitAudioContext ||
+        AudioContext)();
       this.gainNode = this.audioContext.createGain();
 
       if (this.config.enableSpectrum) {
@@ -841,7 +845,12 @@ export class AudioPlayer {
     }
 
     // Update the filter parameter - using type assertion for dynamic property access
-    (this.currentFilterParams[index] as unknown as Record<string, number | boolean>)[type] = value;
+    (
+      this.currentFilterParams[index] as unknown as Record<
+        string,
+        number | boolean
+      >
+    )[type] = value;
 
     // Update filter parameters - this will also update the display
     this.updateFilterParams(this.currentFilterParams);
@@ -865,7 +874,7 @@ export class AudioPlayer {
       if (!fileName) {
         throw new Error("Invalid demo track URL");
       }
-      const filePath = await resolveResource(`demo-audio/${fileName}`);
+      const filePath = await resolveResource(`public/demo-audio/${fileName}`);
       await this.loadAudioFilePath(filePath);
     } catch (error) {
       this.setStatus("Failed to load audio");
@@ -1084,7 +1093,11 @@ export class AudioPlayer {
 
         // Set the output device
         if ("setSinkId" in this.audioElement) {
-          (this.audioElement as HTMLAudioElement & { setSinkId: (id: string) => Promise<void> })
+          (
+            this.audioElement as HTMLAudioElement & {
+              setSinkId: (id: string) => Promise<void>;
+            }
+          )
             .setSinkId(this.outputDeviceId)
             .catch((error: unknown) => {
               console.warn("Failed to set audio element sink ID:", error);
@@ -1172,7 +1185,11 @@ export class AudioPlayer {
 
     // If we have an audio element, update its sink ID
     if (this.audioElement && "setSinkId" in this.audioElement) {
-      (this.audioElement as HTMLAudioElement & { setSinkId: (id: string) => Promise<void> })
+      (
+        this.audioElement as HTMLAudioElement & {
+          setSinkId: (id: string) => Promise<void>;
+        }
+      )
         .setSinkId(this.outputDeviceId)
         .catch((error: unknown) => {
           console.warn("Failed to set audio element sink ID:", error);
@@ -1702,7 +1719,10 @@ export class AudioPlayer {
             }))
         : [];
 
-      await this.camillaManager.play(filters, this.outputDeviceId === "default" ? undefined : this.outputDeviceId);
+      await this.camillaManager.play(
+        filters,
+        this.outputDeviceId === "default" ? undefined : this.outputDeviceId,
+      );
       this.callbacks.onPlay?.();
       console.log("Audio playback started successfully via Camilla backend");
     } catch (error) {
@@ -1711,7 +1731,6 @@ export class AudioPlayer {
       throw error;
     }
   }
-
 
   async pause(): Promise<void> {
     if (!this.camillaManager) {
@@ -1831,7 +1850,6 @@ export class AudioPlayer {
   getCurrentTrack(): string | null {
     return this.demoSelect?.value || null;
   }
-
 
   // ReplayGain analysis
   private async analyzeReplayGain(filePath: string): Promise<void> {

@@ -145,21 +145,22 @@ export class OptimizationManager {
     const { stage, status, details = "", percentage } = data;
 
     // Calculate percentage if we have iteration data
-    let calculatedPercentage = (typeof percentage === 'number' ? percentage : 0);
+    let calculatedPercentage = typeof percentage === "number" ? percentage : 0;
 
     // Update optimization stages
     this.updateOptimizationStage(
-      typeof stage === 'string' ? stage : '',
-      typeof status === 'string' ? status : '',
-      typeof details === 'string' ? String(details) : ''
+      typeof stage === "string" ? stage : "",
+      typeof status === "string" ? status : "",
+      typeof details === "string" ? String(details) : "",
     );
 
     // Store progress data if it contains fitness information
     if (data.iteration !== undefined && data.fitness !== undefined) {
-      const iteration = typeof data.iteration === 'number' ? data.iteration : 0;
-      const fitness = typeof data.fitness === 'number' ? data.fitness : 0;
-      const convergence = typeof data.convergence === 'number' ? data.convergence : 0;
-      
+      const iteration = typeof data.iteration === "number" ? data.iteration : 0;
+      const fitness = typeof data.fitness === "number" ? data.fitness : 0;
+      const convergence =
+        typeof data.convergence === "number" ? data.convergence : 0;
+
       const progressEntry: ProgressData = {
         iteration,
         fitness,
@@ -184,11 +185,7 @@ export class OptimizationManager {
       // Notify progress data callback for plotting
       if (this.onProgressDataUpdate) {
         console.log("[OPT DEBUG] Calling onProgressDataUpdate callback");
-        this.onProgressDataUpdate(
-          iteration,
-          fitness,
-          convergence,
-        );
+        this.onProgressDataUpdate(iteration, fitness, convergence);
       } else {
         console.warn("[OPT DEBUG] No onProgressDataUpdate callback set!");
       }
@@ -206,9 +203,9 @@ export class OptimizationManager {
         calculatedPercentage,
       );
       this.onProgressUpdate(
-        typeof stage === 'string' ? stage : "Optimization",
-        typeof status === 'string' ? status : "running",
-        typeof details === 'string' ? String(details) : '',
+        typeof stage === "string" ? stage : "Optimization",
+        typeof status === "string" ? status : "running",
+        typeof details === "string" ? String(details) : "",
         calculatedPercentage,
       );
     }
@@ -517,7 +514,7 @@ export class OptimizationManager {
       console.log(`[OPTIMIZATION] Loading headphone target: ${targetName}`);
 
       // Fetch the CSV file from the public directory
-      const response = await fetch(`/headphone-targets/${targetName}.csv`);
+      const response = await fetch(`/public/headphone-targets/${targetName}.csv`);
       if (!response.ok) {
         console.error(
           `[OPTIMIZATION] Failed to fetch target file: ${response.statusText}`,

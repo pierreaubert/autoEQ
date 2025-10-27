@@ -12,7 +12,19 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Initialize controller
   const captureController = new CaptureController();
 
-  let currentCaptureData: { frequencies: number[]; magnitudes: number[]; phases?: number[]; metadata: { timestamp: Date; deviceName: string; signalType: string; duration: number; sampleRate: number; outputChannel: string } } | null = null;
+  let currentCaptureData: {
+    frequencies: number[];
+    magnitudes: number[];
+    phases?: number[];
+    metadata: {
+      timestamp: Date;
+      deviceName: string;
+      signalType: string;
+      duration: number;
+      sampleRate: number;
+      outputChannel: string;
+    };
+  } | null = null;
   let graphRenderer: CaptureGraphRenderer | null = null;
 
   // Get UI Elements
@@ -100,7 +112,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     channels?: number;
     sampleRate?: number;
   }
-  const deviceInfo: { input: DeviceInfo[]; output: DeviceInfo[] } = { input: [], output: [] };
+  const deviceInfo: { input: DeviceInfo[]; output: DeviceInfo[] } = {
+    input: [],
+    output: [],
+  };
 
   // Routing matrices for input and output
   let inputRoutingMatrix: RoutingMatrix | null = null;
@@ -456,7 +471,10 @@ document.addEventListener("DOMContentLoaded", async () => {
           CaptureStorage.saveCapture({
             timestamp: currentCaptureData.metadata.timestamp,
             deviceName: currentCaptureData.metadata.deviceName,
-            signalType: currentCaptureData.metadata.signalType as "sweep" | "white" | "pink",
+            signalType: currentCaptureData.metadata.signalType as
+              | "sweep"
+              | "white"
+              | "pink",
             duration: currentCaptureData.metadata.duration,
             sampleRate: currentCaptureData.metadata.sampleRate,
             outputChannel: currentCaptureData.metadata.outputChannel,
@@ -509,7 +527,19 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   // Display results
-  function displayResults(data: { frequencies: number[]; magnitudes: number[]; phases?: number[]; metadata: { timestamp: Date; deviceName: string; signalType: string; duration: number; sampleRate: number; outputChannel: string } }) {
+  function displayResults(data: {
+    frequencies: number[];
+    magnitudes: number[];
+    phases?: number[];
+    metadata: {
+      timestamp: Date;
+      deviceName: string;
+      signalType: string;
+      duration: number;
+      sampleRate: number;
+      outputChannel: string;
+    };
+  }) {
     if (!data || !data.frequencies || !data.magnitudes) {
       console.error("displayResults: Invalid data", data);
       return;
@@ -563,7 +593,11 @@ document.addEventListener("DOMContentLoaded", async () => {
       smoothedMagnitudes: smoothedMagnitudes,
       rawPhase: data.phases || [],
       smoothedPhase: smoothedPhase,
-      outputChannel: data.metadata.outputChannel as "left" | "right" | "both" | "default",
+      outputChannel: data.metadata.outputChannel as
+        | "left"
+        | "right"
+        | "both"
+        | "default",
     };
 
     console.log("Rendering graph with data:", graphData);
@@ -590,7 +624,10 @@ document.addEventListener("DOMContentLoaded", async () => {
         smoothedPhase: currentCaptureData.phases || [],
         metadata: {
           ...currentCaptureData.metadata,
-          signalType: currentCaptureData.metadata.signalType as "sweep" | "white" | "pink",
+          signalType: currentCaptureData.metadata.signalType as
+            | "sweep"
+            | "white"
+            | "pink",
         },
       };
 

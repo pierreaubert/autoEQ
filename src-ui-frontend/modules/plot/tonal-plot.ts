@@ -9,7 +9,10 @@ export class TonalPlot {
     this.tonalPlotElement = tonalPlotElement || null;
   }
 
-  updateTonalPlot(plotData: { data: Plotly.Data[]; layout: Partial<Plotly.Layout> }): void {
+  updateTonalPlot(plotData: {
+    data: Plotly.Data[];
+    layout: Partial<Plotly.Layout>;
+  }): void {
     if (!this.tonalPlotElement) {
       console.warn("Tonal plot element not available");
       return;

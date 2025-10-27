@@ -1057,7 +1057,9 @@ export class UIManager {
     }
   }
 
-  private async populateAudioDevices(audioProcessor: AudioProcessor): Promise<void> {
+  private async populateAudioDevices(
+    audioProcessor: AudioProcessor,
+  ): Promise<void> {
     if (!this.captureDeviceSelect) return;
 
     try {

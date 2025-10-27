@@ -9,7 +9,10 @@ export class FilterPlot {
     this.filterPlotElement = filterPlotElement;
   }
 
-  updateFilterPlot(plotData: { data: Plotly.Data[]; layout: Partial<Plotly.Layout> }): void {
+  updateFilterPlot(plotData: {
+    data: Plotly.Data[];
+    layout: Partial<Plotly.Layout>;
+  }): void {
     if (!this.filterPlotElement) {
       console.error("[FILTER PLOT] Filter plot element not found!");
       return;

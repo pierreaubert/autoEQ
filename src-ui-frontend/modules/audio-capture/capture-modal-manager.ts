@@ -452,7 +452,11 @@ export class CaptureModalManager {
         this.captureGraphRenderer.renderPlaceholder();
 
         // Expose renderer for debugging
-        (window as unknown as { debugCaptureGraphRenderer: CaptureGraphRenderer }).debugCaptureGraphRenderer = this.captureGraphRenderer;
+        (
+          window as unknown as {
+            debugCaptureGraphRenderer: CaptureGraphRenderer;
+          }
+        ).debugCaptureGraphRenderer = this.captureGraphRenderer;
       } catch (error) {
         console.error("Error initializing capture graph:", error);
       }
@@ -710,7 +714,13 @@ export class CaptureModalManager {
   }
 
   private async handleSuccessfulCapture(
-    result: { frequencies: number[]; magnitudes: number[]; phases?: number[]; success: boolean; error?: string },
+    result: {
+      frequencies: number[];
+      magnitudes: number[];
+      phases?: number[];
+      success: boolean;
+      error?: string;
+    },
     params: CaptureParameters,
   ): Promise<void> {
     console.log("Processing successful capture...");
@@ -1297,7 +1307,9 @@ export class CaptureModalManager {
     try {
       // Get the audio context to check the current sample rate
       const audioContext = new (window.AudioContext ||
-        (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext || AudioContext)();
+        (window as typeof window & { webkitAudioContext?: typeof AudioContext })
+          .webkitAudioContext ||
+        AudioContext)();
       const deviceSampleRate = audioContext.sampleRate;
       audioContext.close(); // Clean up
 
@@ -1338,7 +1350,10 @@ export class CaptureModalManager {
       const deviceId = this.modalOutputDevice.value;
 
       // Get device details
-      let deviceInfo: { outputChannels: number | null; deviceLabel: string } | null = null;
+      let deviceInfo: {
+        outputChannels: number | null;
+        deviceLabel: string;
+      } | null = null;
 
       if (deviceId === "default") {
         // For default device, assume stereo
@@ -1527,7 +1542,9 @@ export class CaptureModalManager {
     try {
       // Get the audio context to check the current sample rate
       const audioContext = new (window.AudioContext ||
-        (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext || AudioContext)();
+        (window as typeof window & { webkitAudioContext?: typeof AudioContext })
+          .webkitAudioContext ||
+        AudioContext)();
       const deviceSampleRate = audioContext.sampleRate;
       audioContext.close(); // Clean up
 
@@ -1661,7 +1678,10 @@ export class CaptureModalManager {
     }
   }
 
-  private formatRecordMeta(capture: { outputChannel: string; timestamp: string | Date }): string {
+  private formatRecordMeta(capture: {
+    outputChannel: string;
+    timestamp: string | Date;
+  }): string {
     const channel =
       capture.outputChannel === "both"
         ? "Stereo"

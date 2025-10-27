@@ -43,7 +43,12 @@ export class DeviceInfoUI {
       const devices = await this.deviceManager.enumerateDevices();
 
       // Build UI
-      this.buildUI(devices as { input: UnifiedAudioDevice[]; output: UnifiedAudioDevice[] });
+      this.buildUI(
+        devices as {
+          input: UnifiedAudioDevice[];
+          output: UnifiedAudioDevice[];
+        },
+      );
     } catch (error) {
       this.showError("Failed to enumerate audio devices: " + error);
     }

@@ -102,7 +102,7 @@ export class DeviceManager {
   }
 
   // Additional compatibility methods for capture-controller
-  async enumerateDevices(): Promise<{input: unknown[], output: unknown[]}> {
+  async enumerateDevices(): Promise<{ input: unknown[]; output: unknown[] }> {
     return await this.getDevices();
   }
 

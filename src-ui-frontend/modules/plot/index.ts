@@ -65,22 +65,38 @@ export class PlotManager extends PlotBase {
   }
 
   // Filter plot methods
-  updateFilterPlot(plotData: { data: Plotly.Data[]; layout: Partial<Plotly.Layout>; config?: Record<string, unknown> }): void {
+  updateFilterPlot(plotData: {
+    data: Plotly.Data[];
+    layout: Partial<Plotly.Layout>;
+    config?: Record<string, unknown>;
+  }): void {
     this.filterPlot.updateFilterPlot(plotData);
   }
 
   // Spin plot methods
-  updateSpinPlot(plotData: { data: Plotly.Data[]; layout: Partial<Plotly.Layout>; config?: Record<string, unknown> }): void {
+  updateSpinPlot(plotData: {
+    data: Plotly.Data[];
+    layout: Partial<Plotly.Layout>;
+    config?: Record<string, unknown>;
+  }): void {
     this.spinPlot.updateSpinPlot(plotData);
   }
 
   // Details plot methods
-  async generateDetailsPlot(plotData: { data: Plotly.Data[]; layout: Partial<Plotly.Layout>; config?: Record<string, unknown> }): Promise<void> {
+  async generateDetailsPlot(plotData: {
+    data: Plotly.Data[];
+    layout: Partial<Plotly.Layout>;
+    config?: Record<string, unknown>;
+  }): Promise<void> {
     await this.detailsPlot.generateDetailsPlot(plotData);
   }
 
   // Tonal plot methods
-  updateTonalPlot(plotData: { data: Plotly.Data[]; layout: Partial<Plotly.Layout>; config?: Record<string, unknown> }): void {
+  updateTonalPlot(plotData: {
+    data: Plotly.Data[];
+    layout: Partial<Plotly.Layout>;
+    config?: Record<string, unknown>;
+  }): void {
     this.tonalPlot.updateTonalPlot(plotData);
   }
 
@@ -101,7 +117,11 @@ export class PlotManager extends PlotBase {
     await this.progressPlot.updateProgressGraph();
   }
 
-  getProgressData(): Array<{ iteration: number; fitness: number; convergence: number }> {
+  getProgressData(): Array<{
+    iteration: number;
+    fitness: number;
+    convergence: number;
+  }> {
     return this.progressPlot.getProgressData();
   }
 }

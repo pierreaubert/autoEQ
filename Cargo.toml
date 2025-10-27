@@ -12,7 +12,7 @@ members = [
 resolver = "3"
 
 [workspace.package]
-version = "0.2.454"
+version = "0.2.455"
 authors = ["Pierre F. Aubert pierre@spinorama.org"]
 description = "A CLI for automatically eq-eing your speakers or your headphones"
 edition = "2024"
@@ -72,6 +72,8 @@ cpal = "0.16.0"
 # tauri
 tauri = { version="2.9", features = [] }
 tauri-plugin-dialog = { version="2.4" }
+tauri-plugin-fs = "2"
+tauri-plugin-devtools = "2.0.1"
 
 [patch.crates-io]
 webdriver-downloader = { version = "0.16.4", git = "https://github.com/pierreaubert/webdriver-downloader" }

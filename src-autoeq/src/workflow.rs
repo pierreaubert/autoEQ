@@ -74,7 +74,7 @@ pub fn build_target_curve(
     freqs: &Array1<f64>,
     input_curve: &Curve,
 ) -> Curve {
-    let base_target = if let Some(ref target_path) = args.target {
+    if let Some(ref target_path) = args.target {
         crate::qa_println!(
             args,
             "[RUST DEBUG] Loading target curve from path: {}",
@@ -149,9 +149,7 @@ pub fn build_target_curve(
                 }
             }
         }
-    };
-
-    base_target
+    }
 }
 
 /// Prepare the ObjectiveData and whether CEA2034-based scoring is active.

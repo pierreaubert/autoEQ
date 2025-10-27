@@ -218,7 +218,16 @@ export function createSampleCurveData(): CurveData {
 export async function displayOptimizationResults(
   filterContainer: HTMLElement,
   spinContainer: HTMLElement,
-  optimizationResult: { filter_params?: number[]; filter_response?: { input_curve?: unknown; target_curve?: unknown; deviation_curve?: unknown; eq_response?: number[] }; spin_details?: { curves?: Record<string, unknown> } },
+  optimizationResult: {
+    filter_params?: number[];
+    filter_response?: {
+      input_curve?: unknown;
+      target_curve?: unknown;
+      deviation_curve?: unknown;
+      eq_response?: number[];
+    };
+    spin_details?: { curves?: Record<string, unknown> };
+  },
 ) {
   try {
     // Extract data from optimization result

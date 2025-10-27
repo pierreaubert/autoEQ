@@ -236,7 +236,8 @@ export class APIManager {
         typeof result === "object" &&
         "measurements" in result
       ) {
-        measurements = (result as Record<string, unknown>).measurements as string[];
+        measurements = (result as Record<string, unknown>)
+          .measurements as string[];
       } else {
         throw new Error("Invalid response format from backend");
       }
@@ -771,13 +772,13 @@ export class APIManager {
       console.log("Backend demo audio list not available, using local files");
       // Fallback: Use actual demo audio files from public/demo-audio/
       audioList = [
-        "classical.wav",
-        "country.wav",
-        "edm.wav",
-        "female_vocal.wav",
-        "jazz.wav",
-        "piano.wav",
-        "rock.wav",
+        "classical.flac",
+        "country.flac",
+        "edm.flac",
+        "female_vocal.flac",
+        "jazz.flac",
+        "piano.flac",
+        "rock.flac",
       ];
       console.log("Using local demo audio files:", audioList);
     }
@@ -805,9 +806,9 @@ export class APIManager {
       // Add audio options from the determined list
       audioList.forEach((audio) => {
         const option = document.createElement("option");
-        option.value = audio.replace(".wav", ""); // Remove .wav for the value
+        option.value = audio.replace(".flac", ""); // Remove .flac for the value
         option.textContent = audio
-          .replace(".wav", "")
+          .replace(".flac", "")
           .replace(/_/g, " ")
           .replace(/\b\w/g, (l) => l.toUpperCase());
         demoAudioSelect.appendChild(option);
@@ -831,10 +832,10 @@ export class APIManager {
       );
 
       // Fallback: Use local file path
-      const fileName = audioName.endsWith(".wav")
+      const fileName = audioName.endsWith(".flac")
         ? audioName
-        : `${audioName}.wav`;
-      const localUrl = `/demo-audio/${fileName}`;
+        : `${audioName}.flac`;
+      const localUrl = `public/demo-audio/${fileName}`;
       console.log("Using local demo audio URL:", localUrl);
       return localUrl;
     }

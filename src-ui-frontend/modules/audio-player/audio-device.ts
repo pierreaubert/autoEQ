@@ -41,7 +41,8 @@ export async function detectDeviceCapabilities(
       is_input?: boolean;
       default_config?: { channels?: number };
     }
-    const devices: { input?: DeviceType[]; output?: DeviceType[] } = await invoke("get_audio_devices");
+    const devices: { input?: DeviceType[]; output?: DeviceType[] } =
+      await invoke("get_audio_devices");
 
     // Find the requested device in input or output lists
     const allDevices = [...(devices.input || []), ...(devices.output || [])];

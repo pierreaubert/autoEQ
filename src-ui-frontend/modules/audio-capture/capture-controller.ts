@@ -3,11 +3,8 @@
  * Separates audio capture functionality from UI concerns
  */
 
-import {
-  AudioProcessor,
-  type CaptureResult,
-} from "@audio-player/audio-processor";
-import { AudioDeviceManager } from "./device-manager";
+import type { CaptureResult } from "@audio-player/audio-processor";
+import { getAudioDevices as tauriGetAudioDevices } from "@audio-player/audio-interface";
 
 export interface CaptureParameters {
   inputDevice: string;
@@ -30,13 +27,9 @@ export interface DeviceInfo {
  * Controller for managing audio capture operations
  */
 export class CaptureController {
-  private audioProcessor: AudioProcessor | null = null;
-  private deviceManager: AudioDeviceManager;
   private isCapturing: boolean = false;
 
-  constructor() {
-    this.deviceManager = new AudioDeviceManager(true);
-  }
+  constructor() {}
 
   /**
    * Get list of available audio devices
@@ -45,73 +38,25 @@ export class CaptureController {
     input: DeviceInfo[];
     output: DeviceInfo[];
   }> {
-    await this.deviceManager.enumerateDevices();
-
-    const inputList = this.deviceManager.getDeviceList("input");
-    const outputList = this.deviceManager.getDeviceList("output");
-
+    const devices = await tauriGetAudioDevices();
+    const toInfo = (name: string) => ({ value: name, label: name });
     return {
-      input: [{ value: "default", label: "System Default" }, ...inputList],
-      output: [{ value: "default", label: "System Default" }, ...outputList],
+      input: [{ value: "default", label: "System Default" }, ...devices.input.map((d) => toInfo(d.name))],
+      output: [{ value: "default", label: "System Default" }, ...devices.output.map((d) => toInfo(d.name))],
     };
   }
 
   /**
    * Start audio capture with the given parameters
    */
-  async startCapture(params: CaptureParameters): Promise<CaptureResult> {
+  async startCapture(_params: CaptureParameters): Promise<CaptureResult> {
     if (this.isCapturing) {
       throw new Error("Capture already in progress");
     }
-
-    try {
-      this.isCapturing = true;
-
-      // Map device IDs from cpal to WebAudio
-      const webAudioInputDevice = this.deviceManager.mapToWebAudioDeviceId(
-        params.inputDevice,
-      );
-      const webAudioOutputDevice = this.deviceManager.mapToWebAudioDeviceId(
-        params.outputDevice,
-      );
-
-      console.log("[CaptureController] Device ID mapping:", {
-        cpalInput: params.inputDevice,
-        webAudioInput: webAudioInputDevice,
-        cpalOutput: params.outputDevice,
-        webAudioOutput: webAudioOutputDevice,
-      });
-
-      // Create and configure audio processor
-      this.audioProcessor = new AudioProcessor();
-      this.audioProcessor.setSweepDuration(params.duration);
-      this.audioProcessor.setOutputChannel(params.outputChannel);
-      this.audioProcessor.setSampleRate(params.sampleRate);
-      this.audioProcessor.setSignalType(params.signalType);
-      this.audioProcessor.setCaptureVolume(params.inputVolume);
-      this.audioProcessor.setOutputVolume(params.outputVolume);
-      this.audioProcessor.setOutputDevice(webAudioOutputDevice);
-
-      console.log("[CaptureController] Starting capture with parameters:", {
-        ...params,
-        webAudioInputDevice,
-        webAudioOutputDevice,
-      });
-
-      // Start the actual capture
-      const result =
-        await this.audioProcessor.startCapture(webAudioInputDevice);
-
-      // Cleanup on success
-      if (result.success) {
-        this.cleanup();
-      }
-
-      return result;
-    } catch (error) {
-      this.cleanup();
-      throw error;
-    }
+    this.isCapturing = false;
+    throw new Error(
+      "Audio capture via WebRTC has been removed. Use backend recording commands.",
+    );
   }
 
   /**
@@ -119,10 +64,6 @@ export class CaptureController {
    */
   stopCapture(): void {
     console.log("[CaptureController] Stopping capture");
-
-    if (this.audioProcessor) {
-      this.audioProcessor.stopCapture();
-    }
 
     this.cleanup();
   }
@@ -133,17 +74,13 @@ export class CaptureController {
   private cleanup(): void {
     this.isCapturing = false;
 
-    if (this.audioProcessor) {
-      this.audioProcessor.destroy();
-      this.audioProcessor = null;
-    }
   }
 
   /**
    * Get the device manager instance
    */
-  getDeviceManager(): AudioDeviceManager {
-    return this.deviceManager;
+  getDeviceManager(): never {
+    throw new Error("DeviceManager removed. Use getAudioDevices() returning Tauri devices.");
   }
 
   /**

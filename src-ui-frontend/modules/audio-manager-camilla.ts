@@ -72,7 +72,8 @@ export class CamillaAudioManager {
   private checkTauriAvailability(): void {
     try {
       // Check if __TAURI__ global exists
-      this.isTauriAvailable = typeof (window as { __TAURI__?: unknown }).__TAURI__ !== "undefined";
+      this.isTauriAvailable =
+        typeof (window as { __TAURI__?: unknown }).__TAURI__ !== "undefined";
     } catch {
       this.isTauriAvailable = false;
     }
@@ -84,12 +85,15 @@ export class CamillaAudioManager {
   private async setupEventListeners(): Promise<void> {
     try {
       // Listen for state changes
-      const stateUnlisten = await listen<{ state?: string }>("flac:state-changed", (event) => {
-        console.log("[CamillaAudioManager] State changed:", event.payload);
-        if (event.payload.state) {
-          this.callbacks.onStateChange?.(event.payload.state);
-        }
-      });
+      const stateUnlisten = await listen<{ state?: string }>(
+        "flac:state-changed",
+        (event) => {
+          console.log("[CamillaAudioManager] State changed:", event.payload);
+          if (event.payload.state) {
+            this.callbacks.onStateChange?.(event.payload.state);
+          }
+        },
+      );
       this.eventUnlisteners.push(stateUnlisten);
 
       // Listen for position updates
@@ -107,10 +111,13 @@ export class CamillaAudioManager {
       this.eventUnlisteners.push(positionUnlisten);
 
       // Listen for errors
-      const errorUnlisten = await listen<{ error?: string }>("flac:error", (event) => {
-        console.error("[CamillaAudioManager] Error:", event.payload);
-        this.callbacks.onError?.(event.payload.error || "Unknown error");
-      });
+      const errorUnlisten = await listen<{ error?: string }>(
+        "flac:error",
+        (event) => {
+          console.error("[CamillaAudioManager] Error:", event.payload);
+          this.callbacks.onError?.(event.payload.error || "Unknown error");
+        },
+      );
       this.eventUnlisteners.push(errorUnlisten);
 
       // Listen for file loaded events

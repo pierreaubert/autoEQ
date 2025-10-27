@@ -94,7 +94,10 @@ export class PlotUtils {
   /**
    * Create a responsive layout configuration
    */
-  static createResponsiveLayout(width?: number, height?: number): Partial<Record<string, unknown>> {
+  static createResponsiveLayout(
+    width?: number,
+    height?: number,
+  ): Partial<Record<string, unknown>> {
     return {
       autosize: true,
       responsive: true,
