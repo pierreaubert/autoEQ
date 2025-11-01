@@ -21,6 +21,7 @@ pub use camilla::{
     SharedAudioStreamState,
 };
 
+pub mod eq_response;
 pub mod export;
 pub mod loudness_monitor;
 pub mod optim;
@@ -29,6 +30,7 @@ pub mod replaygain;
 pub mod spinorama_api;
 
 // Re-export commonly used types and helpers for easier access in tests and consumers
+pub use eq_response::{EqResponseResult, FilterParam as EqFilterParam, FilterResponse, compute_eq_response};
 pub use export::{ExportFormat, FilterParam as ExportFilterParam};
 pub use loudness_monitor::{LoudnessInfo, LoudnessMonitor};
 pub use optim::{

@@ -1056,6 +1056,25 @@ async fn flac_get_loudness(
     Ok(manager.get_loudness())
 }
 
+// ============================================================================
+// EQ Response Computation Commands
+// ============================================================================
+
+#[tauri::command]
+async fn compute_eq_response(
+    filters: Vec<sotf_backend::EqFilterParam>,
+    sample_rate: f64,
+    frequencies: Vec<f64>,
+) -> Result<sotf_backend::EqResponseResult, String> {
+    println!(
+        "[EQ RESPONSE] Computing response for {} filters at {} points",
+        filters.len(),
+        frequencies.len()
+    );
+
+    sotf_backend::compute_eq_response(filters, sample_rate, frequencies)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Find CamillaDSP binary
@@ -1179,7 +1198,9 @@ pub fn run() {
             // Real-time loudness monitoring
             flac_enable_loudness_monitoring,
             flac_disable_loudness_monitoring,
-            flac_get_loudness
+            flac_get_loudness,
+            // EQ response computation
+            compute_eq_response
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
