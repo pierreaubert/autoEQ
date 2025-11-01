@@ -8,7 +8,7 @@ import { CaptureStorage } from "./capture-storage";
 import { CSVExporter } from "./csv-export";
 import { CaptureGraphRenderer } from "./capture-graph";
 import { RoutingMatrix } from "@audio-player/audio-routing";
-import { audioManagerRust } from "../audio-manager-rust";
+import { invoke } from "@tauri-apps/api/core";
 
 export interface CaptureData {
   frequencies: number[];
@@ -2129,7 +2129,7 @@ export class CaptureModalManager {
     // Start polling every 100ms
     this.splPollingInterval = window.setInterval(async () => {
       try {
-        const spl = await audioManagerRust.getRecordingSPL();
+        const spl = await invoke<number>("audio_get_recording_spl");
 
         if (this.modalCaptureSPL) {
           // Format SPL value with color coding

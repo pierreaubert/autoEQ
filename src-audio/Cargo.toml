@@ -1,10 +1,10 @@
 [package]
-name = "sotf_backend"
+name = "sotf_audio"
 version = { workspace = true }
 edition = { workspace = true }
 
 [lib]
-name = "sotf_backend"
+name = "sotf_audio"
 path = "src/lib.rs"
 
 [[bin]]
@@ -20,10 +20,7 @@ name = "generate_audio_tests"
 path = "bin/generate_audio_tests.rs"
 
 [dependencies]
-autoeq = { workspace = true }
 ndarray = { workspace = true }
-nlopt = { workspace = true }
-plotly = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 cpal = { workspace = true }
@@ -38,6 +35,7 @@ clap = { workspace = true }
 ctrlc = { workspace = true }
 reqwest = { workspace = true }
 chrono = { workspace = true }
+libc = "0.2"
 
 # Audio decoding/encoding
 symphonia = { version = "0.5", default-features = false }
@@ -54,45 +52,19 @@ symphonia-format-isomp4 = "0.5"
 ebur128 = "0.1.10"
 hound = "3.5"
 
-# plotly
-plotly_static = { version = "0.1", features = ["chromedriver", "webdriver_download"], optional = true }
-
-[features]
-default = []
-plotly_static = ["dep:plotly_static"]
-
 [target.'cfg(target_os = "macos")'.dependencies]
-# BLAS: Use Accelerate framework on macOS
-blas-src = { version = "0.14", features = ["accelerate"] }
-accelerate-src = "0.3"
 signal-hook-tokio = { workspace = true }
 
+[target.'cfg(all(any(target_os = "ios", target_os="ios_sim"), target_arch = "aarch64"))'.dependencies]
+signal-hook-tokio = { workspace = true }
 
 [target.'cfg(all(target_os = "linux", target_arch="x86_64"))'.dependencies]
-# blas folklore
-blas-src = { version = "0.14", features = ["openblas"] }
-openblas-src = { version = "0.10", features = ["cblas", "system"] }
 signal-hook-tokio = { workspace = true }
 
 [target.'cfg(all(target_os = "linux", target_arch="aarch64"))'.dependencies]
-# blas folklore
-blas-src = { version = "0.14", features = ["openblas"] }
-openblas-src = { version = "0.10", features = ["cblas", "system"] }
 signal-hook-tokio = { workspace = true }
-
-[target.'cfg(all(target_os = "windows", target_arch="x86_64"))'.dependencies]
-# blas folklore
-blas-src = { version = "0.14", features = ["intel-mkl-dynamic-parallel"] }
-intel-mkl-src = "0.8.1"
-
-[target.'cfg(all(target_os = "windows", target_arch="aarch64"))'.dependencies]
-# blas folklore: intel-mkl not supported on arm :)
-blas-src = { version = "0.14", features = ["openblas"] }
-openblas-src = { version = "0.10", features = ["cblas", "system"] }
-
-[target.'cfg(unix)'.dependencies]
-libc = "0.2"
 
 [dev-dependencies]
 # Needed for async integration tests
 tokio = { workspace = true, features = ["rt-multi-thread", "tracing"] }
+

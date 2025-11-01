@@ -22,7 +22,7 @@ serde_json = { workspace=true }
 urlencoding = { workspace=true }
 
 # autoeq
-sotf_backend = { path = "../src-ui-backend" }
+sotf_audio = { path = "../src-audio" }
 autoeq = { path = "../src-autoeq" }
 
 # tauri

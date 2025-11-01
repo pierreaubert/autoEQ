@@ -4,7 +4,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { resolveResource } from "@tauri-apps/api/path";
-import { audioManagerRust, type AudioStreamState } from "../audio-manager-rust";
+import { StreamingManager, type AudioFileInfo } from "../audio-manager-streaming";
 
 interface ReplayGainInfo {
   gain: number; // dB
@@ -128,6 +128,9 @@ export class AudioPlayer {
   // Resize handler reference for cleanup
   private resizeHandler: (() => void) | null = null;
 
+  // Streaming audio manager instance
+  private streamingManager: StreamingManager;
+
   constructor(
     container: HTMLElement,
     config: AudioPlayerConfig = {},
@@ -161,6 +164,14 @@ export class AudioPlayer {
       ...config,
     };
     this.callbacks = callbacks;
+
+    // Initialize streaming manager
+    this.streamingManager = new StreamingManager({
+      onStateChange: (state) => this.handleStateChange(state),
+      onPositionUpdate: (position, duration) => this.handlePositionUpdate(position, duration),
+      onError: (error) => this.handleError(error),
+      onFileLoaded: (info) => this.handleFileLoaded(info),
+    });
 
     this.init();
   }
@@ -211,7 +222,6 @@ export class AudioPlayer {
   private async init(): Promise<void> {
     try {
       await this.setupAudioContext();
-      this.setupRustBackendEventHandlers();
       this._createEQModal();
       this.createUI();
       this.setupEventListeners();
@@ -222,57 +232,65 @@ export class AudioPlayer {
     }
   }
 
-  private setupRustBackendEventHandlers(): void {
-    // Subscribe to state changes
-    audioManagerRust.onStateChange((event) => {
-      console.log("[AudioPlayer] Backend state changed:", event.state);
-      
-      if (event.state === "playing") {
-        this.isAudioPlaying = true;
-        this.isAudioPaused = false;
-      } else if (event.state === "paused") {
-        this.isAudioPlaying = false;
-        this.isAudioPaused = true;
-      } else if (event.state === "idle") {
-        this.isAudioPlaying = false;
-        this.isAudioPaused = false;
-        // Reset position display
-        if (this.positionText) {
-          this.positionText.textContent = "--:--";
-        }
-        if (this.progressFill) {
-          this.progressFill.style.width = "0%";
-        }
-        this.setStatus("Ready");
-      } else if (event.state === "error") {
-        this.isAudioPlaying = false;
-        this.isAudioPaused = false;
-        this.setStatus("Error");
-      }
-      
-      this.updatePlaybackUI();
-    });
-
-    // Subscribe to position updates
-    audioManagerRust.onPositionUpdate((event) => {
+  private handleStateChange(state: string): void {
+    console.log("[AudioPlayer] Backend state changed:", state);
+    
+    if (state === "playing") {
+      this.isAudioPlaying = true;
+      this.isAudioPaused = false;
+    } else if (state === "paused") {
+      this.isAudioPlaying = false;
+      this.isAudioPaused = true;
+    } else if (state === "idle" || state === "ready") {
+      this.isAudioPlaying = false;
+      this.isAudioPaused = false;
+      // Reset position display
       if (this.positionText) {
-        this.positionText.textContent = this.formatTime(event.position_seconds);
+        this.positionText.textContent = "--:--";
       }
-      if (this.durationText && event.duration_seconds) {
-        this.durationText.textContent = this.formatTime(event.duration_seconds);
+      if (this.progressFill) {
+        this.progressFill.style.width = "0%";
       }
-      if (this.progressFill && event.duration_seconds) {
-        const progress = (event.position_seconds / event.duration_seconds) * 100;
-        this.progressFill.style.width = `${Math.min(progress, 100)}%`;
-      }
-    });
+      this.setStatus("Ready");
+    } else if (state === "error") {
+      this.isAudioPlaying = false;
+      this.isAudioPaused = false;
+      this.setStatus("Error");
+    }
+    
+    this.updatePlaybackUI();
+  }
 
-    // Subscribe to errors
-    audioManagerRust.onError((event) => {
-      console.error("[AudioPlayer] Backend error:", event.error);
-      this.callbacks.onError?.(event.error);
-      this.setStatus("Error: " + event.error);
-    });
+  private handlePositionUpdate(position: number, duration?: number): void {
+    if (this.positionText) {
+      this.positionText.textContent = this.formatTime(position);
+    }
+    if (this.durationText && duration) {
+      this.durationText.textContent = this.formatTime(duration);
+    }
+    if (this.progressFill && duration) {
+      const progress = (position / duration) * 100;
+      this.progressFill.style.width = `${Math.min(progress, 100)}%`;
+    }
+  }
+
+  private handleError(error: string): void {
+    console.error("[AudioPlayer] Backend error:", error);
+    this.callbacks.onError?.(error);
+    this.setStatus("Error: " + error);
+  }
+
+  private handleFileLoaded(info: AudioFileInfo): void {
+    console.log("[AudioPlayer] File loaded:", info);
+    // Update UI with file info
+    if (this.durationText && info.duration_seconds) {
+      this.durationText.textContent = this.formatTime(info.duration_seconds);
+    }
+    this.setStatus("Ready");
+    // Enable playback controls
+    if (this.listenBtn) {
+      this.listenBtn.disabled = false;
+    }
   }
 
   private async setupAudioContext(): Promise<void> {
@@ -927,24 +945,22 @@ export class AudioPlayer {
   }
 
   public async loadAudioFilePath(filePath: string): Promise<void> {
-    this.setStatus("Audio ready");
+    this.setStatus("Loading...");
     
     try {
-      // Store the path for playback
+      // Load the file via streaming manager
       this.currentAudioPath = filePath;
+      await this.streamingManager.loadAudioFilePath(filePath);
+      // File info will be received via onFileLoaded callback
+      
       this.setListenButtonEnabled(true);
       this.showAudioStatus(true);
-      
-      // Set duration placeholder - will be updated when playback starts
-      if (this.durationText) {
-        this.durationText.textContent = "--:--";
-      }
       
       // Analyze ReplayGain for the track
       await this.analyzeReplayGain(filePath);
     } catch (error) {
-      this.setStatus("Failed to prepare audio");
-      this.callbacks.onError?.("Failed to prepare audio file: " + error);
+      this.setStatus("Failed to load audio");
+      this.callbacks.onError?.("Failed to load audio file: " + error);
       throw error;
     }
   }
@@ -1026,10 +1042,9 @@ export class AudioPlayer {
           frequency: p.frequency,
           q: p.q,
           gain: p.gain,
-          filter_type: "Peaking",
         }));
       
-      audioManagerRust.updateFilters(filters).catch((error) => {
+      this.streamingManager.updateFilters(filters).catch((error) => {
         console.error("Failed to update filters in real-time:", error);
       });
     }
@@ -1197,11 +1212,10 @@ export class AudioPlayer {
               frequency: p.frequency,
               q: p.q,
               gain: p.gain,
-              filter_type: "Peaking",
             }))
         : [];
       
-      audioManagerRust.updateFilters(filters).catch((error) => {
+      this.streamingManager.updateFilters(filters).catch((error: unknown) => {
         console.error("Failed to update filters:", error);
       });
     }
@@ -1795,7 +1809,7 @@ export class AudioPlayer {
     }
 
     try {
-      // Convert current filter params to the format Rust backend expects
+      // Convert current filter params to the format streaming backend expects
       const filters = this.eqEnabled
         ? this.currentFilterParams
             .filter((p) => p.enabled)
@@ -1803,24 +1817,17 @@ export class AudioPlayer {
               frequency: p.frequency,
               q: p.q,
               gain: p.gain,
-              filter_type: "Peaking",
             }))
         : [];
 
-      await audioManagerRust.startPlayback(
-        this.currentAudioPath,
-        this.outputDeviceId === "default" ? null : this.outputDeviceId,
-        48000, // Sample rate
-        2,     // Channels
-        filters,
-      );
+      await this.streamingManager.play(filters);
 
       // Note: Spectrum analyzer requires Web Audio API AnalyserNode
-      // which is not available when using Rust backend for playback
-      // The 30-bin spectrum will remain idle (showing baseline) when using Rust backend
+      // which is not available when using streaming backend for playback
+      // The 30-bin spectrum will remain idle (showing baseline) when using streaming backend
 
       this.callbacks.onPlay?.();
-      console.log("Audio playback started successfully via Rust backend");
+      console.log("Audio playback started successfully via streaming backend");
     } catch (error) {
       console.error("Error during audio playback:", error);
       this.callbacks.onError?.("Playback failed: " + error);
@@ -1829,10 +1836,13 @@ export class AudioPlayer {
   }
 
   async pause(): Promise<void> {
-    // Note: Rust backend doesn't support pause yet
-    // For now, we'll just stop playback
-    console.log("Pause not supported, stopping playback instead");
-    await this.stop();
+    try {
+      await this.streamingManager.pause();
+      console.log("Audio paused via streaming backend");
+    } catch (error) {
+      console.error("Error pausing playback:", error);
+      this.callbacks.onError?.("Failed to pause: " + error);
+    }
   }
 
   private restart(): void {
@@ -1845,15 +1855,18 @@ export class AudioPlayer {
   }
 
   async resume(): Promise<void> {
-    // Note: Rust backend doesn't support resume yet
-    // For now, we'll restart playback from the beginning
-    console.log("Resume not supported, restarting playback from beginning");
-    await this.play();
+    try {
+      await this.streamingManager.resume();
+      console.log("Audio resumed via streaming backend");
+    } catch (error) {
+      console.error("Error resuming playback:", error);
+      this.callbacks.onError?.("Failed to resume: " + error);
+    }
   }
 
   async stop(): Promise<void> {
     try {
-      await audioManagerRust.stopPlayback();
+      await this.streamingManager.stop();
       
       // Reset UI state
       if (this.positionText) {
@@ -1864,7 +1877,7 @@ export class AudioPlayer {
       }
       
       this.callbacks.onStop?.();
-      console.log("Audio playback stopped via Rust backend");
+      console.log("Audio playback stopped via streaming backend");
     } catch (error) {
       console.error("Error stopping playback:", error);
       this.callbacks.onError?.("Failed to stop: " + error);

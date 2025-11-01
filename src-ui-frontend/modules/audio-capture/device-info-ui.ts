@@ -1,9 +1,10 @@
 /**
  * Device Info UI Component
  * Shows enhanced device capabilities from cpal
+ * TODO: Fix device manager import - currently disabled
  */
 
-import { AudioDeviceManager } from "./device-manager";
+// import { AudioDeviceManager } from "./device-manager";
 
 // Define UnifiedAudioDevice interface
 export interface UnifiedAudioDevice {
@@ -20,12 +21,12 @@ export interface UnifiedAudioDevice {
 
 export class DeviceInfoUI {
   private container: HTMLElement;
-  private deviceManager: AudioDeviceManager;
+  // private deviceManager: AudioDeviceManager;
   private currentDevice: UnifiedAudioDevice | null = null;
 
   constructor(container: HTMLElement) {
     this.container = container;
-    this.deviceManager = new AudioDeviceManager(true);
+    // this.deviceManager = new AudioDeviceManager(true);
   }
 
   /**
@@ -39,16 +40,15 @@ export class DeviceInfoUI {
     this.showLoading();
 
     try {
-      // Enumerate devices
-      const devices = await this.deviceManager.enumerateDevices();
-
-      // Build UI
-      this.buildUI(
-        devices as {
-          input: UnifiedAudioDevice[];
-          output: UnifiedAudioDevice[];
-        },
-      );
+      // TODO: Re-enable once device manager is fixed
+      // const devices = await this.deviceManager.enumerateDevices();
+      this.showError("Device enumeration temporarily disabled");
+      // this.buildUI(
+      //   devices as {
+      //     input: UnifiedAudioDevice[];
+      //     output: UnifiedAudioDevice[];
+      //   },
+      // );
     } catch (error) {
       this.showError("Failed to enumerate audio devices: " + error);
     }

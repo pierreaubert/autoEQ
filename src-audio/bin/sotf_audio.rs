@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
-use sotf_backend::camilla::LoudnessCompensation;
-use sotf_backend::{
+use sotf_audio::camilla::LoudnessCompensation;
+use sotf_audio::{
     AudioManager, AudioStreamingManager, CamillaError, FilterParams, StreamingState, audio,
 };
 use std::path::PathBuf;
@@ -170,7 +170,7 @@ async fn main() {
             }
             path
         }
-        None => match sotf_backend::camilla::find_camilladsp_binary() {
+        None => match sotf_audio::camilla::find_camilladsp_binary() {
             Ok(path) => {
                 println!("Found CamillaDSP binary at: {:?}", path);
                 path
@@ -190,7 +190,7 @@ async fn main() {
                 std::process::exit(1);
             }
         }
-        Commands::ReplayGain { file } => match sotf_backend::replaygain::analyze_file(&file) {
+        Commands::ReplayGain { file } => match sotf_audio::replaygain::analyze_file(&file) {
             Ok(info) => {
                 println!("ReplayGain analysis:");
                 println!("  File: {:?}", file);
@@ -226,9 +226,9 @@ async fn main() {
             };
 
             let map_mode = if swap_channels {
-                sotf_backend::camilla::ChannelMapMode::Swap
+                sotf_audio::camilla::ChannelMapMode::Swap
             } else {
-                sotf_backend::camilla::ChannelMapMode::Normal
+                sotf_audio::camilla::ChannelMapMode::Normal
             };
 
             // Parse loudness compensation
@@ -440,7 +440,7 @@ async fn play_stream(
     filters: Vec<FilterParams>,
     duration: u64,
     start_time: f64,
-    map_mode: sotf_backend::camilla::ChannelMapMode,
+    map_mode: sotf_audio::camilla::ChannelMapMode,
     hwaudio_play: Option<Vec<u16>>,
     buffer_chunks: usize,
     lufs: bool,

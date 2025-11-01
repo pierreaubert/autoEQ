@@ -10,19 +10,17 @@ export {
   AudioPlayer,
   type AudioPlayerConfig,
   type AudioPlayerCallbacks,
-  type FilterParam,
+  type FilterParam as AudioPlayerFilterParam,
 } from "@audio-player/audio-player";
 export { LayoutManager } from "./layout-manager";
 
-// Rust audio backend
+// Streaming audio manager (supports all formats: WAV, FLAC, MP3, etc.)
 export {
-  AudioManagerRust,
-  audioManagerRust,
-  type FilterParams,
+  StreamingManager,
+  type AudioFileInfo,
+  type FilterParam,
+  type AudioSpec,
+  type LoudnessInfo,
   type AudioStreamState,
-  type AudioStateChangedEvent,
-  type AudioPositionUpdateEvent,
-  type AudioErrorEvent,
-  type AudioSignalPeakEvent,
-  AudioState,
-} from "./audio-manager-rust";
+  type AudioManagerCallbacks,
+} from "./audio-manager-streaming";

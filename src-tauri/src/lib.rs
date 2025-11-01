@@ -1,22 +1,34 @@
+use ndarray::Array1;
+use std::collections::HashMap;
+use std::path::PathBuf;
+use std::sync::Arc;
+use tauri::{AppHandle, Emitter, Manager, State};
+use tokio::sync::Mutex;
+
+// Module declarations
+mod optim;
+mod plot;
+mod eq_response;
+mod eq_export;
+
 use autoeq::{
     Curve, LossType, cli::Args as AutoEQArgs, plot_filters, plot_spin, plot_spin_details,
     plot_spin_tonal,
 };
-use ndarray::Array1;
-use std::collections::HashMap;
-use std::sync::Arc;
-use tauri::{AppHandle, Emitter, Manager, State};
 
-// Import from sotf_backend
-use sotf_backend::camilla::ChannelMapMode;
-use sotf_backend::optim::{ProgressCallback, ProgressUpdate, run_optimization_internal};
-use sotf_backend::plot::{PlotFiltersParams, PlotSpinParams, plot_to_json};
-use sotf_backend::{
-    AudioFileInfo, AudioManager, AudioStreamingManager, CancellationState, LoudnessInfo,
-    OptimizationParams, OptimizationResult, ReplayGainInfo, SharedAudioState, StreamingState,
-    analyze_file, curve_data_to_curve,
+use sotf_audio::camilla::ChannelMapMode;
+use sotf_audio::{
+    AudioFileInfo, AudioManager, AudioStreamingManager, LoudnessInfo,
+    SharedAudioState, StreamingState,
 };
-use tokio::sync::Mutex;
+use sotf_audio::audio::{AudioConfig, AudioDevice};
+use sotf_audio::FilterParams;
+use sotf_audio::replaygain::{ReplayGainInfo, analyze_file};
+
+use crate::optim::{CancellationState, OptimizationParams, OptimizationResult, ProgressCallback, ProgressUpdate, run_optimization_internal};
+use crate::plot::{PlotFiltersParams, PlotSpinParams, curve_data_to_curve, plot_to_json};
+use crate::eq_response::{FilterParam as EqFilterParam, EqResponseResult};
+
 
 #[tauri::command]
 async fn get_speakers() -> Result<Vec<String>, String> {
@@ -314,18 +326,10 @@ fn cancel_optimization(cancellation_state: State<CancellationState>) -> Result<(
 }
 
 // ============================================================================
-// Audio Control Commands
+// Audio Recording Commands (using AudioManager)
 // ============================================================================
 
-use sotf_backend::audio::{AudioConfig, AudioDevice};
-use sotf_backend::{AudioStreamState, FilterParams};
-use std::path::PathBuf;
-
-// ============================================================================
-// Audio Event Payloads
-// ============================================================================
-
-/// Audio state change event payload
+/// Audio state change event payload (for recording)
 #[derive(Clone, serde::Serialize)]
 struct AudioStateChanged {
     state: String,
@@ -338,131 +342,6 @@ struct AudioStateChanged {
 #[derive(Clone, serde::Serialize)]
 struct AudioError {
     error: String,
-}
-
-#[tauri::command]
-async fn audio_start_playback(
-    file_path: String,
-    output_device: Option<String>,
-    sample_rate: u32,
-    channels: u16,
-    filters: Vec<FilterParams>,
-    audio_manager: State<'_, Mutex<AudioManager>>,
-    app_handle: AppHandle,
-) -> Result<(), String> {
-    println!(
-        "[AUDIO] Starting playback: {} ({}Hz, {}ch, {} filters)",
-        file_path,
-        sample_rate,
-        channels,
-        filters.len()
-    );
-
-    let manager = audio_manager.lock().await;
-    let result = manager
-        .start_playback(
-            PathBuf::from(&file_path),
-            output_device.clone(),
-            sample_rate,
-            channels,
-            filters,
-            ChannelMapMode::Normal,
-            None,
-            None,
-        )
-        .await;
-
-    match result {
-        Ok(_) => {
-            // Emit state change event
-            let _ = app_handle.emit(
-                "audio:state-changed",
-                AudioStateChanged {
-                    state: "playing".to_string(),
-                    file: Some(file_path),
-                    output_device,
-                    input_device: None,
-                },
-            );
-            Ok(())
-        }
-        Err(e) => {
-            // Emit error event
-            let _ = app_handle.emit(
-                "audio:error",
-                AudioError {
-                    error: e.to_string(),
-                },
-            );
-            Err(format!("{}", e))
-        }
-    }
-}
-
-#[tauri::command]
-async fn audio_stop_playback(
-    audio_manager: State<'_, Mutex<AudioManager>>,
-    app_handle: AppHandle,
-) -> Result<(), String> {
-    println!("[AUDIO] Stopping playback");
-
-    let manager = audio_manager.lock().await;
-    let result = manager.stop_playback().await;
-
-    match result {
-        Ok(_) => {
-            // Emit state change event
-            let _ = app_handle.emit(
-                "audio:state-changed",
-                AudioStateChanged {
-                    state: "idle".to_string(),
-                    file: None,
-                    output_device: None,
-                    input_device: None,
-                },
-            );
-            Ok(())
-        }
-        Err(e) => Err(format!("{}", e)),
-    }
-}
-
-#[tauri::command]
-async fn audio_update_filters(
-    filters: Vec<FilterParams>,
-    audio_manager: State<'_, Mutex<AudioManager>>,
-    app_handle: AppHandle,
-) -> Result<(), String> {
-    println!("[AUDIO] Updating {} filters", filters.len());
-
-    let manager = audio_manager.lock().await;
-    let result = manager.update_filters(filters).await;
-
-    match result {
-        Ok(_) => {
-            // Optionally emit event to confirm filters updated
-            println!("[AUDIO] Filters updated successfully");
-            Ok(())
-        }
-        Err(e) => {
-            // Emit error event
-            let _ = app_handle.emit(
-                "audio:error",
-                AudioError {
-                    error: e.to_string(),
-                },
-            );
-            Err(format!("{}", e))
-        }
-    }
-}
-
-#[tauri::command]
-async fn audio_get_state(
-    audio_manager: State<'_, Mutex<AudioManager>>,
-) -> Result<AudioStreamState, String> {
-    let manager = audio_manager.lock().await;
-    manager.get_state().map_err(|e| format!("{}", e))
 }
 
 #[tauri::command]
@@ -589,7 +468,7 @@ async fn audio_get_recording_spl(
 }
 
 // ============================================================================
-// FLAC Streaming Audio Commands
+// Streaming Audio Commands
 // ============================================================================
 
 /// Audio file information for the frontend
@@ -615,12 +494,12 @@ fn convert_audio_file_info(info: &AudioFileInfo) -> AudioFileInfoPayload {
 }
 
 #[tauri::command]
-async fn flac_load_file(
+async fn stream_load_file(
     file_path: String,
     streaming_manager: State<'_, Mutex<AudioStreamingManager>>,
     app_handle: AppHandle,
 ) -> Result<AudioFileInfoPayload, String> {
-    println!("[FLAC] Loading file: {}", file_path);
+    println!("[STREAM] Loading file: {}", file_path);
 
     let mut manager = streaming_manager.lock().await;
     match manager.load_file(&file_path).await {
@@ -628,14 +507,14 @@ async fn flac_load_file(
             let payload = convert_audio_file_info(&audio_info);
 
             // Emit file loaded event
-            let _ = app_handle.emit("flac:file-loaded", &payload);
+            let _ = app_handle.emit("stream:file-loaded", &payload);
 
             Ok(payload)
         }
         Err(e) => {
             let error_msg = format!("{}", e);
             let _ = app_handle.emit(
-                "flac:error",
+                "stream:error",
                 AudioError {
                     error: error_msg.clone(),
                 },
@@ -646,13 +525,13 @@ async fn flac_load_file(
 }
 
 #[tauri::command]
-async fn flac_start_playback(
+async fn stream_start_playback(
     output_device: Option<String>,
     filters: Vec<FilterParams>,
     streaming_manager: State<'_, Mutex<AudioStreamingManager>>,
     app_handle: AppHandle,
 ) -> Result<(), String> {
-    println!("[FLAC] Starting playback with {} filters", filters.len());
+    println!("[STREAM] Starting playback with {} filters", filters.len());
 
     let mut manager = streaming_manager.lock().await;
     match manager
@@ -668,7 +547,7 @@ async fn flac_start_playback(
         Ok(_) => {
             // Emit state change event
             let _ = app_handle.emit(
-                "flac:state-changed",
+                "stream:state-changed",
                 serde_json::json!({
                     "state": "playing",
                     "output_device": output_device,
@@ -679,7 +558,7 @@ async fn flac_start_playback(
         Err(e) => {
             let error_msg = format!("{}", e);
             let _ = app_handle.emit(
-                "flac:error",
+                "stream:error",
                 AudioError {
                     error: error_msg.clone(),
                 },
@@ -690,17 +569,17 @@ async fn flac_start_playback(
 }
 
 #[tauri::command]
-async fn flac_pause_playback(
+async fn stream_pause_playback(
     streaming_manager: State<'_, Mutex<AudioStreamingManager>>,
     app_handle: AppHandle,
 ) -> Result<(), String> {
-    println!("[FLAC] Pausing playback");
+    println!("[STREAM] Pausing playback");
 
     let manager = streaming_manager.lock().await;
     match manager.pause().await {
         Ok(_) => {
             let _ = app_handle.emit(
-                "flac:state-changed",
+                "stream:state-changed",
                 serde_json::json!({
                     "state": "paused",
                 }),
@@ -712,17 +591,17 @@ async fn flac_pause_playback(
 }
 
 #[tauri::command]
-async fn flac_resume_playback(
+async fn stream_resume_playback(
     streaming_manager: State<'_, Mutex<AudioStreamingManager>>,
     app_handle: AppHandle,
 ) -> Result<(), String> {
-    println!("[FLAC] Resuming playback");
+    println!("[STREAM] Resuming playback");
 
     let manager = streaming_manager.lock().await;
     match manager.resume().await {
         Ok(_) => {
             let _ = app_handle.emit(
-                "flac:state-changed",
+                "stream:state-changed",
                 serde_json::json!({
                     "state": "playing",
                 }),
@@ -734,17 +613,17 @@ async fn flac_resume_playback(
 }
 
 #[tauri::command]
-async fn flac_stop_playback(
+async fn stream_stop_playback(
     streaming_manager: State<'_, Mutex<AudioStreamingManager>>,
     app_handle: AppHandle,
 ) -> Result<(), String> {
-    println!("[FLAC] Stopping playback");
+    println!("[STREAM] Stopping playback");
 
     let mut manager = streaming_manager.lock().await;
     match manager.stop().await {
         Ok(_) => {
             let _ = app_handle.emit(
-                "flac:state-changed",
+                "stream:state-changed",
                 serde_json::json!({
                     "state": "idle",
                 }),
@@ -756,18 +635,18 @@ async fn flac_stop_playback(
 }
 
 #[tauri::command]
-async fn flac_seek(
+async fn stream_seek(
     seconds: f64,
     streaming_manager: State<'_, Mutex<AudioStreamingManager>>,
     app_handle: AppHandle,
 ) -> Result<(), String> {
-    println!("[FLAC] Seeking to {}s", seconds);
+    println!("[STREAM] Seeking to {}s", seconds);
 
     let manager = streaming_manager.lock().await;
     match manager.seek(seconds).await {
         Ok(_) => {
             let _ = app_handle.emit(
-                "flac:position-changed",
+                "stream:position-changed",
                 serde_json::json!({
                     "position_seconds": seconds,
                 }),
@@ -779,7 +658,7 @@ async fn flac_seek(
 }
 
 #[tauri::command]
-async fn flac_get_state(
+async fn stream_get_state(
     streaming_manager: State<'_, Mutex<AudioStreamingManager>>,
 ) -> Result<String, String> {
     let manager = streaming_manager.lock().await;
@@ -799,7 +678,7 @@ async fn flac_get_state(
 }
 
 #[tauri::command]
-async fn flac_get_file_info(
+async fn stream_get_file_info(
     streaming_manager: State<'_, Mutex<AudioStreamingManager>>,
 ) -> Result<Option<AudioFileInfoPayload>, String> {
     let manager = streaming_manager.lock().await;
@@ -816,7 +695,7 @@ async fn flac_get_file_info(
 #[tauri::command]
 async fn get_audio_devices() -> Result<std::collections::HashMap<String, Vec<AudioDevice>>, String>
 {
-    sotf_backend::audio::get_audio_devices()
+    sotf_audio::audio::get_audio_devices()
 }
 
 #[tauri::command]
@@ -826,14 +705,14 @@ async fn set_audio_device(
     config: AudioConfig,
     audio_state: State<'_, SharedAudioState>,
 ) -> Result<String, String> {
-    sotf_backend::audio::set_audio_device(device_name, is_input, config, &*audio_state)
+    sotf_audio::audio::set_audio_device(device_name, is_input, config, &*audio_state)
 }
 
 #[tauri::command]
 async fn get_audio_config(
     audio_state: State<'_, SharedAudioState>,
-) -> Result<sotf_backend::audio::AudioState, String> {
-    sotf_backend::audio::get_audio_config(&*audio_state)
+) -> Result<sotf_audio::audio::AudioState, String> {
+    sotf_audio::audio::get_audio_config(&*audio_state)
 }
 
 #[tauri::command]
@@ -841,7 +720,7 @@ async fn get_device_properties(
     device_name: String,
     is_input: bool,
 ) -> Result<serde_json::Value, String> {
-    sotf_backend::audio::get_device_properties(device_name, is_input)
+    sotf_audio::audio::get_device_properties(device_name, is_input)
 }
 
 #[tauri::command]
@@ -1028,7 +907,7 @@ async fn analyze_replaygain(file_path: String) -> Result<ReplayGainInfo, String>
 // ============================================================================
 
 #[tauri::command]
-async fn flac_enable_loudness_monitoring(
+async fn stream_enable_loudness_monitoring(
     streaming_manager: State<'_, Mutex<AudioStreamingManager>>,
 ) -> Result<(), String> {
     println!("[LOUDNESS] Enabling real-time loudness monitoring");
@@ -1038,7 +917,7 @@ async fn flac_enable_loudness_monitoring(
 }
 
 #[tauri::command]
-async fn flac_disable_loudness_monitoring(
+async fn stream_disable_loudness_monitoring(
     streaming_manager: State<'_, Mutex<AudioStreamingManager>>,
 ) -> Result<(), String> {
     println!("[LOUDNESS] Disabling real-time loudness monitoring");
@@ -1049,7 +928,7 @@ async fn flac_disable_loudness_monitoring(
 }
 
 #[tauri::command]
-async fn flac_get_loudness(
+async fn stream_get_loudness(
     streaming_manager: State<'_, Mutex<AudioStreamingManager>>,
 ) -> Result<Option<LoudnessInfo>, String> {
     let manager = streaming_manager.lock().await;
@@ -1062,23 +941,23 @@ async fn flac_get_loudness(
 
 #[tauri::command]
 async fn compute_eq_response(
-    filters: Vec<sotf_backend::EqFilterParam>,
+    filters: Vec<EqFilterParam>,
     sample_rate: f64,
     frequencies: Vec<f64>,
-) -> Result<sotf_backend::EqResponseResult, String> {
+) -> Result<EqResponseResult, String> {
     println!(
         "[EQ RESPONSE] Computing response for {} filters at {} points",
         filters.len(),
         frequencies.len()
     );
 
-    sotf_backend::compute_eq_response(filters, sample_rate, frequencies)
+    eq_response::compute_eq_response(filters, sample_rate, frequencies)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Find CamillaDSP binary
-    let camilla_binary = sotf_backend::camilla::find_camilladsp_binary().unwrap_or_else(|e| {
+    let camilla_binary = sotf_audio::camilla::find_camilladsp_binary().unwrap_or_else(|e| {
         eprintln!("Warning: CamillaDSP binary not found: {}", e);
         eprintln!("Audio playback features will not be available.");
         std::path::PathBuf::from("/usr/local/bin/camilladsp")
@@ -1087,7 +966,7 @@ pub fn run() {
     // Create AudioManager (wrapped in Mutex for Tauri state)
     let audio_manager = Mutex::new(AudioManager::new(camilla_binary.clone()));
 
-    // Create AudioStreamingManager for FLAC playback
+    // Create AudioStreamingManager for all audio format playback (WAV, FLAC, MP3, etc.)
     let streaming_manager = Mutex::new(AudioStreamingManager::new(camilla_binary));
 
     let mut builder = tauri::Builder::default();
@@ -1115,14 +994,14 @@ pub fn run() {
                     if let Ok(manager) = streaming_mgr.try_lock() {
                         for event in manager.drain_events() {
                             let _ = match event {
-                                sotf_backend::StreamingEvent::EndOfStream => {
+                                sotf_audio::StreamingEvent::EndOfStream => {
                                     println!("[EVENT MONITOR] End of stream detected");
                                     app_handle.emit(
-                                        "flac:state-changed",
+                                        "stream:state-changed",
                                         serde_json::json!({ "state": "ended" }),
                                     )
                                 }
-                                sotf_backend::StreamingEvent::StateChanged(state) => {
+                                sotf_audio::StreamingEvent::StateChanged(state) => {
                                     let state_str = match state {
                                         StreamingState::Idle => "idle",
                                         StreamingState::Loading => "loading",
@@ -1134,14 +1013,14 @@ pub fn run() {
                                     };
                                     println!("[EVENT MONITOR] State changed to: {}", state_str);
                                     app_handle.emit(
-                                        "flac:state-changed",
+                                        "stream:state-changed",
                                         serde_json::json!({ "state": state_str }),
                                     )
                                 }
-                                sotf_backend::StreamingEvent::Error(msg) => {
+                                sotf_audio::StreamingEvent::Error(msg) => {
                                     println!("[EVENT MONITOR] Error: {}", msg);
                                     app_handle.emit(
-                                        "flac:state-changed",
+                                        "stream:state-changed",
                                         serde_json::json!({ "state": "error", "message": msg }),
                                     )
                                 }
@@ -1171,23 +1050,23 @@ pub fn run() {
             set_audio_device,
             get_audio_config,
             get_device_properties,
-            audio_start_playback,
-            audio_stop_playback,
-            audio_update_filters,
-            audio_get_state,
+            // Audio recording commands
             audio_start_recording,
             audio_stop_recording,
             audio_get_signal_peak,
             audio_get_recording_spl,
-            // FLAC streaming commands
-            flac_load_file,
-            flac_start_playback,
-            flac_pause_playback,
-            flac_resume_playback,
-            flac_stop_playback,
-            flac_seek,
-            flac_get_state,
-            flac_get_file_info,
+            // Streaming playback commands (supports all audio formats)
+            stream_load_file,
+            stream_start_playback,
+            stream_pause_playback,
+            stream_resume_playback,
+            stream_stop_playback,
+            stream_seek,
+            stream_get_state,
+            stream_get_file_info,
+            stream_enable_loudness_monitoring,
+            stream_disable_loudness_monitoring,
+            stream_get_loudness,
             // Export format commands
             generate_apo_format,
             generate_aupreset_format,
@@ -1195,10 +1074,6 @@ pub fn run() {
             generate_rme_room_format,
             // ReplayGain analysis
             analyze_replaygain,
-            // Real-time loudness monitoring
-            flac_enable_loudness_monitoring,
-            flac_disable_loudness_monitoring,
-            flac_get_loudness,
             // EQ response computation
             compute_eq_response
         ])

@@ -6,7 +6,7 @@ import {
   OptimizationManager,
   APIManager,
   AudioPlayer,
-  FilterParam,
+  AudioPlayerFilterParam as FilterParam,
   LayoutManager,
   generateAppHTML,
 } from "./modules";

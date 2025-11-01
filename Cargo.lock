@@ -5520,7 +5520,7 @@ dependencies = [
  "reqwest 0.12.24",
  "serde",
  "serde_json",
- "sotf_backend",
+ "sotf_audio",
  "tauri",
  "tauri-build",
  "tauri-plugin-devtools",
@@ -5531,12 +5531,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "sotf_backend"
-version = "0.2.461"
+name = "sotf_audio"
+version = "0.2.462"
 dependencies = [
- "accelerate-src",
- "autoeq",
- "blas-src",
  "chrono",
  "clap",
  "cpal",
@@ -5545,13 +5542,8 @@ dependencies = [
  "futures",
  "futures-util",
  "hound",
- "intel-mkl-src",
  "libc",
  "ndarray",
- "nlopt",
- "openblas-src",
- "plotly",
- "plotly_static",
  "reqwest 0.12.24",
  "serde",
  "serde_json",
