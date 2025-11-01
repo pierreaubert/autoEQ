@@ -1,4 +1,5 @@
-use autoeq::iir::{Biquad, BiquadFilterType};
+use autoeq::iir::{Biquad, BiquadFilterType, Peq};
+use ndarray::Array1;
 use serde::{Deserialize, Serialize};
 
 /// Filter parameter for EQ response computation
@@ -41,13 +42,17 @@ fn parse_filter_type(type_str: &str) -> Option<BiquadFilterType> {
 }
 
 /// Compute frequency response for a list of filters
+/// Uses the existing compute_peq_response from autoeq::iir
 pub fn compute_eq_response(
     filters: Vec<FilterParam>,
     sample_rate: f64,
     frequencies: Vec<f64>,
 ) -> Result<EqResponseResult, String> {
+    let freq_array = Array1::from_vec(frequencies.clone());
     let mut individual_responses = Vec::new();
-    let mut combined_response = vec![0.0; frequencies.len()];
+    
+    // Build PEQ for combined response
+    let mut peq: Peq = Vec::new();
 
     // Process each filter
     for filter_param in filters.iter() {
@@ -72,19 +77,22 @@ pub fn compute_eq_response(
             filter_param.gain,
         );
 
-        // Compute frequency response at each frequency point
-        let mut magnitudes_db = Vec::with_capacity(frequencies.len());
-        for (i, &freq) in frequencies.iter().enumerate() {
-            let mag_db = biquad.freq_response_db(freq);
-            magnitudes_db.push(mag_db);
-            combined_response[i] += mag_db;
-        }
-
+        // Compute individual filter response using existing method
+        let response_array = biquad.np_log_result(&freq_array);
+        let magnitudes_db: Vec<f64> = response_array.to_vec();
+        
         individual_responses.push(FilterResponse { magnitudes_db });
+        
+        // Add to PEQ for combined response (weight = 1.0)
+        peq.push((1.0, biquad));
     }
 
+    // Compute combined response using existing compute_peq_response
+    let combined_array = autoeq::iir::compute_peq_response(&freq_array, &peq, sample_rate);
+    let combined_response: Vec<f64> = combined_array.to_vec();
+
     Ok(EqResponseResult {
-        frequencies: frequencies.clone(),
+        frequencies,
         individual_responses,
         combined_response,
     })
