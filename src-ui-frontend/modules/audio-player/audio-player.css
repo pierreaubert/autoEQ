@@ -460,6 +460,60 @@
   border-radius: var(--radius);
 }
 
+/* Spectrum Container with Loudness Display */
+.spectrum-container {
+  position: relative;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Loudness Display Overlay */
+.loudness-display {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  right: 4px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-primary);
+  background: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(4px);
+  padding: 2px 8px;
+  border-radius: var(--radius);
+  pointer-events: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  .loudness-display {
+    background: rgba(0, 0, 0, 0.5);
+  }
+}
+
+.loudness-label {
+  color: var(--text-secondary);
+  font-size: 9px;
+}
+
+.loudness-momentary,
+.loudness-shortterm {
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  min-width: 32px;
+  text-align: right;
+  color: var(--text-primary);
+}
+
+.loudness-separator {
+  color: var(--text-tertiary);
+  margin: 0 2px;
+}
+
 .spectrum-canvas {
   display: block;
   height: 52px;

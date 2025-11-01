@@ -77,6 +77,18 @@ export class AudioPlayer {
   private spectrumCanvas: HTMLCanvasElement | null = null;
   private spectrumCtx: CanvasRenderingContext2D | null = null;
   private spectrumAnimationFrame: number | null = null;
+  
+  // Loudness monitoring
+  private loudnessDisplayMomentary: HTMLElement | null = null;
+  private loudnessDisplayShortterm: HTMLElement | null = null;
+  
+  // 30-bin spectrum analyzer constants
+  private readonly SPECTRUM_BINS = 30;
+  private readonly SPECTRUM_MIN_FREQ = 20;
+  private readonly SPECTRUM_MAX_FREQ = 20000;
+  private spectrumBinEdges: number[] = [];
+  private spectrumBinCenters: number[] = [];
+  private spectrumBinValues: number[] = []; // Smoothed values for display
 
   // UI Elements
   private container: HTMLElement;
@@ -365,7 +377,18 @@ export class AudioPlayer {
               this.config.enableSpectrum
                 ? `
               <div class="frequency-analyzer" style="display: flex;">
-                <canvas class="spectrum-canvas"></canvas>
+                <div class="spectrum-container">
+                  <div class="loudness-display">
+                    <span class="loudness-label">M:</span>
+                    <span class="loudness-momentary">--.-</span>
+                    <span class="loudness-label">LUFS</span>
+                    <span class="loudness-separator">•</span>
+                    <span class="loudness-label">S:</span>
+                    <span class="loudness-shortterm">--.-</span>
+                    <span class="loudness-label">LUFS</span>
+                  </div>
+                  <canvas class="spectrum-canvas"></canvas>
+                </div>
                 ${
                   this.config.showFrequencyLabels
                     ? `
@@ -465,6 +488,8 @@ export class AudioPlayer {
     this.durationText = this.container.querySelector(".audio-duration");
     this.progressFill = this.container.querySelector(".audio-progress-fill");
     this.spectrumCanvas = this.container.querySelector(".spectrum-canvas");
+    this.loudnessDisplayMomentary = this.container.querySelector(".loudness-momentary");
+    this.loudnessDisplayShortterm = this.container.querySelector(".loudness-shortterm");
 
     // Modal and backdrop elements are in the body
     this.eqModal = document.getElementById(this.instanceId + "-eq-modal");
@@ -485,9 +510,11 @@ export class AudioPlayer {
 
     if (this.spectrumCanvas) {
       this.spectrumCtx = this.spectrumCanvas.getContext("2d");
+      // Initialize 30-bin spectrum analyzer
+      this.initializeSpectrumBins();
       // Set canvas dimensions
       this.resizeSpectrumCanvas();
-      // Initialize spectrum analyzer immediately if enabled
+      // Initialize spectrum display immediately if enabled
       if (this.config.enableSpectrum) {
         this.initializeSpectrumDisplay();
       }
@@ -1233,6 +1260,62 @@ export class AudioPlayer {
     }
   }
 
+  // Update loudness display with backend data
+  private updateLoudnessDisplay(loudness: { momentary_lufs: number; shortterm_lufs: number; peak: number } | null): void {
+    if (!this.loudnessDisplayMomentary || !this.loudnessDisplayShortterm) {
+      return;
+    }
+    
+    if (loudness) {
+      // Format LUFS values
+      const momentary = loudness.momentary_lufs;
+      const shortterm = loudness.shortterm_lufs;
+      
+      // Display finite values, otherwise show placeholder
+      if (isFinite(momentary) && momentary > -Infinity) {
+        this.loudnessDisplayMomentary.textContent = momentary.toFixed(1);
+      } else {
+        this.loudnessDisplayMomentary.textContent = "--.-";
+      }
+      
+      if (isFinite(shortterm) && shortterm > -Infinity) {
+        this.loudnessDisplayShortterm.textContent = shortterm.toFixed(1);
+      } else {
+        this.loudnessDisplayShortterm.textContent = "--.-";
+      }
+    } else {
+      // No loudness data available
+      this.loudnessDisplayMomentary.textContent = "--.-";
+      this.loudnessDisplayShortterm.textContent = "--.-";
+    }
+  }
+
+  // Initialize 30 logarithmically-spaced spectrum bins
+  private initializeSpectrumBins(): void {
+    const logMin = Math.log10(this.SPECTRUM_MIN_FREQ);
+    const logMax = Math.log10(this.SPECTRUM_MAX_FREQ);
+    
+    // Calculate bin edges (31 edges for 30 bins)
+    this.spectrumBinEdges = [];
+    for (let i = 0; i <= this.SPECTRUM_BINS; i++) {
+      const logFreq = logMin + (logMax - logMin) * (i / this.SPECTRUM_BINS);
+      this.spectrumBinEdges.push(Math.pow(10, logFreq));
+    }
+    
+    // Calculate bin centers (geometric mean of edges)
+    this.spectrumBinCenters = [];
+    for (let i = 0; i < this.SPECTRUM_BINS; i++) {
+      this.spectrumBinCenters.push(
+        Math.sqrt(this.spectrumBinEdges[i] * this.spectrumBinEdges[i + 1]),
+      );
+    }
+    
+    // Initialize bin values array with zeros
+    this.spectrumBinValues = new Array(this.SPECTRUM_BINS).fill(0);
+    
+    console.log(`[Spectrum] Initialized ${this.SPECTRUM_BINS} log-spaced bins from ${this.SPECTRUM_MIN_FREQ}Hz to ${this.SPECTRUM_MAX_FREQ}Hz`);
+  }
+
   // Draw mini EQ graph
   private drawEQMiniGraph(): void {
     if (!this.eqMiniCanvas || !this.eqMiniCtx || !this.audioContext) return;
@@ -1470,10 +1553,9 @@ export class AudioPlayer {
     this.spectrumCtx.fillRect(0, 0, width, height);
 
     // Draw a subtle baseline to indicate the spectrum analyzer is ready
-    const barsCount = Math.min(width / 2, 256);
-    const barWidth = width / barsCount;
+    const barWidth = width / this.SPECTRUM_BINS;
 
-    for (let i = 0; i < barsCount; i++) {
+    for (let i = 0; i < this.SPECTRUM_BINS; i++) {
       const baseHeight = 2; // Minimal height for idle state
 
       if (isDarkMode) {
@@ -1533,54 +1615,58 @@ export class AudioPlayer {
       if (this.isAudioPlaying) {
         this.analyserNode.getByteFrequencyData(dataArray);
 
-        // Use logarithmic frequency mapping (20Hz - 20kHz)
-        const minFreq = 20;
-        const maxFreq = 20000;
+        // Map FFT data to 30 logarithmic bins
         const sampleRate = this.audioContext!.sampleRate;
         const nyquist = sampleRate / 2;
-        const barsCount = Math.min(width / 2, 256); // Limit bars for performance
-        const barWidth = width / barsCount;
-
-        for (let i = 0; i < barsCount; i++) {
-          // Calculate logarithmic frequency for this bar
-          const logMin = Math.log10(minFreq);
-          const logMax = Math.log10(maxFreq);
-          const logFreq = logMin + (logMax - logMin) * (i / barsCount);
-          const freq = Math.pow(10, logFreq);
-
-          // Map frequency to FFT bin
-          const binIndex = Math.round((freq / nyquist) * dataArray.length);
-          const clampedBin = Math.min(binIndex, dataArray.length - 1);
-
-          // Get magnitude and apply some smoothing by averaging nearby bins
-          let magnitude = 0;
-          const smoothingRange = Math.max(
-            1,
-            Math.floor(dataArray.length / barsCount / 2),
-          );
-          let count = 0;
-
-          for (
-            let j = Math.max(0, clampedBin - smoothingRange);
-            j <= Math.min(dataArray.length - 1, clampedBin + smoothingRange);
-            j++
-          ) {
-            magnitude += dataArray[j];
-            count++;
+        const barWidth = width / this.SPECTRUM_BINS;
+        
+        // Reset bin accumulators
+        const binAccumulators = new Array(this.SPECTRUM_BINS).fill(0);
+        const binCounts = new Array(this.SPECTRUM_BINS).fill(0);
+        
+        // Map each FFT bin to its corresponding logarithmic bin
+        for (let fftBin = 0; fftBin < dataArray.length; fftBin++) {
+          const freq = (fftBin * nyquist) / dataArray.length;
+          
+          // Find which log bin this frequency belongs to (binary search would be faster, but linear is fine for this size)
+          let targetBin = -1;
+          for (let i = 0; i < this.SPECTRUM_BINS; i++) {
+            if (freq >= this.spectrumBinEdges[i] && freq < this.spectrumBinEdges[i + 1]) {
+              targetBin = i;
+              break;
+            }
           }
-          magnitude = count > 0 ? magnitude / count : 0;
-
-          const barHeight = (magnitude / 255) * height * 0.9; // Use 90% of height for better visuals
+          
+          if (targetBin >= 0 && targetBin < this.SPECTRUM_BINS) {
+            binAccumulators[targetBin] += dataArray[fftBin];
+            binCounts[targetBin]++;
+          }
+        }
+        
+        // Calculate average for each bin and apply smoothing
+        const smoothingFactor = 0.7; // Higher = more smoothing
+        for (let i = 0; i < this.SPECTRUM_BINS; i++) {
+          const rawValue = binCounts[i] > 0 ? binAccumulators[i] / binCounts[i] : 0;
+          // Exponential moving average for smooth animation
+          this.spectrumBinValues[i] = 
+            smoothingFactor * this.spectrumBinValues[i] + 
+            (1 - smoothingFactor) * rawValue;
+        }
+        
+        // Draw bars
+        for (let i = 0; i < this.SPECTRUM_BINS; i++) {
+          const magnitude = this.spectrumBinValues[i];
+          const barHeight = (magnitude / 255) * height * 0.9;
 
           // Use different colors based on theme and frequency
           if (isDarkMode) {
             // Dark mode: bright colors with frequency-based hues
-            const hueShift = (i / barsCount) * 60; // 0-60 degrees (red to yellow)
+            const hueShift = (i / this.SPECTRUM_BINS) * 60; // 0-60 degrees (red to yellow)
             const intensity = Math.floor((barHeight / height) * 155 + 100);
             this.spectrumCtx.fillStyle = `hsl(${hueShift}, 80%, ${Math.min((intensity / 255) * 70 + 30, 90)}%)`;
           } else {
             // Light mode: darker colors with frequency-based variation
-            const hueShift = (i / barsCount) * 240; // 0-240 degrees (red to blue)
+            const hueShift = (i / this.SPECTRUM_BINS) * 240; // 0-240 degrees (red to blue)
             const saturation = 70 + (barHeight / height) * 30; // 70-100%
             const lightness = Math.max(20, 60 - (barHeight / height) * 40); // 60-20%
             this.spectrumCtx.fillStyle = `hsl(${hueShift}, ${saturation}%, ${lightness}%)`;
@@ -1744,6 +1830,12 @@ export class AudioPlayer {
         filters,
         this.outputDeviceId === "default" ? undefined : this.outputDeviceId,
       );
+      
+      // Start loudness monitoring
+      this.camillaManager.startLoudnessPolling(100, (loudness) => {
+        this.updateLoudnessDisplay(loudness);
+      });
+      
       this.callbacks.onPlay?.();
       console.log("Audio playback started successfully via Camilla backend");
     } catch (error) {
