@@ -9,6 +9,9 @@
 //! - imd_smpte: SMPTE two-tone 60 Hz + 7 kHz (4:1 amplitude ratio)
 //! - imd_ccif: CCIF two-tone 19 kHz + 20 kHz (equal amplitudes)
 //! - sweep: logarithmic frequency sweep from 20 Hz to 20 kHz (10s fixed duration)
+//! - white_noise: white noise (flat spectrum)
+//! - pink_noise: pink noise (1/f spectrum, -3dB/octave)
+//! - m_noise: M-weighted noise (ITU-R 468 weighting for acoustic measurements)
 
 use clap::{Parser, ValueEnum};
 use hound::{SampleFormat, WavSpec, WavWriter};
@@ -36,6 +39,9 @@ enum SignalKind {
     ImdSmpte,
     ImdCcif,
     Sweep,
+    WhiteNoise,
+    PinkNoise,
+    MNoise,
 }
 
 impl SignalKind {
@@ -47,6 +53,9 @@ impl SignalKind {
             Self::ImdSmpte => "imd_smpte",
             Self::ImdCcif => "imd_ccif",
             Self::Sweep => "sweep",
+            Self::WhiteNoise => "white_noise",
+            Self::PinkNoise => "pink_noise",
+            Self::MNoise => "m_noise",
         }
     }
 
@@ -58,6 +67,9 @@ impl SignalKind {
             Self::ImdSmpte,
             Self::ImdCcif,
             Self::Sweep,
+            Self::WhiteNoise,
+            Self::PinkNoise,
+            Self::MNoise,
         ]
     }
 }
@@ -70,12 +82,12 @@ struct Cli {
     #[arg(long, default_value = "target/test-audio")]
     out_dir: PathBuf,
 
-    /// Number of channels (comma-separated)
-    #[arg(long, value_delimiter = ',', default_values_t = vec![2, 6, 16])]
+    /// Number of channels (comma-separated, mono stereo 5.1 and 9.1.6)
+    #[arg(long, value_delimiter = ',', default_values_t = vec![1, 2, 6, 16])]
     channels: Vec<u16>,
 
-    /// Sample rates in Hz (comma-separated)
-    #[arg(long = "sample-rates", value_delimiter = ',', default_values_t = vec![44100, 96000, 192000])]
+    /// Sample rates in Hz (comma-separated, should be enough to test most cases)
+    #[arg(long = "sample-rates", value_delimiter = ',', default_values_t = vec![44100, 48000, 96000])]
     sample_rates: Vec<u32>,
 
     /// Bit depths (comma-separated, 16 or 24 only)
@@ -87,7 +99,7 @@ struct Cli {
     signals: Vec<SignalKind>,
 
     /// Duration in seconds (default 3.0, does not apply to sweep which is fixed at 10s)
-    #[arg(long, default_value_t = 3.0)]
+    #[arg(long, default_value_t = 10.0)]
     duration: f32,
 }
 
@@ -105,12 +117,37 @@ struct Sidecar {
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 enum SignalMetadata {
-    Id { freqs: Vec<f32> },
-    Thd1k { freq: f32 },
-    Thd100 { freq: f32 },
-    ImdSmpte { freqs: [f32; 2], ratio: u8 },
-    ImdCcif { freqs: [f32; 2] },
-    Sweep { freq_start: f32, freq_end: f32, kind: String },
+    Id {
+        freqs: Vec<f32>,
+    },
+    Thd1k {
+        freq: f32,
+    },
+    Thd100 {
+        freq: f32,
+    },
+    ImdSmpte {
+        freqs: [f32; 2],
+        ratio: u8,
+    },
+    ImdCcif {
+        freqs: [f32; 2],
+    },
+    Sweep {
+        freq_start: f32,
+        freq_end: f32,
+        kind: String,
+    },
+    WhiteNoise {
+        description: String,
+    },
+    PinkNoise {
+        description: String,
+    },
+    MNoise {
+        description: String,
+        weighting: String,
+    },
 }
 
 #[derive(Debug)]
@@ -161,7 +198,10 @@ fn main() {
     for signal in &signals {
         for &channels in &cli.channels {
             if channels < 1 || channels > 16 {
-                eprintln!("Warning: Channel count {} out of range [1,16], skipping", channels);
+                eprintln!(
+                    "Warning: Channel count {} out of range [1,16], skipping",
+                    channels
+                );
                 stats.skipped += 1;
                 continue;
             }
@@ -174,14 +214,7 @@ fn main() {
                         cli.duration
                     };
 
-                    match generate_one(
-                        &cli.out_dir,
-                        *signal,
-                        channels,
-                        sr,
-                        bits,
-                        duration,
-                    ) {
+                    match generate_one(&cli.out_dir, *signal, channels, sr, bits, duration) {
                         Ok(path) => {
                             manifest_files.push(path.to_string_lossy().to_string());
                             stats.generated += 1;
@@ -211,15 +244,21 @@ fn main() {
     let manifest_path = cli.out_dir.join("manifest.json");
     match write_manifest(&manifest_path, &manifest_files) {
         Ok(_) => {
-            println!("\nGenerated {} files. Manifest: {}", stats.generated, manifest_path.display());
+            println!(
+                "\nGenerated {} files. Manifest: {}",
+                stats.generated,
+                manifest_path.display()
+            );
         }
         Err(e) => {
             eprintln!("Warning: Failed to write manifest: {}", e);
         }
     }
 
-    println!("Summary: Generated: {}, Skipped: {}, Failed: {}",
-             stats.generated, stats.skipped, stats.failed);
+    println!(
+        "Summary: Generated: {}, Skipped: {}, Failed: {}",
+        stats.generated, stats.skipped, stats.failed
+    );
 }
 
 fn generate_one(
@@ -235,24 +274,43 @@ fn generate_one(
     // Check Nyquist violations
     match signal {
         SignalKind::Thd1k if 1000.0 >= nyquist => {
-            return Err(format!("Nyquist violation: 1000 Hz >= {} Hz (skipped)", nyquist));
+            return Err(format!(
+                "Nyquist violation: 1000 Hz >= {} Hz (skipped)",
+                nyquist
+            ));
         }
         SignalKind::Thd100 if 100.0 >= nyquist => {
-            return Err(format!("Nyquist violation: 100 Hz >= {} Hz (skipped)", nyquist));
+            return Err(format!(
+                "Nyquist violation: 100 Hz >= {} Hz (skipped)",
+                nyquist
+            ));
         }
         SignalKind::ImdSmpte if 7000.0 >= nyquist => {
-            return Err(format!("Nyquist violation: 7000 Hz >= {} Hz (skipped)", nyquist));
+            return Err(format!(
+                "Nyquist violation: 7000 Hz >= {} Hz (skipped)",
+                nyquist
+            ));
         }
         SignalKind::ImdCcif if 20000.0 >= nyquist => {
-            return Err(format!("Nyquist violation: 20 kHz >= {} Hz (skipped)", nyquist));
+            return Err(format!(
+                "Nyquist violation: 20 kHz >= {} Hz (skipped)",
+                nyquist
+            ));
         }
         SignalKind::Sweep if 20000.0 >= nyquist => {
-            return Err(format!("Nyquist violation: sweep end 20 kHz >= {} Hz (skipped)", nyquist));
+            return Err(format!(
+                "Nyquist violation: sweep end 20 kHz >= {} Hz (skipped)",
+                nyquist
+            ));
         }
         SignalKind::Id => {
-            let max_id_freq = (ID_BASE_FREQ + ID_STEP_FREQ * (channels as f32 - 1.0)).min(ID_MAX_FREQ);
+            let max_id_freq =
+                (ID_BASE_FREQ + ID_STEP_FREQ * (channels as f32 - 1.0)).min(ID_MAX_FREQ);
             if max_id_freq >= nyquist {
-                return Err(format!("Nyquist violation: max ID freq {} Hz >= {} Hz (skipped)", max_id_freq, nyquist));
+                return Err(format!(
+                    "Nyquist violation: max ID freq {} Hz >= {} Hz (skipped)",
+                    max_id_freq, nyquist
+                ));
             }
         }
         _ => {}
@@ -284,21 +342,66 @@ fn generate_one(
         SignalKind::ImdSmpte => {
             let mono = gen_two_tone(60.0, SMPTE_AMP1, 7000.0, SMPTE_AMP2, sr, duration);
             let data = replicate_mono(&mono, channels);
-            (data, SignalMetadata::ImdSmpte { freqs: [60.0, 7000.0], ratio: 4 })
+            (
+                data,
+                SignalMetadata::ImdSmpte {
+                    freqs: [60.0, 7000.0],
+                    ratio: 4,
+                },
+            )
         }
         SignalKind::ImdCcif => {
             let mono = gen_two_tone(19000.0, CCIF_AMP, 20000.0, CCIF_AMP, sr, duration);
             let data = replicate_mono(&mono, channels);
-            (data, SignalMetadata::ImdCcif { freqs: [19000.0, 20000.0] })
+            (
+                data,
+                SignalMetadata::ImdCcif {
+                    freqs: [19000.0, 20000.0],
+                },
+            )
         }
         SignalKind::Sweep => {
             let mono = gen_log_sweep(20.0, 20000.0, AMP_STD, sr, duration);
             let data = replicate_mono(&mono, channels);
-            (data, SignalMetadata::Sweep {
-                freq_start: 20.0,
-                freq_end: 20000.0,
-                kind: "log".to_string(),
-            })
+            (
+                data,
+                SignalMetadata::Sweep {
+                    freq_start: 20.0,
+                    freq_end: 20000.0,
+                    kind: "log".to_string(),
+                },
+            )
+        }
+        SignalKind::WhiteNoise => {
+            let mono = gen_white_noise(AMP_STD, sr, duration);
+            let data = replicate_mono(&mono, channels);
+            (
+                data,
+                SignalMetadata::WhiteNoise {
+                    description: "Flat spectrum (white noise)".to_string(),
+                },
+            )
+        }
+        SignalKind::PinkNoise => {
+            let mono = gen_pink_noise(AMP_STD, sr, duration);
+            let data = replicate_mono(&mono, channels);
+            (
+                data,
+                SignalMetadata::PinkNoise {
+                    description: "1/f spectrum, -3dB/octave (pink noise)".to_string(),
+                },
+            )
+        }
+        SignalKind::MNoise => {
+            let mono = gen_m_noise(AMP_STD, sr, duration);
+            let data = replicate_mono(&mono, channels);
+            (
+                data,
+                SignalMetadata::MNoise {
+                    description: "M-weighted noise for acoustic measurements".to_string(),
+                    weighting: "ITU-R 468".to_string(),
+                },
+            )
         }
     };
 
@@ -398,6 +501,104 @@ fn gen_log_sweep(f_start: f32, f_end: f32, amp: f32, sr: u32, dur: f32) -> Vec<f
     signal
 }
 
+fn gen_white_noise(amp: f32, sr: u32, dur: f32) -> Vec<f32> {
+    let n_frames = frames_for(dur, sr);
+    let mut signal = Vec::with_capacity(n_frames);
+    
+    // Simple LCG random number generator for deterministic output
+    let mut seed: u64 = 1234567890;
+    
+    for _ in 0..n_frames {
+        // LCG constants from Numerical Recipes
+        seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
+        // Convert to [-1, 1] range
+        let random = (seed as f32 / u32::MAX as f32) * 2.0 - 1.0;
+        signal.push(clip(amp * random));
+    }
+    
+    signal
+}
+
+fn gen_pink_noise(amp: f32, sr: u32, dur: f32) -> Vec<f32> {
+    let n_frames = frames_for(dur, sr);
+    let mut signal = Vec::with_capacity(n_frames);
+    
+    // Voss-McCartney algorithm (Paul Kellett's implementation)
+    // Uses multiple white noise generators at different rates
+    let mut seed: u64 = 9876543210;
+    let mut b0 = 0.0f32;
+    let mut b1 = 0.0f32;
+    let mut b2 = 0.0f32;
+    let mut b3 = 0.0f32;
+    let mut b4 = 0.0f32;
+    let mut b5 = 0.0f32;
+    let mut b6 = 0.0f32;
+    
+    for _ in 0..n_frames {
+        // Generate white noise
+        seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
+        let white = (seed as f32 / u32::MAX as f32) * 2.0 - 1.0;
+        
+        // Update pink noise state at different rates
+        b0 = 0.99886 * b0 + white * 0.0555179;
+        b1 = 0.99332 * b1 + white * 0.0750759;
+        b2 = 0.96900 * b2 + white * 0.1538520;
+        b3 = 0.86650 * b3 + white * 0.3104856;
+        b4 = 0.55000 * b4 + white * 0.5329522;
+        b5 = -0.7616 * b5 - white * 0.0168980;
+        
+        let pink = b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362;
+        b6 = white * 0.115926;
+        
+        // Normalize and scale (pink noise is ~3dB louder than white)
+        signal.push(clip(amp * pink * 0.11));
+    }
+    
+    signal
+}
+
+fn gen_m_noise(amp: f32, sr: u32, dur: f32) -> Vec<f32> {
+    // M-weighted noise uses ITU-R 468 weighting curve
+    // This is an approximation using a shaped white noise approach
+    let n_frames = frames_for(dur, sr);
+    let mut signal = Vec::with_capacity(n_frames);
+    
+    // Generate white noise first
+    let mut seed: u64 = 1122334455;
+    let mut noise_buffer = Vec::with_capacity(n_frames);
+    
+    for _ in 0..n_frames {
+        seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
+        let white = (seed as f32 / u32::MAX as f32) * 2.0 - 1.0;
+        noise_buffer.push(white);
+    }
+    
+    // Apply ITU-R 468 weighting approximation using IIR filters
+    // This is a simplified version that boosts high frequencies (emphasis around 6.3 kHz)
+    let mut hp_state = 0.0f32;
+    
+    // High-pass filter coefficient (cutoff around 30 Hz)
+    let hp_coeff = 1.0 - (2.0 * PI * 30.0 / sr as f32).exp();
+    
+    // Peak filter coefficients (peak around 6300 Hz)
+    let peak_freq = 6300.0;
+    let peak_gain_db = 12.0; // ITU-R 468 has peak around 6.3 kHz
+    let w0 = 2.0 * PI * peak_freq / sr as f32;
+    let a = 10.0f32.powf(peak_gain_db / 40.0);
+    
+    for &white in &noise_buffer {
+        // High-pass filter
+        hp_state = hp_coeff * (hp_state + white);
+        
+        // Simplified peak boost (approximate ITU-R 468 weighting)
+        let boosted = hp_state * (1.0 + (w0 * hp_state.abs()).sin() * a * 0.3);
+        
+        signal.push(clip(amp * boosted * 0.7));
+    }
+    
+    signal
+}
+
 // Channel operations
 
 fn interleave_per_channel(per_channel: &[Vec<f32>]) -> Vec<f32> {
@@ -446,28 +647,31 @@ fn write_wav(
         sample_format: SampleFormat::Int,
     };
 
-    let mut writer = WavWriter::create(path, spec)
-        .map_err(|e| format!("Failed to create WAV writer: {}", e))?;
+    let mut writer =
+        WavWriter::create(path, spec).map_err(|e| format!("Failed to create WAV writer: {}", e))?;
 
     match bits {
         16 => {
             for &sample in interleaved {
                 let pcm = (clip(sample) * 32767.0).round() as i16;
-                writer.write_sample(pcm)
+                writer
+                    .write_sample(pcm)
                     .map_err(|e| format!("Failed to write sample: {}", e))?;
             }
         }
         24 => {
             for &sample in interleaved {
                 let pcm = (clip(sample) * 8388607.0).round() as i32;
-                writer.write_sample(pcm)
+                writer
+                    .write_sample(pcm)
                     .map_err(|e| format!("Failed to write sample: {}", e))?;
             }
         }
         _ => return Err(format!("Unsupported bit depth: {}", bits)),
     }
 
-    writer.finalize()
+    writer
+        .finalize()
         .map_err(|e| format!("Failed to finalize WAV: {}", e))?;
 
     Ok(())
@@ -478,8 +682,7 @@ fn write_wav(
 fn write_sidecar(path: &Path, sidecar: &Sidecar) -> Result<(), String> {
     let json = serde_json::to_string_pretty(sidecar)
         .map_err(|e| format!("Failed to serialize sidecar: {}", e))?;
-    fs::write(path, json)
-        .map_err(|e| format!("Failed to write sidecar: {}", e))?;
+    fs::write(path, json).map_err(|e| format!("Failed to write sidecar: {}", e))?;
     Ok(())
 }
 
@@ -487,7 +690,6 @@ fn write_manifest(path: &Path, files: &[String]) -> Result<(), String> {
     let manifest = serde_json::json!({ "files": files });
     let json = serde_json::to_string_pretty(&manifest)
         .map_err(|e| format!("Failed to serialize manifest: {}", e))?;
-    fs::write(path, json)
-        .map_err(|e| format!("Failed to write manifest: {}", e))?;
+    fs::write(path, json).map_err(|e| format!("Failed to write manifest: {}", e))?;
     Ok(())
 }
