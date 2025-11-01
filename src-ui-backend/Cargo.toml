@@ -37,6 +37,7 @@ which = { workspace = true }
 clap = { workspace = true }
 ctrlc = { workspace = true }
 reqwest = { workspace = true }
+chrono = { workspace = true }
 
 # Audio decoding/encoding
 symphonia = { version = "0.5", default-features = false }

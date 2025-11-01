@@ -7,6 +7,35 @@ use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
+// Logging macro for consistent timestamp format
+macro_rules! log_debug {
+    ($($arg:tt)*) => {{
+        let now = chrono::Local::now();
+        eprintln!("{}  DEBUG [audio_streaming] {}", now.format("%Y-%m-%d %H:%M:%S%.6f"), format!($($arg)*));
+    }};
+}
+
+macro_rules! log_info {
+    ($($arg:tt)*) => {{
+        let now = chrono::Local::now();
+        eprintln!("{}  INFO  [audio_streaming] {}", now.format("%Y-%m-%d %H:%M:%S%.6f"), format!($($arg)*));
+    }};
+}
+
+macro_rules! log_warn {
+    ($($arg:tt)*) => {{
+        let now = chrono::Local::now();
+        eprintln!("{}  WARN  [audio_streaming] {}", now.format("%Y-%m-%d %H:%M:%S%.6f"), format!($($arg)*));
+    }};
+}
+
+macro_rules! log_error {
+    ($($arg:tt)*) => {{
+        let now = chrono::Local::now();
+        eprintln!("{}  ERROR [audio_streaming] {}", now.format("%Y-%m-%d %H:%M:%S%.6f"), format!($($arg)*));
+    }};
+}
+
 use crate::camilla::{AudioManager, ChannelMapMode, FilterParams, LoudnessCompensation};
 use crate::loudness_monitor::{LoudnessInfo, LoudnessMonitor};
 use crate::{
@@ -370,14 +399,8 @@ impl AudioStreamingManager {
         underrun_count: Arc<Mutex<usize>>,
         loudness_monitor: Option<Arc<LoudnessMonitor>>,
     ) -> AudioDecoderResult<()> {
-        println!(
-            "[AudioStreamingManager] Decoder thread starting for: {:?}",
-            path
-        );
-        println!(
-            "[AudioStreamingManager] Buffer size: {} chunks (1024 frames each)",
-            buffer_chunks
-        );
+        log_info!("Decoder thread starting for: {:?}", path);
+        log_debug!("Buffer size: {} chunks (1024 frames each)", buffer_chunks);
 
         // Create decoder
         let mut decoder = create_decoder(&path)?;
@@ -396,26 +419,12 @@ impl AudioStreamingManager {
         let mut pre_buffered = false;
         let mut packet_count = 0usize;
 
-        println!(
-            "[AudioStreamingManager] Pre-buffering {} frames...",
-            target_buffer_frames
+        log_info!(
+            "Pre-buffering {} frames ({:.2}s at {}Hz)...",
+            target_buffer_frames,
+            target_buffer_frames as f64 / spec.sample_rate as f64,
+            spec.sample_rate
         );
-
-        // Immediately write silence to prevent initial underrun while decoder spins up
-        // Write 2 seconds of silence to cover worst-case thread startup delay
-        let silence_frames = spec.sample_rate as usize * 2;
-        let silence_bytes = vec![0u8; silence_frames * spec.channels as usize * 4];
-        if let Err(e) = stdin.write_all(&silence_bytes) {
-            eprintln!(
-                "[AudioStreamingManager] Failed to write initial silence: {:?}",
-                e
-            );
-        } else if let Err(e) = stdin.flush() {
-            eprintln!(
-                "[AudioStreamingManager] Failed to flush initial silence: {:?}",
-                e
-            );
-        }
 
         loop {
             // Check for commands (batched - check every 10 packets to reduce overhead)
@@ -473,36 +482,52 @@ impl AudioStreamingManager {
                         let pcm_bytes = decoded_audio.to_bytes_f32_le();
                         let frames_in_packet = pcm_bytes.len() / (spec.channels as usize * 4);
 
-                        // Write immediately to CamillaDSP to prevent initial underrun
-                        if let Err(e) = stdin.write_all(&pcm_bytes) {
-                            eprintln!(
-                                "[AudioStreamingManager] Failed to write during pre-buffering: {:?}",
-                                e
-                            );
-                            let mut state_lock = state.lock().unwrap();
-                            *state_lock = StreamingState::Error;
-                            break;
-                        }
-                        if let Err(e) = stdin.flush() {
-                            eprintln!(
-                                "[AudioStreamingManager] Failed to flush during pre-buffering: {:?}",
-                                e
-                            );
-                            let mut state_lock = state.lock().unwrap();
-                            *state_lock = StreamingState::Error;
-                            break;
-                        }
-
-                        // Also keep in buffer for smooth playback
+                        // Only accumulate in buffer during pre-buffering, don't write yet
                         audio_buffer.extend(pcm_bytes.iter());
                         buffered_frames += frames_in_packet;
 
                         // Check if we've reached the target buffer size
                         if buffered_frames >= target_buffer_frames {
-                            println!(
-                                "[AudioStreamingManager] Pre-buffer complete: {} frames buffered",
+                            log_info!(
+                                "Pre-buffer complete: {} frames buffered ({:.2}s at {}Hz)",
+                                buffered_frames,
+                                buffered_frames as f64 / spec.sample_rate as f64,
+                                spec.sample_rate
+                            );
+                            
+                            // Write HALF the pre-buffer to CamillaDSP, keep the rest in buffer
+                            // This ensures we have data to continue streaming immediately
+                            let write_size = audio_buffer.len() / 2;
+                            let prebuffer_data: Vec<u8> = audio_buffer.drain(..write_size).collect();
+                            let frames_to_write = write_size / (spec.channels as usize * 4);
+                            
+                            log_debug!(
+                                "Writing half of pre-buffer ({} frames, {:.2}s) to CamillaDSP, keeping {} frames in buffer",
+                                frames_to_write,
+                                frames_to_write as f64 / spec.sample_rate as f64,
+                                buffered_frames - frames_to_write
+                            );
+                            
+                            if let Err(e) = stdin.write_all(&prebuffer_data) {
+                                log_error!("Failed to write pre-buffer: {:?}", e);
+                                let mut state_lock = state.lock().unwrap();
+                                *state_lock = StreamingState::Error;
+                                break;
+                            }
+                            if let Err(e) = stdin.flush() {
+                                log_error!("Failed to flush pre-buffer: {:?}", e);
+                                let mut state_lock = state.lock().unwrap();
+                                *state_lock = StreamingState::Error;
+                                break;
+                            }
+                            
+                            // Update buffer state
+                            buffered_frames -= frames_to_write;
+                            log_info!(
+                                "Pre-buffer written, playback starting ({} frames remaining in buffer)",
                                 buffered_frames
                             );
+                            
                             pre_buffered = true;
 
                             if playing {
@@ -513,16 +538,13 @@ impl AudioStreamingManager {
                     }
                     Ok(None) => {
                         // End of stream during pre-buffering
-                        println!("[AudioStreamingManager] End of stream during pre-buffering");
+                        log_info!("End of stream during pre-buffering");
                         let mut state_lock = state.lock().unwrap();
                         *state_lock = StreamingState::Idle;
                         break;
                     }
                     Err(e) => {
-                        eprintln!(
-                            "[AudioStreamingManager] Decode error during pre-buffering: {:?}",
-                            e
-                        );
+                        log_error!("Decode error during pre-buffering: {:?}", e);
                         let mut state_lock = state.lock().unwrap();
                         *state_lock = StreamingState::Error;
                         break;
@@ -535,8 +557,8 @@ impl AudioStreamingManager {
             if pre_buffered && buffered_frames < target_buffer_frames / 10 {
                 let mut underruns = underrun_count.lock().unwrap();
                 *underruns += 1;
-                eprintln!(
-                    "[AudioStreamingManager] Warning: Buffer critically low ({} frames, target {})",
+                log_warn!(
+                    "Buffer critically low ({} frames, target {})",
                     buffered_frames, target_buffer_frames
                 );
             }

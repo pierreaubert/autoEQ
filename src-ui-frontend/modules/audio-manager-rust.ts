@@ -307,6 +307,20 @@ export class AudioManagerRust {
   }
 
   /**
+   * Get the current recording SPL (Sound Pressure Level) in dB
+   * Only works during recording
+   */
+  async getRecordingSPL(): Promise<number> {
+    try {
+      const spl = (await invoke("audio_get_recording_spl")) as number;
+      return spl;
+    } catch (error) {
+      // Silent fail - not recording or no signal
+      return -96.0; // Silence floor
+    }
+  }
+
+  /**
    * Start polling signal peak at regular intervals
    * Returns a function to stop polling
    */

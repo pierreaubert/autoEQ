@@ -2337,6 +2337,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "hound"
+version = "3.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "62adaabb884c94955b19907d60019f4e145d091c75345379e70d1ee696f7854f"
+
+[[package]]
 name = "html5ever"
 version = "0.29.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5526,17 +5532,19 @@ dependencies = [
 
 [[package]]
 name = "sotf_backend"
-version = "0.2.455"
+version = "0.2.457"
 dependencies = [
  "accelerate-src",
  "autoeq",
  "blas-src",
+ "chrono",
  "clap",
  "cpal",
  "ctrlc",
  "ebur128",
  "futures",
  "futures-util",
+ "hound",
  "intel-mkl-src",
  "libc",
  "ndarray",

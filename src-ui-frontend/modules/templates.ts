@@ -582,6 +582,7 @@ export function generateCaptureModal(): string {
                     <span id="input_channels_info" class="channel-count-badge">? ch</span>
                     <span id="modal_capture_sample_rate" class="info-badge sample-rate-badge">48kHz</span>
                     <span id="modal_capture_bit_depth" class="info-badge bit-depth-badge">24</span>
+                    <span id="modal_capture_spl" class="info-badge spl-badge" style="display: none;">-- dB</span>
                     <button id="input_routing_btn" class="routing-button" title="Configure input channel routing">
                       <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                         <!-- Grid lines -->

@@ -217,6 +217,8 @@ pub struct AudioStreamState {
     pub playback_channel_map: Option<Vec<u16>>,
     /// Capture device channel map (hardware channels)
     pub capture_channel_map: Option<Vec<u16>>,
+    /// Recording output file path (for WAV conversion)
+    pub recording_output_file: Option<PathBuf>,
     /// Last error message
     pub error_message: Option<String>,
 }
@@ -236,6 +238,7 @@ impl Default for AudioStreamState {
             channel_map_mode: ChannelMapMode::Normal,
             playback_channel_map: None,
             capture_channel_map: None,
+            recording_output_file: None,
             error_message: None,
         }
     }
@@ -284,11 +287,9 @@ pub struct CaptureDevice {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub filename: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub channels: Option<u16>,
+    pub channels: Option<ChannelsSetting>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub format: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub channel_map: Option<Vec<u16>>,
 }
 
 /// Playback device configuration
@@ -301,11 +302,9 @@ pub struct PlaybackDevice {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub filename: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub channels: Option<u16>,
+    pub channels: Option<ChannelsSetting>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub format: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub channel_map: Option<Vec<u16>>,
 }
 
 /// Pipeline step in the processing chain
@@ -317,6 +316,14 @@ pub struct PipelineStep {
     pub channel: Option<u16>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+}
+
+/// Channels can be specified either as a count (u16) or as explicit indices (Vec<u16>)
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(untagged)]
+pub enum ChannelsSetting {
+    Count(u16),
+    Indices(Vec<u16>),
 }
 
 // ============================================================================
@@ -1304,6 +1311,7 @@ impl AudioManager {
             state.channels = channels;
             state.error_message = None;
             state.capture_channel_map = input_map.clone();
+            state.recording_output_file = Some(output_file.clone());
         }
 
         // Generate recording config
@@ -1345,7 +1353,52 @@ impl AudioManager {
     /// Stop recording
     pub async fn stop_recording(&self) -> CamillaResult<()> {
         println!("[AudioManager] Stopping recording");
-        self.stop_playback().await // Same logic as stop playback
+        
+        // Get recording parameters before stopping
+        let (output_file, sample_rate, channels) = {
+            let state = self.state.lock().map_err(|e| {
+                CamillaError::ProcessCommunicationFailed(format!("Failed to lock state: {}", e))
+            })?;
+            
+            let output_file = state.recording_output_file.clone()
+                .ok_or_else(|| CamillaError::ProcessNotRunning)?;
+            
+            (output_file, state.sample_rate, state.channels)
+        };
+        
+        // Stop the CamillaDSP process (writes raw FLOAT32LE file)
+        self.stop_playback().await?;
+        
+        // Convert raw file to WAV format
+        // CamillaDSP writes to the specified output file as raw FLOAT32LE
+        // We need to convert it to a proper WAV file
+        let raw_file = output_file.with_extension("");
+        let raw_file = PathBuf::from(format!("{}.raw", raw_file.display()));
+        
+        // If the output file already exists (as raw data), convert it
+        if output_file.exists() {
+            println!("[AudioManager] Converting raw audio to WAV format...");
+            convert_raw_to_wav(&output_file, &output_file, sample_rate, channels)?;
+            println!("[AudioManager] Recording saved as WAV: {:?}", output_file);
+        } else if raw_file.exists() {
+            println!("[AudioManager] Converting raw audio to WAV format...");
+            convert_raw_to_wav(&raw_file, &output_file, sample_rate, channels)?;
+            // Remove raw file after conversion
+            let _ = std::fs::remove_file(&raw_file);
+            println!("[AudioManager] Recording saved as WAV: {:?}", output_file);
+        } else {
+            println!("[AudioManager] Warning: Recording file not found");
+        }
+        
+        // Clear recording state
+        {
+            let mut state = self.state.lock().map_err(|e| {
+                CamillaError::ProcessCommunicationFailed(format!("Failed to lock state: {}", e))
+            })?;
+            state.recording_output_file = None;
+        }
+        
+        Ok(())
     }
 
     /// Check if audio is currently playing
@@ -1424,9 +1477,8 @@ pub fn generate_streaming_config(
         device_type: "Stdin".to_string(),
         device: None,
         filename: None,
-        channels: Some(channels),
+        channels: Some(ChannelsSetting::Count(channels)),
         format: Some("FLOAT32LE".to_string()), // Our decoder outputs f32 samples
-        channel_map: None,
     };
 
     // Create playback device
@@ -1459,21 +1511,25 @@ pub fn generate_streaming_config(
         device_type: playback_type,
         device: device_name,
         filename: None,
-        channels: Some(mixer_out_channels),
-        format: None,      // Let CoreAudio use default format
-        channel_map: None, // CoreAudio doesn't accept channel_map; we route via Mixer
+        channels: Some(ChannelsSetting::Count(mixer_out_channels)),
+        format: None, // Let CoreAudio use default format
     };
 
     // Generate resampler config if needed
     let resampler_config = if needs_resampling {
-        // CamillaDSP v3 expects explicit parameters per resampler type.
-        // Use AsyncPoly with linear interpolation for broad compatibility.
-        let resampler_yaml = r#"
-            type: AsyncPoly
-            interpolation: Linear
-        "#;
+        // For streaming from Stdin, Camilla doesn't know the source rate.
+        // Use Synchronous resampler and provide explicit in/out rates.
+        let resampler_yaml = format!(
+            r#"
+            type: Synchronous
+            in_rate: {in_rate}
+            out_rate: {out_rate}
+            "#,
+            in_rate = sample_rate,
+            out_rate = device_sample_rate
+        );
         Some(
-            serde_yaml::from_str::<serde_yaml::Value>(resampler_yaml).map_err(|e| {
+            serde_yaml::from_str::<serde_yaml::Value>(&resampler_yaml).map_err(|e| {
                 CamillaError::ConfigGenerationFailed(format!("Failed to generate resampler: {}", e))
             })?,
         )
@@ -1486,7 +1542,8 @@ pub fn generate_streaming_config(
         chunksize: 1024,
         capture: Some(capture),
         playback,
-        enable_rate_adjust: Some(true),
+        // With a synchronous resampler, rate adjust is not applicable.
+        enable_rate_adjust: Some(false),
         resampler: resampler_config,
     };
 
@@ -1624,7 +1681,6 @@ pub fn generate_playback_config(
         filename: Some(filename_str),
         channels: None, // File input infers channels from file
         format: None,   // File input infers format from file
-        channel_map: None,
     };
 
     // Create playback device
@@ -1657,9 +1713,8 @@ pub fn generate_playback_config(
         device_type: playback_type,
         device: device_name,
         filename: None,
-        channels: Some(mixer_out_channels),
-        format: None,      // Let CoreAudio use default format
-        channel_map: None, // CoreAudio doesn't accept channel_map; we route via Mixer
+        channels: Some(ChannelsSetting::Count(mixer_out_channels)),
+        format: None, // Let CoreAudio use default format
     };
 
     // Detect device native sample rate for file playback too
@@ -1792,6 +1847,61 @@ pub fn generate_playback_config(
     })
 }
 
+/// Convert raw FLOAT32LE audio to WAV format using hound
+fn convert_raw_to_wav(
+    raw_path: &std::path::Path,
+    wav_path: &std::path::Path,
+    sample_rate: u32,
+    channels: u16,
+) -> CamillaResult<()> {
+    use std::fs::File;
+    use std::io::BufReader;
+
+    println!(
+        "[CamillaDSP] Converting raw audio to WAV: {:?} -> {:?}",
+        raw_path, wav_path
+    );
+
+    // Read raw FLOAT32LE data
+    let raw_file = File::open(raw_path)
+        .map_err(|e| CamillaError::IOError(format!("Failed to open raw file: {}", e)))?;
+    let mut reader = BufReader::new(raw_file);
+    let mut raw_data = Vec::new();
+    std::io::Read::read_to_end(&mut reader, &mut raw_data)
+        .map_err(|e| CamillaError::IOError(format!("Failed to read raw data: {}", e)))?;
+
+    // Interpret as f32 samples
+    let sample_count = raw_data.len() / 4;
+    let mut samples = Vec::with_capacity(sample_count);
+    for chunk in raw_data.chunks_exact(4) {
+        let bytes = [chunk[0], chunk[1], chunk[2], chunk[3]];
+        samples.push(f32::from_le_bytes(bytes));
+    }
+
+    // Write WAV file using hound
+    let spec = hound::WavSpec {
+        channels,
+        sample_rate,
+        bits_per_sample: 32,
+        sample_format: hound::SampleFormat::Float,
+    };
+    
+    let mut wav_writer = hound::WavWriter::create(wav_path, spec)
+        .map_err(|e| CamillaError::IOError(format!("Failed to create WAV writer: {}", e)))?;
+
+    // Write all samples
+    for &sample in &samples {
+        wav_writer.write_sample(sample)
+            .map_err(|e| CamillaError::IOError(format!("Failed to write sample: {}", e)))?;
+    }
+    
+    wav_writer.finalize()
+        .map_err(|e| CamillaError::IOError(format!("Failed to finalize WAV file: {}", e)))?;
+
+    println!("[CamillaDSP] WAV conversion complete: {} samples, {}Hz, {}ch", sample_count, sample_rate, channels);
+    Ok(())
+}
+
 /// Generate a CamillaDSP config for recording
 pub fn generate_recording_config(
     output_file: &std::path::Path,
@@ -1819,12 +1929,21 @@ pub fn generate_recording_config(
     };
 
     let capture = CaptureDevice {
-        device_type: capture_type,
+        device_type: capture_type.clone(),
         device: device_name,
         filename: None,
-        channels: Some(channels), // CoreAudio needs explicit channel count
-        format: None,             // Let backend pick a compatible native format
-        channel_map: effective_input_map,
+        // CamillaDSP v3 CoreAudio expects channels as count (usize), not indices
+        // When hardware channel mapping is provided, we capture enough channels to include
+        // the highest requested channel index, then use mixer to route correctly
+        channels: Some(ChannelsSetting::Count(match &effective_input_map {
+            Some(map) if !map.is_empty() && capture_type == "CoreAudio" => {
+                // For CoreAudio: Calculate max channel index + 1 to ensure we capture enough channels
+                let max_channel = map.iter().max().copied().unwrap_or(0);
+                max_channel + 1
+            }
+            _ => channels,
+        })),
+        format: None, // Let backend pick a compatible native format
     };
 
     // Create playback device (file output)
@@ -1841,9 +1960,8 @@ pub fn generate_recording_config(
                 })?
                 .to_string(),
         ),
-        channels: Some(channels), // Specify channels for file output
+        channels: Some(ChannelsSetting::Count(channels)), // Specify channels for file output
         format: Some("FLOAT32LE".to_string()),
-        channel_map: None,
     };
 
     let devices = DeviceConfig {
@@ -1855,11 +1973,55 @@ pub fn generate_recording_config(
         resampler: None,
     };
 
+    // If hardware channel mapping is provided and we're using CoreAudio,
+    // we need to add a mixer to route the selected channels to the output
+    let (mixers_section, pipeline) = if let Some(ref map) = effective_input_map
+        && capture_type == "CoreAudio"
+    {
+        // Get the actual number of channels we're capturing
+        let capture_channels = match devices.capture.as_ref().unwrap().channels {
+            Some(ChannelsSetting::Count(n)) => n,
+            _ => channels,
+        };
+
+        // Build the channel routing map:
+        // For each captured input channel (0..capture_channels), specify which output channel it goes to.
+        // The hardware channels specified in `map` go to sequential output channels (0..channels).
+        // All other input channels are routed to a non-existent output (captured but discarded).
+        let mut channel_routing: Vec<u16> = vec![channels; capture_channels as usize]; // Default: route to out-of-bounds (discard)
+        for (output_idx, &hardware_channel) in map.iter().enumerate() {
+            if (hardware_channel as usize) < channel_routing.len() && (output_idx as u16) < channels
+            {
+                channel_routing[hardware_channel as usize] = output_idx as u16;
+            }
+        }
+
+        // Generate mixer that routes hardware channels to output channels
+        let mixer = generate_matrix_mixer_yaml(capture_channels, channels, &channel_routing);
+
+        // Generate pipeline with just the mixer
+        let mut pipeline_steps: Vec<serde_yaml::Value> = Vec::new();
+        let mut mixer_map = serde_yaml::Mapping::new();
+        mixer_map.insert(
+            serde_yaml::Value::String("type".to_string()),
+            serde_yaml::Value::String("Mixer".to_string()),
+        );
+        mixer_map.insert(
+            serde_yaml::Value::String("name".to_string()),
+            serde_yaml::Value::String("matrix_mixer".to_string()),
+        );
+        pipeline_steps.push(serde_yaml::Value::Mapping(mixer_map));
+
+        (Some(mixer), Some(pipeline_steps))
+    } else {
+        (None, None)
+    };
+
     Ok(CamillaDSPConfig {
         devices,
         filters: None,
-        mixers: None,
-        pipeline: None,
+        mixers: mixers_section,
+        pipeline,
     })
 }
 
@@ -2120,14 +2282,40 @@ pub fn find_camilladsp_binary() -> CamillaResult<PathBuf> {
             return Ok(bundled_path);
         }
 
-        // Also check for Tauri sidecar naming (with hash suffix)
-        let bundled_path_sidecar = exe_dir.join(format!("camilladsp-{}", std::env::consts::ARCH));
-        if bundled_path_sidecar.exists() {
-            println!(
-                "[CamillaDSP] Using bundled sidecar binary: {:?}",
-                bundled_path_sidecar
-            );
-            return Ok(bundled_path_sidecar);
+        // Check for Tauri sidecar in triplet subdirectory (e.g., camilladsp-aarch64-apple-darwin/camilladsp)
+        let triplet = if cfg!(target_os = "windows") {
+            if cfg!(target_arch = "x86_64") {
+                "x86_64-pc-windows-msvc"
+            } else {
+                "aarch64-pc-windows-msvc"
+            }
+        } else if cfg!(target_os = "macos") {
+            if cfg!(target_arch = "aarch64") {
+                "aarch64-apple-darwin"
+            } else {
+                "x86_64-apple-darwin"
+            }
+        } else if cfg!(target_os = "linux") {
+            if cfg!(target_arch = "aarch64") {
+                "aarch64-unknown-linux-gnu"
+            } else {
+                "x86_64-unknown-linux-gnu"
+            }
+        } else {
+            ""
+        };
+
+        if !triplet.is_empty() {
+            let bundled_path_triplet = exe_dir
+                .join(format!("camilladsp-{}", triplet))
+                .join(bundled_name);
+            if bundled_path_triplet.exists() {
+                println!(
+                    "[CamillaDSP] Using bundled sidecar binary: {:?}",
+                    bundled_path_triplet
+                );
+                return Ok(bundled_path_triplet);
+            }
         }
     }
 
@@ -2259,7 +2447,10 @@ mod tests {
         .unwrap();
 
         assert_eq!(config.devices.samplerate, 48000);
-        assert_eq!(config.devices.playback.channels, Some(2));
+        assert_eq!(
+            config.devices.playback.channels,
+            Some(ChannelsSetting::Count(2))
+        );
         assert!(config.devices.capture.is_some());
         assert!(config.filters.is_some());
         assert!(config.mixers.is_some());
@@ -2296,7 +2487,10 @@ mod tests {
         let config = generate_recording_config(&output_file, None, 48000, 2, None).unwrap();
 
         assert_eq!(config.devices.samplerate, 48000);
-        assert_eq!(config.devices.playback.channels, Some(2));
+        assert_eq!(
+            config.devices.playback.channels,
+            Some(ChannelsSetting::Count(2))
+        );
         assert!(config.devices.capture.is_some());
         assert_eq!(config.devices.playback.device_type, "File");
     }

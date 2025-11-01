@@ -75,7 +75,7 @@ enum Commands {
     ///
     /// Notes:
     /// - This subcommand always uses the streaming backend.
-    /// - Sample rate, channels, and hwaudio-input flags are ignored.
+    /// - Sample rate, channels, and hwaudio-record flags are ignored.
     Play {
         /// Path to audio file (supports WAV, FLAC, MP3, AAC/M4A, Vorbis/OGG, AIFF)
         #[arg(value_name = "FILE")]
@@ -98,12 +98,12 @@ enum Commands {
         filters: Vec<String>,
 
         /// Hardware input channel map (ignored; always streamed)
-        #[arg(long = "hwaudio-input", value_delimiter = ',')]
-        hwaudio_input: Option<Vec<u16>>,
+        #[arg(long = "hwaudio-record", value_delimiter = ',')]
+        hwaudio_record: Option<Vec<u16>>,
 
         /// Hardware output channel map (comma-separated indices)
-        #[arg(long = "hwaudio-output", value_delimiter = ',')]
-        hwaudio_output: Option<Vec<u16>>,
+        #[arg(long = "hwaudio-play", value_delimiter = ',')]
+        hwaudio_play: Option<Vec<u16>>,
 
         /// Swap left and right channels
         #[arg(long = "swap-channels", default_value_t = false)]
@@ -149,8 +149,8 @@ enum Commands {
         channels: u16,
 
         /// Hardware input channel map (comma-separated indices)
-        #[arg(long = "hwaudio-input", value_delimiter = ',')]
-        hwaudio_input: Option<Vec<u16>>,
+        #[arg(long = "hwaudio-record", value_delimiter = ',')]
+        hwaudio_record: Option<Vec<u16>>,
 
         /// Duration to record in seconds
         #[arg(short = 't', long, default_value = "10")]
@@ -212,8 +212,8 @@ async fn main() {
             sample_rate: _,
             channels: _,
             filters,
-            hwaudio_input: _,
-            hwaudio_output,
+            hwaudio_record: _,
+            hwaudio_play,
             swap_channels,
             duration,
             start_time,
@@ -253,7 +253,7 @@ async fn main() {
                 duration,
                 start_time,
                 map_mode,
-                hwaudio_output,
+                hwaudio_play,
                 buffer_chunks,
                 lufs,
                 loudness,
@@ -269,7 +269,7 @@ async fn main() {
             device,
             sample_rate,
             channels,
-            hwaudio_input,
+            hwaudio_record,
             duration,
         } => {
             if let Err(e) = record_audio(
@@ -279,7 +279,7 @@ async fn main() {
                 sample_rate,
                 channels,
                 duration,
-                hwaudio_input,
+                hwaudio_record,
             )
             .await
             {
@@ -347,7 +347,7 @@ async fn record_audio(
     sample_rate: u32,
     channels: u16,
     duration: u64,
-    hwaudio_input: Option<Vec<u16>>,
+    hwaudio_record: Option<Vec<u16>>,
 ) -> Result<(), String> {
     println!("Starting recording...");
     println!("  Output: {:?}", output);
@@ -366,7 +366,7 @@ async fn record_audio(
 
     // Start recording
     manager
-        .start_recording(output.clone(), device, sample_rate, channels, hwaudio_input)
+        .start_recording(output.clone(), device, sample_rate, channels, hwaudio_record)
         .await
         .map_err(|e| format!("Failed to start recording: {}", e))?;
 
@@ -440,7 +440,7 @@ async fn play_stream(
     duration: u64,
     start_time: f64,
     map_mode: sotf_backend::camilla::ChannelMapMode,
-    hwaudio_output: Option<Vec<u16>>,
+    hwaudio_play: Option<Vec<u16>>,
     buffer_chunks: usize,
     lufs: bool,
     loudness: Option<LoudnessCompensation>,
@@ -521,7 +521,7 @@ async fn play_stream(
     // Start playback with cancellation support
     let r_check = running.clone();
     tokio::select! {
-        result = streaming_manager.start_playback(device, filters, map_mode, hwaudio_output, loudness) => {
+        result = streaming_manager.start_playback(device, filters, map_mode, hwaudio_play, loudness) => {
             result.map_err(|e| format!("Failed to start streaming playback: {}", e))?;
         }
         _ = async {

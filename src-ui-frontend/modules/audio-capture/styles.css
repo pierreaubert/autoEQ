@@ -1641,6 +1641,42 @@ input[type="checkbox"] {
   background: #4b5563;
 }
 
+.spl-badge {
+  background: #6b7280;
+  transition: background-color 0.3s ease;
+}
+
+.spl-badge.spl-too-low {
+  background: #dc2626;
+  animation: pulse-warning 2s ease-in-out infinite;
+}
+
+.spl-badge.spl-low {
+  background: #f59e0b;
+}
+
+.spl-badge.spl-good {
+  background: #10b981;
+}
+
+.spl-badge.spl-high {
+  background: #f59e0b;
+}
+
+.spl-badge.spl-too-high {
+  background: #dc2626;
+  animation: pulse-warning 2s ease-in-out infinite;
+}
+
+@keyframes pulse-warning {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
 /* Make Input and Output control groups the same width and structure */
 .capture-control-group:has(#modal_capture_device),
 .capture-control-group:has(#modal_output_device) {

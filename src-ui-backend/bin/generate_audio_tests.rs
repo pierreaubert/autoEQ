@@ -26,7 +26,7 @@ const CCIF_AMP: f32 = 0.5; // 19/20 kHz equal amplitudes
 const ID_BASE_FREQ: f32 = 300.0;
 const ID_STEP_FREQ: f32 = 300.0;
 const ID_MAX_FREQ: f32 = 6000.0;
-const SWEEP_DURATION: f32 = 10.0; // Fixed duration for sweep
+const SWEEP_DURATION: f32 = 30.0; // Fixed duration for sweep
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 enum SignalKind {
@@ -218,7 +218,7 @@ fn main() {
         }
     }
 
-    println!("Summary: Generated: {}, Skipped: {}, Failed: {}", 
+    println!("Summary: Generated: {}, Skipped: {}, Failed: {}",
              stats.generated, stats.skipped, stats.failed);
 }
 
@@ -385,7 +385,7 @@ fn gen_two_tone(f1: f32, a1: f32, f2: f32, a2: f32, sr: u32, dur: f32) -> Vec<f3
 fn gen_log_sweep(f_start: f32, f_end: f32, amp: f32, sr: u32, dur: f32) -> Vec<f32> {
     let n_frames = frames_for(dur, sr);
     let mut signal = Vec::with_capacity(n_frames);
-    
+
     let k = (f_end / f_start).ln() / dur;
     let coefficient = 2.0 * PI * f_start / k;
 

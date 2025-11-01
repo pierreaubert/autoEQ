@@ -8,6 +8,7 @@ import { CaptureStorage } from "./capture-storage";
 import { CSVExporter } from "./csv-export";
 import { CaptureGraphRenderer } from "./capture-graph";
 import { RoutingMatrix } from "@audio-player/audio-routing";
+import { audioManagerRust } from "@/modules/audio-manager-rust";
 
 export interface CaptureData {
   frequencies: number[];
@@ -74,6 +75,7 @@ export class CaptureModalManager {
   private modalSweepDuration: HTMLSelectElement | null = null;
   private modalCaptureSampleRate: HTMLElement | null = null;
   private modalCaptureBitDepth: HTMLElement | null = null;
+  private modalCaptureSPL: HTMLElement | null = null;
   private modalOutputSampleRate: HTMLElement | null = null;
   private modalOutputBitDepth: HTMLElement | null = null;
   private modalSweepDurationContainer: HTMLElement | null = null;
@@ -101,6 +103,7 @@ export class CaptureModalManager {
   private currentCaptureData: CaptureData | null = null;
   private captureVolume: number = 70;
   private outputVolume: number = 50;
+  private splPollingInterval: number | null = null;
 
   // Routing matrices
   private inputRoutingMatrix: RoutingMatrix | null = null;
@@ -197,6 +200,9 @@ export class CaptureModalManager {
     );
     this.modalCaptureBitDepth = document.getElementById(
       "modal_capture_bit_depth",
+    );
+    this.modalCaptureSPL = document.getElementById(
+      "modal_capture_spl",
     );
     this.modalOutputSampleRate = document.getElementById(
       "modal_output_sample_rate",
@@ -2102,6 +2108,102 @@ export class CaptureModalManager {
     // Update status
     if (this.captureModalStatus) {
       this.captureModalStatus.textContent = `Average of ${allCaptures.length} sweeps`;
+    }
+  }
+
+  // ============================================================================
+  // SPL Monitoring
+  // ============================================================================
+
+  /**
+   * Start polling for SPL during recording
+   */
+  public startSPLMonitoring(): void {
+    // Stop any existing polling
+    this.stopSPLMonitoring();
+
+    // Show the SPL badge
+    if (this.modalCaptureSPL) {
+      this.modalCaptureSPL.style.display = "inline-block";
+      this.modalCaptureSPL.textContent = "-- dB";
+    }
+
+    // Start polling every 100ms
+    this.splPollingInterval = window.setInterval(async () => {
+      try {
+        const spl = await audioManagerRust.getRecordingSPL();
+        
+        if (this.modalCaptureSPL) {
+          // Format SPL value with color coding
+          let displayText: string;
+          let colorClass: string;
+
+          if (spl <= -90) {
+            displayText = "-- dB";
+            colorClass = "";
+          } else {
+            displayText = `${spl.toFixed(1)} dB`;
+            
+            // Color code based on SPL level
+            if (spl < 40) {
+              colorClass = "spl-too-low"; // Red - too quiet
+            } else if (spl < 60) {
+              colorClass = "spl-low"; // Yellow - low
+            } else if (spl < 90) {
+              colorClass = "spl-good"; // Green - good range
+            } else if (spl < 100) {
+              colorClass = "spl-high"; // Yellow - getting loud
+            } else {
+              colorClass = "spl-too-high"; // Red - too loud
+            }
+          }
+
+          this.modalCaptureSPL.textContent = displayText;
+          
+          // Remove all color classes
+          this.modalCaptureSPL.classList.remove(
+            "spl-too-low",
+            "spl-low",
+            "spl-good",
+            "spl-high",
+            "spl-too-high"
+          );
+          
+          // Add appropriate color class
+          if (colorClass) {
+            this.modalCaptureSPL.classList.add(colorClass);
+          }
+        }
+      } catch (error) {
+        // Silent fail - recording may have stopped
+        console.debug("SPL monitoring error (expected if not recording):", error);
+      }
+    }, 100);
+
+    console.log("SPL monitoring started");
+  }
+
+  /**
+   * Stop polling for SPL
+   */
+  public stopSPLMonitoring(): void {
+    if (this.splPollingInterval !== null) {
+      clearInterval(this.splPollingInterval);
+      this.splPollingInterval = null;
+      console.log("SPL monitoring stopped");
+    }
+
+    // Hide the SPL badge
+    if (this.modalCaptureSPL) {
+      this.modalCaptureSPL.style.display = "none";
+      this.modalCaptureSPL.textContent = "-- dB";
+      this.modalCaptureSPL.classList.remove(
+        "spl-too-low",
+        "spl-low",
+        "spl-good",
+        "spl-high",
+        "spl-too-high"
+      );
     }
   }
 }
