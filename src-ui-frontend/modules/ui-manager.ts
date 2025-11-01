@@ -932,7 +932,9 @@ export class UIManager {
   private async startCapture(): Promise<void> {
     // Audio capture is now handled by CaptureModalManager
     // This method is kept for backward compatibility but does nothing
-    console.log("startCapture called - capture is handled by CaptureModalManager");
+    console.log(
+      "startCapture called - capture is handled by CaptureModalManager",
+    );
   }
 
   private stopCapture(): void {
@@ -948,7 +950,6 @@ export class UIManager {
       this.captureStatusText.textContent = "Capture stopped";
     }
   }
-
 
   private plotCapturedData(frequencies: number[], magnitudes: number[]): void {
     console.log("Plotting captured data...");

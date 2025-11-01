@@ -1088,7 +1088,7 @@ pub fn run() {
         .setup(|app| {
             // Spawn background task to monitor streaming events and forward them to frontend
             let app_handle = app.handle().clone();
-            
+
             tauri::async_runtime::spawn(async move {
                 loop {
                     // Poll for events from the decoder thread

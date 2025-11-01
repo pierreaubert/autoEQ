@@ -7,7 +7,7 @@ import {
   PlotSpinParams,
   CurveData,
 } from "../types/plot";
-import * as Plotly from "plotly.js-dist-min";
+import * as Plotly from "plotly.js-basic-dist-min";
 
 /**
  * Example: Generate and display filter response plots

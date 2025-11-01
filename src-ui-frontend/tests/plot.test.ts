@@ -19,13 +19,19 @@ import {
   displayOptimizationResults,
 } from "../modules/plot-examples";
 
-// Mock Plotly for testing
-const mockPlotly = {
+// Mock Plotly module
+vi.mock("plotly.js-basic-dist-min", () => ({
+  default: {
+    newPlot: vi.fn().mockResolvedValue(undefined),
+    Plots: {
+      resize: vi.fn(),
+    },
+  },
   newPlot: vi.fn().mockResolvedValue(undefined),
   Plots: {
     resize: vi.fn(),
   },
-};
+}));
 
 // Mock Tauri invoke function
 const mockTauriInvoke = vi.fn();
@@ -44,6 +50,21 @@ const createMockElement = () => ({
   classList: { add: vi.fn(), remove: vi.fn() },
   offsetWidth: 800,
   offsetHeight: 600,
+  getBoundingClientRect: vi.fn(() => ({
+    width: 800,
+    height: 600,
+    top: 0,
+    left: 0,
+    right: 800,
+    bottom: 600,
+    x: 0,
+    y: 0,
+    toJSON: () => ({}),
+  })),
+  querySelectorAll: vi.fn(() => []),
+  querySelector: vi.fn(() => null),
+  appendChild: vi.fn(),
+  removeChild: vi.fn(),
 });
 
 describe("PlotUtils", () => {
@@ -239,8 +260,6 @@ describe("AutoEQPlotAPI", () => {
 describe("Plot Examples", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Mock Plotly module
-    vi.doMock("plotly.js-dist-min", () => mockPlotly);
   });
 
   describe("createSampleCurveData", () => {

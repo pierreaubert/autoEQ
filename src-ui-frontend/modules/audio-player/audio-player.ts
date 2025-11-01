@@ -508,7 +508,10 @@ export class AudioPlayer {
     console.log("[ReplayGain] Container cached:", !!this.replayGainContainer);
     if (this.replayGainContainer) {
       console.log("[ReplayGain] Container element:", this.replayGainContainer);
-      console.log("[ReplayGain] Container initial display:", this.replayGainContainer.style.display);
+      console.log(
+        "[ReplayGain] Container initial display:",
+        this.replayGainContainer.style.display,
+      );
     }
   }
 
@@ -1913,21 +1916,32 @@ export class AudioPlayer {
   private updateReplayGainDisplay(gain: number, peak: number): void {
     console.log(`[ReplayGain] Updating display - Gain: ${gain}, Peak: ${peak}`);
     console.log(`[ReplayGain] Container found:`, !!this.replayGainContainer);
-    
+
     if (!this.replayGainContainer) {
       console.error("[ReplayGain] Container not found!");
       return;
     }
 
-    console.log(`[ReplayGain] Container HTML:`, this.replayGainContainer.innerHTML);
-    console.log(`[ReplayGain] Container current display:`, this.replayGainContainer.style.display);
+    console.log(
+      `[ReplayGain] Container HTML:`,
+      this.replayGainContainer.innerHTML,
+    );
+    console.log(
+      `[ReplayGain] Container current display:`,
+      this.replayGainContainer.style.display,
+    );
 
     const gainElement =
       this.replayGainContainer.querySelector(".replay-gain-value");
     const peakElement =
       this.replayGainContainer.querySelector(".replay-peak-value");
 
-    console.log(`[ReplayGain] Elements found - Gain:`, !!gainElement, "Peak:", !!peakElement);
+    console.log(
+      `[ReplayGain] Elements found - Gain:`,
+      !!gainElement,
+      "Peak:",
+      !!peakElement,
+    );
     console.log(`[ReplayGain] Gain element:`, gainElement);
     console.log(`[ReplayGain] Peak element:`, peakElement);
 
@@ -1940,15 +1954,26 @@ export class AudioPlayer {
       // Format peak with 6 decimal places (matching backend precision)
       peakElement.textContent = peak.toFixed(6);
 
-      console.log(`[ReplayGain] Text content set - Gain element text: "${gainElement.textContent}", Peak element text: "${peakElement.textContent}"`);
-      console.log(`[ReplayGain] Display updated - Gain: "${gainText}", Peak: "${peak.toFixed(6)}"`);
+      console.log(
+        `[ReplayGain] Text content set - Gain element text: "${gainElement.textContent}", Peak element text: "${peakElement.textContent}"`,
+      );
+      console.log(
+        `[ReplayGain] Display updated - Gain: "${gainText}", Peak: "${peak.toFixed(6)}"`,
+      );
 
       // Show the container
       this.replayGainContainer.style.display = "block";
-      console.log(`[ReplayGain] Container display set to: ${this.replayGainContainer.style.display}`);
-      console.log(`[ReplayGain] Container is visible:`, this.replayGainContainer.offsetHeight > 0);
+      console.log(
+        `[ReplayGain] Container display set to: ${this.replayGainContainer.style.display}`,
+      );
+      console.log(
+        `[ReplayGain] Container is visible:`,
+        this.replayGainContainer.offsetHeight > 0,
+      );
     } else {
-      console.error("[ReplayGain] Could not find gain or peak element within container");
+      console.error(
+        "[ReplayGain] Could not find gain or peak element within container",
+      );
     }
   }
 
