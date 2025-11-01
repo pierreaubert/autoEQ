@@ -51,10 +51,10 @@
 
 .audio-control-row {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--spacing-md);
-  min-height: 80px;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: var(--spacing-sm);
+  height: 80px;
   padding: var(--spacing-xs) var(--spacing-sm);
   width: 100%;
 }
@@ -65,25 +65,21 @@
   justify-content: flex-start;
   gap: var(--spacing-sm);
   flex: 0 0 auto;
-  padding-right: var(--spacing-md);
+  padding-right: var(--spacing-sm);
   border-right: 1px solid var(--border-color);
-  margin-right: var(--spacing-md);
+  margin-right: var(--spacing-sm);
 }
 
-/* Demo Track Container - Vertical Layout */
+/* Demo Track Container - Compact */
 .demo-track-container {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
   gap: var(--spacing-xs);
 }
 
 .demo-track-label {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-secondary);
-  white-space: nowrap;
-  text-align: center;
+  display: none;
 }
 
 /* Demo Track Select Row - Select + File Button */
@@ -141,16 +137,45 @@
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  margin: 0 var(--spacing-sm);
+  margin: 0 var(--spacing-xs);
+  padding-right: var(--spacing-sm);
+  border-right: 1px solid var(--border-color);
 }
 
 .audio-right-controls {
   display: flex;
-  align-items: center;
-  justify-content: flex-end;
+  align-items: stretch;
+  justify-content: flex-start;
   gap: var(--spacing-sm);
   flex: 1;
   min-width: 0;
+}
+
+.audio-spectrum-block {
+  flex: 1;
+  min-width: 300px;
+  border-right: 1px solid var(--border-color);
+  padding-right: var(--spacing-sm);
+  display: flex;
+  align-items: stretch;
+  overflow: hidden;
+}
+
+.audio-eq-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  border-right: 1px solid var(--border-color);
+  padding-right: var(--spacing-sm);
+}
+
+.audio-metrics-block {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  padding-left: var(--spacing-sm);
 }
 
 /* Demo Audio Select */
@@ -317,20 +342,20 @@
 .listen-button,
 .pause-button,
 .stop-button {
-  width: 32px;
-  height: 32px;
+  width: 24px;
+  height: 24px;
   border: 1px solid var(--button-primary);
   border-radius: var(--radius);
   background: var(--button-primary);
   color: white;
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: var(--spacing-xs);
+  gap: 2px;
   opacity: 1;
   pointer-events: auto;
 }
@@ -428,7 +453,7 @@
 
 .audio-center-controls .audio-progress-bar {
   width: 100%;
-  height: 14px;
+  height: 6px;
   background: var(--bg-accent);
   border-radius: var(--radius);
   overflow: hidden;
@@ -448,7 +473,7 @@
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  justify-content: center;
+  justify-content: stretch;
   flex: 1;
   min-width: 300px;
   max-width: none;
@@ -458,41 +483,22 @@
   margin: 0;
   border: 1px solid var(--border-color);
   border-radius: var(--radius);
+  max-height: 100%;
 }
 
-/* Spectrum Container with Loudness Display */
+/* Spectrum Container */
 .spectrum-container {
   position: relative;
   width: 100%;
   display: flex;
   flex-direction: column;
+  flex: 1;
+  height: 100%;
 }
 
-/* Loudness Display Overlay */
+/* Loudness Display - Hidden */
 .loudness-display {
-  position: absolute;
-  top: 4px;
-  left: 4px;
-  right: 4px;
-  z-index: 10;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--text-primary);
-  background: rgba(0, 0, 0, 0.3);
-  backdrop-filter: blur(4px);
-  padding: 2px 8px;
-  border-radius: var(--radius);
-  pointer-events: none;
-}
-
-@media (prefers-color-scheme: dark) {
-  .loudness-display {
-    background: rgba(0, 0, 0, 0.5);
-  }
+  display: none;
 }
 
 .loudness-label {
@@ -516,8 +522,9 @@
 
 .spectrum-canvas {
   display: block;
-  height: 52px;
+  height: 100%;
   width: 100%;
+  flex: 1;
   image-rendering: crisp-edges;
   image-rendering: pixelated;
   border-radius: 0;
@@ -964,6 +971,76 @@
   font-size: 13px;
   font-weight: 600;
   color: var(--text-primary);
+}
+
+/* Metrics Display - Vertical Layout */
+.metrics-display {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  padding: 3px 4px;
+}
+
+.metric-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0px;
+}
+
+.metric-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+
+.metric-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0px;
+}
+
+.metric-label {
+  font-size: 7px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.2px;
+  line-height: 1;
+}
+
+.metric-value {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-primary);
+  min-width: 30px;
+  text-align: center;
+  line-height: 1;
+}
+
+.metric-separator {
+  font-size: 9px;
+  color: var(--text-secondary);
+  margin: 0 1px;
+}
+
+.metric-label-small {
+  font-size: 7px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin: 0 1px;
+}
+
+.metric-unit {
+  font-size: 7px;
+  color: var(--text-secondary);
+  margin-left: 1px;
 }
 
 .eq-table-container table {

@@ -38,6 +38,7 @@ macro_rules! log_error {
 
 use crate::camilla::{AudioManager, ChannelMapMode, FilterParams, LoudnessCompensation};
 use crate::loudness_monitor::{LoudnessInfo, LoudnessMonitor};
+use crate::spectrum_analyzer::{SpectrumAnalyzer, SpectrumConfig, SpectrumInfo};
 use crate::{
     AudioDecoderError, AudioDecoderResult, AudioFormat, AudioSpec, create_decoder, probe_file,
 };
@@ -63,6 +64,8 @@ pub struct AudioStreamingManager {
     underrun_count: Arc<Mutex<usize>>,
     /// Real-time loudness monitor (optional)
     loudness_monitor: Option<Arc<LoudnessMonitor>>,
+    /// Real-time spectrum analyzer (optional)
+    spectrum_monitor: Option<Arc<Mutex<SpectrumAnalyzer>>>,
 }
 
 /// Commands for controlling the streaming decoder
@@ -125,6 +128,7 @@ impl AudioStreamingManager {
             buffer_chunks: 128, // Default: balanced performance
             underrun_count: Arc::new(Mutex::new(0)),
             loudness_monitor: None,
+            spectrum_monitor: None,
         }
     }
 
@@ -365,6 +369,35 @@ impl AudioStreamingManager {
         self.loudness_monitor.is_some()
     }
 
+    /// Enable real-time spectrum monitoring
+    pub fn enable_spectrum_monitoring(&mut self) -> Result<(), String> {
+        let audio_info = self
+            .current_audio_info
+            .as_ref()
+            .ok_or_else(|| "No audio file loaded".to_string())?;
+
+        let config = SpectrumConfig::default();
+        let analyzer = SpectrumAnalyzer::new(audio_info.spec.channels as u32, audio_info.spec.sample_rate, config)?;
+
+        self.spectrum_monitor = Some(Arc::new(Mutex::new(analyzer)));
+        Ok(())
+    }
+
+    /// Disable real-time spectrum monitoring
+    pub fn disable_spectrum_monitoring(&mut self) {
+        self.spectrum_monitor = None;
+    }
+
+    /// Get current spectrum measurements (if monitoring is enabled)
+    pub fn get_spectrum(&self) -> Option<SpectrumInfo> {
+        self.spectrum_monitor.as_ref().map(|m| m.lock().unwrap().get_spectrum())
+    }
+
+    /// Check if spectrum monitoring is enabled
+    pub fn is_spectrum_monitoring_enabled(&self) -> bool {
+        self.spectrum_monitor.is_some()
+    }
+
     /// Try to receive the next event from the decoder thread (non-blocking)
     pub fn try_recv_event(&self) -> Option<StreamingEvent> {
         self.event_rx
@@ -401,8 +434,9 @@ impl AudioStreamingManager {
             AudioDecoderError::ConfigError("CamillaDSP stdin not available".to_string())
         })?;
 
-        // Clone loudness monitor for decoder thread
+        // Clone loudness monitor and spectrum analyzer for decoder thread
         let loudness_monitor = self.loudness_monitor.clone();
+        let spectrum_monitor = self.spectrum_monitor.clone();
 
         // Spawn decoder thread
         let handle = thread::spawn(move || {
@@ -415,6 +449,7 @@ impl AudioStreamingManager {
                 buffer_chunks,
                 underrun_count,
                 loudness_monitor,
+                spectrum_monitor,
             ) {
                 eprintln!("[AudioStreamingManager] Decoder thread error: {:?}", e);
             }
@@ -434,6 +469,7 @@ impl AudioStreamingManager {
         mut buffer_chunks: usize,
         underrun_count: Arc<Mutex<usize>>,
         loudness_monitor: Option<Arc<LoudnessMonitor>>,
+        spectrum_monitor: Option<Arc<Mutex<SpectrumAnalyzer>>>,
     ) -> AudioDecoderResult<()> {
         log_info!("Decoder thread starting for: {:?}", path);
         log_debug!("Buffer size: {} chunks (1024 frames each)", buffer_chunks);
@@ -519,6 +555,15 @@ impl AudioStreamingManager {
                             && let Err(e) = monitor.add_frames(&decoded_audio.samples)
                         {
                             eprintln!("[AudioStreamingManager] Loudness monitoring error: {}", e);
+                        }
+
+                        // Feed samples to spectrum analyzer if enabled
+                        if let Some(ref analyzer) = spectrum_monitor {
+                            if let Ok(mut a) = analyzer.lock() {
+                                if let Err(e) = a.add_frames(&decoded_audio.samples) {
+                                    eprintln!("[AudioStreamingManager] Spectrum monitoring error: {}", e);
+                                }
+                            }
                         }
 
                         let pcm_bytes = decoded_audio.to_bytes_f32_le();
@@ -698,6 +743,15 @@ impl AudioStreamingManager {
                                     "[AudioStreamingManager] Loudness monitoring error: {}",
                                     e
                                 );
+                            }
+
+                            // Feed samples to spectrum analyzer if enabled
+                            if let Some(ref analyzer) = spectrum_monitor {
+                                if let Ok(mut a) = analyzer.lock() {
+                                    if let Err(e) = a.add_frames(&decoded_audio.samples) {
+                                        eprintln!("[AudioStreamingManager] Spectrum monitoring error: {}", e);
+                                    }
+                                }
                             }
 
                             let pcm_bytes = decoded_audio.to_bytes_f32_le();

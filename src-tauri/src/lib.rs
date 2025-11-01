@@ -936,6 +936,39 @@ async fn stream_get_loudness(
 }
 
 // ============================================================================
+// Real-time Spectrum Analysis Commands
+// ============================================================================
+
+#[tauri::command]
+async fn stream_enable_spectrum_monitoring(
+    streaming_manager: State<'_, Mutex<AudioStreamingManager>>,
+) -> Result<(), String> {
+    println!("[SPECTRUM] Enabling real-time spectrum monitoring");
+
+    let mut manager = streaming_manager.lock().await;
+    manager.enable_spectrum_monitoring()
+}
+
+#[tauri::command]
+async fn stream_disable_spectrum_monitoring(
+    streaming_manager: State<'_, Mutex<AudioStreamingManager>>,
+) -> Result<(), String> {
+    println!("[SPECTRUM] Disabling real-time spectrum monitoring");
+
+    let mut manager = streaming_manager.lock().await;
+    manager.disable_spectrum_monitoring();
+    Ok(())
+}
+
+#[tauri::command]
+async fn stream_get_spectrum(
+    streaming_manager: State<'_, Mutex<AudioStreamingManager>>,
+) -> Result<Option<sotf_audio::SpectrumInfo>, String> {
+    let manager = streaming_manager.lock().await;
+    Ok(manager.get_spectrum())
+}
+
+// ============================================================================
 // EQ Response Computation Commands
 // ============================================================================
 
@@ -1067,6 +1100,9 @@ pub fn run() {
             stream_enable_loudness_monitoring,
             stream_disable_loudness_monitoring,
             stream_get_loudness,
+            stream_enable_spectrum_monitoring,
+            stream_disable_spectrum_monitoring,
+            stream_get_spectrum,
             // Export format commands
             generate_apo_format,
             generate_aupreset_format,

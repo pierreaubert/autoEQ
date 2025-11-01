@@ -5,6 +5,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { resolveResource } from "@tauri-apps/api/path";
 import { StreamingManager, type AudioFileInfo } from "../audio-manager-streaming";
+import { SpectrumAnalyzerComponent } from "./spectrum-analyzer";
 
 interface ReplayGainInfo {
   gain: number; // dB
@@ -130,6 +131,12 @@ export class AudioPlayer {
 
   // Streaming audio manager instance
   private streamingManager: StreamingManager;
+
+  // Spectrum analyzer instance
+  private spectrumAnalyzer: SpectrumAnalyzerComponent | null = null;
+
+  // Loudness polling state
+  private loudnessPollingActive: boolean = false;
 
   constructor(
     container: HTMLElement,
@@ -324,9 +331,9 @@ export class AudioPlayer {
     const html = `
       <div class="audio-player">
         <div class="audio-control-row">
+          <!-- Block 1: Track Selection (compact) -->
           <div class="audio-left-controls">
             <div class="demo-track-container">
-              <label for="${selectId}" class="demo-track-label">Load a song</label>
               <div class="demo-track-select-row">
                 <select id="${selectId}" class="demo-audio-select">
                 <option value="">Pick a track...</option>
@@ -344,33 +351,12 @@ export class AudioPlayer {
                   </svg>
                 </button>
               </div>
-              <div class="replay-gain-info" style="display: none; margin-top: 8px; font-size: 12px; color: var(--text-secondary);">
-                Replay Gain: <span class="info-badge replay-gain-value">--</span> • Peak: <span class="info-badge replay-peak-value">--</span>
-              </div>
             </div>
           </div>
 
+          <!-- Block 2: Playback Controls (compact) -->
           <div class="audio-center-controls">
             <div class="audio-playback-container">
-              ${
-                this.config.showProgress
-                  ? `
-                <div class="audio-status" style="display: flex;">
-                  <div class="audio-info-compact">
-                    <span class="audio-status-text">Ready</span> •
-                    <span class="audio-position">--:--</span> •
-                    <span class="audio-duration">--:--</span>
-                  </div>
-                  <div class="audio-progress">
-                    <div class="audio-progress-bar">
-                      <div class="audio-progress-fill" style="width: 0%;"></div>
-                    </div>
-                  </div>
-                </div>
-              `
-                  : ""
-              }
-
               <div class="audio-playback-controls">
                 <button type="button" class="listen-button" disabled>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M8 5V19L19 12L8 5Z"/></svg>
@@ -382,45 +368,44 @@ export class AudioPlayer {
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M6 6H18V18H6V6Z"/></svg>
                 </button>
               </div>
+              ${
+                this.config.showProgress
+                  ? `
+                <div class="audio-status" style="display: flex; flex-direction: column; gap: 4px;">
+                  <div class="audio-info-compact">
+                    <span class="audio-status-text">Ready</span> •
+                    <span class="audio-position">--:--</span> /
+                    <span class="audio-duration">--:--</span>
+                  </div>
+                  <div class="audio-progress">
+                    <div class="audio-progress-bar">
+                      <div class="audio-progress-fill" style="width: 0%;"></div>
+                    </div>
+                  </div>
+                </div>
+              `
+                  : ""
+              }
             </div>
           </div>
 
-          <div class="audio-right-controls">
+          <!-- Block 3: Spectrum Analyzer (full height) -->
+          <div class="audio-right-controls audio-spectrum-block">
             ${
               this.config.enableSpectrum
                 ? `
-              <div class="frequency-analyzer" style="display: flex;">
+              <div class="frequency-analyzer">
                 <div class="spectrum-container">
-                  <div class="loudness-display">
-                    <span class="loudness-label">M:</span>
-                    <span class="loudness-momentary">--.-</span>
-                    <span class="loudness-label">LUFS</span>
-                    <span class="loudness-separator">•</span>
-                    <span class="loudness-label">S:</span>
-                    <span class="loudness-shortterm">--.-</span>
-                    <span class="loudness-label">LUFS</span>
-                  </div>
                   <canvas class="spectrum-canvas"></canvas>
                 </div>
-                ${
-                  this.config.showFrequencyLabels
-                    ? `
-                  <div class="frequency-labels">
-                    <span class="freq-label" data-range="sub-bass">Sub Bass<br><small>&lt;60Hz</small></span>
-                    <span class="freq-label" data-range="bass">Bass<br><small>60-250Hz</small></span>
-                    <span class="freq-label" data-range="low-mid">Low Mid<br><small>250-500Hz</small></span>
-                    <span class="freq-label" data-range="mid">Mid<br><small>500-2kHz</small></span>
-                    <span class="freq-label" data-range="high-mid">High Mid<br><small>2-4kHz</small></span>
-                    <span class="freq-label" data-range="presence">Presence<br><small>4-6kHz</small></span>
-                    <span class="freq-label" data-range="brilliance">Brilliance<br><small>6-20kHz</small></span>
-                  </div>
-                `
-                    : ""
-                }
               </div>
             `
                 : ""
             }
+          </div>
+
+          <!-- Block 4: EQ Controls -->
+          <div class="audio-eq-controls">
             ${
               this.config.enableEQ
                 ? `
@@ -443,6 +428,32 @@ export class AudioPlayer {
             `
                 : ""
             }
+          </div>
+
+          <!-- Block 5: Audio Metrics (vertical) -->
+          <div class="audio-metrics-block">
+            <div class="metrics-display">
+              <div class="metric-section">
+                <div class="metric-label">LUFS M/S</div>
+                <div class="metric-row">
+                  <span class="metric-label-small">M</span>
+                  <span id="metrics-lufs-m" class="metric-value loudness-momentary">-∞</span>
+                  <span class="metric-separator">/</span>
+                  <span class="metric-label-small">S</span>
+                  <span id="metrics-lufs-s" class="metric-value loudness-shortterm">-∞</span>
+                </div>
+              </div>
+              <div class="metric-section">
+                <div class="metric-label">Replay Gain / Peak</div>
+                <div class="metric-row">
+                  <span id="metrics-replay-gain" class="metric-value replay-gain-value">0.00</span>
+                  <span class="metric-unit">dB</span>
+                  <span class="metric-separator">/</span>
+                  <span id="metrics-peak" class="metric-value replay-peak-value">0.000</span>
+                  <span class="metric-unit">dB</span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -523,13 +534,18 @@ export class AudioPlayer {
 
     if (this.spectrumCanvas) {
       this.spectrumCtx = this.spectrumCanvas.getContext("2d");
-      // Initialize 30-bin spectrum analyzer
-      this.initializeSpectrumBins();
-      // Set canvas dimensions
-      this.resizeSpectrumCanvas();
-      // Initialize spectrum display immediately if enabled
+      // Initialize spectrum analyzer component
       if (this.config.enableSpectrum) {
-        this.initializeSpectrumDisplay();
+        this.spectrumAnalyzer = new SpectrumAnalyzerComponent({
+          canvas: this.spectrumCanvas,
+          pollInterval: 100,
+          minFreq: 20,
+          maxFreq: 20000,
+          dbRange: 60,
+          colorScheme: "dark",
+          showLabels: false,
+          showGrid: false,
+        });
       }
     }
 
@@ -556,11 +572,9 @@ export class AudioPlayer {
   }
 
   private setupEventListeners(): void {
-    // Handle window resize for spectrum canvas
+    // Handle window resize
     this.resizeHandler = () => {
-      if (this.spectrumCanvas && this.config.enableSpectrum) {
-        this.resizeSpectrumCanvas();
-      }
+      // Spectrum analyzer handles its own resizing
     };
     window.addEventListener("resize", this.resizeHandler);
 
@@ -967,7 +981,6 @@ export class AudioPlayer {
 
   private clearAudio(): void {
     this.stop();
-    this.stopSpectrumAnalysis();
     this.audioBuffer = null;
     this.setListenButtonEnabled(false);
     this.showAudioStatus(false);
@@ -1284,31 +1297,6 @@ export class AudioPlayer {
   }
 
 
-  // Initialize 30 logarithmically-spaced spectrum bins
-  private initializeSpectrumBins(): void {
-    const logMin = Math.log10(this.SPECTRUM_MIN_FREQ);
-    const logMax = Math.log10(this.SPECTRUM_MAX_FREQ);
-
-    // Calculate bin edges (31 edges for 30 bins)
-    this.spectrumBinEdges = [];
-    for (let i = 0; i <= this.SPECTRUM_BINS; i++) {
-      const logFreq = logMin + (logMax - logMin) * (i / this.SPECTRUM_BINS);
-      this.spectrumBinEdges.push(Math.pow(10, logFreq));
-    }
-
-    // Calculate bin centers (geometric mean of edges)
-    this.spectrumBinCenters = [];
-    for (let i = 0; i < this.SPECTRUM_BINS; i++) {
-      this.spectrumBinCenters.push(
-        Math.sqrt(this.spectrumBinEdges[i] * this.spectrumBinEdges[i + 1]),
-      );
-    }
-
-    // Initialize bin values array with zeros
-    this.spectrumBinValues = new Array(this.SPECTRUM_BINS).fill(0);
-
-    console.log(`[Spectrum] Initialized ${this.SPECTRUM_BINS} log-spaced bins from ${this.SPECTRUM_MIN_FREQ}Hz to ${this.SPECTRUM_MAX_FREQ}Hz`);
-  }
 
   // Draw mini EQ graph
   private drawEQMiniGraph(): void {
@@ -1489,216 +1477,10 @@ export class AudioPlayer {
     });
   }
 
-  // Resize spectrum canvas to fit container
-  private resizeSpectrumCanvas(): void {
-    if (!this.spectrumCanvas) return;
-
-    const container = this.spectrumCanvas.parentElement;
-    if (!container) return;
-
-    // Get the actual width of the container
-    const rect = container.getBoundingClientRect();
-    const width = Math.max(rect.width || container.clientWidth || 400, 200);
-    const height = 52; // Fixed height matching CSS
-
-    // Set canvas dimensions
-    this.spectrumCanvas.width = width;
-    this.spectrumCanvas.height = height;
-
-    // Redraw idle spectrum if not playing
-    if (!this.isAudioPlaying && this.config.enableSpectrum) {
-      this.drawIdleSpectrum();
-    }
-  }
-
-  // Initialize spectrum display even when not playing
-  private initializeSpectrumDisplay(): void {
-    if (!this.spectrumCanvas || !this.spectrumCtx) return;
-
-    const frequencyAnalyzer = this.container.querySelector(
-      ".frequency-analyzer",
-    ) as HTMLElement;
-    if (frequencyAnalyzer) {
-      frequencyAnalyzer.style.display = "flex";
-    }
-
-    // Draw initial empty spectrum
-    this.drawIdleSpectrum();
-  }
-
-  private drawIdleSpectrum(): void {
-    if (!this.spectrumCanvas || !this.spectrumCtx) return;
-
-    const width = this.spectrumCanvas.width;
-    const height = this.spectrumCanvas.height;
-
-    // Detect color scheme
-    const isDarkMode =
-      window.matchMedia &&
-      window.matchMedia("(prefers-color-scheme: dark)").matches;
-
-    // Properly clear the canvas first
-    this.spectrumCtx.clearRect(0, 0, width, height);
-
-    // Fill background with theme-appropriate color
-    this.spectrumCtx.fillStyle = isDarkMode
-      ? "rgb(0, 0, 0)"
-      : "rgb(255, 255, 255)";
-    this.spectrumCtx.fillRect(0, 0, width, height);
-
-    // Draw a subtle baseline to indicate the spectrum analyzer is ready
-    const barWidth = width / this.SPECTRUM_BINS;
-
-    for (let i = 0; i < this.SPECTRUM_BINS; i++) {
-      const baseHeight = 2; // Minimal height for idle state
-
-      if (isDarkMode) {
-        this.spectrumCtx.fillStyle = "rgba(88, 101, 242, 0.3)"; // Subtle blue
-      } else {
-        this.spectrumCtx.fillStyle = "rgba(0, 123, 255, 0.3)"; // Subtle blue
-      }
-
-      const x = i * barWidth;
-      this.spectrumCtx.fillRect(
-        x,
-        height - baseHeight,
-        barWidth - 1,
-        baseHeight,
-      );
-    }
-  }
-
-  // Spectrum Analyzer
-  private startSpectrumAnalysis(): void {
-    if (!this.analyserNode || !this.spectrumCanvas || !this.spectrumCtx) return;
-
-    const frequencyAnalyzer = this.container.querySelector(
-      ".frequency-analyzer",
-    ) as HTMLElement;
-    if (frequencyAnalyzer) {
-      frequencyAnalyzer.style.display = "flex";
-    }
-
-    if (this.spectrumAnimationFrame) return; // Animation already running
-
-    const dataArray = new Uint8Array(this.analyserNode.frequencyBinCount);
-
-    const draw = () => {
-      if (!this.analyserNode || !this.spectrumCanvas || !this.spectrumCtx) {
-        this.spectrumAnimationFrame = null;
-        return;
-      }
-
-      const width = this.spectrumCanvas.width;
-      const height = this.spectrumCanvas.height;
-
-      // Detect color scheme and set appropriate colors
-      const isDarkMode =
-        window.matchMedia &&
-        window.matchMedia("(prefers-color-scheme: dark)").matches;
-
-      // Properly clear the canvas first
-      this.spectrumCtx.clearRect(0, 0, width, height);
-
-      // Set background color based on theme
-      this.spectrumCtx.fillStyle = isDarkMode
-        ? "rgb(0, 0, 0)"
-        : "rgb(255, 255, 255)";
-      this.spectrumCtx.fillRect(0, 0, width, height);
-
-      if (this.isAudioPlaying) {
-        this.analyserNode.getByteFrequencyData(dataArray);
-
-        // Map FFT data to 30 logarithmic bins
-        const sampleRate = this.audioContext!.sampleRate;
-        const nyquist = sampleRate / 2;
-        const barWidth = width / this.SPECTRUM_BINS;
-
-        // Reset bin accumulators
-        const binAccumulators = new Array(this.SPECTRUM_BINS).fill(0);
-        const binCounts = new Array(this.SPECTRUM_BINS).fill(0);
-
-        // Map each FFT bin to its corresponding logarithmic bin
-        for (let fftBin = 0; fftBin < dataArray.length; fftBin++) {
-          const freq = (fftBin * nyquist) / dataArray.length;
-
-          // Find which log bin this frequency belongs to (binary search would be faster, but linear is fine for this size)
-          let targetBin = -1;
-          for (let i = 0; i < this.SPECTRUM_BINS; i++) {
-            if (freq >= this.spectrumBinEdges[i] && freq < this.spectrumBinEdges[i + 1]) {
-              targetBin = i;
-              break;
-            }
-          }
-
-          if (targetBin >= 0 && targetBin < this.SPECTRUM_BINS) {
-            binAccumulators[targetBin] += dataArray[fftBin];
-            binCounts[targetBin]++;
-          }
-        }
-
-        // Calculate average for each bin and apply smoothing
-        const smoothingFactor = 0.7; // Higher = more smoothing
-        for (let i = 0; i < this.SPECTRUM_BINS; i++) {
-          const rawValue = binCounts[i] > 0 ? binAccumulators[i] / binCounts[i] : 0;
-          // Exponential moving average for smooth animation
-          this.spectrumBinValues[i] =
-            smoothingFactor * this.spectrumBinValues[i] +
-            (1 - smoothingFactor) * rawValue;
-        }
-
-        // Draw bars
-        for (let i = 0; i < this.SPECTRUM_BINS; i++) {
-          const magnitude = this.spectrumBinValues[i];
-          const barHeight = (magnitude / 255) * height * 0.9;
-
-          // Use different colors based on theme and frequency
-          if (isDarkMode) {
-            // Dark mode: bright colors with frequency-based hues
-            const hueShift = (i / this.SPECTRUM_BINS) * 60; // 0-60 degrees (red to yellow)
-            const intensity = Math.floor((barHeight / height) * 155 + 100);
-            this.spectrumCtx.fillStyle = `hsl(${hueShift}, 80%, ${Math.min((intensity / 255) * 70 + 30, 90)}%)`;
-          } else {
-            // Light mode: darker colors with frequency-based variation
-            const hueShift = (i / this.SPECTRUM_BINS) * 240; // 0-240 degrees (red to blue)
-            const saturation = 70 + (barHeight / height) * 30; // 70-100%
-            const lightness = Math.max(20, 60 - (barHeight / height) * 40); // 60-20%
-            this.spectrumCtx.fillStyle = `hsl(${hueShift}, ${saturation}%, ${lightness}%)`;
-          }
-
-          const x = i * barWidth;
-          this.spectrumCtx.fillRect(
-            x,
-            height - barHeight,
-            barWidth - 1,
-            barHeight,
-          );
-        }
-      } else {
-        // When not playing, show idle spectrum
-        this.drawIdleSpectrum();
-      }
-
-      this.spectrumAnimationFrame = requestAnimationFrame(draw);
-    };
-
-    draw();
-  }
-
-  private stopSpectrumAnalysis(): void {
-    if (this.spectrumAnimationFrame) {
-      cancelAnimationFrame(this.spectrumAnimationFrame);
-      this.spectrumAnimationFrame = null;
-    }
-
-    // Keep spectrum analyzer visible but show idle state
-    if (this.config.enableSpectrum) {
-      this.drawIdleSpectrum();
-    }
-  }
 
   // Position Updates
   private startPositionUpdates(): void {
+    let updateCount = 0;
     const updatePosition = () => {
       if (!this.isAudioPlaying) {
         this.audioAnimationFrame = null;
@@ -1715,6 +1497,11 @@ export class AudioPlayer {
       if (this.progressFill && duration > 0) {
         const progress = (currentTime / duration) * 100;
         this.progressFill.style.width = `${Math.min(progress, 100)}%`;
+      }
+
+      // Update metrics display every 5 frames to reduce overhead
+      if (updateCount++ % 5 === 0) {
+        this.updateMetricsDisplay();
       }
 
       this.audioAnimationFrame = requestAnimationFrame(updatePosition);
@@ -1820,11 +1607,54 @@ export class AudioPlayer {
             }))
         : [];
 
-      await this.streamingManager.play(filters);
+      // Start spectrum analyzer BEFORE playback if enabled
+      if (this.spectrumAnalyzer && this.config.enableSpectrum) {
+        try {
+          await this.spectrumAnalyzer.start();
+          console.log("Spectrum analyzer started before playback");
+        } catch (error) {
+          console.error("Failed to start spectrum analyzer:", error);
+        }
+      }
 
-      // Note: Spectrum analyzer requires Web Audio API AnalyserNode
-      // which is not available when using streaming backend for playback
-      // The 30-bin spectrum will remain idle (showing baseline) when using streaming backend
+      // Enable loudness monitoring in backend
+      try {
+        await invoke("stream_enable_loudness_monitoring");
+        console.log("Loudness monitoring enabled");
+      } catch (error) {
+        console.error("Failed to enable loudness monitoring:", error);
+      }
+
+      // Start loudness polling
+      if (!this.loudnessPollingActive) {
+        this.streamingManager.startLoudnessPolling(100, (loudnessInfo) => {
+          console.log("[Loudness] Polling callback - info:", loudnessInfo);
+          if (loudnessInfo) {
+            const momentaryElement = document.getElementById("metrics-lufs-m");
+            const shorttermElement = document.getElementById("metrics-lufs-s");
+
+            console.log("[Loudness] Elements found - M:", !!momentaryElement, "S:", !!shorttermElement);
+
+            if (momentaryElement && shorttermElement) {
+              const momentaryText = loudnessInfo.momentary_lufs === -Infinity 
+                ? "-∞" 
+                : loudnessInfo.momentary_lufs.toFixed(1);
+              const shorttermText = loudnessInfo.shortterm_lufs === -Infinity 
+                ? "-∞" 
+                : loudnessInfo.shortterm_lufs.toFixed(1);
+
+              console.log("[Loudness] Updating - M:", momentaryText, "S:", shorttermText);
+
+              momentaryElement.textContent = momentaryText;
+              shorttermElement.textContent = shorttermText;
+            }
+          }
+        });
+        this.loudnessPollingActive = true;
+        console.log("Loudness polling started");
+      }
+
+      await this.streamingManager.play(filters);
 
       this.callbacks.onPlay?.();
       console.log("Audio playback started successfully via streaming backend");
@@ -1866,16 +1696,40 @@ export class AudioPlayer {
 
   async stop(): Promise<void> {
     try {
+      // Stop spectrum analyzer if running
+      if (this.spectrumAnalyzer) {
+        try {
+          await this.spectrumAnalyzer.stop();
+          console.log("Spectrum analyzer stopped");
+        } catch (error) {
+          console.error("Failed to stop spectrum analyzer:", error);
+        }
+      }
+
       await this.streamingManager.stop();
-      
-      // Reset UI state
+
+      // Stop loudness polling
+      if (this.loudnessPollingActive) {
+        this.streamingManager.stopLoudnessPolling();
+        this.loudnessPollingActive = false;
+        console.log("Loudness polling stopped");
+      }
+
+      // Disable loudness monitoring in backend
+      try {
+        await invoke("stream_disable_loudness_monitoring");
+        console.log("Loudness monitoring disabled");
+      } catch (error) {
+        console.error("Failed to disable loudness monitoring:", error);
+      }
+
       if (this.positionText) {
         this.positionText.textContent = "--:--";
       }
       if (this.progressFill) {
         this.progressFill.style.width = "0%";
       }
-      
+
       this.callbacks.onStop?.();
       console.log("Audio playback stopped via streaming backend");
     } catch (error) {
@@ -1952,19 +1806,11 @@ export class AudioPlayer {
   private async analyzeReplayGain(filePath: string): Promise<void> {
     console.log(`[ReplayGain] Starting analysis for: ${filePath}`);
     try {
-      // Show loading state
-      if (this.replayGainContainer) {
-        console.log("[ReplayGain] Showing loading state");
-        this.replayGainContainer.style.display = "block";
-        const gainElement =
-          this.replayGainContainer.querySelector(".replay-gain-value");
-        const peakElement =
-          this.replayGainContainer.querySelector(".replay-peak-value");
-        if (gainElement) gainElement.textContent = "...";
-        if (peakElement) peakElement.textContent = "...";
-      } else {
-        console.error("[ReplayGain] Container not found during loading state");
-      }
+      // Show loading state in metrics block
+      const gainElement = document.getElementById("metrics-replay-gain");
+      const peakElement = document.getElementById("metrics-peak");
+      if (gainElement) gainElement.textContent = "...";
+      if (peakElement) peakElement.textContent = "...";
 
       // Call Tauri command
       console.log("[ReplayGain] Invoking backend analysis");
@@ -1990,73 +1836,92 @@ export class AudioPlayer {
   }
 
   private updateReplayGainDisplay(gain: number, peak: number): void {
-    console.log(`[ReplayGain] Updating display - Gain: ${gain}, Peak: ${peak}`);
-    console.log(`[ReplayGain] Container found:`, !!this.replayGainContainer);
-
-    if (!this.replayGainContainer) {
-      console.error("[ReplayGain] Container not found!");
-      return;
-    }
-
-    console.log(
-      `[ReplayGain] Container HTML:`,
-      this.replayGainContainer.innerHTML,
-    );
-    console.log(
-      `[ReplayGain] Container current display:`,
-      this.replayGainContainer.style.display,
-    );
-
-    const gainElement =
-      this.replayGainContainer.querySelector(".replay-gain-value");
-    const peakElement =
-      this.replayGainContainer.querySelector(".replay-peak-value");
-
-    console.log(
-      `[ReplayGain] Elements found - Gain:`,
-      !!gainElement,
-      "Peak:",
-      !!peakElement,
-    );
-    console.log(`[ReplayGain] Gain element:`, gainElement);
-    console.log(`[ReplayGain] Peak element:`, peakElement);
+    // Update metrics block with replay gain values
+    const gainElement = document.getElementById("metrics-replay-gain");
+    const peakElement = document.getElementById("metrics-peak");
 
     if (gainElement && peakElement) {
-      // Format gain with sign and 2 decimal places
-      const gainText =
-        gain >= 0 ? `+${gain.toFixed(2)} dB` : `${gain.toFixed(2)} dB`;
+      const gainText = gain >= 0 
+        ? `+${gain.toFixed(2)}` 
+        : `${gain.toFixed(2)}`;
+      const peakText = peak.toFixed(3);
+
       gainElement.textContent = gainText;
-
-      // Format peak with 6 decimal places (matching backend precision)
-      peakElement.textContent = peak.toFixed(6);
-
-      console.log(
-        `[ReplayGain] Text content set - Gain element text: "${gainElement.textContent}", Peak element text: "${peakElement.textContent}"`,
-      );
-      console.log(
-        `[ReplayGain] Display updated - Gain: "${gainText}", Peak: "${peak.toFixed(6)}"`,
-      );
-
-      // Show the container
-      this.replayGainContainer.style.display = "block";
-      console.log(
-        `[ReplayGain] Container display set to: ${this.replayGainContainer.style.display}`,
-      );
-      console.log(
-        `[ReplayGain] Container is visible:`,
-        this.replayGainContainer.offsetHeight > 0,
-      );
-    } else {
-      console.error(
-        "[ReplayGain] Could not find gain or peak element within container",
-      );
+      peakElement.textContent = peakText;
     }
+
+    // Also update the old replay gain container if it exists (for backward compatibility)
+    if (this.replayGainContainer) {
+      const gainElement =
+        this.replayGainContainer.querySelector(".replay-gain-value");
+      const peakElement =
+        this.replayGainContainer.querySelector(".replay-peak-value");
+
+      if (gainElement && peakElement) {
+        const gainText =
+          gain >= 0 ? `+${gain.toFixed(2)} dB` : `${gain.toFixed(2)} dB`;
+        gainElement.textContent = gainText;
+        peakElement.textContent = peak.toFixed(6);
+        this.replayGainContainer.style.display = "block";
+      }
+    }
+  }
+
+  // Update metrics display with loudness and replay gain data
+  private updateMetricsDisplay(): void {
+    // Update replay gain and peak from replay gain info
+    if (this.replayGainInfo) {
+      const gainElement = document.getElementById("metrics-replay-gain");
+      const peakElement = document.getElementById("metrics-peak");
+
+      if (gainElement && peakElement) {
+        const gainText = this.replayGainInfo.gain >= 0 
+          ? `+${this.replayGainInfo.gain.toFixed(2)}` 
+          : `${this.replayGainInfo.gain.toFixed(2)}`;
+        const peakText = this.replayGainInfo.peak.toFixed(3);
+
+        gainElement.textContent = gainText;
+        peakElement.textContent = peakText;
+      }
+    }
+
+    // Fetch and update loudness data asynchronously
+    this.streamingManager.getLoudness().then((loudnessInfo) => {
+      console.log("[Metrics] Got loudness info:", loudnessInfo);
+      
+      if (loudnessInfo) {
+        const momentaryElement = document.getElementById("metrics-lufs-m");
+        const shorttermElement = document.getElementById("metrics-lufs-s");
+
+        console.log("[Metrics] Elements found - M:", !!momentaryElement, "S:", !!shorttermElement);
+
+        if (momentaryElement && shorttermElement) {
+          const momentaryText = loudnessInfo.momentary_lufs === -Infinity 
+            ? "-∞" 
+            : loudnessInfo.momentary_lufs.toFixed(1);
+          const shorttermText = loudnessInfo.shortterm_lufs === -Infinity 
+            ? "-∞" 
+            : loudnessInfo.shortterm_lufs.toFixed(1);
+
+          console.log("[Metrics] Updating LUFS - M:", momentaryText, "S:", shorttermText);
+
+          momentaryElement.textContent = momentaryText;
+          shorttermElement.textContent = shorttermText;
+        }
+      } else {
+        console.log("[Metrics] No loudness info available");
+      }
+    }).catch((error) => {
+      console.error("[Metrics] Failed to get loudness:", error);
+    });
   }
 
   // Cleanup
   destroy(): void {
     this.stop();
-    this.stopSpectrumAnalysis();
+    if (this.spectrumAnalyzer) {
+      this.spectrumAnalyzer.destroy();
+    }
 
     // Remove window resize listener
     if (this.resizeHandler) {

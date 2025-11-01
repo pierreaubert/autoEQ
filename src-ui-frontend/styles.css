@@ -1,4 +1,5 @@
 @import "@audio-player/audio-player.css";
+@import "@audio-player/spectrum-analyzer.css";
 
 :root {
   --bg-primary: #f8f9fa;

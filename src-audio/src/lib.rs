@@ -23,5 +23,7 @@ pub use camilla::{
 
 pub mod loudness_monitor;
 pub mod replaygain;
+pub mod spectrum_analyzer;
 
 pub use loudness_monitor::{LoudnessInfo, LoudnessMonitor};
+pub use spectrum_analyzer::{SpectrumAnalyzer, SpectrumConfig, SpectrumInfo};
