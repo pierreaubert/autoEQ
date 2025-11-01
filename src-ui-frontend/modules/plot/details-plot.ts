@@ -1,6 +1,6 @@
 // Details plot functionality
 
-import Plotly from "plotly.js-dist-min";
+import Plotly from "plotly.js-basic-dist-min";
 
 export class DetailsPlot {
   private detailsPlotElement: HTMLElement | null;

@@ -93,6 +93,49 @@
   gap: var(--spacing-xs);
 }
 
+/* ReplayGain Info Display */
+.replay-gain-info {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 6px;
+  white-space: nowrap;
+}
+
+.replay-gain-info .info-badge {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  text-align: center;
+  min-width: 60px;
+}
+
+.replay-gain-info .replay-gain-value {
+  background: #1e3a8a;
+  color: white;
+}
+
+.replay-gain-info .replay-peak-value {
+  background: #4b5563;
+  color: white;
+}
+
+@media (prefers-color-scheme: dark) {
+  .replay-gain-info .replay-gain-value {
+    background: #3b82f6;
+    color: white;
+  }
+  
+  .replay-gain-info .replay-peak-value {
+    background: #6b7280;
+    color: white;
+  }
+}
+
 .audio-center-controls {
   display: flex;
   align-items: center;

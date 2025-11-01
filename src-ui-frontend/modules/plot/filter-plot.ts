@@ -1,6 +1,6 @@
 // Filter plot functionality
 
-import Plotly from "plotly.js-dist-min";
+import Plotly from "plotly.js-basic-dist-min";
 
 export class FilterPlot {
   private filterPlotElement: HTMLElement;

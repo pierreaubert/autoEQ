@@ -27,11 +27,12 @@
     "@types/plotly.js": "^3.0.7",
     "chrome-devtools-mcp": "^0.9.0",
     "jiti": "^2.6.1",
-    "plotly.js-dist-min": "^3.1.2"
+    "plotly.js-basic-dist-min": "^3.1.2"
   },
   "devDependencies": {
     "@eslint/js": "^9.38.0",
     "@tauri-apps/cli": "^2.9.1",
+    "@types/plotly.js-basic-dist-min": "^2.12.4",
     "@vitest/coverage-v8": "^4.0.3",
     "@vitest/ui": "^4.0.3",
     "eslint": "^9.38.0",

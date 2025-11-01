@@ -60,8 +60,7 @@
       "minimumSystemVersion": "10.15",
       "signingIdentity": "Developer ID Application: Pierre Aubert (RTH7ZJXLT6)",
       "providerShortName": null,
-      "exceptionDomain": "",
-      "frameworks": ["Accelerate"]
+      "exceptionDomain": ""
     },
     "windows": {
       "certificateThumbprint": null,

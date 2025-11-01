@@ -1,6 +1,6 @@
 // Spin plot functionality
 
-import Plotly from "plotly.js-dist-min";
+import Plotly from "plotly.js-basic-dist-min";
 
 export class SpinPlot {
   private spinPlotElement: HTMLElement;

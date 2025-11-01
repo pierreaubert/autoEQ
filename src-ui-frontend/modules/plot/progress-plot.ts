@@ -1,6 +1,6 @@
 // Progress plot functionality
 
-import Plotly from "plotly.js-dist-min";
+import Plotly from "plotly.js-basic-dist-min";
 
 // Progress data interface
 interface ProgressData {
