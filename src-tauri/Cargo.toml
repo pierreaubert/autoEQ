@@ -1,6 +1,6 @@
 [package]
 name = "sotf"
-version = "0.4.47"
+version = "0.4.49"
 description = "Sound of the future will improve and customize the sound of your speakers or your headsets"
 authors = ["pierre@spinorama.org"]
 edition = "2024"

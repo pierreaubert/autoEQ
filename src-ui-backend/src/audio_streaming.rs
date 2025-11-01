@@ -50,6 +50,8 @@ pub struct AudioStreamingManager {
     decoder_thread: Option<JoinHandle<()>>,
     /// Command channel for controlling the decoder
     command_tx: Option<Sender<StreamingCommand>>,
+    /// Event channel for receiving decoder events (wrapped in Arc<Mutex<>> for thread-safety)
+    event_rx: Option<Arc<Mutex<Receiver<StreamingEvent>>>>,
     /// Current streaming state
     state: Arc<Mutex<StreamingState>>,
     /// Current audio file information
@@ -76,6 +78,17 @@ pub enum StreamingCommand {
     Stop,
     /// Seek to position in seconds
     SeekSeconds(f64),
+}
+
+/// Events emitted by the streaming decoder
+#[derive(Debug, Clone)]
+pub enum StreamingEvent {
+    /// State has changed
+    StateChanged(StreamingState),
+    /// End of stream reached (song completed)
+    EndOfStream,
+    /// An error occurred
+    Error(String),
 }
 
 /// Current state of the streaming manager
@@ -106,6 +119,7 @@ impl AudioStreamingManager {
             audio_manager: AudioManager::new(camilla_binary_path),
             decoder_thread: None,
             command_tx: None,
+            event_rx: None,
             state: Arc::new(Mutex::new(StreamingState::Idle)),
             current_audio_info: None,
             buffer_chunks: 128, // Default: balanced performance
@@ -276,8 +290,9 @@ impl AudioStreamingManager {
             .await
             .map_err(|e| AudioDecoderError::ConfigError(format!("CamillaDSP error: {}", e)))?;
 
-        // Clear command channel
+        // Clear command and event channels
         self.command_tx = None;
+        self.event_rx = None;
 
         // Set state to idle
         {
@@ -350,6 +365,23 @@ impl AudioStreamingManager {
         self.loudness_monitor.is_some()
     }
 
+    /// Try to receive the next event from the decoder thread (non-blocking)
+    pub fn try_recv_event(&self) -> Option<StreamingEvent> {
+        self.event_rx
+            .as_ref()
+            .and_then(|rx| rx.lock().unwrap().try_recv().ok())
+    }
+
+    /// Drain all pending events from the decoder thread
+    pub fn drain_events(&self) -> Vec<StreamingEvent> {
+        let mut events = Vec::new();
+        while let Some(event) = self.try_recv_event() {
+            events.push(event);
+        }
+        events
+    }
+
+    /// Start the decoder thread that feeds PCM data to CamillaDSP via stdin
     /// Start the decoder thread that feeds PCM data to CamillaDSP via stdin
     async fn start_decoder_thread(&mut self) -> AudioDecoderResult<()> {
         let audio_info = self.current_audio_info.as_ref().unwrap();
@@ -358,9 +390,11 @@ impl AudioStreamingManager {
         let buffer_chunks = self.buffer_chunks;
         let underrun_count = Arc::clone(&self.underrun_count);
 
-        // Create command channel
+        // Create command and event channels
         let (cmd_tx, cmd_rx) = mpsc::channel();
+        let (event_tx, event_rx) = mpsc::channel();
         self.command_tx = Some(cmd_tx);
+        self.event_rx = Some(Arc::new(Mutex::new(event_rx)));
 
         // Get the CamillaDSP stdin handle from the audio manager
         let stdin = self.audio_manager.take_stdin().ok_or_else(|| {
@@ -376,6 +410,7 @@ impl AudioStreamingManager {
                 path,
                 state,
                 cmd_rx,
+                event_tx,
                 stdin,
                 buffer_chunks,
                 underrun_count,
@@ -394,6 +429,7 @@ impl AudioStreamingManager {
         path: PathBuf,
         state: Arc<Mutex<StreamingState>>,
         cmd_rx: Receiver<StreamingCommand>,
+        event_tx: Sender<StreamingEvent>,
         mut stdin: ChildStdin,
         mut buffer_chunks: usize,
         underrun_count: Arc<Mutex<usize>>,
@@ -437,14 +473,20 @@ impl AudioStreamingManager {
                         if pre_buffered {
                             let mut state_lock = state.lock().unwrap();
                             *state_lock = StreamingState::Playing;
+                            let _ = event_tx
+                                .send(StreamingEvent::StateChanged(StreamingState::Playing));
                         }
                     }
                     StreamingCommand::Pause => {
                         playing = false;
                         let mut state_lock = state.lock().unwrap();
                         *state_lock = StreamingState::Paused;
+                        let _ = event_tx.send(StreamingEvent::StateChanged(StreamingState::Paused));
                     }
                     StreamingCommand::Stop => {
+                        let mut state_lock = state.lock().unwrap();
+                        *state_lock = StreamingState::Idle;
+                        let _ = event_tx.send(StreamingEvent::StateChanged(StreamingState::Idle));
                         break;
                     }
                     StreamingCommand::SeekSeconds(seconds) => {
@@ -513,12 +555,24 @@ impl AudioStreamingManager {
                                 log_error!("Failed to write pre-buffer: {:?}", e);
                                 let mut state_lock = state.lock().unwrap();
                                 *state_lock = StreamingState::Error;
+                                let _ = event_tx.send(StreamingEvent::Error(format!(
+                                    "Failed to write pre-buffer: {:?}",
+                                    e
+                                )));
+                                let _ = event_tx
+                                    .send(StreamingEvent::StateChanged(StreamingState::Error));
                                 break;
                             }
                             if let Err(e) = stdin.flush() {
                                 log_error!("Failed to flush pre-buffer: {:?}", e);
                                 let mut state_lock = state.lock().unwrap();
                                 *state_lock = StreamingState::Error;
+                                let _ = event_tx.send(StreamingEvent::Error(format!(
+                                    "Failed to flush pre-buffer: {:?}",
+                                    e
+                                )));
+                                let _ = event_tx
+                                    .send(StreamingEvent::StateChanged(StreamingState::Error));
                                 break;
                             }
 
@@ -534,6 +588,8 @@ impl AudioStreamingManager {
                             if playing {
                                 let mut state_lock = state.lock().unwrap();
                                 *state_lock = StreamingState::Playing;
+                                let _ = event_tx
+                                    .send(StreamingEvent::StateChanged(StreamingState::Playing));
                             }
                         }
                     }
@@ -542,12 +598,16 @@ impl AudioStreamingManager {
                         log_info!("End of stream during pre-buffering");
                         let mut state_lock = state.lock().unwrap();
                         *state_lock = StreamingState::Idle;
+                        let _ = event_tx.send(StreamingEvent::EndOfStream);
+                        let _ = event_tx.send(StreamingEvent::StateChanged(StreamingState::Idle));
                         break;
                     }
                     Err(e) => {
                         log_error!("Decode error during pre-buffering: {:?}", e);
                         let mut state_lock = state.lock().unwrap();
                         *state_lock = StreamingState::Error;
+                        let _ = event_tx.send(StreamingEvent::Error(format!("{:?}", e)));
+                        let _ = event_tx.send(StreamingEvent::StateChanged(StreamingState::Error));
                         break;
                     }
                 }
@@ -600,6 +660,11 @@ impl AudioStreamingManager {
                         );
                         let mut state_lock = state.lock().unwrap();
                         *state_lock = StreamingState::Error;
+                        let _ = event_tx.send(StreamingEvent::Error(format!(
+                            "Failed to write to CamillaDSP: {:?}",
+                            e
+                        )));
+                        let _ = event_tx.send(StreamingEvent::StateChanged(StreamingState::Error));
                         break;
                     }
 
@@ -608,6 +673,11 @@ impl AudioStreamingManager {
                         eprintln!("[AudioStreamingManager] Failed to flush stdin: {:?}", e);
                         let mut state_lock = state.lock().unwrap();
                         *state_lock = StreamingState::Error;
+                        let _ = event_tx.send(StreamingEvent::Error(format!(
+                            "Failed to flush stdin: {:?}",
+                            e
+                        )));
+                        let _ = event_tx.send(StreamingEvent::StateChanged(StreamingState::Error));
                         break;
                     }
 
@@ -638,9 +708,17 @@ impl AudioStreamingManager {
                         }
                         Ok(None) => {
                             // End of stream - drain remaining buffer
+                            log_info!(
+                                "End of stream reached, buffer has {} frames remaining",
+                                buffered_frames
+                            );
                             if audio_buffer.is_empty() {
+                                log_info!("Buffer drained, playback completed");
                                 let mut state_lock = state.lock().unwrap();
                                 *state_lock = StreamingState::Idle;
+                                let _ = event_tx.send(StreamingEvent::EndOfStream);
+                                let _ = event_tx
+                                    .send(StreamingEvent::StateChanged(StreamingState::Idle));
                                 playing = false;
                             }
                             break;
@@ -649,6 +727,9 @@ impl AudioStreamingManager {
                             eprintln!("[AudioStreamingManager] Decode error: {:?}", e);
                             let mut state_lock = state.lock().unwrap();
                             *state_lock = StreamingState::Error;
+                            let _ = event_tx.send(StreamingEvent::Error(format!("{:?}", e)));
+                            let _ =
+                                event_tx.send(StreamingEvent::StateChanged(StreamingState::Error));
                             break;
                         }
                     }

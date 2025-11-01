@@ -2,7 +2,7 @@
 
 # AutoEQ : an automatic eq for your speaker or headset
 
-The software help you find very good EQ for your speaker or your headset. It is available as a CLI or as an application.
+The software help you find very good EQ for your speakers or your headsets. It is available as a CLI or as an application.
 
 ## Install
 
@@ -13,7 +13,19 @@ Install [rustup](https://rustup.rs/) first.
 If you already have cargo / rustup:
 
 ```shell
-cargo install autoeq
+cargo install just
+just
+```
+
+Select the correct install just command for your platform:
+```shell
+just install-...
+```
+
+You can build or test with a simple:
+```shell
+just build
+just test
 ```
 
 and you are set up. See this [README](src-autoeq/README.md) for instructions on how to use it.
@@ -52,3 +64,18 @@ A implementation of CEA2034 aka [Spinorama](https://spinorama.org): a set of met
 ### src-env
 
 A small set of functions and constants used by the other crates but you are unlikely to be interested.
+
+### src-ui-backend
+
+The backend take care of all the Audio activities (from recording to playing). It does not use WebAudio but CamillaDSP and Symphonia. It also provides support for IIR filters, SPL computations etc
+
+The backend also make the interface with autoeq. It should be splitted in 2 crates.
+
+### src-ui-frontend
+
+The UI frontend :) Nothing special here, just a boring UI.
+
+### src-tauri
+
+The Tauri backend for the frontend. Noting special here, just a wrapper around src-ui-backend.
+

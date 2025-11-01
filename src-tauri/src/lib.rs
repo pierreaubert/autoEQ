@@ -5,7 +5,7 @@ use autoeq::{
 use ndarray::Array1;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 // Import from sotf_backend
 use sotf_backend::camilla::ChannelMapMode;
@@ -318,7 +318,7 @@ fn cancel_optimization(cancellation_state: State<CancellationState>) -> Result<(
 // ============================================================================
 
 use sotf_backend::audio::{AudioConfig, AudioDevice};
-use sotf_backend::{AudioState, AudioStreamState, FilterParams};
+use sotf_backend::{AudioStreamState, FilterParams};
 use std::path::PathBuf;
 
 // ============================================================================
@@ -334,34 +334,10 @@ struct AudioStateChanged {
     input_device: Option<String>,
 }
 
-/// Audio position update event payload
-#[derive(Clone, serde::Serialize)]
-struct AudioPositionUpdate {
-    position_seconds: f64,
-    duration_seconds: Option<f64>,
-}
-
 /// Audio error event payload
 #[derive(Clone, serde::Serialize)]
 struct AudioError {
     error: String,
-}
-
-/// Audio signal peak event payload (for VU meter)
-#[derive(Clone, serde::Serialize)]
-struct AudioSignalPeak {
-    peak: f32,
-}
-
-/// Convert AudioState enum to string for events
-fn audio_state_to_string(state: AudioState) -> String {
-    match state {
-        AudioState::Idle => "idle".to_string(),
-        AudioState::Playing => "playing".to_string(),
-        AudioState::Paused => "paused".to_string(),
-        AudioState::Recording => "recording".to_string(),
-        AudioState::Error => "error".to_string(),
-    }
 }
 
 #[tauri::command]
@@ -1109,6 +1085,58 @@ pub fn run() {
         .manage(SharedAudioState::default())
         .manage(audio_manager)
         .manage(streaming_manager)
+        .setup(|app| {
+            // Spawn background task to monitor streaming events and forward them to frontend
+            let app_handle = app.handle().clone();
+            
+            tauri::async_runtime::spawn(async move {
+                loop {
+                    // Poll for events from the decoder thread
+                    let streaming_mgr = app_handle.state::<Mutex<AudioStreamingManager>>();
+                    if let Ok(manager) = streaming_mgr.try_lock() {
+                        for event in manager.drain_events() {
+                            let _ = match event {
+                                sotf_backend::StreamingEvent::EndOfStream => {
+                                    println!("[EVENT MONITOR] End of stream detected");
+                                    app_handle.emit(
+                                        "flac:state-changed",
+                                        serde_json::json!({ "state": "ended" }),
+                                    )
+                                }
+                                sotf_backend::StreamingEvent::StateChanged(state) => {
+                                    let state_str = match state {
+                                        StreamingState::Idle => "idle",
+                                        StreamingState::Loading => "loading",
+                                        StreamingState::Ready => "ready",
+                                        StreamingState::Playing => "playing",
+                                        StreamingState::Paused => "paused",
+                                        StreamingState::Seeking => "seeking",
+                                        StreamingState::Error => "error",
+                                    };
+                                    println!("[EVENT MONITOR] State changed to: {}", state_str);
+                                    app_handle.emit(
+                                        "flac:state-changed",
+                                        serde_json::json!({ "state": state_str }),
+                                    )
+                                }
+                                sotf_backend::StreamingEvent::Error(msg) => {
+                                    println!("[EVENT MONITOR] Error: {}", msg);
+                                    app_handle.emit(
+                                        "flac:state-changed",
+                                        serde_json::json!({ "state": "error", "message": msg }),
+                                    )
+                                }
+                            };
+                        }
+                    }
+
+                    // Sleep to avoid busy-waiting
+                    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+                }
+            });
+
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             run_optimization,
             cancel_optimization,

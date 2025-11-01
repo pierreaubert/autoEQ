@@ -1,6 +1,6 @@
 // Tonal balance plot functionality
 
-import Plotly from "plotly.js-dist-min";
+import Plotly from "plotly.js-basic-dist-min";
 
 export class TonalPlot {
   private tonalPlotElement: HTMLElement | null = null;

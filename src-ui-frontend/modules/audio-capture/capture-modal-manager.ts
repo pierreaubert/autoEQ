@@ -8,7 +8,7 @@ import { CaptureStorage } from "./capture-storage";
 import { CSVExporter } from "./csv-export";
 import { CaptureGraphRenderer } from "./capture-graph";
 import { RoutingMatrix } from "@audio-player/audio-routing";
-import { audioManagerRust } from "@/modules/audio-manager-rust";
+import { audioManagerRust } from "../audio-manager-rust";
 
 export interface CaptureData {
   frequencies: number[];

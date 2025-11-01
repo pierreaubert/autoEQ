@@ -1,6 +1,6 @@
 // Base plot functionality and visibility management
 
-import Plotly from "plotly.js-dist-min";
+import Plotly from "plotly.js-basic-dist-min";
 import { PlotData } from "../../types";
 
 export class PlotBase {

@@ -11,7 +11,9 @@ pub use audio_decoder::decoder::AudioSpec;
 pub use audio_decoder::stream::{StreamEvent, StreamPosition, StreamState};
 
 pub mod audio_streaming;
-pub use audio_streaming::{AudioFileInfo, AudioStreamingManager, StreamingCommand, StreamingState};
+pub use audio_streaming::{
+    AudioFileInfo, AudioStreamingManager, StreamingCommand, StreamingEvent, StreamingState,
+};
 
 pub mod camilla;
 pub use camilla::{

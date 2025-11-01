@@ -6,7 +6,7 @@ import { SpinPlot } from "./spin-plot";
 import { DetailsPlot } from "./details-plot";
 import { TonalPlot } from "./tonal-plot";
 import { ProgressPlot } from "./progress-plot";
-import Plotly from "plotly.js-dist-min";
+import Plotly from "plotly.js-basic-dist-min";
 
 export class PlotManager extends PlotBase {
   private filterPlot: FilterPlot;
