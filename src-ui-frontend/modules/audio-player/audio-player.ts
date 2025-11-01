@@ -4,7 +4,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { resolveResource } from "@tauri-apps/api/path";
-import { CamillaAudioManager, AudioFileInfo } from "../audio-manager-camilla";
+import { audioManagerRust, type AudioStreamState } from "../audio-manager-rust";
 
 interface ReplayGainInfo {
   gain: number; // dB
@@ -57,7 +57,6 @@ export class AudioPlayer {
   private audioPauseTime: number = 0;
   private audioAnimationFrame: number | null = null;
   private currentAudioPath: string | null = null; // Track current audio file path for Rust backend
-  private camillaManager: CamillaAudioManager | null = null; // Camilla backend manager
   private currentFilterParams: FilterParam[] = [
     { frequency: 100, q: 1.0, gain: 0, enabled: true },
     { frequency: 1000, q: 1.0, gain: 0, enabled: true },
@@ -77,11 +76,11 @@ export class AudioPlayer {
   private spectrumCanvas: HTMLCanvasElement | null = null;
   private spectrumCtx: CanvasRenderingContext2D | null = null;
   private spectrumAnimationFrame: number | null = null;
-  
+
   // Loudness monitoring
   private loudnessDisplayMomentary: HTMLElement | null = null;
   private loudnessDisplayShortterm: HTMLElement | null = null;
-  
+
   // 30-bin spectrum analyzer constants
   private readonly SPECTRUM_BINS = 30;
   private readonly SPECTRUM_MIN_FREQ = 20;
@@ -212,7 +211,7 @@ export class AudioPlayer {
   private async init(): Promise<void> {
     try {
       await this.setupAudioContext();
-      this.setupCamillaManager();
+      this.setupRustBackendEventHandlers();
       this._createEQModal();
       this.createUI();
       this.setupEventListeners();
@@ -223,60 +222,56 @@ export class AudioPlayer {
     }
   }
 
-  private setupCamillaManager(): void {
-    this.camillaManager = new CamillaAudioManager({
-      onStateChange: (state) => {
-        console.log("[AudioPlayer] Camilla state changed:", state);
-        if (state === "playing") {
-          this.isAudioPlaying = true;
-          this.isAudioPaused = false;
-        } else if (state === "paused") {
-          this.isAudioPlaying = false;
-          this.isAudioPaused = true;
-        } else if (state === "idle") {
-          this.isAudioPlaying = false;
-          this.isAudioPaused = false;
-        } else if (state === "ended") {
-          // Song completed naturally
-          console.log("[AudioPlayer] Playback completed");
-          this.isAudioPlaying = false;
-          this.isAudioPaused = false;
-          // Reset position display
-          if (this.positionText) {
-            this.positionText.textContent = "--:--";
-          }
-          if (this.progressFill) {
-            this.progressFill.style.width = "0%";
-          }
-          this.setStatus("Playback completed");
-        }
-        this.updatePlaybackUI();
-      },
-      onPositionUpdate: (position, duration) => {
+  private setupRustBackendEventHandlers(): void {
+    // Subscribe to state changes
+    audioManagerRust.onStateChange((event) => {
+      console.log("[AudioPlayer] Backend state changed:", event.state);
+      
+      if (event.state === "playing") {
+        this.isAudioPlaying = true;
+        this.isAudioPaused = false;
+      } else if (event.state === "paused") {
+        this.isAudioPlaying = false;
+        this.isAudioPaused = true;
+      } else if (event.state === "idle") {
+        this.isAudioPlaying = false;
+        this.isAudioPaused = false;
+        // Reset position display
         if (this.positionText) {
-          this.positionText.textContent = this.formatTime(position);
+          this.positionText.textContent = "--:--";
         }
-        if (this.durationText && duration) {
-          this.durationText.textContent = this.formatTime(duration);
+        if (this.progressFill) {
+          this.progressFill.style.width = "0%";
         }
-        if (this.progressFill && duration) {
-          const progress = (position / duration) * 100;
-          this.progressFill.style.width = `${Math.min(progress, 100)}%`;
-        }
-      },
-      onError: (error) => {
-        console.error("[AudioPlayer] Camilla error:", error);
-        this.callbacks.onError?.(error);
-        this.setStatus("Error: " + error);
-      },
-      onFileLoaded: (info: AudioFileInfo) => {
-        console.log("[AudioPlayer] File loaded:", info);
-        if (this.durationText && info.duration_seconds) {
-          this.durationText.textContent = this.formatTime(
-            info.duration_seconds,
-          );
-        }
-      },
+        this.setStatus("Ready");
+      } else if (event.state === "error") {
+        this.isAudioPlaying = false;
+        this.isAudioPaused = false;
+        this.setStatus("Error");
+      }
+      
+      this.updatePlaybackUI();
+    });
+
+    // Subscribe to position updates
+    audioManagerRust.onPositionUpdate((event) => {
+      if (this.positionText) {
+        this.positionText.textContent = this.formatTime(event.position_seconds);
+      }
+      if (this.durationText && event.duration_seconds) {
+        this.durationText.textContent = this.formatTime(event.duration_seconds);
+      }
+      if (this.progressFill && event.duration_seconds) {
+        const progress = (event.position_seconds / event.duration_seconds) * 100;
+        this.progressFill.style.width = `${Math.min(progress, 100)}%`;
+      }
+    });
+
+    // Subscribe to errors
+    audioManagerRust.onError((event) => {
+      console.error("[AudioPlayer] Backend error:", event.error);
+      this.callbacks.onError?.(event.error);
+      this.setStatus("Error: " + event.error);
     });
   }
 
@@ -932,26 +927,24 @@ export class AudioPlayer {
   }
 
   public async loadAudioFilePath(filePath: string): Promise<void> {
-    this.setStatus("Loading audio...");
-    this.setListenButtonEnabled(false);
-
+    this.setStatus("Audio ready");
+    
     try {
-      // Use Camilla backend to load the audio file
-      if (this.camillaManager) {
-        await this.camillaManager.loadAudioFilePath(filePath);
-        this.currentAudioPath = filePath;
-        this.setStatus("Audio ready");
-        this.setListenButtonEnabled(true);
-        this.showAudioStatus(true);
-
-        // Analyze ReplayGain for demo track
-        await this.analyzeReplayGain(filePath);
-      } else {
-        throw new Error("Camilla audio manager not initialized");
+      // Store the path for playback
+      this.currentAudioPath = filePath;
+      this.setListenButtonEnabled(true);
+      this.showAudioStatus(true);
+      
+      // Set duration placeholder - will be updated when playback starts
+      if (this.durationText) {
+        this.durationText.textContent = "--:--";
       }
+      
+      // Analyze ReplayGain for the track
+      await this.analyzeReplayGain(filePath);
     } catch (error) {
-      this.setStatus("Failed to load audio");
-      this.callbacks.onError?.("Failed to load audio file: " + error);
+      this.setStatus("Failed to prepare audio");
+      this.callbacks.onError?.("Failed to prepare audio file: " + error);
       throw error;
     }
   }
@@ -1025,9 +1018,20 @@ export class AudioPlayer {
     // Recalculate and apply filters
     this.setupEQFilters();
 
-    // If playing, reconnect audio chain to apply changes immediately
-    if (this.isAudioPlaying && this.audioSource) {
-      this.connectAudioChain();
+    // If playing, update filters in real-time
+    if (this.isAudioPlaying && this.eqEnabled) {
+      const filters = this.currentFilterParams
+        .filter((p) => p.enabled)
+        .map((p) => ({
+          frequency: p.frequency,
+          q: p.q,
+          gain: p.gain,
+          filter_type: "Peaking",
+        }));
+      
+      audioManagerRust.updateFilters(filters).catch((error) => {
+        console.error("Failed to update filters in real-time:", error);
+      });
     }
   }
 
@@ -1184,17 +1188,22 @@ export class AudioPlayer {
       }
     }
 
-    // Apply EQ changes during playback or pause
-    if (this.audioSource) {
-      if (this.isAudioPlaying) {
-        // Audio is actively playing - reconnect chain directly
-        this.connectAudioChain();
-      } else if (this.isAudioPaused) {
-        // Audio is paused - need to restart to rebuild the audio chain
-        // Save current time position before restart
-        const currentTime = this.getCurrentTimeWhilePaused();
-        this.restartFromPosition(currentTime);
-      }
+    // Apply EQ changes in real-time if playing
+    if (this.isAudioPlaying) {
+      const filters = enabled
+        ? this.currentFilterParams
+            .filter((p) => p.enabled)
+            .map((p) => ({
+              frequency: p.frequency,
+              q: p.q,
+              gain: p.gain,
+              filter_type: "Peaking",
+            }))
+        : [];
+      
+      audioManagerRust.updateFilters(filters).catch((error) => {
+        console.error("Failed to update filters:", error);
+      });
     }
 
     // Recalculate active filters and compensation when toggling
@@ -1260,48 +1269,19 @@ export class AudioPlayer {
     }
   }
 
-  // Update loudness display with backend data
-  private updateLoudnessDisplay(loudness: { momentary_lufs: number; shortterm_lufs: number; peak: number } | null): void {
-    if (!this.loudnessDisplayMomentary || !this.loudnessDisplayShortterm) {
-      return;
-    }
-    
-    if (loudness) {
-      // Format LUFS values
-      const momentary = loudness.momentary_lufs;
-      const shortterm = loudness.shortterm_lufs;
-      
-      // Display finite values, otherwise show placeholder
-      if (isFinite(momentary) && momentary > -Infinity) {
-        this.loudnessDisplayMomentary.textContent = momentary.toFixed(1);
-      } else {
-        this.loudnessDisplayMomentary.textContent = "--.-";
-      }
-      
-      if (isFinite(shortterm) && shortterm > -Infinity) {
-        this.loudnessDisplayShortterm.textContent = shortterm.toFixed(1);
-      } else {
-        this.loudnessDisplayShortterm.textContent = "--.-";
-      }
-    } else {
-      // No loudness data available
-      this.loudnessDisplayMomentary.textContent = "--.-";
-      this.loudnessDisplayShortterm.textContent = "--.-";
-    }
-  }
 
   // Initialize 30 logarithmically-spaced spectrum bins
   private initializeSpectrumBins(): void {
     const logMin = Math.log10(this.SPECTRUM_MIN_FREQ);
     const logMax = Math.log10(this.SPECTRUM_MAX_FREQ);
-    
+
     // Calculate bin edges (31 edges for 30 bins)
     this.spectrumBinEdges = [];
     for (let i = 0; i <= this.SPECTRUM_BINS; i++) {
       const logFreq = logMin + (logMax - logMin) * (i / this.SPECTRUM_BINS);
       this.spectrumBinEdges.push(Math.pow(10, logFreq));
     }
-    
+
     // Calculate bin centers (geometric mean of edges)
     this.spectrumBinCenters = [];
     for (let i = 0; i < this.SPECTRUM_BINS; i++) {
@@ -1309,10 +1289,10 @@ export class AudioPlayer {
         Math.sqrt(this.spectrumBinEdges[i] * this.spectrumBinEdges[i + 1]),
       );
     }
-    
+
     // Initialize bin values array with zeros
     this.spectrumBinValues = new Array(this.SPECTRUM_BINS).fill(0);
-    
+
     console.log(`[Spectrum] Initialized ${this.SPECTRUM_BINS} log-spaced bins from ${this.SPECTRUM_MIN_FREQ}Hz to ${this.SPECTRUM_MAX_FREQ}Hz`);
   }
 
@@ -1619,15 +1599,15 @@ export class AudioPlayer {
         const sampleRate = this.audioContext!.sampleRate;
         const nyquist = sampleRate / 2;
         const barWidth = width / this.SPECTRUM_BINS;
-        
+
         // Reset bin accumulators
         const binAccumulators = new Array(this.SPECTRUM_BINS).fill(0);
         const binCounts = new Array(this.SPECTRUM_BINS).fill(0);
-        
+
         // Map each FFT bin to its corresponding logarithmic bin
         for (let fftBin = 0; fftBin < dataArray.length; fftBin++) {
           const freq = (fftBin * nyquist) / dataArray.length;
-          
+
           // Find which log bin this frequency belongs to (binary search would be faster, but linear is fine for this size)
           let targetBin = -1;
           for (let i = 0; i < this.SPECTRUM_BINS; i++) {
@@ -1636,23 +1616,23 @@ export class AudioPlayer {
               break;
             }
           }
-          
+
           if (targetBin >= 0 && targetBin < this.SPECTRUM_BINS) {
             binAccumulators[targetBin] += dataArray[fftBin];
             binCounts[targetBin]++;
           }
         }
-        
+
         // Calculate average for each bin and apply smoothing
         const smoothingFactor = 0.7; // Higher = more smoothing
         for (let i = 0; i < this.SPECTRUM_BINS; i++) {
           const rawValue = binCounts[i] > 0 ? binAccumulators[i] / binCounts[i] : 0;
           // Exponential moving average for smooth animation
-          this.spectrumBinValues[i] = 
-            smoothingFactor * this.spectrumBinValues[i] + 
+          this.spectrumBinValues[i] =
+            smoothingFactor * this.spectrumBinValues[i] +
             (1 - smoothingFactor) * rawValue;
         }
-        
+
         // Draw bars
         for (let i = 0; i < this.SPECTRUM_BINS; i++) {
           const magnitude = this.spectrumBinValues[i];
@@ -1810,12 +1790,12 @@ export class AudioPlayer {
   async play(): Promise<void> {
     console.log("Play method called");
 
-    if (!this.camillaManager) {
-      throw new Error("Camilla audio manager not initialized");
+    if (!this.currentAudioPath) {
+      throw new Error("No audio file loaded");
     }
 
     try {
-      // Convert current filter params to the format Camilla expects
+      // Convert current filter params to the format Rust backend expects
       const filters = this.eqEnabled
         ? this.currentFilterParams
             .filter((p) => p.enabled)
@@ -1823,21 +1803,24 @@ export class AudioPlayer {
               frequency: p.frequency,
               q: p.q,
               gain: p.gain,
+              filter_type: "Peaking",
             }))
         : [];
 
-      await this.camillaManager.play(
+      await audioManagerRust.startPlayback(
+        this.currentAudioPath,
+        this.outputDeviceId === "default" ? null : this.outputDeviceId,
+        48000, // Sample rate
+        2,     // Channels
         filters,
-        this.outputDeviceId === "default" ? undefined : this.outputDeviceId,
       );
-      
-      // Start loudness monitoring
-      this.camillaManager.startLoudnessPolling(100, (loudness) => {
-        this.updateLoudnessDisplay(loudness);
-      });
-      
+
+      // Note: Spectrum analyzer requires Web Audio API AnalyserNode
+      // which is not available when using Rust backend for playback
+      // The 30-bin spectrum will remain idle (showing baseline) when using Rust backend
+
       this.callbacks.onPlay?.();
-      console.log("Audio playback started successfully via Camilla backend");
+      console.log("Audio playback started successfully via Rust backend");
     } catch (error) {
       console.error("Error during audio playback:", error);
       this.callbacks.onError?.("Playback failed: " + error);
@@ -1846,18 +1829,10 @@ export class AudioPlayer {
   }
 
   async pause(): Promise<void> {
-    if (!this.camillaManager) {
-      console.warn("Camilla audio manager not initialized");
-      return;
-    }
-
-    try {
-      await this.camillaManager.pause();
-      console.log("Audio playback paused via Camilla backend");
-    } catch (error) {
-      console.error("Error pausing playback:", error);
-      this.callbacks.onError?.("Failed to pause: " + error);
-    }
+    // Note: Rust backend doesn't support pause yet
+    // For now, we'll just stop playback
+    console.log("Pause not supported, stopping playback instead");
+    await this.stop();
   }
 
   private restart(): void {
@@ -1870,30 +1845,26 @@ export class AudioPlayer {
   }
 
   async resume(): Promise<void> {
-    if (!this.camillaManager) {
-      console.warn("Camilla audio manager not initialized");
-      return;
-    }
-
-    try {
-      await this.camillaManager.resume();
-      console.log("Audio playback resumed via Camilla backend");
-    } catch (error) {
-      console.error("Error resuming playback:", error);
-      this.callbacks.onError?.("Failed to resume: " + error);
-    }
+    // Note: Rust backend doesn't support resume yet
+    // For now, we'll restart playback from the beginning
+    console.log("Resume not supported, restarting playback from beginning");
+    await this.play();
   }
 
   async stop(): Promise<void> {
-    if (!this.camillaManager) {
-      console.warn("Camilla audio manager not initialized");
-      return;
-    }
-
     try {
-      await this.camillaManager.stop();
+      await audioManagerRust.stopPlayback();
+      
+      // Reset UI state
+      if (this.positionText) {
+        this.positionText.textContent = "--:--";
+      }
+      if (this.progressFill) {
+        this.progressFill.style.width = "0%";
+      }
+      
       this.callbacks.onStop?.();
-      console.log("Audio playback stopped via Camilla backend");
+      console.log("Audio playback stopped via Rust backend");
     } catch (error) {
       console.error("Error stopping playback:", error);
       this.callbacks.onError?.("Failed to stop: " + error);

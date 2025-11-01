@@ -921,10 +921,10 @@ export class CaptureModalManager {
     this.modalCaptureVolumeValue.textContent = `${volume}%`;
 
     const percentage = volume;
-    this.modalCaptureVolume.style.background = `linear-gradient(to right, 
-      var(--button-primary) 0%, 
-      var(--button-primary) ${percentage}%, 
-      var(--bg-accent) ${percentage}%, 
+    this.modalCaptureVolume.style.background = `linear-gradient(to right,
+      var(--button-primary) 0%,
+      var(--button-primary) ${percentage}%,
+      var(--bg-accent) ${percentage}%,
       var(--bg-accent) 100%)`;
   }
 
@@ -936,10 +936,10 @@ export class CaptureModalManager {
     this.modalOutputVolumeValue.textContent = `${volume}%`;
 
     const percentage = volume;
-    this.modalOutputVolume.style.background = `linear-gradient(to right, 
-      var(--button-primary) 0%, 
-      var(--button-primary) ${percentage}%, 
-      var(--bg-accent) ${percentage}%, 
+    this.modalOutputVolume.style.background = `linear-gradient(to right,
+      var(--button-primary) 0%,
+      var(--button-primary) ${percentage}%,
+      var(--bg-accent) ${percentage}%,
       var(--bg-accent) 100%)`;
   }
 

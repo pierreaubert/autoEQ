@@ -72,6 +72,7 @@ export class AudioManagerRust {
 
   private stateChangeUnlisten: UnlistenFn | null = null;
   private errorUnlisten: UnlistenFn | null = null;
+  private statePollingStopper: (() => void) | null = null;
 
   constructor() {
     this.setupEventListeners();
@@ -194,6 +195,9 @@ export class AudioManagerRust {
         filters,
       });
       console.log("[AudioManager] Playback started successfully");
+      
+      // Start state polling for position updates
+      this.statePollingStopper = this.startStatePolling();
     } catch (error) {
       console.error("[AudioManager] Failed to start playback:", error);
       throw error;
@@ -207,6 +211,12 @@ export class AudioManagerRust {
     console.log("[AudioManager] Stopping playback");
 
     try {
+      // Stop state polling first
+      if (this.statePollingStopper) {
+        this.statePollingStopper();
+        this.statePollingStopper = null;
+      }
+      
       await invoke("audio_stop_playback");
       console.log("[AudioManager] Playback stopped successfully");
     } catch (error) {
@@ -318,6 +328,55 @@ export class AudioManagerRust {
       // Silent fail - not recording or no signal
       return -96.0; // Silence floor
     }
+  }
+
+  /**
+   * Start polling playback state for position and state updates
+   * Returns a function to stop polling
+   */
+  startStatePolling(intervalMs: number = 250): () => void {
+    let polling = true;
+    let lastState: string | null = null;
+
+    const poll = async () => {
+      while (polling) {
+        try {
+          const state = await this.getState();
+          
+          // Emit state changes
+          if (state.state !== lastState) {
+            lastState = state.state;
+            this.stateChangeListeners.forEach((listener) =>
+              listener({
+                state: state.state,
+                file: state.current_file ?? null,
+                output_device: state.output_device ?? null,
+                input_device: state.input_device ?? null,
+              }),
+            );
+          }
+          
+          // Emit position updates
+          if (typeof state.position_seconds === 'number') {
+            this.positionUpdateListeners.forEach((listener) =>
+              listener({
+                position_seconds: state.position_seconds,
+                duration_seconds: state.duration_seconds ?? null,
+              }),
+            );
+          }
+        } catch (error) {
+          // Ignore errors during polling
+        }
+        await new Promise((resolve) => setTimeout(resolve, intervalMs));
+      }
+    };
+
+    poll();
+
+    return () => {
+      polling = false;
+    };
   }
 
   /**

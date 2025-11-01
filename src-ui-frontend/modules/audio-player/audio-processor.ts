@@ -1,6 +1,6 @@
 /**
  * Removed: WebAudio/WebRTC-based AudioProcessor.
- * This project is Tauri-only now. Use CamillaAudioManager for playback/recording.
+ * This project is Tauri-only now. Use AudioManagerRust for playback/recording.
  */
 
 // Kept for type compatibility with capture modules
@@ -15,7 +15,7 @@ export interface CaptureResult {
 export class AudioProcessor {
   constructor() {
     throw new Error(
-      "AudioProcessor has been removed. Use CamillaAudioManager instead.",
+      "AudioProcessor has been removed. Use AudioManagerRust instead.",
     );
   }
   destroy(): void {
