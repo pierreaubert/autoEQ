@@ -49,7 +49,6 @@ prod: prod-workspace prod-autoeq prod-sotf-audio prod-generate-audio-tests
 	cargo build --release --bin benchmark_convergence
 	cargo build --release --bin plot_autoeq_de
 	cargo build --release --bin run_autoeq_de
-	cargo build --release --bin sotf_audio
 
 prod-generate-audio-tests:
 	cargo build --release --bin generate_audio_tests
@@ -297,6 +296,114 @@ install-ubuntu-arm64: install-ubuntu-common install-ubuntu-arm64-driver install-
 
 
 # ----------------------------------------------------------------------
+# publish
+# ----------------------------------------------------------------------
+
+publish:
+	cd src-testfunctions && cargo publish
+	cd src-de && cargo publish
+	cd src-cea2034 && cargo publish
+	cd src-autoeq && cargo publish
+
+# ----------------------------------------------------------------------
+# QA
+# ----------------------------------------------------------------------
+
+qa: prod-autoeq \
+	qa-ascilab-6b \
+	qa-jbl-m2-flat qa-jbl-m2-score \
+	qa-beyerdynamic-dt1990pro \
+	qa-edifierw830nb
+
+qa-ascilab-6b:
+	./target/release/autoeq --speaker="AsciLab F6B" --version asr --measurement CEA2034 \
+	--algo autoeq:de --loss speaker-score -n 7 --min-freq=30 --max-q=6 \
+	--qa 0.5
+
+qa-jbl-m2-flat:
+	./target/release/autoeq --speaker="JBL M2" --version eac --measurement CEA2034 \
+	--algo autoeq:de --loss speaker-flat -n 7 --min-freq=20 --max-q=6 --peq-model hp-pk \
+	--qa 0.5
+
+qa-jbl-m2-score:
+	./target/release/autoeq --speaker="JBL M2" --version eac --measurement CEA2034 \
+	--algo autoeq:de --loss speaker-score -n 7 --min-freq=20 --max-q=6 --peq-model hp-pk \
+	--qa 0.5
+
+qa-beyerdynamic-dt1990pro: qa-beyerdynamic-dt1990pro-flat qa-beyerdynamic-dt1990pro-score	qa-beyerdynamic-dt1990pro-score2
+
+qa-beyerdynamic-dt1990pro-score:
+	./target/release/autoeq -n 5 \
+	--curve ./data_tests/headphone/asr/beyerdynamic_dt1990pro/Beyerdynamic\ DT1990\ Pro\ Headphone\ Frequency\ Response\ Measurement.csv \
+	--target ./data_tests/targets/harman-over-ear-2018.csv --loss headphone-score  \
+	--qa 3.0
+
+qa-beyerdynamic-dt1990pro-score2:
+	./target/release/autoeq -n 7 \
+	--curve ./data_tests/headphone/asr/beyerdynamic_dt1990pro/Beyerdynamic\ DT1990\ Pro\ Headphone\ Frequency\ Response\ Measurement.csv \
+	--target ./data_tests/targets/harman-over-ear-2018.csv \
+	--loss headphone-score	--max-db 6 --max-q 6 --algo mh:rga --maxeval 20000 --min-freq=20 --max-freq 10000 --peq-model hp-pk-lp --min-q 0.6 --min-db 0.25 \
+	--qa 1.5
+
+qa-beyerdynamic-dt1990pro-flat:
+	./target/release/autoeq -n 5 \
+	--curve ./data_tests/headphone/asr/beyerdynamic_dt1990pro/Beyerdynamic\ DT1990\ Pro\ Headphone\ Frequency\ Response\ Measurement.csv \
+	--target ./data_tests/targets/harman-over-ear-2018.csv \
+	--loss headphone-flat  --max-db 6 --max-q 6 --maxeval 20000 --algo mh:pso --min-freq=20 --max-freq 10000 --peq-model pk \
+	--qa 0.5
+
+qa-edifierw830nb: qa-edifierw830nb-autoeqde qa-edifierw830nb-mhrga qa-edifierw830nb-mhfirefly
+
+qa-edifierw830nb-autoeqde:
+	./target/release/autoeq -n 9 \
+	--curve data_tests/headphone/asr/edifierw830nb/Edifier\ W830NB.csv \
+	--target ./data_tests/targets/harman-over-ear-2018.csv \
+	--min-freq 50 --max-freq 16000 --max-q 8 --max-db 8 \
+	--loss headphone-score --min-spacing-oct 0.08 \
+	--algo autoeq:de --population 70 --maxeval 8000 --seed 42 \
+	--qa 14.0
+
+qa-edifierw830nb-mhrga:
+	./target/release/autoeq -n 5 \
+	--curve data_tests/headphone/asr/edifierw830nb/Edifier\ W830NB.csv \
+	--target ./data_tests/targets/harman-over-ear-2018.csv \
+	--min-freq 50 --max-freq 16000 --max-q 8 --max-db 8 \
+	--loss headphone-score \
+	--min-spacing-oct 0.08 --atolerance 0.000001 --tolerance 0.0000001 --algo mh:rga --population 100 --maxeval 20000 \
+	--qa 4.0
+
+qa-edifierw830nb-mhfirefly:
+	./target/release/autoeq -n 5 \
+	--curve data_tests/headphone/asr/edifierw830nb/Edifier\ W830NB.csv \
+	--target ./data_tests/targets/harman-over-ear-2018.csv \
+	--min-freq 50 --max-freq 16000 --max-q 8 --max-db 8 \
+	--loss headphone-score \
+	--min-spacing-oct 0.08 --atolerance 0.000001 --tolerance 0.0000001 --algo mh:rga --population 80 --maxeval 3000 \
+	--qa 4.0
+
+# ----------------------------------------------------------------------
+# POST
+# ----------------------------------------------------------------------
+
+post-install-npm:
+	cd src-ui-frontend && npm install .
+
+post-install-rust:
+	rustup default stable
+	cargo install just
+	cargo install tauri-cli
+	cargo check
+	cd src-tauri && cargo tauri icon
+
+post-install: post-install-rust post-install-npm
+
+# ----------------------------------------------------------------------
+# SIGNING
+# ----------------------------------------------------------------------
+
+
+
+# ----------------------------------------------------------------------
 # Install windows
 # ----------------------------------------------------------------------
 
@@ -460,110 +567,4 @@ install-windows-arm: install-windows-vcpkg install-windows-node install-windows-
 install-windows-x86: install-windows-vcpkg install-windows-node
 	rustup default stable
 	rustup target add x86_64-pc-windows-msvc
-
-# ----------------------------------------------------------------------
-# publish
-# ----------------------------------------------------------------------
-
-publish:
-	cd src-testfunctions && cargo publish
-	cd src-de && cargo publish
-	cd src-cea2034 && cargo publish
-	cd src-autoeq && cargo publish
-
-# ----------------------------------------------------------------------
-# QA
-# ----------------------------------------------------------------------
-
-qa: prod-autoeq \
-	qa-ascilab-6b \
-	qa-jbl-m2-flat qa-jbl-m2-score \
-	qa-beyerdynamic-dt1990pro \
-	qa-edifierw830nb
-
-qa-ascilab-6b:
-	./target/release/autoeq --speaker="AsciLab F6B" --version asr --measurement CEA2034 \
-	--algo autoeq:de --loss speaker-score -n 7 --min-freq=30 --max-q=6 \
-	--qa 0.5
-
-qa-jbl-m2-flat:
-	./target/release/autoeq --speaker="JBL M2" --version eac --measurement CEA2034 \
-	--algo autoeq:de --loss speaker-flat -n 7 --min-freq=20 --max-q=6 --peq-model hp-pk \
-	--qa 0.5
-
-qa-jbl-m2-score:
-	./target/release/autoeq --speaker="JBL M2" --version eac --measurement CEA2034 \
-	--algo autoeq:de --loss speaker-score -n 7 --min-freq=20 --max-q=6 --peq-model hp-pk \
-	--qa 0.5
-
-qa-beyerdynamic-dt1990pro: qa-beyerdynamic-dt1990pro-flat qa-beyerdynamic-dt1990pro-score	qa-beyerdynamic-dt1990pro-score2
-
-qa-beyerdynamic-dt1990pro-score:
-	./target/release/autoeq -n 5 \
-	--curve ./data_tests/headphone/asr/beyerdynamic_dt1990pro/Beyerdynamic\ DT1990\ Pro\ Headphone\ Frequency\ Response\ Measurement.csv \
-	--target ./data_tests/targets/harman-over-ear-2018.csv --loss headphone-score  \
-	--qa 3.0
-
-qa-beyerdynamic-dt1990pro-score2:
-	./target/release/autoeq -n 7 \
-	--curve ./data_tests/headphone/asr/beyerdynamic_dt1990pro/Beyerdynamic\ DT1990\ Pro\ Headphone\ Frequency\ Response\ Measurement.csv \
-	--target ./data_tests/targets/harman-over-ear-2018.csv \
-	--loss headphone-score	--max-db 6 --max-q 6 --algo mh:rga --maxeval 20000 --min-freq=20 --max-freq 10000 --peq-model hp-pk-lp --min-q 0.6 --min-db 0.25 \
-	--qa 1.5
-
-qa-beyerdynamic-dt1990pro-flat:
-	./target/release/autoeq -n 5 \
-	--curve ./data_tests/headphone/asr/beyerdynamic_dt1990pro/Beyerdynamic\ DT1990\ Pro\ Headphone\ Frequency\ Response\ Measurement.csv \
-	--target ./data_tests/targets/harman-over-ear-2018.csv \
-	--loss headphone-flat  --max-db 6 --max-q 6 --maxeval 20000 --algo mh:pso --min-freq=20 --max-freq 10000 --peq-model pk \
-	--qa 0.5
-
-qa-edifierw830nb: qa-edifierw830nb-autoeqde qa-edifierw830nb-mhrga qa-edifierw830nb-mhfirefly
-
-qa-edifierw830nb-autoeqde:
-	./target/release/autoeq -n 9 \
-	--curve data_tests/headphone/asr/edifierw830nb/Edifier\ W830NB.csv \
-	--target ./data_tests/targets/harman-over-ear-2018.csv \
-	--min-freq 50 --max-freq 16000 --max-q 8 --max-db 8 \
-	--loss headphone-score --min-spacing-oct 0.08 \
-	--algo autoeq:de --population 70 --maxeval 8000 --seed 42 \
-	--qa 14.0
-
-qa-edifierw830nb-mhrga:
-	./target/release/autoeq -n 5 \
-	--curve data_tests/headphone/asr/edifierw830nb/Edifier\ W830NB.csv \
-	--target ./data_tests/targets/harman-over-ear-2018.csv \
-	--min-freq 50 --max-freq 16000 --max-q 8 --max-db 8 \
-	--loss headphone-score \
-	--min-spacing-oct 0.08 --atolerance 0.000001 --tolerance 0.0000001 --algo mh:rga --population 100 --maxeval 20000 \
-	--qa 4.0
-
-qa-edifierw830nb-mhfirefly:
-	./target/release/autoeq -n 5 \
-	--curve data_tests/headphone/asr/edifierw830nb/Edifier\ W830NB.csv \
-	--target ./data_tests/targets/harman-over-ear-2018.csv \
-	--min-freq 50 --max-freq 16000 --max-q 8 --max-db 8 \
-	--loss headphone-score \
-	--min-spacing-oct 0.08 --atolerance 0.000001 --tolerance 0.0000001 --algo mh:rga --population 80 --maxeval 3000 \
-	--qa 4.0
-
-# ----------------------------------------------------------------------
-# POST
-# ----------------------------------------------------------------------
-
-post-install-npm:
-	cd src-ui-frontend && npm install .
-
-post-install-rust:
-	rustup default stable
-	cargo install just
-	cargo check
-
-post-install: post-install-rust post-install-npm
-
-# ----------------------------------------------------------------------
-# SIGNING
-# ----------------------------------------------------------------------
-
-
 
