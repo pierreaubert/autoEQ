@@ -3,8 +3,14 @@
  * This project is Tauri-only now. Use CamillaAudioManager for playback/recording.
  */
 
-// Kept only for temporary compatibility; any usage will throw immediately.
-export type CaptureResult = never;
+// Kept for type compatibility with capture modules
+export interface CaptureResult {
+  success: boolean;
+  frequencies: number[];
+  magnitudes: number[];
+  phases?: number[];
+  error?: string;
+}
 
 export class AudioProcessor {
   constructor() {

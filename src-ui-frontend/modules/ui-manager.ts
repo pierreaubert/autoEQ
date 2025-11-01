@@ -7,7 +7,6 @@ import {
   HEADPHONE_LOSS_OPTIONS,
 } from "./optimization-constants";
 import { CaptureModalManager } from "@audio-capture/capture-modal-manager";
-import { AudioProcessor } from "@audio-player/audio-processor";
 import { exportEQ, type ExportFormat } from "./apo-export";
 
 export class UIManager {
@@ -931,116 +930,9 @@ export class UIManager {
   }
 
   private async startCapture(): Promise<void> {
-    if (!this.captureBtn || !this.captureStatus || !this.captureStatusText)
-      return;
-
-    try {
-      // Update UI to capturing state
-      this.captureBtn.textContent = "⏹️ Stop Capture";
-      this.captureBtn.classList.add("capturing");
-      this.captureStatus.style.display = "block";
-      this.captureStatusText.textContent = "Starting capture...";
-
-      // Hide any previous results
-      if (this.captureResult) {
-        this.captureResult.style.display = "none";
-      }
-
-      const audioProcessor = new AudioProcessor();
-
-      try {
-        // First enumerate and populate audio devices if needed
-        if (
-          this.captureDeviceSelect &&
-          this.captureDeviceSelect.options.length <= 1
-        ) {
-          await this.populateAudioDevices(audioProcessor);
-        }
-
-        // Get selected device
-        const selectedDevice = this.captureDeviceSelect?.value || "default";
-
-        // Set sweep duration if selected
-        if (this.sweepDurationSelect) {
-          const duration = parseInt(this.sweepDurationSelect.value) || 10;
-          audioProcessor.setSweepDuration(duration);
-        }
-
-        // Set output channel if selected
-        if (this.outputChannelSelect) {
-          const channel = this.outputChannelSelect.value as
-            | "left"
-            | "right"
-            | "both"
-            | "default";
-          audioProcessor.setOutputChannel(channel);
-          console.log("Setting output channel to:", channel);
-        }
-
-        // Set sample rate if selected
-        if (this.captureSampleRateSelect) {
-          const sampleRate =
-            parseInt(this.captureSampleRateSelect.value) || 48000;
-          audioProcessor.setSampleRate(sampleRate);
-          console.log("Setting sample rate to:", sampleRate);
-        }
-
-        // Set signal type if selected
-        if (this.signalTypeSelect) {
-          const signalType = this.signalTypeSelect.value as
-            | "sweep"
-            | "white"
-            | "pink";
-          audioProcessor.setSignalType(signalType);
-          console.log("Setting signal type to:", signalType);
-        }
-
-        const signalType = this.signalTypeSelect?.value || "sweep";
-        this.captureStatusText.textContent = `Playing ${signalType === "sweep" ? "frequency sweep" : signalType + " noise"} and capturing response...`;
-
-        // Start the capture with selected device
-        const result = await audioProcessor.startCapture(selectedDevice);
-
-        if (result.success && result.frequencies.length > 0) {
-          console.log(
-            "Capture successful:",
-            result.frequencies.length,
-            "points",
-          );
-
-          // Call the callback to store captured data in the optimization manager
-          if (this.onCaptureComplete) {
-            this.onCaptureComplete(result.frequencies, result.magnitudes);
-          }
-
-          this.captureStatusText.textContent = `✅ Captured ${result.frequencies.length} frequency points`;
-
-          // Show results
-          if (this.captureResult) {
-            this.captureResult.style.display = "block";
-          }
-
-          // Plot the captured data
-          this.plotCapturedData(result.frequencies, result.magnitudes);
-        } else {
-          throw new Error(result.error || "Capture failed");
-        }
-      } finally {
-        audioProcessor.destroy();
-      }
-    } catch (error) {
-      console.error("Capture error:", error);
-
-      if (this.captureStatusText) {
-        this.captureStatusText.textContent = `❌ Capture failed: ${error instanceof Error ? error.message : "Unknown error"}`;
-      }
-    } finally {
-      // Reset UI
-      if (this.captureBtn) {
-        this.captureBtn.textContent = "🎤 Start Capture";
-        this.captureBtn.classList.remove("capturing");
-      }
-    }
+    // Audio capture is now handled by CaptureModalManager
+    // This method is kept for backward compatibility but does nothing
+    console.log("startCapture called - capture is handled by CaptureModalManager");
   }
 
   private stopCapture(): void {
@@ -1057,37 +949,6 @@ export class UIManager {
     }
   }
 
-  private async populateAudioDevices(
-    audioProcessor: AudioProcessor,
-  ): Promise<void> {
-    if (!this.captureDeviceSelect) return;
-
-    try {
-      const devices = await audioProcessor.enumerateAudioDevices();
-
-      // Clear existing options
-      this.captureDeviceSelect.innerHTML = "";
-
-      // Add default option
-      const defaultOption = document.createElement("option");
-      defaultOption.value = "default";
-      defaultOption.textContent = "Default Microphone";
-      this.captureDeviceSelect.appendChild(defaultOption);
-
-      // Add all available devices
-      devices.forEach((device: MediaDeviceInfo) => {
-        const option = document.createElement("option");
-        option.value = device.deviceId;
-        option.textContent =
-          device.label || `Microphone ${device.deviceId.substr(0, 8)}`;
-        this.captureDeviceSelect?.appendChild(option);
-      });
-
-      console.log(`Populated ${devices.length} audio input devices`);
-    } catch (error) {
-      console.error("Error populating audio devices:", error);
-    }
-  }
 
   private plotCapturedData(frequencies: number[], magnitudes: number[]): void {
     console.log("Plotting captured data...");
@@ -1230,16 +1091,8 @@ export class UIManager {
   }
 
   private async initializeAudioDevices(): Promise<void> {
-    // Populate audio devices on initialization
-    if (this.captureDeviceSelect) {
-      try {
-        const audioProcessor = new AudioProcessor();
-        await this.populateAudioDevices(audioProcessor);
-        audioProcessor.destroy();
-      } catch (error) {
-        console.error("Error initializing audio devices:", error);
-      }
-    }
+    // Audio device enumeration is now handled by CaptureModalManager
+    console.log("initializeAudioDevices - handled by CaptureModalManager");
   }
 
   private clearCaptureResults(): void {
