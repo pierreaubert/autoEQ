@@ -494,20 +494,21 @@ impl AudioStreamingManager {
                                 buffered_frames as f64 / spec.sample_rate as f64,
                                 spec.sample_rate
                             );
-                            
+
                             // Write HALF the pre-buffer to CamillaDSP, keep the rest in buffer
                             // This ensures we have data to continue streaming immediately
                             let write_size = audio_buffer.len() / 2;
-                            let prebuffer_data: Vec<u8> = audio_buffer.drain(..write_size).collect();
+                            let prebuffer_data: Vec<u8> =
+                                audio_buffer.drain(..write_size).collect();
                             let frames_to_write = write_size / (spec.channels as usize * 4);
-                            
+
                             log_debug!(
                                 "Writing half of pre-buffer ({} frames, {:.2}s) to CamillaDSP, keeping {} frames in buffer",
                                 frames_to_write,
                                 frames_to_write as f64 / spec.sample_rate as f64,
                                 buffered_frames - frames_to_write
                             );
-                            
+
                             if let Err(e) = stdin.write_all(&prebuffer_data) {
                                 log_error!("Failed to write pre-buffer: {:?}", e);
                                 let mut state_lock = state.lock().unwrap();
@@ -520,14 +521,14 @@ impl AudioStreamingManager {
                                 *state_lock = StreamingState::Error;
                                 break;
                             }
-                            
+
                             // Update buffer state
                             buffered_frames -= frames_to_write;
                             log_info!(
                                 "Pre-buffer written, playback starting ({} frames remaining in buffer)",
                                 buffered_frames
                             );
-                            
+
                             pre_buffered = true;
 
                             if playing {
@@ -559,7 +560,8 @@ impl AudioStreamingManager {
                 *underruns += 1;
                 log_warn!(
                     "Buffer critically low ({} frames, target {})",
-                    buffered_frames, target_buffer_frames
+                    buffered_frames,
+                    target_buffer_frames
                 );
             }
 

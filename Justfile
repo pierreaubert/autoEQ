@@ -10,6 +10,9 @@ default:
 # TEST
 # ----------------------------------------------------------------------
 
+test-generate: prod-generate-audio-tests
+	cargo run --bin prod-generate-audio-tests --release
+
 test-rust:
 	cargo check --all-targets
 	cargo test --lib
@@ -39,7 +42,7 @@ fmt-ts:
 
 alias build := prod
 
-prod: prod-workspace prod-autoeq prod-sotf-audio
+prod: prod-workspace prod-autoeq prod-sotf-audio prod-generate-audio-tests
 	cargo build --release --bin plot_functions
 	cargo build --release --bin download
 	cargo build --release --bin benchmark_autoeq_speaker
@@ -47,6 +50,9 @@ prod: prod-workspace prod-autoeq prod-sotf-audio
 	cargo build --release --bin plot_autoeq_de
 	cargo build --release --bin run_autoeq_de
 	cargo build --release --bin sotf_audio
+
+prod-generate-audio-tests:
+	cargo build --release --bin generate_audio_tests
 
 prod-workspace:
 	cargo build --release --workspace

@@ -585,15 +585,18 @@ async fn audio_get_recording_spl(
     audio_manager: State<'_, Mutex<AudioManager>>,
 ) -> Result<f32, String> {
     let manager = audio_manager.lock().await;
-    
+
     // Check if we're recording
     if !manager.is_recording().map_err(|e| format!("{}", e))? {
         return Err("Not currently recording".to_string());
     }
-    
+
     // Get signal peak and convert to dB SPL
-    let peak = manager.get_signal_peak().await.map_err(|e| format!("{}", e))?;
-    
+    let peak = manager
+        .get_signal_peak()
+        .await
+        .map_err(|e| format!("{}", e))?;
+
     // Convert peak (0.0 to 1.0+) to dB SPL
     // 0 dBFS = 94 dB SPL (standard calibration for digital audio)
     // dB = 20 * log10(value)
@@ -602,10 +605,10 @@ async fn audio_get_recording_spl(
     } else {
         -96.0 // Silence floor
     };
-    
+
     // Convert dBFS to dB SPL (assuming 0 dBFS = 94 dB SPL)
     let db_spl = 94.0 + db_fs;
-    
+
     Ok(db_spl)
 }
 

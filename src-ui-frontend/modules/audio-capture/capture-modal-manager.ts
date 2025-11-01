@@ -201,9 +201,7 @@ export class CaptureModalManager {
     this.modalCaptureBitDepth = document.getElementById(
       "modal_capture_bit_depth",
     );
-    this.modalCaptureSPL = document.getElementById(
-      "modal_capture_spl",
-    );
+    this.modalCaptureSPL = document.getElementById("modal_capture_spl");
     this.modalOutputSampleRate = document.getElementById(
       "modal_output_sample_rate",
     );
@@ -2132,7 +2130,7 @@ export class CaptureModalManager {
     this.splPollingInterval = window.setInterval(async () => {
       try {
         const spl = await audioManagerRust.getRecordingSPL();
-        
+
         if (this.modalCaptureSPL) {
           // Format SPL value with color coding
           let displayText: string;
@@ -2143,7 +2141,7 @@ export class CaptureModalManager {
             colorClass = "";
           } else {
             displayText = `${spl.toFixed(1)} dB`;
-            
+
             // Color code based on SPL level
             if (spl < 40) {
               colorClass = "spl-too-low"; // Red - too quiet
@@ -2159,16 +2157,16 @@ export class CaptureModalManager {
           }
 
           this.modalCaptureSPL.textContent = displayText;
-          
+
           // Remove all color classes
           this.modalCaptureSPL.classList.remove(
             "spl-too-low",
             "spl-low",
             "spl-good",
             "spl-high",
-            "spl-too-high"
+            "spl-too-high",
           );
-          
+
           // Add appropriate color class
           if (colorClass) {
             this.modalCaptureSPL.classList.add(colorClass);
@@ -2176,7 +2174,10 @@ export class CaptureModalManager {
         }
       } catch (error) {
         // Silent fail - recording may have stopped
-        console.debug("SPL monitoring error (expected if not recording):", error);
+        console.debug(
+          "SPL monitoring error (expected if not recording):",
+          error,
+        );
       }
     }, 100);
 
@@ -2202,7 +2203,7 @@ export class CaptureModalManager {
         "spl-low",
         "spl-good",
         "spl-high",
-        "spl-too-high"
+        "spl-too-high",
       );
     }
   }

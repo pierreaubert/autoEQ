@@ -2,7 +2,7 @@
 import { describe, test, expect, beforeEach, vi, afterEach } from "vitest";
 
 // Mock Tauri APIs before importing modules under test
-;(globalThis as any).__TAURI__ = (globalThis as any).__TAURI__ || {};
+(globalThis as any).__TAURI__ = (globalThis as any).__TAURI__ || {};
 
 vi.mock("@tauri-apps/api/core", () => {
   return {

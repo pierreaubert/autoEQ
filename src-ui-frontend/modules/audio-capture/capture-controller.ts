@@ -41,8 +41,14 @@ export class CaptureController {
     const devices = await tauriGetAudioDevices();
     const toInfo = (name: string) => ({ value: name, label: name });
     return {
-      input: [{ value: "default", label: "System Default" }, ...devices.input.map((d) => toInfo(d.name))],
-      output: [{ value: "default", label: "System Default" }, ...devices.output.map((d) => toInfo(d.name))],
+      input: [
+        { value: "default", label: "System Default" },
+        ...devices.input.map((d) => toInfo(d.name)),
+      ],
+      output: [
+        { value: "default", label: "System Default" },
+        ...devices.output.map((d) => toInfo(d.name)),
+      ],
     };
   }
 
@@ -73,14 +79,15 @@ export class CaptureController {
    */
   private cleanup(): void {
     this.isCapturing = false;
-
   }
 
   /**
    * Get the device manager instance
    */
   getDeviceManager(): never {
-    throw new Error("DeviceManager removed. Use getAudioDevices() returning Tauri devices.");
+    throw new Error(
+      "DeviceManager removed. Use getAudioDevices() returning Tauri devices.",
+    );
   }
 
   /**

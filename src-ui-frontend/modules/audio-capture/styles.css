@@ -1669,7 +1669,8 @@ input[type="checkbox"] {
 }
 
 @keyframes pulse-warning {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 1;
   }
   50% {

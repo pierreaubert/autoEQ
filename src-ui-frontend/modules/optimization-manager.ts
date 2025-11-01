@@ -514,7 +514,9 @@ export class OptimizationManager {
       console.log(`[OPTIMIZATION] Loading headphone target: ${targetName}`);
 
       // Fetch the CSV file from the public directory
-      const response = await fetch(`/public/headphone-targets/${targetName}.csv`);
+      const response = await fetch(
+        `/public/headphone-targets/${targetName}.csv`,
+      );
       if (!response.ok) {
         console.error(
           `[OPTIMIZATION] Failed to fetch target file: ${response.statusText}`,

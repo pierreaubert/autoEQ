@@ -1353,28 +1353,30 @@ impl AudioManager {
     /// Stop recording
     pub async fn stop_recording(&self) -> CamillaResult<()> {
         println!("[AudioManager] Stopping recording");
-        
+
         // Get recording parameters before stopping
         let (output_file, sample_rate, channels) = {
             let state = self.state.lock().map_err(|e| {
                 CamillaError::ProcessCommunicationFailed(format!("Failed to lock state: {}", e))
             })?;
-            
-            let output_file = state.recording_output_file.clone()
+
+            let output_file = state
+                .recording_output_file
+                .clone()
                 .ok_or_else(|| CamillaError::ProcessNotRunning)?;
-            
+
             (output_file, state.sample_rate, state.channels)
         };
-        
+
         // Stop the CamillaDSP process (writes raw FLOAT32LE file)
         self.stop_playback().await?;
-        
+
         // Convert raw file to WAV format
         // CamillaDSP writes to the specified output file as raw FLOAT32LE
         // We need to convert it to a proper WAV file
         let raw_file = output_file.with_extension("");
         let raw_file = PathBuf::from(format!("{}.raw", raw_file.display()));
-        
+
         // If the output file already exists (as raw data), convert it
         if output_file.exists() {
             println!("[AudioManager] Converting raw audio to WAV format...");
@@ -1389,7 +1391,7 @@ impl AudioManager {
         } else {
             println!("[AudioManager] Warning: Recording file not found");
         }
-        
+
         // Clear recording state
         {
             let mut state = self.state.lock().map_err(|e| {
@@ -1397,7 +1399,7 @@ impl AudioManager {
             })?;
             state.recording_output_file = None;
         }
-        
+
         Ok(())
     }
 
@@ -1885,20 +1887,25 @@ fn convert_raw_to_wav(
         bits_per_sample: 32,
         sample_format: hound::SampleFormat::Float,
     };
-    
+
     let mut wav_writer = hound::WavWriter::create(wav_path, spec)
         .map_err(|e| CamillaError::IOError(format!("Failed to create WAV writer: {}", e)))?;
 
     // Write all samples
     for &sample in &samples {
-        wav_writer.write_sample(sample)
+        wav_writer
+            .write_sample(sample)
             .map_err(|e| CamillaError::IOError(format!("Failed to write sample: {}", e)))?;
     }
-    
-    wav_writer.finalize()
+
+    wav_writer
+        .finalize()
         .map_err(|e| CamillaError::IOError(format!("Failed to finalize WAV file: {}", e)))?;
 
-    println!("[CamillaDSP] WAV conversion complete: {} samples, {}Hz, {}ch", sample_count, sample_rate, channels);
+    println!(
+        "[CamillaDSP] WAV conversion complete: {} samples, {}Hz, {}ch",
+        sample_count, sample_rate, channels
+    );
     Ok(())
 }
 

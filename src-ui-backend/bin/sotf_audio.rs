@@ -75,7 +75,7 @@ enum Commands {
     ///
     /// Notes:
     /// - This subcommand always uses the streaming backend.
-    /// - Sample rate, channels, and hwaudio-record flags are ignored.
+    /// - Sample rate and channels from the file are used automatically.
     Play {
         /// Path to audio file (supports WAV, FLAC, MP3, AAC/M4A, Vorbis/OGG, AIFF)
         #[arg(value_name = "FILE")]
@@ -96,10 +96,6 @@ enum Commands {
         /// EQ filters in format "freq:q:gain" (e.g., "1000:1.5:3.0")
         #[arg(short, long = "filter", value_name = "FREQ:Q:GAIN")]
         filters: Vec<String>,
-
-        /// Hardware input channel map (ignored; always streamed)
-        #[arg(long = "hwaudio-record", value_delimiter = ',')]
-        hwaudio_record: Option<Vec<u16>>,
 
         /// Hardware output channel map (comma-separated indices)
         #[arg(long = "hwaudio-play", value_delimiter = ',')]
@@ -212,7 +208,6 @@ async fn main() {
             sample_rate: _,
             channels: _,
             filters,
-            hwaudio_record: _,
             hwaudio_play,
             swap_channels,
             duration,
@@ -366,7 +361,13 @@ async fn record_audio(
 
     // Start recording
     manager
-        .start_recording(output.clone(), device, sample_rate, channels, hwaudio_record)
+        .start_recording(
+            output.clone(),
+            device,
+            sample_rate,
+            channels,
+            hwaudio_record,
+        )
         .await
         .map_err(|e| format!("Failed to start recording: {}", e))?;
 
