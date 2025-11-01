@@ -175,6 +175,8 @@ export class SpectrumAnalyzerComponent {
    * Render the spectrum to canvas
    */
   private render(): void {
+    if (!this.ctx) return;
+
     const dpr = window.devicePixelRatio || 1;
     const width = this.canvas.width / dpr;
     const height = this.canvas.height / dpr;
@@ -203,6 +205,9 @@ export class SpectrumAnalyzerComponent {
     // Draw spectrum bars
     this.drawSpectrum(width, height);
 
+    // Draw horizontal dB grid lines ON TOP of spectrum bars
+    this.drawVerticalGridLines(width, height);
+
     // Draw labels
     if (this.config.showLabels) {
       this.drawLabels(width, height);
@@ -225,32 +230,56 @@ export class SpectrumAnalyzerComponent {
    * Draw frequency grid and dB scale
    */
   private drawGrid(width: number, height: number): void {
-    const gridColor =
-      this.config.colorScheme === "dark" ? "#333333" : "#cccccc";
-    this.ctx.strokeStyle = gridColor;
-    this.ctx.lineWidth = 0.5;
+    const isDarkMode = this.config.colorScheme === "dark";
 
-    // Horizontal grid lines (dB scale)
-    const dbStep = this.config.dbRange / 6;
-    for (let i = 0; i <= 6; i++) {
-      const y = height - (i * height) / 6;
+    // Draw horizontal frequency lines (original grid functionality)
+    this.ctx.strokeStyle = isDarkMode ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.1)";
+    this.ctx.lineWidth = 1;
+    const freqMarkers = [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000];
+    freqMarkers.forEach(freq => {
+      const x = this.freqToX(freq, width);
       this.ctx.beginPath();
-      this.ctx.moveTo(40, y);
-      this.ctx.lineTo(width - 10, y);
+      this.ctx.moveTo(x, 0);
+      this.ctx.lineTo(x, height - 10);
       this.ctx.stroke();
-    }
+    });
+  }
 
-    // Vertical grid lines (frequency scale)
-    const freqSteps = [100, 1000, 10000];
-    for (const freq of freqSteps) {
-      if (freq >= this.config.minFreq && freq <= this.config.maxFreq) {
-        const x = this.freqToX(freq, width);
-        this.ctx.beginPath();
-        this.ctx.moveTo(x, 10);
-        this.ctx.lineTo(x, height - 30);
-        this.ctx.stroke();
-      }
-    }
+  /**
+   * Draw vertical dB grid lines
+   */
+  private drawVerticalGridLines(width: number, height: number): void {
+    const isDarkMode = this.config.colorScheme === "dark";
+    
+    // Draw horizontal lines for dB levels (0, -10, -20, -30, -40, -50, -60)
+    const dbLevels = [0, -10, -20, -30, -40, -50, -60];
+    
+    dbLevels.forEach(db => {
+      const y = this.dbToY(db, height);
+      
+      // Set dotted line style - full opacity
+      const lineColor = isDarkMode ? "rgba(255, 255, 255, 1)" : "rgba(0, 0, 0, 1)";
+      this.ctx.strokeStyle = lineColor;
+      this.ctx.lineWidth = 1;
+      this.ctx.setLineDash([2, 3]); // Dotted pattern: 2px dash, 3px gap
+      
+      // Draw horizontal line across full width
+      this.ctx.beginPath();
+      this.ctx.moveTo(0, y);
+      this.ctx.lineTo(width, y);
+      this.ctx.stroke();
+    });
+    
+    // Reset line dash to solid
+    this.ctx.setLineDash([]);
+  }
+
+  /**
+   * Convert dB to Y coordinate (inverted because canvas Y increases downward)
+   */
+  private dbToY(db: number, height: number): number {
+    const normalized = (db + this.config.dbRange) / this.config.dbRange;
+    return height - 10 - (normalized * (height - 10));
   }
 
   /**
@@ -286,7 +315,8 @@ export class SpectrumAnalyzerComponent {
       // Color based on magnitude
       const color = this.getMagnitudeColor(magnitude);
       this.ctx.fillStyle = color;
-      this.ctx.fillRect(x, height - 50 - barHeight, barWidth, barHeight);
+      // Draw bars from bottom, leaving 10px for labels
+      this.ctx.fillRect(x, height - 10 - barHeight, barWidth, barHeight);
     }
   }
 
@@ -301,50 +331,60 @@ export class SpectrumAnalyzerComponent {
         ? "rgba(26, 26, 26, 0.9)"
         : "rgba(248, 249, 250, 0.9)";
 
-    this.ctx.font = "11px monospace";
+    this.ctx.font = "9px monospace";
     this.ctx.textAlign = "center";
     this.ctx.textBaseline = "top";
 
-    // Frequency labels under each bar - at the very bottom
+    // Frequency labels under each bar - reduced to every other label
     const freqLabels = [
-      { freq: 20, label: "20Hz" },
-      { freq: 100, label: "100Hz" },
-      { freq: 1000, label: "1kHz" },
-      { freq: 10000, label: "10kHz" },
-      { freq: 20000, label: "20kHz" },
+      { freq: 20, label: "20" },
+      { freq: 40, label: "40" },
+      { freq: 60, label: "60" },
+      { freq: 100, label: "100" },
+      { freq: 200, label: "200" },
+      { freq: 400, label: "400" },
+      { freq: 600, label: "600" },
+      { freq: 1000, label: "1k" },
+      { freq: 2000, label: "2k" },
+      { freq: 4000, label: "4k" },
+      { freq: 6000, label: "6k" },
+      { freq: 10000, label: "10k" },
+      { freq: 20000, label: "20k" },
     ];
 
     for (const { freq, label } of freqLabels) {
       if (freq >= this.config.minFreq && freq <= this.config.maxFreq) {
         const x = this.freqToX(freq, width);
-        const y = height - 18;
+        const y = height - 8;
 
-        // Draw background
+        // Draw background for better visibility
         this.ctx.fillStyle = bgColor;
-        this.ctx.fillRect(x - 20, y, 40, 16);
+        this.ctx.fillRect(x - 20, y - 6, 40, 10);
 
         // Draw text
         this.ctx.fillStyle = labelColor;
-        this.ctx.fillText(label, x, y + 2);
+        this.ctx.fillText(label, x, y - 4);
       }
     }
 
-    // dB labels on vertical axis (left side)
+    // dB labels on vertical axis (left side) - adjust for compact height
     this.ctx.textAlign = "right";
     this.ctx.textBaseline = "middle";
-    for (let i = 0; i <= 6; i++) {
-      const db = -i * (this.config.dbRange / 6);
-      const y = 10 + (i * (height - 60)) / 6;
+    // Show fewer labels for compact height
+    for (let i = 0; i <= 3; i++) {
+      const db = -i * (this.config.dbRange / 3);
+      // Adjust Y positioning for 72px height
+      const y = 8 + (i * (height - 18)) / 3;
 
       const label = `${db.toFixed(0)}dB`;
 
-      // Draw background
+      // Draw background for better visibility
       this.ctx.fillStyle = bgColor;
-      this.ctx.fillRect(0, y - 7, 38, 14);
+      this.ctx.fillRect(0, y - 6, 30, 12);
 
       // Draw text
       this.ctx.fillStyle = labelColor;
-      this.ctx.fillText(label, 36, y);
+      this.ctx.fillText(label, 28, y);
     }
   }
 
@@ -357,7 +397,8 @@ export class SpectrumAnalyzerComponent {
     const logFreq = Math.log10(freq);
 
     const normalized = (logFreq - logMin) / (logMax - logMin);
-    return 40 + normalized * (width - 50);
+    // Use smaller left padding for compact canvas
+    return 30 + normalized * (width - 35);
   }
 
   /**
@@ -372,7 +413,8 @@ export class SpectrumAnalyzerComponent {
     const clamped = Math.max(-this.config.dbRange, Math.min(0, magnitude));
     const normalized = (clamped + this.config.dbRange) / this.config.dbRange;
 
-    return normalized * (height - 40);
+    // Use full height minus 10px for labels
+    return normalized * (height - 10);
   }
 
   /**
@@ -384,16 +426,17 @@ export class SpectrumAnalyzerComponent {
     }
 
     // Color gradient: blue -> green -> yellow -> red
+    // Dark mode colors are now lighter for better visibility
     if (magnitude < -40) {
-      return this.config.colorScheme === "dark" ? "#1a3a7a" : "#8ab4f8";
+      return this.config.colorScheme === "dark" ? "#4fc3f7" : "#8ab4f8";
     } else if (magnitude < -20) {
-      return this.config.colorScheme === "dark" ? "#1a7a3a" : "#81c995";
+      return this.config.colorScheme === "dark" ? "#66bb6a" : "#81c995";
     } else if (magnitude < -10) {
-      return this.config.colorScheme === "dark" ? "#7a7a1a" : "#fdd835";
+      return this.config.colorScheme === "dark" ? "#ffeb3b" : "#fdd835";
     } else if (magnitude < 0) {
-      return this.config.colorScheme === "dark" ? "#7a3a1a" : "#ff6f00";
+      return this.config.colorScheme === "dark" ? "#ff9800" : "#ff6f00";
     } else {
-      return this.config.colorScheme === "dark" ? "#7a1a1a" : "#d32f2f";
+      return this.config.colorScheme === "dark" ? "#ef5350" : "#d32f2f";
     }
   }
 

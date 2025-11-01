@@ -595,7 +595,7 @@ export class AudioPlayer {
           maxFreq: 20000,
           dbRange: 60,
           colorScheme: "dark",
-          showLabels: false,
+          showLabels: true,
           showGrid: false,
         });
       }
