@@ -34,6 +34,12 @@ export interface AudioStreamState {
   output_device?: string;
 }
 
+export interface LoudnessInfo {
+  momentary_lufs: number;
+  shortterm_lufs: number;
+  peak: number;
+}
+
 export interface AudioManagerCallbacks {
   onStateChange?: (state: string) => void;
   onPositionUpdate?: (position: number, duration?: number) => void;
@@ -48,10 +54,13 @@ export interface AudioManagerCallbacks {
 export class CamillaAudioManager {
   private callbacks: AudioManagerCallbacks;
   private pollingInterval: number | null = null;
+  private loudnessPollingInterval: number | null = null;
   private currentFileInfo: AudioFileInfo | null = null;
   private currentFilePath: string | null = null;
   private eventUnlisteners: UnlistenFn[] = [];
   private isTauriAvailable: boolean = false;
+  private currentPosition: number = 0; // Track current position in seconds
+  private loudnessCallback: ((info: LoudnessInfo | null) => void) | null = null;
 
   constructor(callbacks: AudioManagerCallbacks = {}) {
     this.callbacks = callbacks;
@@ -228,6 +237,8 @@ export class CamillaAudioManager {
         filters: backendFilters,
       });
 
+      // Reset position tracking
+      this.currentPosition = 0;
       this.callbacks.onStateChange?.("playing");
       this.startStatePolling();
     } catch (error) {
@@ -246,6 +257,7 @@ export class CamillaAudioManager {
       await invoke("flac_pause_playback");
       this.callbacks.onStateChange?.("paused");
       this.stopStatePolling();
+      this.stopLoudnessPolling();
     } catch (error) {
       console.error("[CamillaAudioManager] Failed to pause:", error);
       throw error;
@@ -272,8 +284,10 @@ export class CamillaAudioManager {
   async stop(): Promise<void> {
     try {
       await invoke("flac_stop_playback");
+      this.currentPosition = 0;
       this.callbacks.onStateChange?.("idle");
       this.stopStatePolling();
+      this.stopLoudnessPolling();
     } catch (error) {
       console.error("[CamillaAudioManager] Failed to stop:", error);
       throw error;
@@ -286,6 +300,7 @@ export class CamillaAudioManager {
   async seek(seconds: number): Promise<void> {
     try {
       await invoke("flac_seek", { seconds });
+      this.currentPosition = seconds;
       this.callbacks.onPositionUpdate?.(
         seconds,
         this.currentFileInfo?.duration_seconds,
@@ -377,10 +392,19 @@ export class CamillaAudioManager {
 
     this.pollingInterval = window.setInterval(async () => {
       try {
-        const fileInfo = await this.getFileInfo();
-        if (fileInfo && fileInfo.duration_seconds) {
-          // Backend doesn't provide position updates yet, would need to add this
-          // For now, we rely on events
+        // Get current playback state to check if still playing
+        const state = await this.getPlaybackState();
+        if (state === "playing") {
+          // Increment position estimate (will be corrected by backend events)
+          this.currentPosition += intervalMs / 1000;
+          
+          // Trigger position update callback
+          if (this.currentFileInfo?.duration_seconds) {
+            this.callbacks.onPositionUpdate?.(
+              this.currentPosition,
+              this.currentFileInfo.duration_seconds,
+            );
+          }
         }
       } catch (error) {
         // Ignore polling errors
@@ -395,6 +419,57 @@ export class CamillaAudioManager {
     if (this.pollingInterval !== null) {
       clearInterval(this.pollingInterval);
       this.pollingInterval = null;
+    }
+  }
+
+  /**
+   * Get current loudness information from backend
+   */
+  async getLoudness(): Promise<LoudnessInfo | null> {
+    if (!this.isTauriAvailable) {
+      return null;
+    }
+
+    try {
+      const result = await invoke<LoudnessInfo | null>("flac_get_loudness");
+      return result;
+    } catch (error) {
+      console.error("[CamillaAudioManager] Failed to get loudness:", error);
+      return null;
+    }
+  }
+
+  /**
+   * Start polling loudness information
+   */
+  startLoudnessPolling(
+    intervalMs: number = 100,
+    onUpdate: (info: LoudnessInfo | null) => void,
+  ): void {
+    if (this.loudnessPollingInterval !== null) {
+      return; // Already polling
+    }
+
+    this.loudnessCallback = onUpdate;
+
+    this.loudnessPollingInterval = window.setInterval(async () => {
+      try {
+        const loudness = await this.getLoudness();
+        this.loudnessCallback?.(loudness);
+      } catch (error) {
+        // Ignore polling errors
+      }
+    }, intervalMs);
+  }
+
+  /**
+   * Stop polling loudness information
+   */
+  stopLoudnessPolling(): void {
+    if (this.loudnessPollingInterval !== null) {
+      clearInterval(this.loudnessPollingInterval);
+      this.loudnessPollingInterval = null;
+      this.loudnessCallback = null;
     }
   }
 
@@ -426,6 +501,7 @@ export class CamillaAudioManager {
    */
   destroy(): void {
     this.stopStatePolling();
+    this.stopLoudnessPolling();
 
     // Unlisten from all events
     this.eventUnlisteners.forEach((unlisten) => {
@@ -439,6 +515,7 @@ export class CamillaAudioManager {
 
     this.currentFileInfo = null;
     this.currentFilePath = null;
+    this.currentPosition = 0;
   }
 }
 
