@@ -50,7 +50,7 @@ pub fn compute_eq_response(
 ) -> Result<EqResponseResult, String> {
     let freq_array = Array1::from_vec(frequencies.clone());
     let mut individual_responses = Vec::new();
-    
+
     // Build PEQ for combined response
     let mut peq: Peq = Vec::new();
 
@@ -80,9 +80,9 @@ pub fn compute_eq_response(
         // Compute individual filter response using existing method
         let response_array = biquad.np_log_result(&freq_array);
         let magnitudes_db: Vec<f64> = response_array.to_vec();
-        
+
         individual_responses.push(FilterResponse { magnitudes_db });
-        
+
         // Add to PEQ for combined response (weight = 1.0)
         peq.push((1.0, biquad));
     }

@@ -6,29 +6,31 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::sync::Mutex;
 
 // Module declarations
+mod eq_export;
+mod eq_response;
 mod optim;
 mod plot;
-mod eq_response;
-mod eq_export;
 
 use autoeq::{
     Curve, LossType, cli::Args as AutoEQArgs, plot_filters, plot_spin, plot_spin_details,
     plot_spin_tonal,
 };
 
-use sotf_audio::camilla::ChannelMapMode;
-use sotf_audio::{
-    AudioFileInfo, AudioManager, AudioStreamingManager, LoudnessInfo,
-    SharedAudioState, StreamingState,
-};
-use sotf_audio::audio::{AudioConfig, AudioDevice};
 use sotf_audio::FilterParams;
+use sotf_audio::audio::{AudioConfig, AudioDevice};
+use sotf_audio::camilla::ChannelMapMode;
 use sotf_audio::replaygain::{ReplayGainInfo, analyze_file};
+use sotf_audio::{
+    AudioFileInfo, AudioManager, AudioStreamingManager, LoudnessInfo, SharedAudioState,
+    StreamingState,
+};
 
-use crate::optim::{CancellationState, OptimizationParams, OptimizationResult, ProgressCallback, ProgressUpdate, run_optimization_internal};
+use crate::eq_response::{EqResponseResult, FilterParam as EqFilterParam};
+use crate::optim::{
+    CancellationState, OptimizationParams, OptimizationResult, ProgressCallback, ProgressUpdate,
+    run_optimization_internal,
+};
 use crate::plot::{PlotFiltersParams, PlotSpinParams, curve_data_to_curve, plot_to_json};
-use crate::eq_response::{FilterParam as EqFilterParam, EqResponseResult};
-
 
 #[tauri::command]
 async fn get_speakers() -> Result<Vec<String>, String> {
