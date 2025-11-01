@@ -74,8 +74,11 @@ pub struct SpectrumAnalyzer {
 impl SpectrumAnalyzer {
     /// Create a new spectrum analyzer
     pub fn new(channels: u32, sample_rate: u32, config: SpectrumConfig) -> Result<Self, String> {
-        eprintln!("[SpectrumAnalyzer] Creating new analyzer: {}ch, {}Hz", channels, sample_rate);
-        
+        eprintln!(
+            "[SpectrumAnalyzer] Creating new analyzer: {}ch, {}Hz",
+            channels, sample_rate
+        );
+
         if config.num_bins < 2 {
             return Err("num_bins must be at least 2".to_string());
         }
@@ -92,8 +95,11 @@ impl SpectrumAnalyzer {
         // Generate logarithmic frequency bins
         let (bin_edges, bin_centers) =
             Self::generate_log_bins(config.num_bins, config.min_freq, config.max_freq);
-        
-        eprintln!("[SpectrumAnalyzer] Generated {} bins from {:.0}Hz to {:.0}Hz", config.num_bins, config.min_freq, config.max_freq);
+
+        eprintln!(
+            "[SpectrumAnalyzer] Generated {} bins from {:.0}Hz to {:.0}Hz",
+            config.num_bins, config.min_freq, config.max_freq
+        );
 
         let current_spectrum = Arc::new(Mutex::new(SpectrumInfo {
             frequencies: bin_centers.clone(),
@@ -142,7 +148,11 @@ impl SpectrumAnalyzer {
         // Mix all channels to mono for spectrum analysis
         let mono_samples = self.mix_to_mono(samples);
 
-        eprintln!("[SpectrumAnalyzer] add_frames: {} samples, buffer_pos={}", mono_samples.len(), self.buffer_pos);
+        eprintln!(
+            "[SpectrumAnalyzer] add_frames: {} samples, buffer_pos={}",
+            mono_samples.len(),
+            self.buffer_pos
+        );
 
         // Add samples to circular buffer
         for sample in mono_samples {
@@ -200,10 +210,7 @@ impl SpectrumAnalyzer {
         self.prev_magnitudes = magnitudes.clone();
 
         // Find peak
-        let peak_magnitude = magnitudes
-            .iter()
-            .copied()
-            .fold(f32::NEG_INFINITY, f32::max);
+        let peak_magnitude = magnitudes.iter().copied().fold(f32::NEG_INFINITY, f32::max);
 
         // Update shared state
         {
@@ -212,7 +219,10 @@ impl SpectrumAnalyzer {
             spectrum.peak_magnitude = peak_magnitude;
         }
 
-        eprintln!("[SpectrumAnalyzer] Computed spectrum: peak={:.1}dB", peak_magnitude);
+        eprintln!(
+            "[SpectrumAnalyzer] Computed spectrum: peak={:.1}dB",
+            peak_magnitude
+        );
 
         Ok(())
     }
@@ -224,7 +234,8 @@ impl SpectrumAnalyzer {
             .iter()
             .enumerate()
             .map(|(i, &sample)| {
-                let window = 0.5 * (1.0 - (2.0 * std::f32::consts::PI * i as f32 / (n - 1) as f32).cos());
+                let window =
+                    0.5 * (1.0 - (2.0 * std::f32::consts::PI * i as f32 / (n - 1) as f32).cos());
                 sample * window
             })
             .collect()

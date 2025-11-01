@@ -4,7 +4,10 @@
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { resolveResource } from "@tauri-apps/api/path";
-import { StreamingManager, type AudioFileInfo } from "../audio-manager-streaming";
+import {
+  StreamingManager,
+  type AudioFileInfo,
+} from "../audio-manager-streaming";
 import { SpectrumAnalyzerComponent } from "./spectrum-analyzer";
 
 interface ReplayGainInfo {
@@ -38,6 +41,21 @@ export interface FilterParam {
   enabled: boolean;
 }
 
+export interface ExtendedFilterParam extends FilterParam {
+  filter_type: string; // "Peak", "Lowpass", "Highpass", "Bandpass", "Notch", "Lowshelf", "Highshelf"
+}
+
+// Filter type options
+export const FILTER_TYPES = {
+  Peak: { label: "Peak", shortName: "PK", icon: "○" },
+  Lowpass: { label: "Low Pass", shortName: "LP", icon: "╲" },
+  Highpass: { label: "High Pass", shortName: "HP", icon: "╱" },
+  Bandpass: { label: "Band Pass", shortName: "BP", icon: "∩" },
+  Notch: { label: "Notch", shortName: "NO", icon: "V" },
+  Lowshelf: { label: "Low Shelf", shortName: "LS", icon: "⎣" },
+  Highshelf: { label: "High Shelf", shortName: "HS", icon: "⎤" },
+};
+
 export interface AudioPlayerCallbacks {
   onPlay?: () => void;
   onStop?: () => void;
@@ -58,10 +76,10 @@ export class AudioPlayer {
   private audioPauseTime: number = 0;
   private audioAnimationFrame: number | null = null;
   private currentAudioPath: string | null = null; // Track current audio file path for Rust backend
-  private currentFilterParams: FilterParam[] = [
-    { frequency: 100, q: 1.0, gain: 0, enabled: true },
-    { frequency: 1000, q: 1.0, gain: 0, enabled: true },
-    { frequency: 10000, q: 1.0, gain: 0, enabled: true },
+  private currentFilterParams: ExtendedFilterParam[] = [
+    { frequency: 100, q: 1.0, gain: 0, enabled: true, filter_type: "Peak" },
+    { frequency: 1000, q: 1.0, gain: 0, enabled: true, filter_type: "Peak" },
+    { frequency: 10000, q: 1.0, gain: 0, enabled: true, filter_type: "Peak" },
   ];
   private eqEnabled: boolean = true;
   private outputDeviceId: string = "default"; // Selected output device ID
@@ -112,6 +130,28 @@ export class AudioPlayer {
   private eqGainCompText: HTMLElement | null = null;
   private eqMiniCanvas: HTMLCanvasElement | null = null;
   private eqMiniCtx: CanvasRenderingContext2D | null = null;
+
+  // EQ Graph properties
+  private eqGraphCanvas: HTMLCanvasElement | null = null;
+  private eqGraphCtx: CanvasRenderingContext2D | null = null;
+  private selectedFilterIndex: number = -1;
+  private isDraggingHandle: boolean = false;
+  private dragMode: "ring" | "bar" | null = null;
+  private dragStartX: number = 0;
+  private dragStartY: number = 0;
+  private eqResponseData: any = null; // Cached response from backend
+  private eqResponseDebounceTimer: number | null = null;
+
+  // EQ Graph constants
+  private readonly EQ_GRAPH_MIN_FREQ = 20;
+  private readonly EQ_GRAPH_MAX_FREQ = 20000;
+  private readonly EQ_GRAPH_MIN_Q = 0.1;
+  private readonly EQ_GRAPH_MAX_Q = 3.0;
+  private readonly EQ_GRAPH_FREQ_POINTS = 256; // Number of points for response curve
+
+  // EQ Graph dynamic gain range (computed from response data)
+  private eqGraphMinGain = -18; // Default: -6 * max_db (3.0)
+  private eqGraphMaxGain = 3; // Default: max_db
 
   // ReplayGain
   private replayGainInfo: ReplayGainInfo | null = null;
@@ -175,7 +215,8 @@ export class AudioPlayer {
     // Initialize streaming manager
     this.streamingManager = new StreamingManager({
       onStateChange: (state) => this.handleStateChange(state),
-      onPositionUpdate: (position, duration) => this.handlePositionUpdate(position, duration),
+      onPositionUpdate: (position, duration) =>
+        this.handlePositionUpdate(position, duration),
       onError: (error) => this.handleError(error),
       onFileLoaded: (info) => this.handleFileLoaded(info),
     });
@@ -241,7 +282,7 @@ export class AudioPlayer {
 
   private handleStateChange(state: string): void {
     console.log("[AudioPlayer] Backend state changed:", state);
-    
+
     if (state === "playing") {
       this.isAudioPlaying = true;
       this.isAudioPaused = false;
@@ -264,7 +305,7 @@ export class AudioPlayer {
       this.isAudioPaused = false;
       this.setStatus("Error");
     }
-    
+
     this.updatePlaybackUI();
   }
 
@@ -512,8 +553,12 @@ export class AudioPlayer {
     this.durationText = this.container.querySelector(".audio-duration");
     this.progressFill = this.container.querySelector(".audio-progress-fill");
     this.spectrumCanvas = this.container.querySelector(".spectrum-canvas");
-    this.loudnessDisplayMomentary = this.container.querySelector(".loudness-momentary");
-    this.loudnessDisplayShortterm = this.container.querySelector(".loudness-shortterm");
+    this.loudnessDisplayMomentary = this.container.querySelector(
+      ".loudness-momentary",
+    );
+    this.loudnessDisplayShortterm = this.container.querySelector(
+      ".loudness-shortterm",
+    );
 
     // Modal and backdrop elements are in the body
     this.eqModal = document.getElementById(this.instanceId + "-eq-modal");
@@ -530,6 +575,13 @@ export class AudioPlayer {
         ".playback-options-container",
       );
       this.eqTableContainer = this.eqModal.querySelector(".eq-table-container");
+
+      // Cache EQ graph canvas
+      this.eqGraphCanvas = this.eqModal.querySelector(".eq-graph-canvas");
+      if (this.eqGraphCanvas) {
+        this.eqGraphCtx = this.eqGraphCanvas.getContext("2d");
+        this.resizeEQGraphCanvas();
+      }
     }
 
     if (this.spectrumCanvas) {
@@ -684,6 +736,23 @@ export class AudioPlayer {
         }
       });
     }
+
+    // EQ Graph interactions
+    if (this.eqGraphCanvas) {
+      this.eqGraphCanvas.addEventListener("mousedown", (e) =>
+        this.handleGraphMouseDown(e),
+      );
+      this.eqGraphCanvas.addEventListener("mousemove", (e) =>
+        this.handleGraphMouseMove(e),
+      );
+      this.eqGraphCanvas.addEventListener("mouseup", (e) =>
+        this.handleGraphMouseUp(e),
+      );
+      this.eqGraphCanvas.addEventListener("mouseleave", (e) =>
+        this.handleGraphMouseUp(e),
+      );
+      this.eqGraphCanvas.style.cursor = "crosshair";
+    }
   }
 
   private openEQModal(): void {
@@ -699,32 +768,29 @@ export class AudioPlayer {
     if (this.eqModal && this.eqBackdrop && this.eqConfigBtn) {
       this.renderEQTable();
 
-      // Position the modal above the gear button
-      const buttonRect = this.eqConfigBtn.getBoundingClientRect();
-      const modalWidth = 450; // Match CSS width
-      const modalHeight = 350; // Approximate height
+      // Center the modal on screen
+      const padding = 20;
+      const maxWidth = Math.min(window.innerWidth - padding * 2, 1200);
+      const maxHeight = Math.min(
+        window.innerHeight - padding * 2,
+        window.innerHeight * 0.85,
+      );
 
-      // Calculate position - center above the button
-      let left = buttonRect.left + buttonRect.width / 2 - modalWidth / 2;
-      let top = buttonRect.top - modalHeight - 10; // 10px gap
+      const left = (window.innerWidth - maxWidth) / 2;
+      const top = (window.innerHeight - maxHeight) / 2;
 
-      // Keep modal within viewport
-      const padding = 10;
-      if (left < padding) left = padding;
-      if (left + modalWidth > window.innerWidth - padding) {
-        left = window.innerWidth - modalWidth - padding;
-      }
-
-      // If not enough space above, show below
-      if (top < padding) {
-        top = buttonRect.bottom + 10;
-      }
-
-      // Apply positioning
+      // Apply positioning and sizing
       this.eqModal.style.left = `${left}px`;
       this.eqModal.style.top = `${top}px`;
+      this.eqModal.style.width = `${maxWidth}px`;
+      this.eqModal.style.height = `${maxHeight}px`;
 
-      console.log("[EQ Debug] Modal positioned at:", { left, top, buttonRect });
+      console.log("[EQ Debug] Modal positioned at:", {
+        left,
+        top,
+        width: maxWidth,
+        height: maxHeight,
+      });
 
       // Show backdrop and modal
       this.eqBackdrop.classList.add("visible");
@@ -734,6 +800,9 @@ export class AudioPlayer {
         modal: this.eqModal.className,
         backdrop: this.eqBackdrop.className,
       });
+
+      // Compute and draw EQ graph
+      this.computeEQResponse();
 
       // Add click outside handler
       document.addEventListener("mousedown", this.handleClickOutside, true);
@@ -788,36 +857,124 @@ export class AudioPlayer {
     const header = document.createElement("h4");
     header.textContent = "Equalizer Configuration";
 
+    // Create a container for the graph
+    const graphContainer = document.createElement("div");
+    graphContainer.className = "eq-graph-container";
+    const canvas = document.createElement("canvas");
+    canvas.className = "eq-graph-canvas";
+    graphContainer.appendChild(canvas);
+
     const table = document.createElement("table");
+    table.className = "eq-table-vertical";
     table.innerHTML = `
       <thead>
         <tr>
-          <th>Enabled</th>
-          <th>Frequency (Hz)</th>
-          <th>Q</th>
-          <th>Gain (dB)</th>
+          <th class="eq-row-label"></th>
+          ${this.currentFilterParams
+            .map(
+              (filter, index) => `
+            <th data-filter-index="${index}" class="eq-column-header ${index === this.selectedFilterIndex ? "selected" : ""}">
+              Filter ${index + 1}
+            </th>
+          `,
+            )
+            .join("")}
         </tr>
       </thead>
       <tbody>
-        ${this.currentFilterParams
-          .map(
-            (filter, index) => `
-          <tr>
-            <td><input type="checkbox" data-index="${index}" class="eq-enabled" ${filter.enabled ? "checked" : ""}></td>
-            <td><input type="number" data-index="${index}" class="eq-frequency" value="${filter.frequency.toFixed(1)}" step="1"></td>
-            <td><input type="number" data-index="${index}" class="eq-q" value="${filter.q.toFixed(2)}" step="0.1"></td>
-            <td><input type="number" data-index="${index}" class="eq-gain" value="${filter.gain.toFixed(2)}" step="0.1"></td>
-          </tr>
-        `,
-          )
-          .join("")}
+        <tr class="eq-row">
+          <td class="eq-row-label">Type</td>
+          ${this.currentFilterParams
+            .map(
+              (filter, index) => `
+            <td data-filter-index="${index}" class="${index === this.selectedFilterIndex ? "selected" : ""}">
+              <select data-index="${index}" class="eq-filter-type">
+                ${Object.entries(FILTER_TYPES)
+                  .map(
+                    ([type, info]) => `
+                  <option value="${type}" ${filter.filter_type === type ? "selected" : ""}>
+                    ${info.icon} ${info.shortName}
+                  </option>
+                `,
+                  )
+                  .join("")}
+              </select>
+            </td>
+          `,
+            )
+            .join("")}
+        </tr>
+        <tr class="eq-row">
+          <td class="eq-row-label">Enable</td>
+          ${this.currentFilterParams
+            .map(
+              (filter, index) => `
+            <td data-filter-index="${index}" class="${index === this.selectedFilterIndex ? "selected" : ""}">
+              <input type="checkbox" data-index="${index}" class="eq-enabled" ${filter.enabled ? "checked" : ""}>
+            </td>
+          `,
+            )
+            .join("")}
+        </tr>
+        <tr class="eq-row">
+          <td class="eq-row-label">Freq (Hz)</td>
+          ${this.currentFilterParams
+            .map(
+              (filter, index) => `
+            <td data-filter-index="${index}" class="${index === this.selectedFilterIndex ? "selected" : ""}">
+              <input type="number" data-index="${index}" class="eq-frequency" value="${filter.frequency.toFixed(1)}" step="1">
+            </td>
+          `,
+            )
+            .join("")}
+        </tr>
+        <tr class="eq-row">
+          <td class="eq-row-label">Gain (dB)</td>
+          ${this.currentFilterParams
+            .map(
+              (filter, index) => `
+            <td data-filter-index="${index}" class="${index === this.selectedFilterIndex ? "selected" : ""}">
+              <input type="number" data-index="${index}" class="eq-gain" value="${filter.gain.toFixed(2)}" step="0.1">
+            </td>
+          `,
+            )
+            .join("")}
+        </tr>
+        <tr class="eq-row">
+          <td class="eq-row-label">Q</td>
+          ${this.currentFilterParams
+            .map(
+              (filter, index) => `
+            <td data-filter-index="${index}" class="${index === this.selectedFilterIndex ? "selected" : ""}">
+              <input type="number" data-index="${index}" class="eq-q" value="${filter.q.toFixed(2)}" step="0.1">
+            </td>
+          `,
+            )
+            .join("")}
+        </tr>
       </tbody>
     `;
 
     this.eqTableContainer.innerHTML = "";
     eqSection.appendChild(header);
+    eqSection.appendChild(graphContainer);
     eqSection.appendChild(table);
     this.eqTableContainer.appendChild(eqSection);
+
+    // Update the canvas reference and context
+    this.eqGraphCanvas = canvas;
+    this.eqGraphCtx = canvas.getContext("2d");
+    this.resizeEQGraphCanvas();
+
+    // Add column click handler to sync with graph selection
+    table.addEventListener("click", (e) => {
+      const cell = (e.target as HTMLElement).closest("td, th") as HTMLElement;
+      if (cell && cell.dataset.filterIndex) {
+        const index = parseInt(cell.dataset.filterIndex, 10);
+        this.selectedFilterIndex = index;
+        this.drawEQGraph();
+      }
+    });
 
     table.addEventListener("input", (e) => this.handleEQTableChange(e));
   }
@@ -905,27 +1062,39 @@ export class AudioPlayer {
   }
 
   private handleEQTableChange(e: Event): void {
-    const target = e.target as HTMLInputElement;
+    const target = e.target as HTMLInputElement | HTMLSelectElement;
     const index = parseInt(target.dataset.index || "0", 10);
-    const type = target.className.replace("eq-", "");
+    let type = target.className.replace("eq-", "");
 
     if (isNaN(index) || !this.currentFilterParams[index]) return;
 
-    let value: number | boolean;
-    if (target.type === "checkbox") {
+    let value: number | boolean | string;
+    if (target instanceof HTMLSelectElement) {
+      type = "filter_type";
+      value = target.value;
+    } else if (target.type === "checkbox") {
       value = target.checked;
     } else {
       value = parseFloat(target.value);
-      if (isNaN(value)) return;
+      if (isNaN(value as number)) return;
     }
 
-    // Update the filter parameter - using type assertion for dynamic property access
+    // Update the filter parameter
     (
       this.currentFilterParams[index] as unknown as Record<
         string,
-        number | boolean
+        number | boolean | string
       >
     )[type] = value;
+
+    // Select this filter in the graph
+    this.selectedFilterIndex = index;
+
+    // Request graph update
+    this.requestEQResponseUpdate();
+
+    // Redraw graph to show selection and updated values
+    this.drawEQGraph();
 
     // Update filter parameters - this will also update the display
     this.updateFilterParams(this.currentFilterParams);
@@ -960,16 +1129,16 @@ export class AudioPlayer {
 
   public async loadAudioFilePath(filePath: string): Promise<void> {
     this.setStatus("Loading...");
-    
+
     try {
       // Load the file via streaming manager
       this.currentAudioPath = filePath;
       await this.streamingManager.loadAudioFilePath(filePath);
       // File info will be received via onFileLoaded callback
-      
+
       this.setListenButtonEnabled(true);
       this.showAudioStatus(true);
-      
+
       // Analyze ReplayGain for the track
       await this.analyzeReplayGain(filePath);
     } catch (error) {
@@ -1035,14 +1204,15 @@ export class AudioPlayer {
   }
 
   // EQ Filter Management
-  updateFilterParams(filterParams: Partial<FilterParam>[]): void {
+  updateFilterParams(filterParams: Partial<ExtendedFilterParam>[]): void {
     this.currentFilterParams = filterParams.map((p) => ({
       ...p,
       frequency: p.frequency || 0,
       q: p.q || 1,
       gain: p.gain || 0,
       enabled: p.enabled ?? true,
-    }));
+      filter_type: p.filter_type || "Peak",
+    })) as ExtendedFilterParam[];
 
     // Recalculate and apply filters
     this.setupEQFilters();
@@ -1056,7 +1226,7 @@ export class AudioPlayer {
           q: p.q,
           gain: p.gain,
         }));
-      
+
       this.streamingManager.updateFilters(filters).catch((error) => {
         console.error("Failed to update filters in real-time:", error);
       });
@@ -1227,7 +1397,7 @@ export class AudioPlayer {
               gain: p.gain,
             }))
         : [];
-      
+
       this.streamingManager.updateFilters(filters).catch((error: unknown) => {
         console.error("Failed to update filters:", error);
       });
@@ -1295,8 +1465,6 @@ export class AudioPlayer {
         compensationDb > 0 ? `-${compensationDb.toFixed(1)}dB` : "0dB";
     }
   }
-
-
 
   // Draw mini EQ graph
   private drawEQMiniGraph(): void {
@@ -1477,7 +1645,6 @@ export class AudioPlayer {
     });
   }
 
-
   // Position Updates
   private startPositionUpdates(): void {
     let updateCount = 0;
@@ -1633,17 +1800,29 @@ export class AudioPlayer {
             const momentaryElement = document.getElementById("metrics-lufs-m");
             const shorttermElement = document.getElementById("metrics-lufs-s");
 
-            console.log("[Loudness] Elements found - M:", !!momentaryElement, "S:", !!shorttermElement);
+            console.log(
+              "[Loudness] Elements found - M:",
+              !!momentaryElement,
+              "S:",
+              !!shorttermElement,
+            );
 
             if (momentaryElement && shorttermElement) {
-              const momentaryText = loudnessInfo.momentary_lufs === -Infinity 
-                ? "-∞" 
-                : loudnessInfo.momentary_lufs.toFixed(1);
-              const shorttermText = loudnessInfo.shortterm_lufs === -Infinity 
-                ? "-∞" 
-                : loudnessInfo.shortterm_lufs.toFixed(1);
+              const momentaryText =
+                loudnessInfo.momentary_lufs === -Infinity
+                  ? "-∞"
+                  : loudnessInfo.momentary_lufs.toFixed(1);
+              const shorttermText =
+                loudnessInfo.shortterm_lufs === -Infinity
+                  ? "-∞"
+                  : loudnessInfo.shortterm_lufs.toFixed(1);
 
-              console.log("[Loudness] Updating - M:", momentaryText, "S:", shorttermText);
+              console.log(
+                "[Loudness] Updating - M:",
+                momentaryText,
+                "S:",
+                shorttermText,
+              );
 
               momentaryElement.textContent = momentaryText;
               shorttermElement.textContent = shorttermText;
@@ -1841,9 +2020,7 @@ export class AudioPlayer {
     const peakElement = document.getElementById("metrics-peak");
 
     if (gainElement && peakElement) {
-      const gainText = gain >= 0 
-        ? `+${gain.toFixed(2)}` 
-        : `${gain.toFixed(2)}`;
+      const gainText = gain >= 0 ? `+${gain.toFixed(2)}` : `${gain.toFixed(2)}`;
       const peakText = peak.toFixed(3);
 
       gainElement.textContent = gainText;
@@ -1875,9 +2052,10 @@ export class AudioPlayer {
       const peakElement = document.getElementById("metrics-peak");
 
       if (gainElement && peakElement) {
-        const gainText = this.replayGainInfo.gain >= 0 
-          ? `+${this.replayGainInfo.gain.toFixed(2)}` 
-          : `${this.replayGainInfo.gain.toFixed(2)}`;
+        const gainText =
+          this.replayGainInfo.gain >= 0
+            ? `+${this.replayGainInfo.gain.toFixed(2)}`
+            : `${this.replayGainInfo.gain.toFixed(2)}`;
         const peakText = this.replayGainInfo.peak.toFixed(3);
 
         gainElement.textContent = gainText;
@@ -1886,34 +2064,49 @@ export class AudioPlayer {
     }
 
     // Fetch and update loudness data asynchronously
-    this.streamingManager.getLoudness().then((loudnessInfo) => {
-      console.log("[Metrics] Got loudness info:", loudnessInfo);
-      
-      if (loudnessInfo) {
-        const momentaryElement = document.getElementById("metrics-lufs-m");
-        const shorttermElement = document.getElementById("metrics-lufs-s");
+    this.streamingManager
+      .getLoudness()
+      .then((loudnessInfo) => {
+        console.log("[Metrics] Got loudness info:", loudnessInfo);
 
-        console.log("[Metrics] Elements found - M:", !!momentaryElement, "S:", !!shorttermElement);
+        if (loudnessInfo) {
+          const momentaryElement = document.getElementById("metrics-lufs-m");
+          const shorttermElement = document.getElementById("metrics-lufs-s");
 
-        if (momentaryElement && shorttermElement) {
-          const momentaryText = loudnessInfo.momentary_lufs === -Infinity 
-            ? "-∞" 
-            : loudnessInfo.momentary_lufs.toFixed(1);
-          const shorttermText = loudnessInfo.shortterm_lufs === -Infinity 
-            ? "-∞" 
-            : loudnessInfo.shortterm_lufs.toFixed(1);
+          console.log(
+            "[Metrics] Elements found - M:",
+            !!momentaryElement,
+            "S:",
+            !!shorttermElement,
+          );
 
-          console.log("[Metrics] Updating LUFS - M:", momentaryText, "S:", shorttermText);
+          if (momentaryElement && shorttermElement) {
+            const momentaryText =
+              loudnessInfo.momentary_lufs === -Infinity
+                ? "-∞"
+                : loudnessInfo.momentary_lufs.toFixed(1);
+            const shorttermText =
+              loudnessInfo.shortterm_lufs === -Infinity
+                ? "-∞"
+                : loudnessInfo.shortterm_lufs.toFixed(1);
 
-          momentaryElement.textContent = momentaryText;
-          shorttermElement.textContent = shorttermText;
+            console.log(
+              "[Metrics] Updating LUFS - M:",
+              momentaryText,
+              "S:",
+              shorttermText,
+            );
+
+            momentaryElement.textContent = momentaryText;
+            shorttermElement.textContent = shorttermText;
+          }
+        } else {
+          console.log("[Metrics] No loudness info available");
         }
-      } else {
-        console.log("[Metrics] No loudness info available");
-      }
-    }).catch((error) => {
-      console.error("[Metrics] Failed to get loudness:", error);
-    });
+      })
+      .catch((error) => {
+        console.error("[Metrics] Failed to get loudness:", error);
+      });
   }
 
   // Cleanup
@@ -1954,5 +2147,448 @@ export class AudioPlayer {
     this.audioBuffer = null;
     this.gainNode = null;
     this.analyserNode = null;
+  }
+
+  // ===== EQ GRAPH IMPLEMENTATION =====
+
+  private resizeEQGraphCanvas(): void {
+    if (!this.eqGraphCanvas) return;
+    const container = this.eqGraphCanvas.parentElement;
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    const width = Math.max(rect.width || 600, 400);
+    const height = 300;
+    this.eqGraphCanvas.width = width;
+    this.eqGraphCanvas.height = height;
+    this.drawEQGraph();
+  }
+
+  private async computeEQResponse(): Promise<void> {
+    if (!this.currentFilterParams || this.currentFilterParams.length === 0) {
+      this.eqResponseData = null;
+      return;
+    }
+    try {
+      const logMin = Math.log10(this.EQ_GRAPH_MIN_FREQ);
+      const logMax = Math.log10(this.EQ_GRAPH_MAX_FREQ);
+      const frequencies: number[] = [];
+      for (let i = 0; i < this.EQ_GRAPH_FREQ_POINTS; i++) {
+        const logFreq =
+          logMin + (logMax - logMin) * (i / (this.EQ_GRAPH_FREQ_POINTS - 1));
+        frequencies.push(Math.pow(10, logFreq));
+      }
+      const filters = this.currentFilterParams.map((f) => ({
+        filter_type: f.filter_type || "Peak",
+        frequency: f.frequency,
+        q: f.q,
+        gain: f.gain,
+        enabled: f.enabled,
+      }));
+      console.log("[EQ Graph] Computing response with filters:", filters);
+      const result = await invoke("compute_eq_response", {
+        filters,
+        sampleRate: 48000,
+        frequencies,
+      });
+      console.log("[EQ Graph] Response data received:", result);
+      this.eqResponseData = result;
+      this.drawEQGraph();
+    } catch (error) {
+      console.error("[EQ Graph] Failed to compute response:", error);
+    }
+  }
+
+  private requestEQResponseUpdate(): void {
+    if (this.eqResponseDebounceTimer) {
+      clearTimeout(this.eqResponseDebounceTimer);
+    }
+    this.eqResponseDebounceTimer = window.setTimeout(() => {
+      this.computeEQResponse();
+      this.eqResponseDebounceTimer = null;
+    }, 60);
+  }
+
+  private drawEQGraph(): void {
+    if (!this.eqGraphCanvas || !this.eqGraphCtx) {
+      console.log("[EQ Graph] Canvas or context not available");
+      return;
+    }
+    const ctx = this.eqGraphCtx;
+    const width = this.eqGraphCanvas.width;
+    const height = this.eqGraphCanvas.height;
+    const isDarkMode = window.matchMedia?.(
+      "(prefers-color-scheme: dark)",
+    ).matches;
+
+    // Compute dynamic Y-axis range from response data
+    if (this.eqResponseData) {
+      this.computeDynamicYAxisRange();
+    }
+
+    console.log(
+      "[EQ Graph] Drawing graph - canvas:",
+      width,
+      "x",
+      height,
+      "data:",
+      !!this.eqResponseData,
+    );
+    ctx.clearRect(0, 0, width, height);
+    ctx.fillStyle = isDarkMode ? "rgb(26, 26, 26)" : "rgb(255, 255, 255)";
+    ctx.fillRect(0, 0, width, height);
+    this.drawGrid(ctx, width, height, isDarkMode);
+    if (this.eqResponseData) {
+      console.log("[EQ Graph] Drawing response curves");
+      this.drawIndividualResponses(ctx, width, height, isDarkMode);
+      this.drawCombinedResponse(ctx, width, height, isDarkMode);
+    } else {
+      console.log("[EQ Graph] No response data available");
+    }
+    this.drawFilterHandles(ctx, width, height, isDarkMode);
+  }
+
+  private computeDynamicYAxisRange(): void {
+    if (!this.eqResponseData) return;
+
+    let minGain = Infinity;
+    let maxGain = -Infinity;
+
+    // Check combined response
+    if (
+      this.eqResponseData.combined_response &&
+      Array.isArray(this.eqResponseData.combined_response)
+    ) {
+      this.eqResponseData.combined_response.forEach((gain: number) => {
+        minGain = Math.min(minGain, gain);
+        maxGain = Math.max(maxGain, gain);
+      });
+    }
+
+    // Check individual responses (could be array or object)
+    if (this.eqResponseData.individual_responses) {
+      const responses = this.eqResponseData.individual_responses;
+      if (Array.isArray(responses)) {
+        // If it's an array of arrays
+        responses.forEach((response: number[]) => {
+          if (Array.isArray(response)) {
+            response.forEach((gain: number) => {
+              minGain = Math.min(minGain, gain);
+              maxGain = Math.max(maxGain, gain);
+            });
+          }
+        });
+      } else if (typeof responses === "object") {
+        // If it's an object with numeric keys
+        Object.values(responses).forEach((response: any) => {
+          if (Array.isArray(response)) {
+            response.forEach((gain: number) => {
+              minGain = Math.min(minGain, gain);
+              maxGain = Math.max(maxGain, gain);
+            });
+          }
+        });
+      }
+    }
+
+    // Set dynamic range with 1dB padding
+    if (minGain !== Infinity && maxGain !== -Infinity) {
+      this.eqGraphMinGain = minGain - 1;
+      this.eqGraphMaxGain = maxGain + 1;
+      console.log(
+        "[EQ Graph] Dynamic Y-axis range:",
+        this.eqGraphMinGain,
+        "to",
+        this.eqGraphMaxGain,
+      );
+    }
+  }
+
+  private drawGrid(
+    ctx: CanvasRenderingContext2D,
+    width: number,
+    height: number,
+    isDarkMode: boolean,
+  ): void {
+    ctx.strokeStyle = isDarkMode
+      ? "rgba(255, 255, 255, 0.1)"
+      : "rgba(0, 0, 0, 0.1)";
+    ctx.lineWidth = 1;
+    const freqMarkers = [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000];
+    freqMarkers.forEach((freq) => {
+      const x = this.freqToX(freq, width);
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, height);
+      ctx.stroke();
+    });
+    const gainMarkers = [-18, -12, -6, 0, 3];
+    gainMarkers.forEach((gain) => {
+      const y = this.gainToY(gain, height);
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(width, y);
+      if (gain === 0) {
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = isDarkMode
+          ? "rgba(255, 255, 255, 0.3)"
+          : "rgba(0, 0, 0, 0.3)";
+      }
+      ctx.stroke();
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = isDarkMode
+        ? "rgba(255, 255, 255, 0.1)"
+        : "rgba(0, 0, 0, 0.1)";
+    });
+    ctx.fillStyle = isDarkMode
+      ? "rgba(255, 255, 255, 0.5)"
+      : "rgba(0, 0, 0, 0.5)";
+    ctx.font = "10px sans-serif";
+    freqMarkers.forEach((freq) => {
+      const x = this.freqToX(freq, width);
+      const label = freq >= 1000 ? `${freq / 1000}k` : `${freq}`;
+      ctx.fillText(label, x + 2, height - 4);
+    });
+    gainMarkers.forEach((gain) => {
+      const y = this.gainToY(gain, height);
+      ctx.fillText(`${gain > 0 ? "+" : ""}${gain}dB`, 4, y - 2);
+    });
+  }
+
+  private drawCombinedResponse(
+    ctx: CanvasRenderingContext2D,
+    width: number,
+    height: number,
+    isDarkMode: boolean,
+  ): void {
+    if (!this.eqResponseData?.combined_response) return;
+    const { frequencies, combined_response } = this.eqResponseData;
+    ctx.strokeStyle = isDarkMode ? "#4dabf7" : "#007bff";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    frequencies.forEach((freq: number, i: number) => {
+      const x = this.freqToX(freq, width);
+      const y = this.gainToY(combined_response[i], height);
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+  }
+
+  private drawIndividualResponses(
+    ctx: CanvasRenderingContext2D,
+    width: number,
+    height: number,
+    isDarkMode: boolean,
+  ): void {
+    if (!this.eqResponseData?.individual_responses) return;
+    const { frequencies, individual_responses } = this.eqResponseData;
+    const colors = [
+      isDarkMode ? "#fa5252" : "#dc3545",
+      isDarkMode ? "#fab005" : "#ffc107",
+      isDarkMode ? "#40c057" : "#28a745",
+      isDarkMode ? "#4dabf7" : "#007bff",
+      isDarkMode ? "#cc5de8" : "#6f42c1",
+    ];
+    this.currentFilterParams.forEach((filter, filterIdx) => {
+      if (!filter.enabled || Math.abs(filter.gain) < 0.1) return;
+      const response = individual_responses[filterIdx];
+      if (!response) return;
+      ctx.strokeStyle = colors[filterIdx % colors.length];
+      ctx.lineWidth = 1;
+      ctx.globalAlpha = 0.5;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      frequencies.forEach((freq: number, i: number) => {
+        const x = this.freqToX(freq, width);
+        const y = this.gainToY(response.magnitudes_db[i], height);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.globalAlpha = 1;
+    });
+  }
+
+  private drawFilterHandles(
+    ctx: CanvasRenderingContext2D,
+    width: number,
+    height: number,
+    isDarkMode: boolean,
+  ): void {
+    this.currentFilterParams.forEach((filter, idx) => {
+      if (!filter.enabled) return;
+      const x = this.freqToX(filter.frequency, width);
+      const y = this.gainToY(filter.gain, height);
+      const isSelected = idx === this.selectedFilterIndex;
+      ctx.strokeStyle = isSelected
+        ? isDarkMode
+          ? "#fa5252"
+          : "#dc3545"
+        : isDarkMode
+          ? "#4dabf7"
+          : "#007bff";
+      ctx.lineWidth = isSelected ? 3 : 2;
+      ctx.fillStyle = isDarkMode
+        ? "rgba(77, 171, 247, 0.3)"
+        : "rgba(0, 123, 255, 0.3)";
+      ctx.beginPath();
+      ctx.arc(x, y, isSelected ? 8 : 6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      if (isSelected) {
+        const barWidth = 40 / filter.q;
+        ctx.strokeStyle = isDarkMode ? "#fab005" : "#ffc107";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(x - barWidth, y);
+        ctx.lineTo(x + barWidth, y);
+        ctx.stroke();
+      }
+    });
+  }
+
+  private freqToX(freq: number, width: number): number {
+    const logMin = Math.log10(this.EQ_GRAPH_MIN_FREQ);
+    const logMax = Math.log10(this.EQ_GRAPH_MAX_FREQ);
+    const logFreq = Math.log10(
+      Math.max(this.EQ_GRAPH_MIN_FREQ, Math.min(this.EQ_GRAPH_MAX_FREQ, freq)),
+    );
+    return ((logFreq - logMin) / (logMax - logMin)) * width;
+  }
+
+  private xToFreq(x: number, width: number): number {
+    const logMin = Math.log10(this.EQ_GRAPH_MIN_FREQ);
+    const logMax = Math.log10(this.EQ_GRAPH_MAX_FREQ);
+    const logFreq = logMin + (x / width) * (logMax - logMin);
+    return Math.pow(10, logFreq);
+  }
+
+  private gainToY(gain: number, height: number): number {
+    const range = this.eqGraphMaxGain - this.eqGraphMinGain;
+    const normalized = (gain - this.eqGraphMinGain) / range;
+    return height - normalized * height;
+  }
+
+  private yToGain(y: number, height: number): number {
+    const range = this.eqGraphMaxGain - this.eqGraphMinGain;
+    const normalized = (height - y) / height;
+    return this.eqGraphMinGain + normalized * range;
+  }
+
+  private handleGraphMouseDown(e: MouseEvent): void {
+    if (!this.eqGraphCanvas) return;
+    const rect = this.eqGraphCanvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const width = this.eqGraphCanvas.width;
+    const height = this.eqGraphCanvas.height;
+    const clickedFreq = this.xToFreq(x, width);
+
+    let closestIdx = -1;
+    let minFreqDist = Infinity;
+    let dragMode: "ring" | "bar" | null = null;
+
+    // First, check if clicking on Q bar of selected filter
+    if (this.selectedFilterIndex >= 0) {
+      const filter = this.currentFilterParams[this.selectedFilterIndex];
+      if (filter && filter.enabled) {
+        const filterX = this.freqToX(filter.frequency, width);
+        const filterY = this.gainToY(filter.gain, height);
+        const barWidth = 40 / filter.q;
+        const dx = x - filterX;
+        const dy = y - filterY;
+        if (Math.abs(dy) < 5 && Math.abs(dx) < barWidth) {
+          closestIdx = this.selectedFilterIndex;
+          dragMode = "bar";
+        }
+      }
+    }
+
+    // If not on Q bar, find closest filter by frequency
+    if (closestIdx < 0) {
+      this.currentFilterParams.forEach((filter, idx) => {
+        if (!filter.enabled) return;
+        const freqDist = Math.abs(filter.frequency - clickedFreq);
+        if (freqDist < minFreqDist) {
+          closestIdx = idx;
+          minFreqDist = freqDist;
+          dragMode = "ring";
+        }
+      });
+    }
+
+    if (closestIdx >= 0) {
+      this.selectedFilterIndex = closestIdx;
+      this.isDraggingHandle = true;
+      this.dragMode = dragMode;
+      this.dragStartX = x;
+      this.dragStartY = y;
+      this.drawEQGraph();
+    }
+  }
+
+  private handleGraphMouseMove(e: MouseEvent): void {
+    if (!this.isDraggingHandle || !this.eqGraphCanvas) return;
+    const rect = this.eqGraphCanvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const width = this.eqGraphCanvas.width;
+    const height = this.eqGraphCanvas.height;
+    const filter = this.currentFilterParams[this.selectedFilterIndex];
+    if (!filter) return;
+    if (this.dragMode === "ring") {
+      filter.frequency = Math.max(
+        this.EQ_GRAPH_MIN_FREQ,
+        Math.min(this.EQ_GRAPH_MAX_FREQ, this.xToFreq(x, width)),
+      );
+      filter.gain = Math.max(
+        this.eqGraphMinGain,
+        Math.min(this.eqGraphMaxGain, this.yToGain(y, height)),
+      );
+    } else if (this.dragMode === "bar") {
+      const deltaX = x - this.dragStartX;
+      const qDelta = deltaX / 20;
+      filter.q = Math.max(
+        this.EQ_GRAPH_MIN_Q,
+        Math.min(this.EQ_GRAPH_MAX_Q, filter.q + qDelta),
+      );
+      this.dragStartX = x;
+    }
+    // Update table inputs to reflect graph changes
+    this.updateTableInputs();
+    this.requestEQResponseUpdate();
+    this.drawEQGraph();
+  }
+
+  private handleGraphMouseUp(e: MouseEvent): void {
+    if (this.isDraggingHandle) {
+      this.isDraggingHandle = false;
+      this.dragMode = null;
+      this.updateFilterParams(this.currentFilterParams);
+    }
+  }
+
+  private updateTableInputs(): void {
+    if (!this.eqTableContainer) return;
+    const filter = this.currentFilterParams[this.selectedFilterIndex];
+    if (!filter) return;
+
+    const table = this.eqTableContainer.querySelector("table");
+    if (!table) return;
+
+    // Find cells in the selected column
+    const cells = table.querySelectorAll(
+      `td[data-filter-index="${this.selectedFilterIndex}"]`,
+    );
+    cells.forEach((cell) => {
+      const freqInput = cell.querySelector(".eq-frequency") as HTMLInputElement;
+      const qInput = cell.querySelector(".eq-q") as HTMLInputElement;
+      const gainInput = cell.querySelector(".eq-gain") as HTMLInputElement;
+
+      if (freqInput) freqInput.value = filter.frequency.toFixed(1);
+      if (qInput) qInput.value = filter.q.toFixed(2);
+      if (gainInput) gainInput.value = filter.gain.toFixed(2);
+    });
   }
 }

@@ -1,5 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { SpectrumAnalyzerComponent, type SpectrumInfo } from "../modules/audio-player/spectrum-analyzer";
+import {
+  SpectrumAnalyzerComponent,
+  type SpectrumInfo,
+} from "../modules/audio-player/spectrum-analyzer";
 import { invoke } from "@tauri-apps/api/core";
 
 // Mock Tauri invoke
@@ -58,7 +61,9 @@ describe("SpectrumAnalyzerComponent", () => {
 
     await component.start();
 
-    expect(mockInvoke).toHaveBeenCalledWith("stream_enable_spectrum_monitoring");
+    expect(mockInvoke).toHaveBeenCalledWith(
+      "stream_enable_spectrum_monitoring",
+    );
     expect(component.isActive()).toBe(true);
   });
 
@@ -71,7 +76,9 @@ describe("SpectrumAnalyzerComponent", () => {
 
     await component.stop();
 
-    expect(mockInvoke).toHaveBeenCalledWith("stream_disable_spectrum_monitoring");
+    expect(mockInvoke).toHaveBeenCalledWith(
+      "stream_disable_spectrum_monitoring",
+    );
     expect(component.isActive()).toBe(false);
   });
 
@@ -100,7 +107,9 @@ describe("SpectrumAnalyzerComponent", () => {
 
     await component.stop();
 
-    expect(mockInvoke).not.toHaveBeenCalledWith("stream_disable_spectrum_monitoring");
+    expect(mockInvoke).not.toHaveBeenCalledWith(
+      "stream_disable_spectrum_monitoring",
+    );
   });
 
   it("should handle spectrum data", async () => {

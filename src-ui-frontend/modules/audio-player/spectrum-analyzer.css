@@ -62,7 +62,8 @@
   border-color: #666666;
 }
 
-.spectrum-analyzer-container.light .spectrum-analyzer-button:hover:not(:disabled) {
+.spectrum-analyzer-container.light
+  .spectrum-analyzer-button:hover:not(:disabled) {
   background: #e0e0e0;
   border-color: #777777;
 }

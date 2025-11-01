@@ -377,7 +377,11 @@ impl AudioStreamingManager {
             .ok_or_else(|| "No audio file loaded".to_string())?;
 
         let config = SpectrumConfig::default();
-        let analyzer = SpectrumAnalyzer::new(audio_info.spec.channels as u32, audio_info.spec.sample_rate, config)?;
+        let analyzer = SpectrumAnalyzer::new(
+            audio_info.spec.channels as u32,
+            audio_info.spec.sample_rate,
+            config,
+        )?;
 
         self.spectrum_monitor = Some(Arc::new(Mutex::new(analyzer)));
         Ok(())
@@ -390,7 +394,9 @@ impl AudioStreamingManager {
 
     /// Get current spectrum measurements (if monitoring is enabled)
     pub fn get_spectrum(&self) -> Option<SpectrumInfo> {
-        self.spectrum_monitor.as_ref().map(|m| m.lock().unwrap().get_spectrum())
+        self.spectrum_monitor
+            .as_ref()
+            .map(|m| m.lock().unwrap().get_spectrum())
     }
 
     /// Check if spectrum monitoring is enabled
@@ -561,7 +567,10 @@ impl AudioStreamingManager {
                         if let Some(ref analyzer) = spectrum_monitor {
                             if let Ok(mut a) = analyzer.lock() {
                                 if let Err(e) = a.add_frames(&decoded_audio.samples) {
-                                    eprintln!("[AudioStreamingManager] Spectrum monitoring error: {}", e);
+                                    eprintln!(
+                                        "[AudioStreamingManager] Spectrum monitoring error: {}",
+                                        e
+                                    );
                                 }
                             }
                         }
@@ -749,7 +758,10 @@ impl AudioStreamingManager {
                             if let Some(ref analyzer) = spectrum_monitor {
                                 if let Ok(mut a) = analyzer.lock() {
                                     if let Err(e) = a.add_frames(&decoded_audio.samples) {
-                                        eprintln!("[AudioStreamingManager] Spectrum monitoring error: {}", e);
+                                        eprintln!(
+                                            "[AudioStreamingManager] Spectrum monitoring error: {}",
+                                            e
+                                        );
                                     }
                                 }
                             }

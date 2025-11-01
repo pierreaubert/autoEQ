@@ -1,4 +1,7 @@
-import { SpectrumAnalyzerComponent, type SpectrumDisplayConfig } from "./spectrum-analyzer";
+import {
+  SpectrumAnalyzerComponent,
+  type SpectrumDisplayConfig,
+} from "./spectrum-analyzer";
 
 /**
  * UI wrapper for spectrum analyzer component
@@ -14,7 +17,7 @@ export class SpectrumAnalyzerUI {
 
   constructor(
     containerElement: HTMLElement,
-    config?: Partial<SpectrumDisplayConfig>
+    config?: Partial<SpectrumDisplayConfig>,
   ) {
     this.container = containerElement;
 
@@ -46,19 +49,19 @@ export class SpectrumAnalyzerUI {
 
     // Get elements
     const canvas = this.container.querySelector(
-      "#spectrum-canvas"
+      "#spectrum-canvas",
     ) as HTMLCanvasElement;
     this.startButton = this.container.querySelector(
-      "#spectrum-start"
+      "#spectrum-start",
     ) as HTMLButtonElement;
     this.stopButton = this.container.querySelector(
-      "#spectrum-stop"
+      "#spectrum-stop",
     ) as HTMLButtonElement;
     this.peakLabel = this.container.querySelector(
-      "#spectrum-peak"
+      "#spectrum-peak",
     ) as HTMLElement;
     this.statusLabel = this.container.querySelector(
-      "#spectrum-status"
+      "#spectrum-status",
     ) as HTMLElement;
 
     // Create analyzer
@@ -146,7 +149,7 @@ export class SpectrumAnalyzerUI {
  */
 export function createSpectrumAnalyzerUI(
   selector: string,
-  config?: Partial<SpectrumDisplayConfig>
+  config?: Partial<SpectrumDisplayConfig>,
 ): SpectrumAnalyzerUI | null {
   const element = document.querySelector(selector) as HTMLElement;
   if (!element) {

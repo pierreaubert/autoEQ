@@ -397,7 +397,7 @@ export class StreamingManager {
         if (state === "playing") {
           // Increment position estimate (will be corrected by backend events)
           this.currentPosition += intervalMs / 1000;
-          
+
           // Trigger position update callback
           if (this.currentFileInfo?.duration_seconds) {
             this.callbacks.onPositionUpdate?.(

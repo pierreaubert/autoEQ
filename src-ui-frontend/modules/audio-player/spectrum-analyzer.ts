@@ -122,7 +122,7 @@ export class SpectrumAnalyzerComponent {
     this.pollInterval = window.setInterval(async () => {
       try {
         const spectrum = await invoke<SpectrumInfo | null>(
-          "stream_get_spectrum"
+          "stream_get_spectrum",
         );
         if (spectrum) {
           this.currentSpectrum = spectrum;
@@ -179,9 +179,11 @@ export class SpectrumAnalyzerComponent {
     const width = this.canvas.width / dpr;
     const height = this.canvas.height / dpr;
 
-    // Clear canvas
-    this.ctx.fillStyle =
-      this.config.colorScheme === "dark" ? "#1a1a1a" : "#ffffff";
+    // Get background color from CSS variables
+    const bgColor = this.getComputedCSSVariable("--bg-secondary");
+
+    // Clear canvas with theme color
+    this.ctx.fillStyle = bgColor;
     this.ctx.fillRect(0, 0, width, height);
 
     if (!this.currentSpectrum || this.currentSpectrum.magnitudes.length === 0) {
@@ -270,7 +272,7 @@ export class SpectrumAnalyzerComponent {
       }
 
       const x = this.freqToX(freq, width);
-      
+
       // Calculate bar width based on logarithmic spacing
       let nextFreq = this.config.maxFreq;
       if (i < spectrum.frequencies.length - 1) {
@@ -284,7 +286,7 @@ export class SpectrumAnalyzerComponent {
       // Color based on magnitude
       const color = this.getMagnitudeColor(magnitude);
       this.ctx.fillStyle = color;
-      this.ctx.fillRect(x, height - 30 - barHeight, barWidth, barHeight);
+      this.ctx.fillRect(x, height - 50 - barHeight, barWidth, barHeight);
     }
   }
 
@@ -293,11 +295,17 @@ export class SpectrumAnalyzerComponent {
    */
   private drawLabels(width: number, height: number): void {
     const labelColor =
-      this.config.colorScheme === "dark" ? "#cccccc" : "#333333";
-    this.ctx.fillStyle = labelColor;
-    this.ctx.font = "11px monospace";
+      this.config.colorScheme === "dark" ? "#ffffff" : "#000000";
+    const bgColor =
+      this.config.colorScheme === "dark"
+        ? "rgba(26, 26, 26, 0.9)"
+        : "rgba(248, 249, 250, 0.9)";
 
-    // Frequency labels
+    this.ctx.font = "11px monospace";
+    this.ctx.textAlign = "center";
+    this.ctx.textBaseline = "top";
+
+    // Frequency labels under each bar - at the very bottom
     const freqLabels = [
       { freq: 20, label: "20Hz" },
       { freq: 100, label: "100Hz" },
@@ -306,22 +314,37 @@ export class SpectrumAnalyzerComponent {
       { freq: 20000, label: "20kHz" },
     ];
 
-    this.ctx.textAlign = "center";
-    this.ctx.textBaseline = "top";
     for (const { freq, label } of freqLabels) {
       if (freq >= this.config.minFreq && freq <= this.config.maxFreq) {
         const x = this.freqToX(freq, width);
-        this.ctx.fillText(label, x, height - 15);
+        const y = height - 18;
+
+        // Draw background
+        this.ctx.fillStyle = bgColor;
+        this.ctx.fillRect(x - 20, y, 40, 16);
+
+        // Draw text
+        this.ctx.fillStyle = labelColor;
+        this.ctx.fillText(label, x, y + 2);
       }
     }
 
-    // dB labels
+    // dB labels on vertical axis (left side)
     this.ctx.textAlign = "right";
     this.ctx.textBaseline = "middle";
     for (let i = 0; i <= 6; i++) {
       const db = -i * (this.config.dbRange / 6);
-      const y = height - (i * height) / 6;
-      this.ctx.fillText(`${db.toFixed(0)}dB`, 35, y);
+      const y = 10 + (i * (height - 60)) / 6;
+
+      const label = `${db.toFixed(0)}dB`;
+
+      // Draw background
+      this.ctx.fillStyle = bgColor;
+      this.ctx.fillRect(0, y - 7, 38, 14);
+
+      // Draw text
+      this.ctx.fillStyle = labelColor;
+      this.ctx.fillText(label, 36, y);
     }
   }
 
@@ -400,5 +423,15 @@ export class SpectrumAnalyzerComponent {
    */
   destroy(): void {
     this.stop();
+  }
+
+  /**
+   * Get computed CSS variable value
+   */
+  private getComputedCSSVariable(varName: string): string {
+    const value = getComputedStyle(document.documentElement)
+      .getPropertyValue(varName)
+      .trim();
+    return value || (varName === "--bg-secondary" ? "#2d2d2d" : "#ffffff");
   }
 }
