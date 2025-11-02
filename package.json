@@ -18,7 +18,8 @@
     "test:watch": "vitest --watch",
     "test:coverage": "vitest --coverage",
     "fmt": "npx prettier -w src-ui-frontend",
-    "upgrade": "npx npm-check-updates -u"
+    "upgrade": "npx npm-check-updates -u",
+    "lint": "npx eslint src-ui-frontend"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.9.0",

@@ -252,26 +252,26 @@ export class SpectrumAnalyzerComponent {
    */
   private drawVerticalGridLines(width: number, height: number): void {
     const isDarkMode = this.config.colorScheme === "dark";
-    
+
     // Draw horizontal lines for dB levels (0, -10, -20, -30, -40, -50, -60)
     const dbLevels = [0, -10, -20, -30, -40, -50, -60];
-    
+
     dbLevels.forEach(db => {
       const y = this.dbToY(db, height);
-      
+
       // Set dotted line style - full opacity
       const lineColor = isDarkMode ? "rgba(255, 255, 255, 1)" : "rgba(0, 0, 0, 1)";
       this.ctx.strokeStyle = lineColor;
       this.ctx.lineWidth = 1;
-      this.ctx.setLineDash([2, 3]); // Dotted pattern: 2px dash, 3px gap
-      
+      this.ctx.setLineDash([1, 4]); // Dotted pattern: 2px dash, 3px gap
+
       // Draw horizontal line across full width
       this.ctx.beginPath();
       this.ctx.moveTo(0, y);
       this.ctx.lineTo(width, y);
       this.ctx.stroke();
     });
-    
+
     // Reset line dash to solid
     this.ctx.setLineDash([]);
   }
@@ -477,7 +477,7 @@ export class SpectrumAnalyzerComponent {
     const value = getComputedStyle(document.documentElement)
       .getPropertyValue(varName)
       .trim();
-    
+
     // Better fallbacks based on color scheme
     if (!value) {
       if (varName === "--bg-secondary") {
@@ -485,7 +485,7 @@ export class SpectrumAnalyzerComponent {
       }
       return this.config.colorScheme === "dark" ? "#ffffff" : "#000000";
     }
-    
+
     return value;
   }
 }

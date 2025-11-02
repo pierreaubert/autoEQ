@@ -423,6 +423,39 @@ export class StreamingManager {
   }
 
   /**
+   * Enable loudness monitoring in the backend
+   */
+  async enableLoudnessMonitoring(): Promise<void> {
+    if (!this.isTauriAvailable) {
+      return;
+    }
+
+    try {
+      await invoke("stream_enable_loudness_monitoring");
+      console.log("[StreamingManager] Loudness monitoring enabled");
+    } catch (error) {
+      console.error("[StreamingManager] Failed to enable loudness monitoring:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Disable loudness monitoring in the backend
+   */
+  async disableLoudnessMonitoring(): Promise<void> {
+    if (!this.isTauriAvailable) {
+      return;
+    }
+
+    try {
+      await invoke("stream_disable_loudness_monitoring");
+      console.log("[StreamingManager] Loudness monitoring disabled");
+    } catch (error) {
+      console.error("[StreamingManager] Failed to disable loudness monitoring:", error);
+    }
+  }
+
+  /**
    * Get current loudness information from backend
    */
   async getLoudness(): Promise<LoudnessInfo | null> {
@@ -447,17 +480,20 @@ export class StreamingManager {
     onUpdate: (info: LoudnessInfo | null) => void,
   ): void {
     if (this.loudnessPollingInterval !== null) {
+      console.log('[StreamingManager] Loudness polling already active');
       return; // Already polling
     }
 
+    console.log('[StreamingManager] Starting loudness polling with interval:', intervalMs);
     this.loudnessCallback = onUpdate;
 
     this.loudnessPollingInterval = window.setInterval(async () => {
       try {
         const loudness = await this.getLoudness();
+        console.log('[StreamingManager] Got loudness data:', loudness);
         this.loudnessCallback?.(loudness);
       } catch (error) {
-        // Ignore polling errors
+        console.error('[StreamingManager] Error polling loudness:', error);
       }
     }, intervalMs);
   }

@@ -29,6 +29,12 @@ export const FILTER_TYPES = {
 export interface VisualEQConfigCallbacks {
   onFilterParamsChange?: (filterParams: ExtendedFilterParam[]) => void;
   onEQToggle?: (enabled: boolean) => void;
+  onAutoGainChange?: (enabled: boolean) => void;
+  onLoudnessCompensationChange?: (enabled: boolean) => void;
+  onSplAmplitudeChange?: (amplitude: number) => void;
+  getAutoGain?: () => boolean;
+  getLoudnessCompensation?: () => boolean;
+  getSplAmplitude?: () => number;
 }
 
 export class VisualEQConfig {
@@ -37,16 +43,21 @@ export class VisualEQConfig {
   private callbacks: VisualEQConfigCallbacks;
   private streamingManager: StreamingManager;
 
-  // EQ Modal elements
+  // EQ Modal and UI elements
   private eqModal: HTMLElement | null = null;
   private eqBackdrop: HTMLElement | null = null;
   private eqModalCloseBtn: HTMLButtonElement | null = null;
-  private playbackOptionsContainer: HTMLElement | null = null;
   private eqTableContainer: HTMLElement | null = null;
+  private playbackOptionsContainer: HTMLElement | null = null;
+  private eqConfigBtn: HTMLElement | null = null;
 
-  // EQ Graph properties
+  // EQ Graph properties (modal)
   private eqGraphCanvas: HTMLCanvasElement | null = null;
   private eqGraphCtx: CanvasRenderingContext2D | null = null;
+  
+  // Mini EQ Graph (in main UI)
+  private eqMiniCanvas: HTMLCanvasElement | null = null;
+  private eqMiniCtx: CanvasRenderingContext2D | null = null;
   private selectedFilterIndex: number = -1;
   private isDraggingHandle: boolean = false;
   private dragMode: 'ring' | 'bar' = 'ring';
@@ -79,15 +90,25 @@ export class VisualEQConfig {
     container: HTMLElement,
     instanceId: string,
     streamingManager: StreamingManager,
-    callbacks: VisualEQConfigCallbacks = {}
+    callbacks: VisualEQConfigCallbacks = {},
+    eqMiniCanvas: HTMLCanvasElement | null = null
   ) {
     this.container = container;
     this.instanceId = instanceId;
     this.streamingManager = streamingManager;
     this.callbacks = callbacks;
     
+    // Initialize mini canvas
+    this.eqMiniCanvas = eqMiniCanvas;
+    if (this.eqMiniCanvas) {
+      this.eqMiniCtx = this.eqMiniCanvas.getContext('2d');
+    }
+    
     this.createEQModal();
     this.setupEventListeners();
+    
+    // Compute initial EQ response to populate graphs
+    this.computeEQResponse();
   }
 
   // ===== MODAL CREATION AND MANAGEMENT =====
@@ -184,11 +205,14 @@ export class VisualEQConfig {
     console.log("[EQ Debug] Attempting to show modal");
     console.log("[EQ Debug] Current modal state:", {
       exists: !!this.eqModal,
+      display: this.eqModal?.style.display,
       backdropExists: !!this.eqBackdrop,
-      id: this.eqModal?.id,
-      className: this.eqModal?.className,
+      backdropDisplay: this.eqBackdrop?.style.display,
       parentElement: this.eqModal?.parentElement?.tagName,
     });
+
+    // Store button reference for click-outside handling
+    this.eqConfigBtn = eqConfigBtn;
 
     if (this.eqModal && this.eqBackdrop && eqConfigBtn) {
       this.renderEQTable();
@@ -273,6 +297,70 @@ export class VisualEQConfig {
     // Clear existing content
     this.playbackOptionsContainer.innerHTML = "";
     this.eqTableContainer.innerHTML = "";
+
+    // Render playback options
+    const autoGain = this.callbacks.getAutoGain?.() ?? true;
+    const loudnessComp = this.callbacks.getLoudnessCompensation?.() ?? false;
+    const splAmplitude = this.callbacks.getSplAmplitude?.() ?? -20;
+    
+    this.playbackOptionsContainer.innerHTML = `
+      <div class="playback-options-section">
+        <div class="option-row">
+          <label class="option-label">
+            <input type="checkbox" class="auto-gain-toggle" ${autoGain ? 'checked' : ''}>
+            Auto Gain
+          </label>
+          <span class="option-help">Automatically adjust volume to prevent clipping</span>
+        </div>
+        <div class="option-row">
+          <label class="option-label">
+            <input type="checkbox" class="loudness-compensation-toggle" ${loudnessComp ? 'checked' : ''}>
+            Loudness Compensation
+          </label>
+          <span class="option-help">Apply equal-loudness curve adjustment</span>
+        </div>
+        <div class="option-row spl-amplitude-row" style="display: ${loudnessComp ? 'flex' : 'none'}; padding-left: 24px;">
+          <label class="option-label" style="flex-direction: column; align-items: flex-start; gap: 4px;">
+            <span>SPL Amplitude: <span class="spl-value">${splAmplitude}</span> dB</span>
+            <div style="display: flex; align-items: center; gap: 8px; width: 100%;">
+              <span style="font-size: 0.85em; color: var(--text-secondary);">-30</span>
+              <input type="range" class="spl-amplitude-slider" 
+                     min="-30" max="0" step="1" value="${splAmplitude}"
+                     style="flex: 1;">
+              <span style="font-size: 0.85em; color: var(--text-secondary);">0</span>
+            </div>
+          </label>
+          <span class="option-help">Reference SPL for loudness compensation curve</span>
+        </div>
+      </div>
+    `;
+    
+    // Setup event listeners for playback options
+    const autoGainToggle = this.playbackOptionsContainer.querySelector('.auto-gain-toggle') as HTMLInputElement;
+    const loudnessToggle = this.playbackOptionsContainer.querySelector('.loudness-compensation-toggle') as HTMLInputElement;
+    const splSlider = this.playbackOptionsContainer.querySelector('.spl-amplitude-slider') as HTMLInputElement;
+    const splValue = this.playbackOptionsContainer.querySelector('.spl-value') as HTMLSpanElement;
+    const splRow = this.playbackOptionsContainer.querySelector('.spl-amplitude-row') as HTMLDivElement;
+    
+    autoGainToggle?.addEventListener('change', () => {
+      this.callbacks.onAutoGainChange?.(autoGainToggle.checked);
+    });
+    
+    loudnessToggle?.addEventListener('change', () => {
+      this.callbacks.onLoudnessCompensationChange?.(loudnessToggle.checked);
+      // Show/hide SPL slider
+      if (splRow) {
+        splRow.style.display = loudnessToggle.checked ? 'flex' : 'none';
+      }
+    });
+    
+    splSlider?.addEventListener('input', () => {
+      const value = parseFloat(splSlider.value);
+      if (splValue) {
+        splValue.textContent = value.toString();
+      }
+      this.callbacks.onSplAmplitudeChange?.(value);
+    });
 
     // Render EQ table section
     const eqSection = document.createElement("div");
@@ -440,7 +528,7 @@ export class VisualEQConfig {
     // Handle column selection
     table.addEventListener("click", (e) => {
       const target = e.target as HTMLElement;
-      const cell = target.closest("td, th");
+      const cell = target.closest("td, th") as HTMLElement | null;
       if (cell && cell.dataset.filterIndex) {
         const index = parseInt(cell.dataset.filterIndex, 10);
         this.selectedFilterIndex = index;
@@ -603,6 +691,7 @@ export class VisualEQConfig {
     if (!this.currentFilterParams || this.currentFilterParams.length === 0) {
       this.eqResponseData = null;
       this.drawEQGraph();
+      this.drawMiniEQ();
       return;
     }
 
@@ -635,6 +724,7 @@ export class VisualEQConfig {
       console.log("[EQ Graph] Response data received:", result);
       this.eqResponseData = result;
       this.drawEQGraph();
+      this.drawMiniEQ(); // Update mini EQ visualization
     } catch (error) {
       console.error("[EQ Graph] Failed to compute response:", error);
     }
@@ -1089,6 +1179,68 @@ export class VisualEQConfig {
       if (qInput) qInput.value = filter.q.toFixed(2);
       if (gainInput) gainInput.value = filter.gain.toFixed(2);
     });
+  }
+
+  // ===== MINI EQ VISUALIZATION =====
+
+  private drawMiniEQ(): void {
+    if (!this.eqMiniCanvas || !this.eqMiniCtx) return;
+
+    const ctx = this.eqMiniCtx;
+    const width = this.eqMiniCanvas.width;
+    const height = this.eqMiniCanvas.height;
+
+    // Clear canvas
+    ctx.clearRect(0, 0, width, height);
+
+    // Draw background with theme awareness
+    const isDark = document.documentElement.classList.contains('dark');
+    ctx.fillStyle = isDark ? '#1a1a1a' : '#ffffff';
+    ctx.fillRect(0, 0, width, height);
+
+    // Draw center line (0 dB)
+    ctx.strokeStyle = isDark ? '#404040' : '#d0d0d0';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, height / 2);
+    ctx.lineTo(width, height / 2);
+    ctx.stroke();
+
+    // Draw EQ curve if we have response data
+    if (this.eqResponseData && this.eqResponseData.frequencies && this.eqResponseData.magnitude_db) {
+      const frequencies = this.eqResponseData.frequencies;
+      const magnitudes = this.eqResponseData.magnitude_db;
+      
+      // Determine gain range from response data
+      let minGain = Math.min(...magnitudes);
+      let maxGain = Math.max(...magnitudes);
+      const gainRange = Math.max(Math.abs(minGain), Math.abs(maxGain));
+      const displayRange = Math.max(6, gainRange); // At least ±6dB range
+      
+      ctx.strokeStyle = isDark ? '#4a9eff' : '#2563eb';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+
+      for (let i = 0; i < frequencies.length; i++) {
+        const freq = frequencies[i];
+        const mag = magnitudes[i];
+
+        // Map frequency to x (logarithmic)
+        const x = (Math.log10(freq / this.EQ_GRAPH_MIN_FREQ) / 
+                   Math.log10(this.EQ_GRAPH_MAX_FREQ / this.EQ_GRAPH_MIN_FREQ)) * width;
+
+        // Map magnitude to y (inverted, 0dB at center)
+        const y = height / 2 - (mag / displayRange) * (height / 2);
+
+        if (i === 0) {
+          ctx.moveTo(x, y);
+        } else {
+          ctx.lineTo(x, y);
+        }
+      }
+
+      ctx.stroke();
+    }
   }
 
   // ===== CLEANUP =====
