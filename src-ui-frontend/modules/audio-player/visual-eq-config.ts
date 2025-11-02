@@ -2,7 +2,7 @@
 // Extracted from audio-player.ts to handle all EQ table and graph functionality
 
 import { invoke } from "@tauri-apps/api/core";
-import { StreamingManager } from "../audio-manager-streaming";
+import { StreamingManager } from "./audio-manager";
 
 export interface FilterParam {
   frequency: number;
@@ -54,7 +54,7 @@ export class VisualEQConfig {
   // EQ Graph properties (modal)
   private eqGraphCanvas: HTMLCanvasElement | null = null;
   private eqGraphCtx: CanvasRenderingContext2D | null = null;
-  
+
   // Mini EQ Graph (in main UI)
   private eqMiniCanvas: HTMLCanvasElement | null = null;
   private eqMiniCtx: CanvasRenderingContext2D | null = null;
@@ -97,16 +97,16 @@ export class VisualEQConfig {
     this.instanceId = instanceId;
     this.streamingManager = streamingManager;
     this.callbacks = callbacks;
-    
+
     // Initialize mini canvas
     this.eqMiniCanvas = eqMiniCanvas;
     if (this.eqMiniCanvas) {
       this.eqMiniCtx = this.eqMiniCanvas.getContext('2d');
     }
-    
+
     this.createEQModal();
     this.setupEventListeners();
-    
+
     // Compute initial EQ response to populate graphs
     // Use setTimeout to ensure canvas is fully laid out
     setTimeout(() => {
@@ -226,7 +226,7 @@ export class VisualEQConfig {
 
     if (this.eqModal && this.eqBackdrop && eqConfigBtn) {
       this.renderEQTable();
-      
+
       // Position modal near the button
       const buttonRect = eqConfigBtn.getBoundingClientRect();
       const modalRect = this.eqModal.getBoundingClientRect();
@@ -312,7 +312,7 @@ export class VisualEQConfig {
     const autoGain = this.callbacks.getAutoGain?.() ?? true;
     const loudnessComp = this.callbacks.getLoudnessCompensation?.() ?? false;
     const splAmplitude = this.callbacks.getSplAmplitude?.() ?? -20;
-    
+
     this.playbackOptionsContainer.innerHTML = `
       <div class="playback-options-section">
         <div class="option-row">
@@ -334,7 +334,7 @@ export class VisualEQConfig {
             <span>SPL Amplitude: <span class="spl-value">${splAmplitude}</span> dB</span>
             <div style="display: flex; align-items: center; gap: 8px; width: 100%;">
               <span style="font-size: 0.85em; color: var(--text-secondary);">-30</span>
-              <input type="range" class="spl-amplitude-slider" 
+              <input type="range" class="spl-amplitude-slider"
                      min="-30" max="0" step="1" value="${splAmplitude}"
                      style="flex: 1;">
               <span style="font-size: 0.85em; color: var(--text-secondary);">0</span>
@@ -344,18 +344,18 @@ export class VisualEQConfig {
         </div>
       </div>
     `;
-    
+
     // Setup event listeners for playback options
     const autoGainToggle = this.playbackOptionsContainer.querySelector('.auto-gain-toggle') as HTMLInputElement;
     const loudnessToggle = this.playbackOptionsContainer.querySelector('.loudness-compensation-toggle') as HTMLInputElement;
     const splSlider = this.playbackOptionsContainer.querySelector('.spl-amplitude-slider') as HTMLInputElement;
     const splValue = this.playbackOptionsContainer.querySelector('.spl-value') as HTMLSpanElement;
     const splRow = this.playbackOptionsContainer.querySelector('.spl-amplitude-row') as HTMLDivElement;
-    
+
     autoGainToggle?.addEventListener('change', () => {
       this.callbacks.onAutoGainChange?.(autoGainToggle.checked);
     });
-    
+
     loudnessToggle?.addEventListener('change', () => {
       this.callbacks.onLoudnessCompensationChange?.(loudnessToggle.checked);
       // Show/hide SPL slider
@@ -363,7 +363,7 @@ export class VisualEQConfig {
         splRow.style.display = loudnessToggle.checked ? 'flex' : 'none';
       }
     });
-    
+
     splSlider?.addEventListener('input', () => {
       const value = parseFloat(splSlider.value);
       if (splValue) {
@@ -434,7 +434,7 @@ export class VisualEQConfig {
           (filter, index) => `
           <td data-filter-index="${index}" class="${index === this.selectedFilterIndex ? "selected" : ""}">
             <select data-index="${index}" class="eq-filter-type">
-              ${Object.entries(FILTER_TYPES).map(([type, config]) => 
+              ${Object.entries(FILTER_TYPES).map(([type, config]) =>
                 `<option value="${type}" ${filter.filter_type === type ? "selected" : ""}>${config.label}</option>`
               ).join('')}
             </select>
@@ -543,7 +543,7 @@ export class VisualEQConfig {
     // Handle column selection
     table.addEventListener("click", (e) => {
       const target = e.target as HTMLElement;
-      
+
       // Handle remove filter button
       if (target.classList.contains('filter-remove-btn')) {
         e.stopPropagation();
@@ -551,14 +551,14 @@ export class VisualEQConfig {
         this.removeFilter(index);
         return;
       }
-      
+
       // Handle add filter button
       if (target.classList.contains('filter-add-btn')) {
         e.stopPropagation();
         this.addFilter();
         return;
       }
-      
+
       const cell = target.closest("td, th") as HTMLElement | null;
       if (cell && cell.dataset.filterIndex) {
         const index = parseInt(cell.dataset.filterIndex, 10);
@@ -630,13 +630,13 @@ export class VisualEQConfig {
       enabled: true,
       filter_type: "Peak"
     };
-    
+
     this.currentFilterParams.push(newFilter);
     this.selectedFilterIndex = this.currentFilterParams.length - 1;
     this.setupEQFilters();
     this.renderEQTable();
     this.requestEQResponseUpdate();
-    
+
     // Notify callback
     this.callbacks.onFilterParamsChange?.(this.currentFilterParams);
   }
@@ -646,18 +646,18 @@ export class VisualEQConfig {
       console.warn('[VisualEQConfig] Cannot remove last filter');
       return;
     }
-    
+
     this.currentFilterParams.splice(index, 1);
-    
+
     // Adjust selected index if needed
     if (this.selectedFilterIndex >= this.currentFilterParams.length) {
       this.selectedFilterIndex = this.currentFilterParams.length - 1;
     }
-    
+
     this.setupEQFilters();
     this.renderEQTable();
     this.requestEQResponseUpdate();
-    
+
     // Notify callback
     this.callbacks.onFilterParamsChange?.(this.currentFilterParams);
   }
@@ -794,14 +794,14 @@ export class VisualEQConfig {
     }));
 
     console.log("[EQ Graph] Computing response with filters:", filters);
-    
+
     try {
       const result = await invoke("compute_eq_response", {
         filters,
         sampleRate: 48000,
         frequencies,
       });
-      
+
       console.log("[EQ Graph] Response data received:", result);
       this.eqResponseData = result;
       this.drawEQGraph();
@@ -919,16 +919,16 @@ export class VisualEQConfig {
     const padding = 1;
     const minRange = 6; // Minimum 6 dB range
     const range = maxGain - minGain;
-    
+
     if (range < minRange) {
       const center = (minGain + maxGain) / 2;
       minGain = center - minRange / 2;
       maxGain = center + minRange / 2;
     }
-    
+
     this.eqGraphMinGain = minGain - padding;
     this.eqGraphMaxGain = maxGain + padding;
-    
+
     console.log(
       "[EQ Graph] Dynamic Y-axis range:",
       this.eqGraphMinGain.toFixed(1),
@@ -967,15 +967,15 @@ export class VisualEQConfig {
     if (idealStep > niceSteps[niceSteps.length - 1]) {
       gainStep = Math.ceil(idealStep / 10) * 10;
     }
-    
-    for (let gain = Math.ceil(this.eqGraphMinGain / gainStep) * gainStep; 
-         gain <= this.eqGraphMaxGain; 
+
+    for (let gain = Math.ceil(this.eqGraphMinGain / gainStep) * gainStep;
+         gain <= this.eqGraphMaxGain;
          gain += gainStep) {
       const y = this.gainToY(gain, height);
       ctx.beginPath();
       ctx.moveTo(60, y);
       ctx.lineTo(width - 20, y);
-      
+
       if (Math.abs(gain) < 0.01) {
         ctx.lineWidth = 2;
         ctx.strokeStyle = "rgba(255, 255, 255, 0.3)";
@@ -1009,7 +1009,7 @@ export class VisualEQConfig {
 
     const gainRange = this.eqGraphMaxGain - this.eqGraphMinGain;
     const maxLabels = 7;
-    
+
     // Calculate appropriate step size to get max 7 labels
     const idealStep = gainRange / (maxLabels - 1);
     // Round to nice numbers: 1, 2, 3, 5, 6, 10, 12, 15, etc.
@@ -1024,15 +1024,15 @@ export class VisualEQConfig {
     if (idealStep > niceSteps[niceSteps.length - 1]) {
       gainStep = Math.ceil(idealStep / 10) * 10;
     }
-    
+
     // Generate labels
     const labels: number[] = [];
-    for (let gain = Math.ceil(this.eqGraphMinGain / gainStep) * gainStep; 
-         gain <= this.eqGraphMaxGain && labels.length < maxLabels; 
+    for (let gain = Math.ceil(this.eqGraphMinGain / gainStep) * gainStep;
+         gain <= this.eqGraphMaxGain && labels.length < maxLabels;
          gain += gainStep) {
       labels.push(gain);
     }
-    
+
     // Draw labels on the left
     labels.forEach(gain => {
       const y = this.gainToY(gain, height);
@@ -1054,7 +1054,7 @@ export class VisualEQConfig {
     frequencies.forEach((freq: number, i: number) => {
       const x = this.freqToX(freq, width);
       const y = this.gainToY(combined_response[i], height);
-      
+
       if (i === 0) {
         ctx.moveTo(x, y);
       } else {
@@ -1080,12 +1080,12 @@ export class VisualEQConfig {
 
     this.currentFilterParams.forEach((filter, filterIdx) => {
       if (!filter.enabled || Math.abs(filter.gain) < 0.1) return;
-      
+
       const response = individual_responses[filterIdx];
       if (!response || !Array.isArray(response)) return;
 
       const isSelected = filterIdx === this.selectedFilterIndex;
-      
+
       // Highlight selected filter with brighter, thicker line
       if (isSelected) {
         ctx.strokeStyle = "#00ff00"; // Bright green for selected
@@ -1094,13 +1094,13 @@ export class VisualEQConfig {
         ctx.strokeStyle = colors[filterIdx % colors.length];
         ctx.lineWidth = 1.5;
       }
-      
+
       ctx.beginPath();
 
       frequencies.forEach((freq: number, i: number) => {
         const x = this.freqToX(freq, width);
         const y = this.gainToY(response[i], height);
-        
+
         if (i === 0) {
           ctx.moveTo(x, y);
         } else {
@@ -1120,17 +1120,17 @@ export class VisualEQConfig {
   ): void {
     this.currentFilterParams.forEach((filter, idx) => {
       if (!filter.enabled) return;
-      
+
       const x = this.freqToX(filter.frequency, width);
       const y = this.gainToY(filter.gain, height);
       const isSelected = idx === this.selectedFilterIndex;
 
       // Draw Q bar (horizontal line showing Q bandwidth)
-      ctx.strokeStyle = isSelected 
-        ? "rgba(255, 200, 100, 0.8)" 
+      ctx.strokeStyle = isSelected
+        ? "rgba(255, 200, 100, 0.8)"
         : "rgba(255, 255, 255, 0.4)";
       ctx.lineWidth = isSelected ? 3 : 2;
-      
+
       const barWidth = 40 / filter.q;
       ctx.beginPath();
       ctx.moveTo(x - barWidth / 2, y);
@@ -1138,8 +1138,8 @@ export class VisualEQConfig {
       ctx.stroke();
 
       // Draw handle point
-      ctx.fillStyle = isSelected 
-        ? "rgba(255, 200, 100, 1)" 
+      ctx.fillStyle = isSelected
+        ? "rgba(255, 200, 100, 1)"
         : "rgba(255, 255, 255, 0.8)";
       ctx.beginPath();
       ctx.arc(x, y, isSelected ? 6 : 4, 0, Math.PI * 2);
@@ -1192,18 +1192,18 @@ export class VisualEQConfig {
 
   private setupGraphInteractions(): void {
     if (!this.eqGraphCanvas) return;
-    
+
     this.eqGraphCanvas.addEventListener('mousedown', (e) => this.handleGraphMouseDown(e));
     document.addEventListener('mousemove', (e) => this.handleGraphMouseMove(e));
     document.addEventListener('mouseup', () => this.handleGraphMouseUp());
-    
+
     // Set cursor style
     this.eqGraphCanvas.style.cursor = 'crosshair';
   }
 
   handleGraphMouseDown(e: MouseEvent): void {
     if (!this.eqGraphCanvas) return;
-    
+
     const rect = this.eqGraphCanvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
@@ -1261,7 +1261,7 @@ export class VisualEQConfig {
 
     // Recompute Y-axis range when gain changes
     this.computeDynamicYAxisRange();
-    
+
     this.requestEQResponseUpdate();
     this.drawEQGraph();
     this.updateTableInputs();
@@ -1280,7 +1280,7 @@ export class VisualEQConfig {
 
   private updateTableSelection(): void {
     if (!this.eqTableContainer) return;
-    
+
     const table = this.eqTableContainer.querySelector("table");
     if (!table) return;
 
@@ -1349,13 +1349,13 @@ export class VisualEQConfig {
     if (this.eqResponseData && this.eqResponseData.frequencies && this.eqResponseData.combined_response) {
       const frequencies = this.eqResponseData.frequencies;
       const magnitudes = this.eqResponseData.combined_response; // Use combined_response, not magnitude_db
-      
+
       // Determine gain range from response data
       let minGain = Math.min(...magnitudes);
       let maxGain = Math.max(...magnitudes);
       const gainRange = Math.max(Math.abs(minGain), Math.abs(maxGain));
       const displayRange = Math.max(6, gainRange); // At least ±6dB range
-      
+
       ctx.strokeStyle = isDark ? '#4a9eff' : '#2563eb';
       ctx.lineWidth = 2;
       ctx.beginPath();
@@ -1365,7 +1365,7 @@ export class VisualEQConfig {
         const mag = magnitudes[i];
 
         // Map frequency to x (logarithmic)
-        const x = (Math.log10(freq / this.EQ_GRAPH_MIN_FREQ) / 
+        const x = (Math.log10(freq / this.EQ_GRAPH_MIN_FREQ) /
                    Math.log10(this.EQ_GRAPH_MAX_FREQ / this.EQ_GRAPH_MIN_FREQ)) * width;
 
         // Map magnitude to y (inverted, 0dB at center)

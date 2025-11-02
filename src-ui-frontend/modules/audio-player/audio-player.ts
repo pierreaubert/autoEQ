@@ -7,7 +7,7 @@ import { resolveResource } from "@tauri-apps/api/path";
 import {
   StreamingManager,
   type AudioFileInfo,
-} from "../audio-manager-streaming";
+} from "./audio-manager";
 import { SpectrumAnalyzerComponent } from "./spectrum-analyzer";
 import {
   VisualEQConfig,
@@ -16,7 +16,7 @@ import {
   FILTER_TYPES
 } from "./visual-eq-config";
 
-interface ReplayGainInfo {
+export interface ReplayGainInfo {
   gain: number; // dB
   peak: number; // 0.0 to 1.0+
 }
@@ -88,6 +88,7 @@ export class AudioPlayer {
   private loudnessPollingActive: boolean = false;
   private replayGainDisplay: HTMLElement | null = null;
   private peakDisplay: HTMLElement | null = null;
+  private currentReplayGain: ReplayGainInfo | null = null;
 
   // 30-bin spectrum analyzer constants
   private readonly SPECTRUM_BINS = 30;
@@ -184,12 +185,12 @@ export class AudioPlayer {
     try {
       await this.setupAudioContext();
       this.createUI();
-      
+
       // Initialize Visual EQ Configuration after UI is created
       if (this.config.enableEQ) {
         // Get mini canvas after UI is created
         const eqMiniCanvas = this.container.querySelector('.eq-mini-canvas') as HTMLCanvasElement | null;
-        
+
         this.visualEQConfig = new VisualEQConfig(
           this.container,
           this.instanceId,
@@ -207,15 +208,12 @@ export class AudioPlayer {
             },
             onAutoGainChange: (enabled) => {
               this.autoGain = enabled;
-              console.log('[AudioPlayer] Auto gain changed to:', enabled);
             },
             onLoudnessCompensationChange: (enabled) => {
               this.loudnessCompensation = enabled;
-              console.log('[AudioPlayer] Loudness compensation changed to:', enabled);
             },
             onSplAmplitudeChange: (amplitude) => {
               this.splAmplitude = amplitude;
-              console.log('[AudioPlayer] SPL amplitude changed to:', amplitude, 'dB');
             },
             getAutoGain: () => this.autoGain,
             getLoudnessCompensation: () => this.loudnessCompensation,
@@ -225,7 +223,6 @@ export class AudioPlayer {
         );
       }
       this.setupEventListeners();
-      console.log("AudioPlayer initialized successfully");
     } catch (error) {
       console.error("Failed to initialize AudioPlayer:", error);
       this.callbacks.onError?.("Failed to initialize audio player: " + error);
@@ -432,7 +429,7 @@ export class AudioPlayer {
         // Detect system color scheme
         const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
         const colorScheme = prefersDark ? "dark" : "light";
-        
+
         this.spectrumAnalyzer = new SpectrumAnalyzerComponent({
           canvas: this.spectrumCanvas,
           pollInterval: 100,
@@ -565,6 +562,9 @@ export class AudioPlayer {
       this.currentAudioPath = filePath;
       await this.streamingManager.loadAudioFilePath(filePath);
       this.setStatus("Loading...");
+
+      // Analyze ReplayGain in the background
+      this.analyzeReplayGain(filePath);
     } catch (error) {
       console.error("Failed to load audio file:", error);
       this.callbacks.onError?.(`Failed to load audio file: ${error}`);
@@ -577,6 +577,17 @@ export class AudioPlayer {
     this.setListenButtonEnabled(false);
     this.showAudioStatus(false);
     this.setStatus("No audio selected");
+
+    // Clear ReplayGain data
+    this.currentReplayGain = null;
+
+    // Reset displays
+    if (this.replayGainDisplay) {
+      this.replayGainDisplay.textContent = '--';
+    }
+    if (this.peakDisplay) {
+      this.peakDisplay.textContent = '--';
+    }
 
     // Hide ReplayGain display
     if (this.replayGainContainer) {
@@ -824,20 +835,23 @@ export class AudioPlayer {
   // ===== LOUDNESS MONITORING =====
 
   private updateLoudnessDisplay(loudnessInfo: {momentary_lufs: number; shortterm_lufs: number; peak: number} | null): void {
+    console.log('[AudioPlayer] updateLoudnessDisplay called with:', loudnessInfo);
+    console.log('[AudioPlayer] Elements cached:', {
+      momentary: !!this.loudnessDisplayMomentary,
+      shortterm: !!this.loudnessDisplayShortterm,
+      peak: !!this.peakDisplay,
+      replayGain: !!this.replayGainDisplay
+    });
+
     if (!loudnessInfo) {
-      // Reset to -∞ when no data
+      // Reset LUFS displays to -∞ when no data
       if (this.loudnessDisplayMomentary) {
         this.loudnessDisplayMomentary.textContent = '-∞';
       }
       if (this.loudnessDisplayShortterm) {
         this.loudnessDisplayShortterm.textContent = '-∞';
       }
-      if (this.peakDisplay) {
-        this.peakDisplay.textContent = '--';
-      }
-      if (this.replayGainDisplay) {
-        this.replayGainDisplay.textContent = '--';
-      }
+      // Note: Don't reset ReplayGain and Peak - they're set by analyzeReplayGain() and should persist
       return;
     }
 
@@ -845,27 +859,52 @@ export class AudioPlayer {
     if (this.loudnessDisplayMomentary) {
       const mValue = loudnessInfo.momentary_lufs;
       const text = (mValue !== null && isFinite(mValue)) ? mValue.toFixed(1) : '-∞';
+      console.log('[AudioPlayer] Setting momentary LUFS to:', text);
       this.loudnessDisplayMomentary.textContent = text;
+    } else {
+      console.warn('[AudioPlayer] loudnessDisplayMomentary element not found');
     }
 
     // Update short-term LUFS (S)
     if (this.loudnessDisplayShortterm) {
       const sValue = loudnessInfo.shortterm_lufs;
       const text = (sValue !== null && isFinite(sValue)) ? sValue.toFixed(1) : '-∞';
+      console.log('[AudioPlayer] Setting shortterm LUFS to:', text);
       this.loudnessDisplayShortterm.textContent = text;
+    } else {
+      console.warn('[AudioPlayer] loudnessDisplayShortterm element not found');
     }
 
-    // Update peak value
-    if (this.peakDisplay) {
-      const peakValue = loudnessInfo.peak;
-      const text = (peakValue !== null && peakValue !== undefined && isFinite(peakValue)) 
-        ? peakValue.toFixed(2) 
-        : '--';
-      this.peakDisplay.textContent = text;
-    }
+    // Note: Peak display is handled by ReplayGain analysis and should not be overwritten
+    // The loudnessInfo.peak is the real-time peak, but we want to show the ReplayGain peak
 
-    // TODO: Update ReplayGain when backend provides it
-    // For now, keep it as '--'
+    // Display stored ReplayGain if available (keep it displayed during playback)
+    if (this.currentReplayGain && this.replayGainDisplay) {
+      this.replayGainDisplay.textContent = `${this.currentReplayGain.gain >= 0 ? '+' : ''}${this.currentReplayGain.gain.toFixed(2)} dB`;
+    }
+  }
+
+  private async analyzeReplayGain(filePath: string): Promise<void> {
+    try {
+      console.log('[AudioPlayer] Analyzing ReplayGain for:', filePath);
+      const result = await invoke<ReplayGainInfo>('analyze_replaygain', { filePath });
+
+      this.currentReplayGain = result;
+      console.log('[AudioPlayer] ReplayGain analysis complete:', result);
+
+      // Update ReplayGain display
+      if (this.replayGainDisplay) {
+        this.replayGainDisplay.textContent = `${result.gain >= 0 ? '+' : ''}${result.gain.toFixed(2)} dB`;
+      }
+
+      // Update Peak display
+      if (this.peakDisplay) {
+        this.peakDisplay.textContent = result.peak.toFixed(2);
+      }
+    } catch (error) {
+      console.error('[AudioPlayer] Failed to analyze ReplayGain:', error);
+      // Don't show error to user, just log it
+    }
   }
 
   // ===== PUBLIC API METHODS =====

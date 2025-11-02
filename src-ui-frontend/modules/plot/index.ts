@@ -1,4 +1,4 @@
-// Main PlotManager export - combines all plot modules
+// Main PlotComposer export - combines all plot modules
 
 import { PlotBase } from "./base";
 import { FilterPlot } from "./filter-plot";
@@ -8,7 +8,7 @@ import { TonalPlot } from "./tonal-plot";
 import { ProgressPlot } from "./progress-plot";
 import Plotly from "plotly.js-basic-dist-min";
 
-export class PlotManager extends PlotBase {
+export class PlotComposer extends PlotBase {
   private filterPlot: FilterPlot;
   private spinPlot: SpinPlot;
   private detailsPlot: DetailsPlot;
