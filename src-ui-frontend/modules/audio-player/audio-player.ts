@@ -824,12 +824,6 @@ export class AudioPlayer {
   // ===== LOUDNESS MONITORING =====
 
   private updateLoudnessDisplay(loudnessInfo: {momentary_lufs: number; shortterm_lufs: number; peak: number} | null): void {
-    console.log('[AudioPlayer] Updating loudness display:', loudnessInfo);
-    console.log('[AudioPlayer] Display elements:', {
-      momentary: this.loudnessDisplayMomentary,
-      shortterm: this.loudnessDisplayShortterm
-    });
-    
     if (!loudnessInfo) {
       // Reset to -∞ when no data
       if (this.loudnessDisplayMomentary) {
@@ -851,7 +845,6 @@ export class AudioPlayer {
     if (this.loudnessDisplayMomentary) {
       const mValue = loudnessInfo.momentary_lufs;
       const text = (mValue !== null && isFinite(mValue)) ? mValue.toFixed(1) : '-∞';
-      console.log('[AudioPlayer] Setting momentary to:', text);
       this.loudnessDisplayMomentary.textContent = text;
     }
 
@@ -859,7 +852,6 @@ export class AudioPlayer {
     if (this.loudnessDisplayShortterm) {
       const sValue = loudnessInfo.shortterm_lufs;
       const text = (sValue !== null && isFinite(sValue)) ? sValue.toFixed(1) : '-∞';
-      console.log('[AudioPlayer] Setting shortterm to:', text);
       this.loudnessDisplayShortterm.textContent = text;
     }
 
@@ -869,7 +861,6 @@ export class AudioPlayer {
       const text = (peakValue !== null && peakValue !== undefined && isFinite(peakValue)) 
         ? peakValue.toFixed(2) 
         : '--';
-      console.log('[AudioPlayer] Setting peak to:', text);
       this.peakDisplay.textContent = text;
     }
 

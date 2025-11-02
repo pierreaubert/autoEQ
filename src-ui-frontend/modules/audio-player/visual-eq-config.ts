@@ -108,7 +108,10 @@ export class VisualEQConfig {
     this.setupEventListeners();
     
     // Compute initial EQ response to populate graphs
-    this.computeEQResponse();
+    // Use setTimeout to ensure canvas is fully laid out
+    setTimeout(() => {
+      this.computeEQResponse();
+    }, 0);
   }
 
   // ===== MODAL CREATION AND MANAGEMENT =====
@@ -181,6 +184,7 @@ export class VisualEQConfig {
       this.eqGraphCanvas = this.eqModal.querySelector(".eq-graph-canvas");
       if (this.eqGraphCanvas) {
         this.eqGraphCtx = this.eqGraphCanvas.getContext("2d");
+        this.setupGraphInteractions();
         this.resizeEQGraphCanvas();
       }
     }
@@ -189,10 +193,16 @@ export class VisualEQConfig {
     this.eqModalCloseBtn?.addEventListener("click", () => this.closeEQModal());
     this.eqBackdrop?.addEventListener("click", () => this.closeEQModal());
 
+    // Prevent clicks inside modal from propagating
+    this.eqModal?.addEventListener("click", (event: MouseEvent) => {
+      event.stopPropagation();
+    });
+
     // Close modal when clicking outside
     document.addEventListener("click", (event: MouseEvent) => {
       if (
         this.eqModal &&
+        this.eqModal.classList.contains("visible") &&
         !this.eqModal.contains(event.target as Node) &&
         !this.eqConfigBtn?.contains(event.target as Node)
       ) {
@@ -396,12 +406,17 @@ export class VisualEQConfig {
           .map(
             (_, index) => `
             <th data-filter-index="${index}" class="eq-column-header ${index === this.selectedFilterIndex ? "selected" : ""}">
-              Filter ${index + 1}
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 4px;">
+                <span>Filter ${index + 1}</span>
+                <button class="filter-remove-btn" data-index="${index}" title="Remove filter" style="background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 16px; padding: 0 4px; line-height: 1;">&times;</button>
+              </div>
             </th>
           `
           )
           .join("")}
-        <th class="eq-row-label"></th>
+        <th class="eq-row-label">
+          <button class="filter-add-btn" title="Add filter" style="background: var(--button-primary); border: none; color: white; cursor: pointer; font-size: 18px; padding: 4px 8px; border-radius: 4px; line-height: 1;">+</button>
+        </th>
       </tr>
     `;
     table.appendChild(thead);
@@ -458,7 +473,7 @@ export class VisualEQConfig {
         .map(
           (filter, index) => `
           <td data-filter-index="${index}" class="${index === this.selectedFilterIndex ? "selected" : ""}">
-            <input type="number" data-index="${index}" class="eq-frequency" value="${filter.frequency.toFixed(1)}" step="1">
+            <input type="number" data-index="${index}" class="eq-frequency" value="${filter.frequency.toFixed(1)}" step="1" min="20" max="20000">
           </td>
         `
         )
@@ -494,7 +509,7 @@ export class VisualEQConfig {
         .map(
           (filter, index) => `
           <td data-filter-index="${index}" class="${index === this.selectedFilterIndex ? "selected" : ""}">
-            <input type="number" data-index="${index}" class="eq-q" value="${filter.q.toFixed(2)}" step="0.1">
+            <input type="number" data-index="${index}" class="eq-q" value="${filter.q.toFixed(2)}" step="0.1" min="0.1" max="3.0">
           </td>
         `
         )
@@ -528,6 +543,22 @@ export class VisualEQConfig {
     // Handle column selection
     table.addEventListener("click", (e) => {
       const target = e.target as HTMLElement;
+      
+      // Handle remove filter button
+      if (target.classList.contains('filter-remove-btn')) {
+        e.stopPropagation();
+        const index = parseInt(target.dataset.index!, 10);
+        this.removeFilter(index);
+        return;
+      }
+      
+      // Handle add filter button
+      if (target.classList.contains('filter-add-btn')) {
+        e.stopPropagation();
+        this.addFilter();
+        return;
+      }
+      
       const cell = target.closest("td, th") as HTMLElement | null;
       if (cell && cell.dataset.filterIndex) {
         const index = parseInt(cell.dataset.filterIndex, 10);
@@ -559,6 +590,12 @@ export class VisualEQConfig {
     // Convert numeric values
     if (type === "frequency" || type === "gain" || type === "q") {
       value = parseFloat(value);
+      // Enforce bounds
+      if (type === "frequency") {
+        value = Math.max(20, Math.min(20000, value));
+      } else if (type === "q") {
+        value = Math.max(0.1, Math.min(3.0, value));
+      }
     } else if (type === "enabled") {
       value = (target as HTMLInputElement).checked;
     }
@@ -584,6 +621,47 @@ export class VisualEQConfig {
 
   // ===== FILTER PARAMETER MANAGEMENT =====
 
+  private addFilter(): void {
+    // Add a new filter with default values
+    const newFilter: ExtendedFilterParam = {
+      frequency: 1000,
+      q: 1.0,
+      gain: 0,
+      enabled: true,
+      filter_type: "Peak"
+    };
+    
+    this.currentFilterParams.push(newFilter);
+    this.selectedFilterIndex = this.currentFilterParams.length - 1;
+    this.setupEQFilters();
+    this.renderEQTable();
+    this.requestEQResponseUpdate();
+    
+    // Notify callback
+    this.callbacks.onFilterParamsChange?.(this.currentFilterParams);
+  }
+
+  private removeFilter(index: number): void {
+    if (this.currentFilterParams.length <= 1) {
+      console.warn('[VisualEQConfig] Cannot remove last filter');
+      return;
+    }
+    
+    this.currentFilterParams.splice(index, 1);
+    
+    // Adjust selected index if needed
+    if (this.selectedFilterIndex >= this.currentFilterParams.length) {
+      this.selectedFilterIndex = this.currentFilterParams.length - 1;
+    }
+    
+    this.setupEQFilters();
+    this.renderEQTable();
+    this.requestEQResponseUpdate();
+    
+    // Notify callback
+    this.callbacks.onFilterParamsChange?.(this.currentFilterParams);
+  }
+
   updateFilterParams(filterParams: Partial<ExtendedFilterParam>[]): void {
     this.currentFilterParams = filterParams.map((p) => ({
       enabled: p.enabled ?? true,
@@ -595,6 +673,9 @@ export class VisualEQConfig {
 
     // Recalculate and apply filters
     this.setupEQFilters();
+
+    // Update graphs (including mini EQ)
+    this.requestEQResponseUpdate();
 
     // Notify callback
     this.callbacks.onFilterParamsChange?.(this.currentFilterParams);
@@ -784,51 +865,77 @@ export class VisualEQConfig {
   }
 
   private computeDynamicYAxisRange(): void {
-    if (!this.eqResponseData) return;
-
     let minGain = Infinity;
     let maxGain = -Infinity;
 
-    if (this.eqResponseData.combined_response && Array.isArray(this.eqResponseData.combined_response)) {
-      this.eqResponseData.combined_response.forEach((gain: number) => {
-        minGain = Math.min(minGain, gain);
-        maxGain = Math.max(maxGain, gain);
-      });
-    }
+    // Include filter gain values in range calculation
+    this.currentFilterParams.forEach(filter => {
+      if (filter.enabled) {
+        minGain = Math.min(minGain, filter.gain);
+        maxGain = Math.max(maxGain, filter.gain);
+      }
+    });
 
-    if (this.eqResponseData.individual_responses) {
-      const responses = this.eqResponseData.individual_responses;
-      if (Array.isArray(responses)) {
-        responses.forEach((response: number[]) => {
-          if (Array.isArray(response)) {
-            response.forEach((gain: number) => {
-              minGain = Math.min(minGain, gain);
-              maxGain = Math.max(maxGain, gain);
-            });
-          }
+    // Include response data if available
+    if (this.eqResponseData) {
+      if (this.eqResponseData.combined_response && Array.isArray(this.eqResponseData.combined_response)) {
+        this.eqResponseData.combined_response.forEach((gain: number) => {
+          minGain = Math.min(minGain, gain);
+          maxGain = Math.max(maxGain, gain);
         });
-      } else if (typeof responses === 'object') {
-        Object.values(responses).forEach((response: any) => {
-          if (Array.isArray(response)) {
-            response.forEach((gain: number) => {
-              minGain = Math.min(minGain, gain);
-              maxGain = Math.max(maxGain, gain);
-            });
-          }
-        });
+      }
+
+      if (this.eqResponseData.individual_responses) {
+        const responses = this.eqResponseData.individual_responses;
+        if (Array.isArray(responses)) {
+          responses.forEach((response: number[]) => {
+            if (Array.isArray(response)) {
+              response.forEach((gain: number) => {
+                minGain = Math.min(minGain, gain);
+                maxGain = Math.max(maxGain, gain);
+              });
+            }
+          });
+        } else if (typeof responses === 'object') {
+          Object.values(responses).forEach((response: any) => {
+            if (Array.isArray(response)) {
+              response.forEach((gain: number) => {
+                minGain = Math.min(minGain, gain);
+                maxGain = Math.max(maxGain, gain);
+              });
+            }
+          });
+        }
       }
     }
 
-    if (minGain !== Infinity && maxGain !== -Infinity) {
-      this.eqGraphMinGain = minGain - 1;
-      this.eqGraphMaxGain = maxGain + 1;
-      console.log(
-        "[EQ Graph] Dynamic Y-axis range:",
-        this.eqGraphMinGain,
-        "to",
-        this.eqGraphMaxGain
-      );
+    // Default range if no data
+    if (minGain === Infinity || maxGain === -Infinity) {
+      minGain = -18;
+      maxGain = 3;
     }
+
+    // Add padding and ensure minimum range
+    const padding = 1;
+    const minRange = 6; // Minimum 6 dB range
+    const range = maxGain - minGain;
+    
+    if (range < minRange) {
+      const center = (minGain + maxGain) / 2;
+      minGain = center - minRange / 2;
+      maxGain = center + minRange / 2;
+    }
+    
+    this.eqGraphMinGain = minGain - padding;
+    this.eqGraphMaxGain = maxGain + padding;
+    
+    console.log(
+      "[EQ Graph] Dynamic Y-axis range:",
+      this.eqGraphMinGain.toFixed(1),
+      "to",
+      this.eqGraphMaxGain.toFixed(1),
+      "dB"
+    );
   }
 
   private drawGrid(ctx: CanvasRenderingContext2D, width: number, height: number): void {
@@ -845,17 +952,29 @@ export class VisualEQConfig {
       ctx.stroke();
     });
 
-    // Horizontal gain lines
+    // Horizontal gain lines (match label logic)
     const gainRange = this.eqGraphMaxGain - this.eqGraphMinGain;
-    const gainStep = Math.pow(10, Math.floor(Math.log10(gainRange / 5)));
+    const maxLabels = 7;
+    const idealStep = gainRange / (maxLabels - 1);
+    const niceSteps = [1, 2, 3, 5, 6, 10, 12, 15, 20, 30, 50, 60];
+    let gainStep = niceSteps[0];
+    for (const step of niceSteps) {
+      if (step >= idealStep) {
+        gainStep = step;
+        break;
+      }
+    }
+    if (idealStep > niceSteps[niceSteps.length - 1]) {
+      gainStep = Math.ceil(idealStep / 10) * 10;
+    }
     
     for (let gain = Math.ceil(this.eqGraphMinGain / gainStep) * gainStep; 
          gain <= this.eqGraphMaxGain; 
          gain += gainStep) {
       const y = this.gainToY(gain, height);
       ctx.beginPath();
-      ctx.moveTo(40, y);
-      ctx.lineTo(width, y);
+      ctx.moveTo(60, y);
+      ctx.lineTo(width - 20, y);
       
       if (Math.abs(gain) < 0.01) {
         ctx.lineWidth = 2;
@@ -889,15 +1008,37 @@ export class VisualEQConfig {
     ctx.textBaseline = "middle";
 
     const gainRange = this.eqGraphMaxGain - this.eqGraphMinGain;
-    const gainStep = Math.pow(10, Math.floor(Math.log10(gainRange / 5)));
+    const maxLabels = 7;
     
+    // Calculate appropriate step size to get max 7 labels
+    const idealStep = gainRange / (maxLabels - 1);
+    // Round to nice numbers: 1, 2, 3, 5, 6, 10, 12, 15, etc.
+    const niceSteps = [1, 2, 3, 5, 6, 10, 12, 15, 20, 30, 50, 60];
+    let gainStep = niceSteps[0];
+    for (const step of niceSteps) {
+      if (step >= idealStep) {
+        gainStep = step;
+        break;
+      }
+    }
+    if (idealStep > niceSteps[niceSteps.length - 1]) {
+      gainStep = Math.ceil(idealStep / 10) * 10;
+    }
+    
+    // Generate labels
+    const labels: number[] = [];
     for (let gain = Math.ceil(this.eqGraphMinGain / gainStep) * gainStep; 
-         gain <= this.eqGraphMaxGain; 
+         gain <= this.eqGraphMaxGain && labels.length < maxLabels; 
          gain += gainStep) {
+      labels.push(gain);
+    }
+    
+    // Draw labels on the left
+    labels.forEach(gain => {
       const y = this.gainToY(gain, height);
       const label = `${gain > 0 ? '+' : ''}${gain.toFixed(0)}dB`;
-      ctx.fillText(label, 35, y);
-    }
+      ctx.fillText(label, 55, y);
+    });
   }
 
   private drawCombinedResponse(ctx: CanvasRenderingContext2D, width: number, height: number): void {
@@ -943,8 +1084,17 @@ export class VisualEQConfig {
       const response = individual_responses[filterIdx];
       if (!response || !Array.isArray(response)) return;
 
-      ctx.strokeStyle = colors[filterIdx % colors.length];
-      ctx.lineWidth = 1.5;
+      const isSelected = filterIdx === this.selectedFilterIndex;
+      
+      // Highlight selected filter with brighter, thicker line
+      if (isSelected) {
+        ctx.strokeStyle = "#00ff00"; // Bright green for selected
+        ctx.lineWidth = 3.5;
+      } else {
+        ctx.strokeStyle = colors[filterIdx % colors.length];
+        ctx.lineWidth = 1.5;
+      }
+      
       ctx.beginPath();
 
       frequencies.forEach((freq: number, i: number) => {
@@ -1014,13 +1164,15 @@ export class VisualEQConfig {
     const logFreq = Math.log10(
       Math.max(this.EQ_GRAPH_MIN_FREQ, Math.min(this.EQ_GRAPH_MAX_FREQ, freq)),
     );
-    return ((logFreq - logMin) / (logMax - logMin)) * (width - 40) + 40;
+    const normalized = (logFreq - logMin) / (logMax - logMin);
+    return 60 + normalized * (width - 80); // 60px left margin, 20px right margin
   }
 
   private xToFreq(x: number, width: number): number {
+    const normalized = (x - 60) / (width - 80); // Match new margins
     const logMin = Math.log10(this.EQ_GRAPH_MIN_FREQ);
     const logMax = Math.log10(this.EQ_GRAPH_MAX_FREQ);
-    const logFreq = logMin + ((x - 40) / (width - 40)) * (logMax - logMin);
+    const logFreq = logMin + normalized * (logMax - logMin);
     return Math.pow(10, logFreq);
   }
 
@@ -1038,6 +1190,17 @@ export class VisualEQConfig {
 
   // ===== GRAPH INTERACTIONS =====
 
+  private setupGraphInteractions(): void {
+    if (!this.eqGraphCanvas) return;
+    
+    this.eqGraphCanvas.addEventListener('mousedown', (e) => this.handleGraphMouseDown(e));
+    document.addEventListener('mousemove', (e) => this.handleGraphMouseMove(e));
+    document.addEventListener('mouseup', () => this.handleGraphMouseUp());
+    
+    // Set cursor style
+    this.eqGraphCanvas.style.cursor = 'crosshair';
+  }
+
   handleGraphMouseDown(e: MouseEvent): void {
     if (!this.eqGraphCanvas) return;
     
@@ -1046,48 +1209,27 @@ export class VisualEQConfig {
     const y = e.clientY - rect.top;
 
     const width = this.eqGraphCanvas.width;
-    const height = this.eqGraphCanvas.height;
     const clickedFreq = this.xToFreq(x, width);
 
+    // Find closest filter by frequency
     let closestIdx = -1;
     let minFreqDist = Infinity;
 
-    // First, check if clicking on Q bar of selected filter
-    if (this.selectedFilterIndex >= 0) {
-      const filter = this.currentFilterParams[this.selectedFilterIndex];
-      if (filter && filter.enabled) {
-        const filterX = this.freqToX(filter.frequency, width);
-        const filterY = this.gainToY(filter.gain, height);
-        const barWidth = 40 / filter.q;
-        const dx = x - filterX;
-        const dy = y - filterY;
-
-        if (Math.abs(dx) <= barWidth / 2 && Math.abs(dy) <= 5) {
-          closestIdx = this.selectedFilterIndex;
-          this.dragMode = 'bar';
-        }
+    this.currentFilterParams.forEach((filter, idx) => {
+      if (!filter.enabled) return;
+      const freqDist = Math.abs(Math.log10(filter.frequency) - Math.log10(clickedFreq));
+      if (freqDist < minFreqDist) {
+        minFreqDist = freqDist;
+        closestIdx = idx;
       }
-    }
-
-    // If not on Q bar, find closest filter by frequency
-    if (closestIdx === -1) {
-      this.currentFilterParams.forEach((filter, idx) => {
-        if (!filter.enabled) return;
-        const freqDist = Math.abs(filter.frequency - clickedFreq);
-        if (freqDist < minFreqDist) {
-          minFreqDist = freqDist;
-          closestIdx = idx;
-        }
-      });
-      this.dragMode = 'ring';
-    }
+    });
 
     if (closestIdx >= 0) {
       this.selectedFilterIndex = closestIdx;
       this.isDraggingHandle = true;
       this.lastMouseY = y;
       this.drawEQGraph();
-      this.updateTableSelection();
+      this.renderEQTable(); // Update table to show selection
     }
   }
 
@@ -1098,31 +1240,28 @@ export class VisualEQConfig {
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
-    const width = this.eqGraphCanvas.width;
     const height = this.eqGraphCanvas.height;
     const filter = this.currentFilterParams[this.selectedFilterIndex];
     if (!filter) return;
 
-    if (this.dragMode === 'ring') {
-      // Change frequency and gain
-      filter.frequency = Math.max(
-        this.EQ_GRAPH_MIN_FREQ,
-        Math.min(this.EQ_GRAPH_MAX_FREQ, this.xToFreq(x, width)),
-      );
-      filter.gain = Math.max(
-        this.eqGraphMinGain,
-        Math.min(this.eqGraphMaxGain, this.yToGain(y, height)),
-      );
-    } else if (this.dragMode === 'bar') {
-      // Change Q only
-      const qDelta = (y - this.lastMouseY) / 50;
-      filter.q = Math.max(
-        this.EQ_GRAPH_MIN_Q,
-        Math.min(this.EQ_GRAPH_MAX_Q, filter.q + qDelta),
-      );
-      this.lastMouseY = y;
-    }
+    // Up/down: change gain
+    filter.gain = Math.max(
+      this.eqGraphMinGain,
+      Math.min(this.eqGraphMaxGain, this.yToGain(y, height)),
+    );
 
+    // Left/right: change Q
+    // Calculate Q based on horizontal distance from initial click
+    const xDelta = x - this.freqToX(filter.frequency, this.eqGraphCanvas.width);
+    // Map horizontal distance to Q: center = current Q, moving away increases Q
+    const qSensitivity = 0.05; // Adjust this to control sensitivity
+    const qDelta = xDelta * qSensitivity;
+    const newQ = 1.0 + qDelta;
+    filter.q = Math.max(0.1, Math.min(3.0, newQ));
+
+    // Recompute Y-axis range when gain changes
+    this.computeDynamicYAxisRange();
+    
     this.requestEQResponseUpdate();
     this.drawEQGraph();
     this.updateTableInputs();
@@ -1207,9 +1346,9 @@ export class VisualEQConfig {
     ctx.stroke();
 
     // Draw EQ curve if we have response data
-    if (this.eqResponseData && this.eqResponseData.frequencies && this.eqResponseData.magnitude_db) {
+    if (this.eqResponseData && this.eqResponseData.frequencies && this.eqResponseData.combined_response) {
       const frequencies = this.eqResponseData.frequencies;
-      const magnitudes = this.eqResponseData.magnitude_db;
+      const magnitudes = this.eqResponseData.combined_response; // Use combined_response, not magnitude_db
       
       // Determine gain range from response data
       let minGain = Math.min(...magnitudes);
