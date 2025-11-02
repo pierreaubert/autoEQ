@@ -87,12 +87,14 @@ export class SpectrumAnalyzerComponent {
     if (this.isMonitoring) return;
 
     try {
+      console.log("[Spectrum] Starting spectrum monitoring...");
       await invoke("stream_enable_spectrum_monitoring");
       this.isMonitoring = true;
       this.startPolling();
       this.startRendering();
+      console.log("[Spectrum] Spectrum monitoring started successfully");
     } catch (error) {
-      console.error("Failed to start spectrum monitoring:", error);
+      console.error("[Spectrum] Failed to start spectrum monitoring:", error);
       throw error;
     }
   }
@@ -475,6 +477,15 @@ export class SpectrumAnalyzerComponent {
     const value = getComputedStyle(document.documentElement)
       .getPropertyValue(varName)
       .trim();
-    return value || (varName === "--bg-secondary" ? "#2d2d2d" : "#ffffff");
+    
+    // Better fallbacks based on color scheme
+    if (!value) {
+      if (varName === "--bg-secondary") {
+        return this.config.colorScheme === "dark" ? "#2d2d2d" : "#f8f9fa";
+      }
+      return this.config.colorScheme === "dark" ? "#ffffff" : "#000000";
+    }
+    
+    return value;
   }
 }

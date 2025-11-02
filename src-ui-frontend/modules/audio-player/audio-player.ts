@@ -9,8 +9,8 @@ import {
   type AudioFileInfo,
 } from "../audio-manager-streaming";
 import { SpectrumAnalyzerComponent } from "./spectrum-analyzer";
-import { 
-  VisualEQConfig, 
+import {
+  VisualEQConfig,
   type ExtendedFilterParam,
   type FilterParam,
   FILTER_TYPES
@@ -63,7 +63,7 @@ export class AudioPlayer {
   private audioPauseTime: number = 0;
   private audioAnimationFrame: number | null = null;
   private currentAudioPath: string | null = null; // Track current audio file path for Rust backend
-  
+
   // Visual EQ Configuration
   private visualEQConfig: VisualEQConfig | null = null;
   private outputDeviceId: string = "default"; // Selected output device ID
@@ -99,7 +99,10 @@ export class AudioPlayer {
   private playBtn: HTMLButtonElement | null = null;
   private pauseBtn: HTMLButtonElement | null = null;
   private stopBtn: HTMLButtonElement | null = null;
+  private eqOnBtn: HTMLButtonElement | null = null;
+  private eqOffBtn: HTMLButtonElement | null = null;
   private eqConfigBtn: HTMLButtonElement | null = null;
+  private eqMiniCanvas: HTMLCanvasElement | null = null;
   private statusText: HTMLElement | null = null;
   private positionText: HTMLElement | null = null;
   private durationText: HTMLElement | null = null;
@@ -268,115 +271,108 @@ export class AudioPlayer {
     const selectId = `demo-audio-select-${this.instanceId}`;
 
     const html = `
-      <div class="audio-player">
-        <div class="audio-control-row">
-          <!-- Block 1: Track Selection (compact) -->
-          <div class="audio-left-controls">
-            <div class="demo-track-container">
-              <div class="demo-track-select-row">
-                <select id="${selectId}" class="demo-audio-select">
-                <option value="">Pick a track...</option>
-                  ${Object.keys(this.config.demoTracks || {})
-                    .map(
-                      (key) =>
-                        `<option value="${key}">${this.formatTrackName(key)}</option>`,
-                    )
-                    .join("")}
-                </select>
-                <button type="button" class="file-upload-btn">📁 Load File</button>
-              </div>
-            </div>
+<div class="audio-player">
+  <div class="audio-control-row">
 
-            <!-- Block 2: Playback Controls (vertical) -->
-            <div class="audio-playback-controls">
-              <div class="playback-controls-row">
-                <button type="button" class="listen-button" disabled>▶️</button>
-                <button type="button" class="pause-button" disabled>⏸️</button>
-                <button type="button" class="stop-button" disabled>⏹️</button>
-              </div>
-            </div>
+    <!-- Block: Track Selection (compact) -->
+    <div class="demo-track-container">
+      <div class="demo-track-select-row">
+        <select id="${selectId}" class="demo-audio-select">
+          <option value="">Pick a track...</option>
+          ${Object.keys(this.config.demoTracks || {})
+          .map(
+          (key) =>
+          `<option value="${key}">${this.formatTrackName(key)}</option>`,
+          )
+          .join("")}
+        </select>
+        <button type="button" class="file-upload-btn">Load a file: 📁</button>
+      </div>
+    </div>
 
-            <!-- Block 3: Status Display -->
-            <div class="audio-status-display">
-              <div class="status-display-row">
-                <div class="audio-status-text">No audio selected</div>
-                <div class="audio-time-display">
-                  <span class="audio-position">--:--</span> / <span class="audio-duration">--:--</span>
-                </div>
-              </div>
-              ${
-                this.config.showProgress
-                  ? `
-              <div class="audio-progress-row">
-                <div class="audio-progress-bar">
-                  <div class="audio-progress-fill"></div>
-                </div>
-              </div>`
-                  : ""
-              }
-            </div>
-
-            <!-- Block 4: EQ Controls -->
-            <div class="audio-eq-controls">
-              ${
-                this.config.enableEQ
-                  ? `
-              <div class="eq-control-section">
-                <div class="eq-controls-row">
-                  <div class="eq-toggle-buttons" tabindex="0">
-                    <button type="button" class="eq-toggle-btn eq-config-btn">⚙️ EQ Config</button>
-                  </div>
-                </div>
-              </div>
-            `
-                  : ""
-              }
-            </div>
-
-            <!-- Block 5: Audio Metrics (vertical) -->
-            <div class="audio-metrics-block">
-              <div class="metrics-display">
-                <div class="metric-section">
-                  <div class="metric-label">LUFS M/S</div>
-                  <div class="metric-row">
-                    <span class="metric-label-small">M</span>
-                    <span id="metrics-lufs-m" class="metric-value loudness-momentary">-∞</span>
-                    <span class="metric-separator">/</span>
-                    <span class="metric-label-small">S</span>
-                    <span id="metrics-lufs-s" class="metric-value loudness-shortterm">-∞</span>
-                  </div>
-                </div>
-                <div class="metric-section">
-                  <div class="metric-label">ReplayGain</div>
-                  <div class="metric-row">
-                    <span id="metrics-replay-gain" class="metric-value">--</span>
-                    <span class="metric-separator">/</span>
-                    <span id="metrics-peak" class="metric-value">--</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Block 6: Frequency Analyzer -->
-            ${
-              this.config.enableSpectrum
-                ? `
-            <div class="frequency-analyzer">
-              <canvas class="spectrum-canvas" width="520" height="72"></canvas>
-            </div>`
-                : ""
-            }
+    <!-- Block: Playback Controls (vertical) -->
+    <div class="audio-playback-controls">
+      <div class="audio-status-display">
+        <div class="status-display-row">
+          <div class="audio-status-text">No audio selected</div>
+          <div class="audio-time-display">
+            <span class="audio-position">--:--</span> / <span class="audio-duration">--:--</span>
+          </div>
+        </div>
+        <div class="audio-progress-row">
+          <div class="audio-progress-bar">
+            <div class="audio-progress-fill"></div>
           </div>
         </div>
       </div>
+      <div class="playback-controls-row">
+        <button type="button" class="listen-button" disabled>▶️</button>
+        <button type="button" class="pause-button" disabled>⏸️</button>
+        <button type="button" class="stop-button" disabled>⏹️</button>
+      </div>
+    </div>
+
+    <!-- Block: Frequency Analyzer -->
+    <div class="frequency-analyzer">
+      <canvas class="spectrum-canvas" width="520" height="72"></canvas>
+    </div>
+
+    <!-- Block: EQ Controls -->
+    <div class="audio-eq-controls">
+      ${
+        this.config.enableEQ
+          ? `
+      <div class="eq-control-section">
+        <div class="eq-mini-graph">
+          <canvas class="eq-mini-canvas" width="160" height="50"></canvas>
+        </div>
+        <div class="eq-controls-row">
+          <div class="eq-info-text">
+            <span class="eq-filter-count">#0</span>
+            <span class="eq-gain-compensation">0dB</span>
+          </div>
+          <div class="eq-toggle-buttons" tabindex="0">
+            <button type="button" class="eq-toggle-btn eq-on-btn active">On</button>
+            <button type="button" class="eq-toggle-btn eq-off-btn">Off</button>
+            <button type="button" class="eq-toggle-btn eq-config-btn">⚙️</button>
+          </div>
+        </div>
+      </div>
+    `
+          : ""
+      }
+    </div>
+
+    <!-- Block: Audio Metrics (vertical) -->
+    <div class="audio-metrics-block">
+      <div class="metrics-display">
+        <div class="metric-section">
+          <div class="metric-label">LUFS M/S</div>
+          <div class="metric-row">
+            <span class="metric-label-small">M</span>
+            <span id="metrics-lufs-m" class="metric-value loudness-momentary">-∞</span>
+            <span class="metric-separator">/</span>
+            <span class="metric-label-small">S</span>
+            <span id="metrics-lufs-s" class="metric-value loudness-shortterm">-∞</span>
+          </div>
+        </div>
+        <div class="metric-section">
+          <div class="metric-label">ReplayGain</div>
+          <div class="metric-row">
+            <span id="metrics-replay-gain" class="metric-value">--</span>
+            <span class="metric-separator">/</span>
+            <span id="metrics-peak" class="metric-value">--</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
     `;
 
-    console.log(
-      "[EQ Debug] Generated HTML contains gear button:",
-      html.includes("eq-config-btn"),
-    );
     this.container.innerHTML = html;
-    console.log("[EQ Debug] HTML injected into container");
     this.cacheUIElements();
   }
 
@@ -385,7 +381,10 @@ export class AudioPlayer {
     this.playBtn = this.container.querySelector(".listen-button");
     this.pauseBtn = this.container.querySelector(".pause-button");
     this.stopBtn = this.container.querySelector(".stop-button");
+    this.eqOnBtn = this.container.querySelector(".eq-on-btn");
+    this.eqOffBtn = this.container.querySelector(".eq-off-btn");
     this.eqConfigBtn = this.container.querySelector(".eq-config-btn");
+    this.eqMiniCanvas = this.container.querySelector(".eq-mini-canvas");
 
     this.statusText = this.container.querySelector(".audio-status-text");
     this.positionText = this.container.querySelector(".audio-position");
@@ -403,15 +402,19 @@ export class AudioPlayer {
       this.spectrumCtx = this.spectrumCanvas.getContext("2d");
       // Initialize spectrum analyzer component
       if (this.config.enableSpectrum) {
+        // Detect system color scheme
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const colorScheme = prefersDark ? "dark" : "light";
+        
         this.spectrumAnalyzer = new SpectrumAnalyzerComponent({
           canvas: this.spectrumCanvas,
           pollInterval: 100,
           minFreq: 20,
           maxFreq: 20000,
           dbRange: 60,
-          colorScheme: "dark",
+          colorScheme: colorScheme,
           showLabels: true,
-          showGrid: false,
+          showGrid: true,
         });
       }
     }
@@ -488,7 +491,23 @@ export class AudioPlayer {
       this.stop();
     });
 
-    // EQ controls - only config button now
+    // EQ controls
+    if (this.eqOnBtn && this.visualEQConfig) {
+      this.eqOnBtn.addEventListener("click", () => {
+        this.visualEQConfig!.setEQEnabled(true);
+        this.updateEQButtonStates(true);
+        this.callbacks.onEQToggle?.(true);
+      });
+    }
+
+    if (this.eqOffBtn && this.visualEQConfig) {
+      this.eqOffBtn.addEventListener("click", () => {
+        this.visualEQConfig!.setEQEnabled(false);
+        this.updateEQButtonStates(false);
+        this.callbacks.onEQToggle?.(false);
+      });
+    }
+
     if (this.eqConfigBtn && this.visualEQConfig) {
       this.eqConfigBtn.addEventListener("click", () => {
         this.visualEQConfig!.openEQModal(this.eqConfigBtn!);
@@ -517,7 +536,7 @@ export class AudioPlayer {
   async loadAudioFilePath(filePath: string): Promise<void> {
     try {
       this.currentAudioPath = filePath;
-      await this.streamingManager.loadFile(filePath);
+      await this.streamingManager.loadAudioFilePath(filePath);
       this.setStatus("Loading...");
     } catch (error) {
       console.error("Failed to load audio file:", error);
@@ -612,6 +631,11 @@ export class AudioPlayer {
       this.isAudioPaused = false;
       this.audioStartTime = Date.now();
 
+      // Start spectrum analyzer
+      if (this.spectrumAnalyzer) {
+        await this.spectrumAnalyzer.start();
+      }
+
       // Update UI
       this.updatePlaybackUI();
       this.setStatus("Playing");
@@ -646,6 +670,11 @@ export class AudioPlayer {
       await this.streamingManager.stop();
       this.isAudioPlaying = false;
       this.isAudioPaused = false;
+
+      // Stop spectrum analyzer
+      if (this.spectrumAnalyzer) {
+        await this.spectrumAnalyzer.stop();
+      }
 
       // Reset position display
       if (this.positionText) {
@@ -723,6 +752,24 @@ export class AudioPlayer {
 
     if (this.stopBtn) {
       this.stopBtn.disabled = !isPlaying && !isPaused;
+    }
+  }
+
+  private updateEQButtonStates(enabled: boolean): void {
+    if (this.eqOnBtn) {
+      if (enabled) {
+        this.eqOnBtn.classList.add("active");
+      } else {
+        this.eqOnBtn.classList.remove("active");
+      }
+    }
+
+    if (this.eqOffBtn) {
+      if (enabled) {
+        this.eqOffBtn.classList.remove("active");
+      } else {
+        this.eqOffBtn.classList.add("active");
+      }
     }
   }
 
