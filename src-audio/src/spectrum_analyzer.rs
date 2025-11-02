@@ -75,7 +75,7 @@ impl SpectrumAnalyzer {
     /// Create a new spectrum analyzer
     pub fn new(channels: u32, sample_rate: u32, config: SpectrumConfig) -> Result<Self, String> {
         eprintln!(
-            "[SpectrumAnalyzer] Creating new analyzer: {}ch, {}Hz",
+            "[Spectrum Analyzer] Creating new analyzer: {}ch, {}Hz",
             channels, sample_rate
         );
 
@@ -97,7 +97,7 @@ impl SpectrumAnalyzer {
             Self::generate_log_bins(config.num_bins, config.min_freq, config.max_freq);
 
         eprintln!(
-            "[SpectrumAnalyzer] Generated {} bins from {:.0}Hz to {:.0}Hz",
+            "[Spectrum Analyzer] Generated {} bins from {:.0}Hz to {:.0}Hz",
             config.num_bins, config.min_freq, config.max_freq
         );
 
@@ -149,7 +149,7 @@ impl SpectrumAnalyzer {
         let mono_samples = self.mix_to_mono(samples);
 
         eprintln!(
-            "[SpectrumAnalyzer] add_frames: {} samples, buffer_pos={}",
+            "[Spectrum Analyzer] add_frames: {} samples, buffer_pos={}",
             mono_samples.len(),
             self.buffer_pos
         );
@@ -220,7 +220,7 @@ impl SpectrumAnalyzer {
         }
 
         eprintln!(
-            "[SpectrumAnalyzer] Computed spectrum: peak={:.1}dB",
+            "[Spectrum Analyzer] Computed spectrum: peak={:.1}dB",
             peak_magnitude
         );
 

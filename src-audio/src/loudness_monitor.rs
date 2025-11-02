@@ -36,7 +36,7 @@ pub struct LoudnessMonitor {
     /// Sample rate
     sample_rate: u32,
     /// Current measurements
-    current_info: Arc<Mutex<LoudnessInfo>>,
+    current_loudness: Arc<Mutex<LoudnessInfo>>,
 }
 
 impl LoudnessMonitor {
@@ -53,7 +53,7 @@ impl LoudnessMonitor {
             ebur128: Arc::new(Mutex::new(ebur128)),
             channels,
             sample_rate,
-            current_info: Arc::new(Mutex::new(LoudnessInfo::default())),
+            current_loudness: Arc::new(Mutex::new(LoudnessInfo::default())),
         })
     }
 
@@ -86,7 +86,7 @@ impl LoudnessMonitor {
 
         // Update shared state
         {
-            let mut info = self.current_info.lock().unwrap();
+            let mut info = self.current_loudness.lock().unwrap();
             info.momentary_lufs = momentary_lufs;
             info.shortterm_lufs = shortterm_lufs;
             info.peak = peak;
@@ -97,7 +97,7 @@ impl LoudnessMonitor {
 
     /// Get the current loudness measurements
     pub fn get_loudness(&self) -> LoudnessInfo {
-        let info = self.current_info.lock().unwrap();
+        let info = self.current_loudness.lock().unwrap();
         info.clone()
     }
 
@@ -117,7 +117,7 @@ impl LoudnessMonitor {
 
         // Reset measurements
         {
-            let mut info = self.current_info.lock().unwrap();
+            let mut info = self.current_loudness.lock().unwrap();
             *info = LoudnessInfo::default();
         }
 
@@ -141,7 +141,7 @@ impl Clone for LoudnessMonitor {
             ebur128: Arc::clone(&self.ebur128),
             channels: self.channels,
             sample_rate: self.sample_rate,
-            current_info: Arc::clone(&self.current_info),
+            current_loudness: Arc::clone(&self.current_loudness),
         }
     }
 }

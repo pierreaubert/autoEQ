@@ -7,6 +7,8 @@ use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
+const FRAMES_PER_CHUNK: usize = 256;
+
 // Logging macro for consistent timestamp format
 macro_rules! log_debug {
     ($($arg:tt)*) => {{
@@ -63,7 +65,7 @@ pub struct AudioStreamingManager {
     /// Shared underrun counter for adaptive buffering
     underrun_count: Arc<Mutex<usize>>,
     /// Real-time loudness monitor (optional)
-    loudness_monitor: Option<Arc<LoudnessMonitor>>,
+    loudness_monitor: Option<Arc<Mutex<LoudnessMonitor>>>,
     /// Real-time spectrum analyzer (optional)
     spectrum_monitor: Option<Arc<Mutex<SpectrumAnalyzer>>>,
 }
@@ -350,7 +352,7 @@ impl AudioStreamingManager {
         let monitor =
             LoudnessMonitor::new(audio_info.spec.channels as u32, audio_info.spec.sample_rate)?;
 
-        self.loudness_monitor = Some(Arc::new(monitor));
+        self.loudness_monitor = Some(Arc::new(Mutex::new(monitor)));
         Ok(())
     }
 
@@ -361,7 +363,9 @@ impl AudioStreamingManager {
 
     /// Get current loudness measurements (if monitoring is enabled)
     pub fn get_loudness(&self) -> Option<LoudnessInfo> {
-        self.loudness_monitor.as_ref().map(|m| m.get_loudness())
+        self.loudness_monitor
+            .as_ref()
+            .and_then(|m| m.lock().ok().map(|lm| lm.get_loudness()))
     }
 
     /// Check if loudness monitoring is enabled
@@ -474,7 +478,7 @@ impl AudioStreamingManager {
         mut stdin: ChildStdin,
         mut buffer_chunks: usize,
         underrun_count: Arc<Mutex<usize>>,
-        loudness_monitor: Option<Arc<LoudnessMonitor>>,
+        loudness_monitor: Option<Arc<Mutex<LoudnessMonitor>>>,
         spectrum_monitor: Option<Arc<Mutex<SpectrumAnalyzer>>>,
     ) -> AudioDecoderResult<()> {
         log_info!("Decoder thread starting for: {:?}", path);
@@ -485,7 +489,6 @@ impl AudioStreamingManager {
         let spec = decoder.spec().clone();
 
         // Calculate buffer target in frames (1 chunk = 1024 frames)
-        const FRAMES_PER_CHUNK: usize = 1024;
         let mut target_buffer_frames = buffer_chunks * FRAMES_PER_CHUNK;
         let mut last_underrun_check = std::time::Instant::now();
 
@@ -557,10 +560,15 @@ impl AudioStreamingManager {
                 match decoder.decode_next() {
                     Ok(Some(decoded_audio)) => {
                         // Feed samples to loudness monitor if enabled
-                        if let Some(ref monitor) = loudness_monitor
-                            && let Err(e) = monitor.add_frames(&decoded_audio.samples)
-                        {
-                            eprintln!("[AudioStreamingManager] Loudness monitoring error: {}", e);
+                        if let Some(ref monitor) = loudness_monitor {
+                            if let Ok(a) = monitor.lock() {
+                                if let Err(e) = a.add_frames(&decoded_audio.samples) {
+                                    eprintln!(
+                                        "[AudioStreamingManager] Loudness monitoring error: {}",
+                                        e
+                                    );
+                                }
+                            }
                         }
 
                         // Feed samples to spectrum analyzer if enabled
@@ -684,7 +692,7 @@ impl AudioStreamingManager {
                 let underruns = *underrun_count.lock().unwrap();
                 if underruns > 0 {
                     // Increase buffer by 50% (up to max of 1024 chunks)
-                    let new_chunks = ((buffer_chunks as f64 * 1.5) as usize).min(1024);
+                    let new_chunks = ((buffer_chunks as f64 * 2.0) as usize).min(FRAMES_PER_CHUNK);
                     if new_chunks > buffer_chunks {
                         buffer_chunks = new_chunks;
                         target_buffer_frames = buffer_chunks * FRAMES_PER_CHUNK;
@@ -704,7 +712,7 @@ impl AudioStreamingManager {
                 // Write from buffer to stdin if we have data
                 if !audio_buffer.is_empty() {
                     // Write in chunks for better performance
-                    let write_size = std::cmp::min(audio_buffer.len(), 8192 * 4); // Write up to 4 CamillaDSP chunks at once
+                    let write_size = std::cmp::min(audio_buffer.len(), FRAMES_PER_CHUNK * 4); // Write up to 4 CamillaDSP chunks at once
                     let chunk: Vec<u8> = audio_buffer.drain(..write_size).collect();
 
                     if let Err(e) = stdin.write_all(&chunk) {
@@ -745,13 +753,15 @@ impl AudioStreamingManager {
                     match decoder.decode_next() {
                         Ok(Some(decoded_audio)) => {
                             // Feed samples to loudness monitor if enabled
-                            if let Some(ref monitor) = loudness_monitor
-                                && let Err(e) = monitor.add_frames(&decoded_audio.samples)
-                            {
-                                eprintln!(
-                                    "[AudioStreamingManager] Loudness monitoring error: {}",
-                                    e
-                                );
+                            if let Some(ref monitor) = loudness_monitor {
+                                if let Ok(lm) = monitor.lock() {
+                                    if let Err(e) = lm.add_frames(&decoded_audio.samples) {
+                                        eprintln!(
+                                            "[AudioStreamingManager] Loudness monitoring error: {}",
+                                            e
+                                        );
+                                    }
+                                }
                             }
 
                             // Feed samples to spectrum analyzer if enabled

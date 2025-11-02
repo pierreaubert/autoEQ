@@ -114,7 +114,7 @@ enum Commands {
         start_time: f64,
 
         /// Buffer size in chunks (32=low latency, 128=balanced, 1024=high reliability)
-        #[arg(long = "buffer-chunks", default_value = "128")]
+        #[arg(long = "buffer-chunks", default_value = "32")]
         buffer_chunks: usize,
 
         /// Enable real-time LUFS monitoring (prints momentary/short-term loudness)
