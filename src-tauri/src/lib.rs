@@ -6,7 +6,6 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::sync::Mutex;
 
 // Module declarations
-mod eq_export;
 mod eq_response;
 mod optim;
 mod plot;
@@ -118,7 +117,7 @@ impl ProgressCallback for TauriProgressCallback {
         match self.app_handle.emit("progress_update", &update) {
             Ok(_) => true, // Continue optimization
             Err(e) => {
-                eprintln!("Failed to emit progress update: {}", e);
+                eprintln!("[TAURI] Failed to emit progress update: {}", e);
                 true // Still continue even if emit fails
             }
         }
@@ -132,11 +131,11 @@ async fn run_optimization(
     cancellation_state: State<'_, CancellationState>,
 ) -> Result<OptimizationResult, String> {
     println!(
-        "[RUST DEBUG] run_optimization called with algo: {}",
+        "[TAURI] run_optimization called with algo: {}",
         params.algo
     );
     println!(
-        "[RUST DEBUG] Parameters: num_filters={}, population={}, maxeval={}",
+        "[TAURI] Parameters: num_filters={}, population={}, maxeval={}",
         params.num_filters, params.population, params.maxeval
     );
 
@@ -155,11 +154,11 @@ async fn run_optimization(
 
     match result {
         Ok(res) => {
-            println!("[RUST DEBUG] Optimization completed successfully");
+            println!("[TAURI] Optimization completed successfully");
             Ok(res)
         }
         Err(e) => {
-            println!("[RUST DEBUG] Optimization failed with error: {}", e);
+            println!("[TAURI] Optimization failed with error: {}", e);
             Ok(OptimizationResult {
                 success: false,
                 error_message: Some(e.to_string()),
@@ -322,7 +321,7 @@ fn exit_app(window: tauri::Window) {
 
 #[tauri::command]
 fn cancel_optimization(cancellation_state: State<CancellationState>) -> Result<(), String> {
-    println!("[RUST DEBUG] Cancellation requested");
+    println!("[TAURI] Cancellation requested");
     cancellation_state.cancel();
     Ok(())
 }
@@ -356,7 +355,7 @@ async fn audio_start_recording(
     app_handle: AppHandle,
 ) -> Result<(), String> {
     println!(
-        "[AUDIO] Starting recording: {} ({}Hz, {}ch)",
+        "[TAURI] Starting recording: {} ({}Hz, {}ch)",
         output_path, sample_rate, channels
     );
 
@@ -403,7 +402,7 @@ async fn audio_stop_recording(
     audio_manager: State<'_, Mutex<AudioManager>>,
     app_handle: AppHandle,
 ) -> Result<(), String> {
-    println!("[AUDIO] Stopping recording");
+    println!("[TAURI] Stopping recording");
 
     let manager = audio_manager.lock().await;
     let result = manager.stop_recording().await;
@@ -501,7 +500,7 @@ async fn stream_load_file(
     streaming_manager: State<'_, Mutex<AudioStreamingManager>>,
     app_handle: AppHandle,
 ) -> Result<AudioFileInfoPayload, String> {
-    println!("[STREAM] Loading file: {}", file_path);
+    println!("[TAURI] Loading file for streaming: {}", file_path);
 
     let mut manager = streaming_manager.lock().await;
     match manager.load_file(&file_path).await {
@@ -533,7 +532,7 @@ async fn stream_start_playback(
     streaming_manager: State<'_, Mutex<AudioStreamingManager>>,
     app_handle: AppHandle,
 ) -> Result<(), String> {
-    println!("[STREAM] Starting playback with {} filters", filters.len());
+    println!("[TAURI] Starting playback with {} filters", filters.len());
 
     let mut manager = streaming_manager.lock().await;
     match manager
@@ -575,7 +574,7 @@ async fn stream_pause_playback(
     streaming_manager: State<'_, Mutex<AudioStreamingManager>>,
     app_handle: AppHandle,
 ) -> Result<(), String> {
-    println!("[STREAM] Pausing playback");
+    println!("[TAURI] Pausing playback");
 
     let manager = streaming_manager.lock().await;
     match manager.pause().await {
@@ -597,7 +596,7 @@ async fn stream_resume_playback(
     streaming_manager: State<'_, Mutex<AudioStreamingManager>>,
     app_handle: AppHandle,
 ) -> Result<(), String> {
-    println!("[STREAM] Resuming playback");
+    println!("[TAURI] Resuming playback");
 
     let manager = streaming_manager.lock().await;
     match manager.resume().await {
@@ -619,7 +618,7 @@ async fn stream_stop_playback(
     streaming_manager: State<'_, Mutex<AudioStreamingManager>>,
     app_handle: AppHandle,
 ) -> Result<(), String> {
-    println!("[STREAM] Stopping playback");
+    println!("[TAURI] Stopping playback");
 
     let mut manager = streaming_manager.lock().await;
     match manager.stop().await {
@@ -642,7 +641,7 @@ async fn stream_seek(
     streaming_manager: State<'_, Mutex<AudioStreamingManager>>,
     app_handle: AppHandle,
 ) -> Result<(), String> {
-    println!("[STREAM] Seeking to {}s", seconds);
+    println!("[TAURI] Seeking to {}s", seconds);
 
     let manager = streaming_manager.lock().await;
     match manager.seek(seconds).await {
@@ -732,7 +731,7 @@ async fn generate_apo_format(
     peq_model: String,
 ) -> Result<String, String> {
     println!(
-        "[APO EXPORT] Generating APO format: {} params, {}Hz, model: {}",
+        "[TAURI] Generating APO format: {} params, {}Hz, model: {}",
         filter_params.len(),
         sample_rate,
         peq_model
@@ -756,7 +755,7 @@ async fn generate_apo_format(
     let apo_string = autoeq::iir::peq_format_apo("AutoEQ Optimization Result", &peq);
 
     println!(
-        "[APO EXPORT] Generated {} bytes of APO data",
+        "[TAURI] Generated {} bytes of APO data",
         apo_string.len()
     );
 
@@ -771,7 +770,7 @@ async fn generate_aupreset_format(
     preset_name: String,
 ) -> Result<String, String> {
     println!(
-        "[AUPRESET EXPORT] Generating AUpreset format: {} params, {}Hz, model: {}, name: {}",
+        "[TAURI] Generating AUpreset format: {} params, {}Hz, model: {}, name: {}",
         filter_params.len(),
         sample_rate,
         peq_model,
@@ -796,7 +795,7 @@ async fn generate_aupreset_format(
     let aupreset_string = autoeq::iir::peq_format_aupreset(&peq, &preset_name);
 
     println!(
-        "[AUPRESET EXPORT] Generated {} bytes of AUpreset data",
+        "[TAURI] Generated {} bytes of AUpreset data",
         aupreset_string.len()
     );
 
@@ -810,7 +809,7 @@ async fn generate_rme_format(
     peq_model: String,
 ) -> Result<String, String> {
     println!(
-        "[RME EXPORT] Generating RME format: {} params, {}Hz, model: {}",
+        "[TAURI] Generating RME format: {} params, {}Hz, model: {}",
         filter_params.len(),
         sample_rate,
         peq_model
@@ -834,7 +833,7 @@ async fn generate_rme_format(
     let rme_string = autoeq::iir::peq_format_rme_channel(&peq);
 
     println!(
-        "[RME EXPORT] Generated {} bytes of RME data",
+        "[TAURI] Generated {} bytes of RME data",
         rme_string.len()
     );
 
@@ -848,7 +847,7 @@ async fn generate_rme_room_format(
     peq_model: String,
 ) -> Result<String, String> {
     println!(
-        "[RME ROOM EXPORT] Generating RME Room format: {} params, {}Hz, model: {}",
+        "[TAURI] Generating RME Room format: {} params, {}Hz, model: {}",
         filter_params.len(),
         sample_rate,
         peq_model
@@ -873,7 +872,7 @@ async fn generate_rme_room_format(
     let rme_room_string = autoeq::iir::peq_format_rme_room(&peq, &empty_peq);
 
     println!(
-        "[RME ROOM EXPORT] Generated {} bytes of RME Room data",
+        "[TAURI] Generated {} bytes of RME Room data",
         rme_room_string.len()
     );
 
@@ -886,19 +885,19 @@ async fn generate_rme_room_format(
 
 #[tauri::command]
 async fn analyze_replaygain(file_path: String) -> Result<ReplayGainInfo, String> {
-    println!("[REPLAYGAIN] Analyzing file: {}", file_path);
+    println!("[TAURI] Analyzing file: {}", file_path);
 
     match analyze_file(&file_path) {
         Ok(info) => {
             println!(
-                "[REPLAYGAIN] Analysis complete - Gain: {:.2} dB, Peak: {:.6}",
+                "[TAURI] Analysis complete - Gain: {:.2} dB, Peak: {:.6}",
                 info.gain, info.peak
             );
             Ok(info)
         }
         Err(e) => {
             let error_msg = format!("{}", e);
-            println!("[REPLAYGAIN] Analysis failed: {}", error_msg);
+            println!("[TAURI] Analysis failed: {}", error_msg);
             Err(error_msg)
         }
     }
@@ -912,7 +911,7 @@ async fn analyze_replaygain(file_path: String) -> Result<ReplayGainInfo, String>
 async fn stream_enable_loudness_monitoring(
     streaming_manager: State<'_, Mutex<AudioStreamingManager>>,
 ) -> Result<(), String> {
-    println!("[LOUDNESS] Enabling real-time loudness monitoring");
+    println!("[TAURI] Enabling real-time loudness monitoring");
 
     let mut manager = streaming_manager.lock().await;
     manager.enable_loudness_monitoring()
@@ -922,7 +921,7 @@ async fn stream_enable_loudness_monitoring(
 async fn stream_disable_loudness_monitoring(
     streaming_manager: State<'_, Mutex<AudioStreamingManager>>,
 ) -> Result<(), String> {
-    println!("[LOUDNESS] Disabling real-time loudness monitoring");
+    println!("[TAURI] Disabling real-time loudness monitoring");
 
     let mut manager = streaming_manager.lock().await;
     manager.disable_loudness_monitoring();
@@ -945,7 +944,7 @@ async fn stream_get_loudness(
 async fn stream_enable_spectrum_monitoring(
     streaming_manager: State<'_, Mutex<AudioStreamingManager>>,
 ) -> Result<(), String> {
-    println!("[SPECTRUM] Enabling real-time spectrum monitoring");
+    println!("[TAURI] Enabling real-time spectrum monitoring");
 
     let mut manager = streaming_manager.lock().await;
     manager.enable_spectrum_monitoring()
@@ -955,7 +954,7 @@ async fn stream_enable_spectrum_monitoring(
 async fn stream_disable_spectrum_monitoring(
     streaming_manager: State<'_, Mutex<AudioStreamingManager>>,
 ) -> Result<(), String> {
-    println!("[SPECTRUM] Disabling real-time spectrum monitoring");
+    println!("[TAURI] Disabling real-time spectrum monitoring");
 
     let mut manager = streaming_manager.lock().await;
     manager.disable_spectrum_monitoring();
@@ -981,7 +980,7 @@ async fn compute_eq_response(
     frequencies: Vec<f64>,
 ) -> Result<EqResponseResult, String> {
     println!(
-        "[EQ RESPONSE] Computing response for {} filters at {} points",
+        "[TAURI] Computing response for {} filters at {} points",
         filters.len(),
         frequencies.len()
     );
@@ -993,8 +992,8 @@ async fn compute_eq_response(
 pub fn run() {
     // Find CamillaDSP binary
     let camilla_binary = sotf_audio::camilla::find_camilladsp_binary().unwrap_or_else(|e| {
-        eprintln!("Warning: CamillaDSP binary not found: {}", e);
-        eprintln!("Audio playback features will not be available.");
+        eprintln!("[TAURI] Warning: CamillaDSP binary not found: {}", e);
+        eprintln!("[TAURI] Audio playback features will not be available.");
         std::path::PathBuf::from("/usr/local/bin/camilladsp")
     });
 
@@ -1046,14 +1045,14 @@ pub fn run() {
                                         StreamingState::Seeking => "seeking",
                                         StreamingState::Error => "error",
                                     };
-                                    println!("[EVENT MONITOR] State changed to: {}", state_str);
+                                    println!("[TAURI] State changed to: {}", state_str);
                                     app_handle.emit(
                                         "stream:state-changed",
                                         serde_json::json!({ "state": state_str }),
                                     )
                                 }
                                 sotf_audio::StreamingEvent::Error(msg) => {
-                                    println!("[EVENT MONITOR] Error: {}", msg);
+                                    println!("[TAURI] Error: {}", msg);
                                     app_handle.emit(
                                         "stream:state-changed",
                                         serde_json::json!({ "state": "error", "message": msg }),
