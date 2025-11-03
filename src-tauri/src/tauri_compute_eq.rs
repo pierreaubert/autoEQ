@@ -42,61 +42,6 @@ fn parse_filter_type(type_str: &str) -> Option<BiquadFilterType> {
 }
 
 /// Compute frequency response for a list of filters
-/// Uses the existing compute_peq_response from autoeq::iir
-pub fn compute_eq_response(
-    filters: Vec<FilterParam>,
-    sample_rate: f64,
-    frequencies: Vec<f64>,
-) -> Result<EqResponseResult, String> {
-    let freq_array = Array1::from_vec(frequencies.clone());
-    let mut individual_responses = Vec::new();
-
-    // Build PEQ for combined response
-    let mut peq: Peq = Vec::new();
-
-    // Process each filter
-    for filter_param in filters.iter() {
-        if !filter_param.enabled {
-            // Skip disabled filters but add empty response
-            individual_responses.push(FilterResponse {
-                magnitudes_db: vec![0.0; frequencies.len()],
-            });
-            continue;
-        }
-
-        // Parse filter type
-        let filter_type = parse_filter_type(&filter_param.filter_type)
-            .ok_or_else(|| format!("Invalid filter type: {}", filter_param.filter_type))?;
-
-        // Create biquad filter
-        let biquad = Biquad::new(
-            filter_type,
-            filter_param.frequency,
-            sample_rate,
-            filter_param.q,
-            filter_param.gain,
-        );
-
-        // Compute individual filter response using existing method
-        let response_array = biquad.np_log_result(&freq_array);
-        let magnitudes_db: Vec<f64> = response_array.to_vec();
-
-        individual_responses.push(FilterResponse { magnitudes_db });
-
-        // Add to PEQ for combined response (weight = 1.0)
-        peq.push((1.0, biquad));
-    }
-
-    // Compute combined response using existing compute_peq_response
-    let combined_array = autoeq::iir::compute_peq_response(&freq_array, &peq, sample_rate);
-    let combined_response: Vec<f64> = combined_array.to_vec();
-
-    Ok(EqResponseResult {
-        frequencies,
-        individual_responses,
-        combined_response,
-    })
-}
 
 #[cfg(test)]
 mod tests {
@@ -161,3 +106,65 @@ mod tests {
         assert_eq!(result.combined_response[0], 0.0);
     }
 }
+
+
+#[tauri::command]
+pub async fn compute_eq_response(
+    filters: Vec<FilterParam>,
+    sample_rate: f64,
+    frequencies: Vec<f64>,
+) -> Result<EqResponseResult, String> {
+    println!(
+        "[TAURI] Computing response for {} filters at {} points",
+        filters.len(),
+        frequencies.len()
+    );
+
+    // Convert filters to PEQ format
+    let freq_array = ndarray::Array1::from_vec(frequencies.clone());
+    let mut peq: Vec<(f64, autoeq::iir::Biquad)> = Vec::new();
+    let mut individual_responses = Vec::new();
+
+    for filter_param in filters.iter() {
+        if !filter_param.enabled {
+            // Skip disabled filters but add empty response
+            individual_responses.push(FilterResponse {
+                magnitudes_db: vec![0.0; frequencies.len()],
+            });
+            continue;
+        }
+
+        // Parse filter type
+        let filter_type = parse_filter_type(&filter_param.filter_type)
+            .ok_or_else(|| format!("Invalid filter type: {}", filter_param.filter_type))?;
+
+        // Create biquad filter
+        let biquad = autoeq::iir::Biquad::new(
+            filter_type,
+            filter_param.frequency,
+            sample_rate,
+            filter_param.q,
+            filter_param.gain,
+        );
+
+        // Compute individual filter response
+        let response_array = biquad.np_log_result(&freq_array);
+        let magnitudes_db: Vec<f64> = response_array.to_vec();
+
+        individual_responses.push(FilterResponse { magnitudes_db });
+
+        // Add to PEQ for combined response (weight = 1.0)
+        peq.push((1.0, biquad));
+    }
+
+    // Compute combined response
+    let combined_array = autoeq::iir::compute_peq_response(&freq_array, &peq, sample_rate);
+    let combined_response: Vec<f64> = combined_array.to_vec();
+
+    Ok(EqResponseResult {
+        frequencies,
+        individual_responses,
+        combined_response,
+    })
+}
+

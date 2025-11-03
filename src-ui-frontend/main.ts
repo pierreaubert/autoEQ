@@ -30,11 +30,8 @@ class AutoEQApplication {
     this.uiManager = new UIManager();
     this.apiManager = new APIManager();
 
-
     // Initialize AudioPlayer
-    const audioControlsContainer = document.querySelector(
-      ".audio-testing-controls",
-    ) as HTMLElement;
+    const audioControlsContainer = document.querySelector(".audio-controls") as HTMLElement;
     if (audioControlsContainer) {
       // Clear the old controls and let the AudioPlayer component build its own UI
       audioControlsContainer.innerHTML = "";
@@ -57,42 +54,29 @@ class AutoEQApplication {
       );
     } else {
       console.error(
-        "Audio controls container (.audio-testing-controls) not found!",
+        "Audio controls container (.audio-controls) not found!",
       );
     }
 
     // Initialize plot manager with DOM elements
-    const progressGraphElement = document.getElementById("progress_graph");
-    const tonalPlotElement = document.getElementById("tonal_plot");
-
-    // Debug plot element availability
-    const filterPlotElement = document.getElementById(
-      "filter_plot",
-    ) as HTMLElement;
+    const progressGraphElement = document.getElementById("progress_graph") as HTMLElement;
+    const tonalPlotElement = document.getElementById("tonal_plot") as HTMLElement;
+    const filterPlotElement = document.getElementById("filter_plot") as HTMLElement;
     const spinPlotElement = document.getElementById("spin_plot") as HTMLElement;
-    const detailsPlotElement = document.getElementById(
-      "details_plot",
-    ) as HTMLElement;
+    const detailsPlotElement = document.getElementById("details_plot") as HTMLElement;
 
     this.plotComposer = new PlotComposer(
       filterPlotElement,
       detailsPlotElement,
       spinPlotElement,
-      progressGraphElement as HTMLElement,
-      tonalPlotElement as HTMLElement,
+      progressGraphElement,
+      tonalPlotElement,
     );
 
-    // Initialize optimization manager
     this.optimizationManager = new OptimizationManager();
-
-    // Initialize layout manager
     this.plotManager = new PlotManager();
-
-    // Setup connections between managers
     this.setupManagerConnections();
     this.setupEventHandlers();
-
-    // Initialize application state
     this.initialize();
   }
 
@@ -374,6 +358,7 @@ class AutoEQApplication {
     // This method is called by the AudioPlayer callback
     // It can be used to sync EQ state with other parts of the application if needed
     console.log(`[MAIN] EQ state changed to: ${enabled}`);
+    // TODO
   }
 
   private handleOptimizationError(error: string): void {

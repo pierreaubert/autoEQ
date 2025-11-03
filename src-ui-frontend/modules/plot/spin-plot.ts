@@ -61,7 +61,6 @@ export class SpinPlot {
           layout,
           config,
         ).then(() => {
-          console.log("Spin plot created successfully");
           this.spinPlotElement.classList.add("has-plot");
           this.showPlotContainer("spin_plot");
           setTimeout(() => Plotly.Plots.resize(this.spinPlotElement), 100);
@@ -87,9 +86,6 @@ export class SpinPlot {
       const element = document.getElementById(verticalItemId);
       if (element) {
         element.style.display = "flex";
-        console.log(
-          `[VERTICAL DEBUG] Showed plot container: ${plotId} via vertical item ${verticalItemId}`,
-        );
       }
     }
   }

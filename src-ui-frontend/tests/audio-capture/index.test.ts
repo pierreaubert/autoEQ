@@ -1,16 +1,10 @@
 /* removed old WebAudio/WebRTC AudioProcessor export tests */
 import { describe, test, expect } from "vitest";
 
-// Import AudioProcessor from the audio-player module
-import { AudioProcessor } from "@audio-player/audio-processor";
-import { type CaptureResult } from "@audio-player/audio-processor";
+// Import CaptureResult from capture-controller
+import { type CaptureResult } from "@audio-capture/capture-controller";
 
 describe.skip("Audio Module Exports", () => {
-  test("should export AudioProcessor class", () => {
-    expect(AudioProcessor).toBeDefined();
-    expect(typeof AudioProcessor).toBe("function");
-  });
-
   test("should export TypeScript interfaces", () => {
     const captureResult: CaptureResult = {
       success: true,
@@ -24,16 +18,4 @@ describe.skip("Audio Module Exports", () => {
     expect(captureResult.frequencies).toHaveLength(3);
   });
 
-  test("should maintain backward compatibility with module exports", () => {
-    // Verify that the audio module can be imported from the main index
-    expect(() => {
-      // This would be caught at compile time if exports are broken
-      const processor = new AudioProcessor();
-
-      expect(processor).toBeInstanceOf(AudioProcessor);
-
-      // Cleanup
-      processor.destroy();
-    }).not.toThrow();
-  });
 });

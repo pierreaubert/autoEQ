@@ -180,7 +180,7 @@ export function generateDataAcquisition(): string {
             Configure microphone settings and capture audio response measurements
           </p>
         </div>
-        
+
         <!-- Status area for showing captured data -->
         <div id="capture_result" class="capture-result" style="display: none">
           <div class="capture-result-info">
@@ -606,7 +606,7 @@ export function generateCaptureModal(): string {
                   <option value="">Loading devices...</option>
                 </select>
               </div>
-              
+
               <div class="capture-control-group capture-volume-group">
                 <label for="modal_capture_volume">Input Gain:</label>
                 <div class="volume-slider-container">
@@ -614,7 +614,7 @@ export function generateCaptureModal(): string {
                   <div class="volume-value" id="modal_capture_volume_value">70%</div>
                 </div>
               </div>
-              
+
               <div class="capture-control-group">
                 <label for="capture_calibration_file">Calibration:</label>
                 <div class="capture-calibration-inline">
@@ -627,7 +627,7 @@ export function generateCaptureModal(): string {
                   </button>
                 </div>
               </div>
-              
+
               <div class="capture-control-group">
                 <div class="label-with-badge">
                   <label for="modal_output_device">Output:</label>
@@ -658,7 +658,7 @@ export function generateCaptureModal(): string {
                   <option value="default" selected>System Default</option>
                 </select>
               </div>
-              
+
               <div class="capture-control-group capture-volume-group">
                 <label for="modal_output_volume">Output Gain:</label>
                 <div class="volume-slider-container">
@@ -667,7 +667,7 @@ export function generateCaptureModal(): string {
                 </div>
               </div>
             </div>
-            
+
             <!-- Second row: Signal parameters (slim inline layout) -->
             <div class="capture-controls-row capture-controls-row-slim">
               <div class="capture-control-inline">
@@ -676,7 +676,7 @@ export function generateCaptureModal(): string {
                   <option value="all" selected>All Channels</option>
                 </select>
               </div>
-              
+
               <div class="capture-control-inline">
                 <label for="modal_signal_type">Signal:</label>
                 <select id="modal_signal_type" class="signal-type-select">
@@ -685,7 +685,7 @@ export function generateCaptureModal(): string {
                   <option value="pink">Pink Noise</option>
                 </select>
               </div>
-              
+
               <div class="capture-control-inline" id="modal_sweep_duration_container">
                 <label for="modal_sweep_duration">Duration:</label>
                 <select id="modal_sweep_duration" class="sweep-duration-select">
@@ -697,7 +697,7 @@ export function generateCaptureModal(): string {
               </div>
             </div>
           </div>
-          
+
           <!-- Graph Display with Records Sidebar -->
           <div class="capture-main-area">
             <!-- Records Management Sidebar -->
@@ -717,7 +717,7 @@ export function generateCaptureModal(): string {
                 <!-- Records will be dynamically populated here -->
               </div>
             </div>
-            
+
             <!-- Graph Container -->
             <div class="capture-graph-container">
               <canvas id="capture_modal_graph" class="capture-modal-graph"></canvas>
@@ -737,7 +737,7 @@ export function generateCaptureModal(): string {
             </div>
           </div>
         </div>
-        
+
         <div class="modal-footer">
           <!-- Bottom Controls Bar -->
           <div class="capture-bottom-controls">
@@ -849,7 +849,7 @@ export function generateAppHTML(): string {
       </div>
     </main>
     ${generateBottomRow()}
-    <div class="audio-testing-controls audio-bar-fixed"></div>
+    <div class="audio-controls audio-bar-fixed"></div>
   </div>
   ${generateOptimizationModal()}
   ${generateCaptureModal()}`;

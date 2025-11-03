@@ -1,5 +1,6 @@
-use crate::plot::{OptimizationPlotParams, PlotData, generate_optimization_plots};
+use crate::tauri_plots::{OptimizationPlotParams, PlotData, generate_optimization_plots};
 use autoeq::{LossType, cli::Args as AutoEQArgs};
+use tauri::{AppHandle, State, Emitter};
 use ndarray::Array1;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -1633,3 +1634,90 @@ mod tests {
         println!("[TEST] ✅ Cancellation state works correctly");
     }
 }
+
+
+use autoeq::{
+    Curve, plot_filters, plot_spin, plot_spin_details,
+    plot_spin_tonal,
+};
+
+// Note: These types are defined in this same file above
+use crate::tauri_plots::{PlotFiltersParams, PlotSpinParams, curve_data_to_curve, plot_to_json};
+
+// Tauri-specific ProgressCallback implementation
+struct TauriProgressCallback {
+    app_handle: AppHandle,
+}
+
+impl ProgressCallback for TauriProgressCallback {
+    fn on_progress(&self, update: ProgressUpdate) -> bool {
+        // Emit progress update to frontend
+        match self.app_handle.emit("progress_update", &update) {
+            Ok(_) => true, // Continue optimization
+            Err(e) => {
+                eprintln!("[TAURI] Failed to emit progress update: {}", e);
+                true // Still continue even if emit fails
+            }
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn run_optimization(
+    params: OptimizationParams,
+    app_handle: AppHandle,
+    cancellation_state: State<'_, CancellationState>,
+) -> Result<OptimizationResult, String> {
+    println!(
+        "[TAURI] run_optimization called with algo: {}",
+        params.algo
+    );
+    println!(
+        "[TAURI] Parameters: num_filters={}, population={}, maxeval={}",
+        params.num_filters, params.population, params.maxeval
+    );
+
+    // Reset cancellation state at the start of optimization
+    cancellation_state.reset();
+
+    // Create progress callback
+    let progress_callback = Arc::new(TauriProgressCallback { app_handle });
+
+    let result = run_optimization_internal(
+        params,
+        progress_callback,
+        Arc::new((*cancellation_state).clone()),
+    )
+    .await;
+
+    match result {
+        Ok(res) => {
+            println!("[TAURI] Optimization completed successfully");
+            Ok(res)
+        }
+        Err(e) => {
+            println!("[TAURI] Optimization failed with error: {}", e);
+            Ok(OptimizationResult {
+                success: false,
+                error_message: Some(e.to_string()),
+                filter_params: None,
+                objective_value: None,
+                preference_score_before: None,
+                preference_score_after: None,
+                filter_response: None,
+                spin_details: None,
+                filter_plots: None,
+                input_curve: None,
+                deviation_curve: None,
+            })
+        }
+    }
+}
+
+#[tauri::command]
+pub fn cancel_optimization(cancellation_state: State<CancellationState>) -> Result<(), String> {
+    println!("[TAURI] Cancellation requested");
+    cancellation_state.cancel();
+    Ok(())
+}
+

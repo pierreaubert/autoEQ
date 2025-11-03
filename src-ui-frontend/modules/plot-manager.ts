@@ -22,7 +22,6 @@ export class PlotManager {
     this.calculateLayout();
 
     this.isInitialized = true;
-    console.log("[LAYOUT] Layout manager initialized for vertical layout");
   }
 
   private handleResize = (): void => {
@@ -83,10 +82,6 @@ export class PlotManager {
         `${plotHeight}px`,
       );
     }
-
-    console.log(
-      `[LAYOUT] Updated vertical layout: ${availableWidth}x${availableHeight}, 3 graphs, mobile: ${isMobile}, tablet: ${isTablet}`,
-    );
   }
 
   public resizePlots(): void {

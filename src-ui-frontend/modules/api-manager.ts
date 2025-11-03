@@ -29,8 +29,6 @@ export class APIManager {
    */
   private enableSelectElement(selectElement: HTMLSelectElement): void {
     try {
-      console.log(`Attempting to enable select element: ${selectElement.id}`);
-
       // Method 1: Remove disabled attribute and property
       selectElement.removeAttribute("disabled");
       selectElement.disabled = false;
@@ -81,7 +79,6 @@ export class APIManager {
         }, 20);
       });
 
-      console.log(`Enable attempt completed for: ${selectElement.id}`);
     } catch (error) {
       console.error("Error enabling select element:", error);
       // Fallback: just set disabled to false
@@ -95,8 +92,6 @@ export class APIManager {
    */
   private nuclearEnableSelect(selectElement: HTMLSelectElement): void {
     try {
-      console.log(`Using nuclear option for: ${selectElement.id}`);
-
       const parent = selectElement.parentElement;
       if (!parent) return;
 
@@ -122,7 +117,6 @@ export class APIManager {
       // Replace the old element
       parent.replaceChild(newSelect, selectElement);
 
-      console.log(`Nuclear replacement completed for: ${newSelect.id}`);
     } catch (error) {
       console.error("Nuclear enable failed:", error);
     }
@@ -130,13 +124,11 @@ export class APIManager {
 
   async loadSpeakers(): Promise<void> {
     try {
-      console.log("Loading speakers from API...");
       const speakers = (await invoke("get_speakers")) as string[];
 
       // Ensure we have a valid array
       if (Array.isArray(speakers)) {
         this.speakers = speakers;
-        console.log("Loaded speakers:", speakers.length);
 
         // Update speaker dropdown
         this.updateSpeakerDropdown();
@@ -151,14 +143,11 @@ export class APIManager {
       // No fallback - keep empty list
       this.speakers = [];
       this.autocompleteData = [];
-      console.log("No speakers available from API");
     }
   }
 
   async loadSpeakerVersions(speaker: string): Promise<string[]> {
     try {
-      console.log("Loading versions for speaker:", speaker);
-
       // Try the backend call with proper parameter structure
       const result = await invoke("get_speaker_versions", {
         speaker: speaker,
@@ -185,7 +174,6 @@ export class APIManager {
         this.speakerData[speaker].versions = versions;
       }
 
-      console.log("Loaded versions from backend:", versions);
       return versions;
     } catch (error) {
       console.warn("Backend speaker versions not available:", error);
@@ -204,7 +192,6 @@ export class APIManager {
         this.speakerData[speaker].versions = emptyVersions;
       }
 
-      console.log("No versions available for speaker:", speaker);
       return emptyVersions;
     }
   }
@@ -214,13 +201,6 @@ export class APIManager {
     version: string,
   ): Promise<string[]> {
     try {
-      console.log(
-        "Loading measurements for speaker:",
-        speaker,
-        "version:",
-        version,
-      );
-
       // Try the backend call with proper parameter structure
       const result = await invoke("get_speaker_measurements", {
         speaker: speaker,
@@ -252,7 +232,6 @@ export class APIManager {
       }
       this.speakerData[speaker].measurements[version] = measurements;
 
-      console.log("Loaded measurements from backend:", measurements);
       return measurements;
     } catch (error) {
       console.warn("Backend speaker measurements not available:", error);
@@ -269,13 +248,6 @@ export class APIManager {
         };
       }
       this.speakerData[speaker].measurements[version] = emptyMeasurements;
-
-      console.log(
-        "No measurements available for speaker:",
-        speaker,
-        "version:",
-        version,
-      );
       return emptyMeasurements;
     }
   }
@@ -296,12 +268,6 @@ export class APIManager {
       option.textContent = speaker;
       speakerSelect.appendChild(option);
     });
-
-    console.log(
-      "Updated speaker dropdown with",
-      this.speakers.length,
-      "speakers",
-    );
   }
 
   async handleSpeakerChange(speaker: string): Promise<void> {
@@ -333,7 +299,6 @@ export class APIManager {
     const lossSelect = document.getElementById("loss") as HTMLSelectElement;
     if (lossSelect) {
       lossSelect.value = "speaker-flat";
-      console.log("Set loss function to speaker-flat for speaker selection");
     }
 
     try {
@@ -356,19 +321,9 @@ export class APIManager {
 
         // Trigger version change to load measurements
         await this.handleVersionChange(versions[0]);
-
-        console.log(
-          "Updated version dropdown for speaker:",
-          speaker,
-          "with",
-          versions.length,
-          "versions. Selected:",
-          versions[0],
-        );
       } else {
         // No versions available, keep dropdown disabled
         versionSelect.disabled = true;
-        console.log("No versions available for speaker:", speaker);
       }
     } catch (error) {
       console.error("Error loading versions for speaker:", speaker, error);
@@ -385,12 +340,10 @@ export class APIManager {
     ) as HTMLSelectElement;
     if (!measurementSelect) return;
 
-    // Clear measurement dropdown
     measurementSelect.innerHTML =
       '<option value="">Select a measurement...</option>';
 
     if (!version || !this.selectedSpeaker) {
-      // Disable measurement dropdown if no version or speaker selected
       measurementSelect.disabled = true;
       return;
     }
@@ -409,42 +362,25 @@ export class APIManager {
           measurementSelect.appendChild(option);
         });
 
-        // Enable measurement dropdown with cross-browser compatibility
         this.enableSelectElement(measurementSelect);
-
-        // Automatically select the first measurement
         measurementSelect.value = measurements[0];
-
-        console.log(
-          "Updated measurement dropdown for version:",
-          version,
-          "with",
-          measurements.length,
-          "measurements. Selected:",
-          measurements[0],
-        );
       } else {
-        // No measurements available, keep dropdown disabled
         measurementSelect.disabled = true;
         console.log("No measurements available for version:", version);
       }
     } catch (error) {
       console.error("Error loading measurements for version:", version, error);
-      // Keep measurement dropdown disabled on error
       measurementSelect.disabled = true;
     }
   }
 
   async selectCurveFile(): Promise<string | null> {
-    console.log("selectCurveFile called");
     try {
       const input = document.getElementById("curve_path") as HTMLInputElement;
       if (!input) {
         console.error("Curve path input element not found");
         return null;
       }
-
-      console.log("Opening file dialog for curve file...");
 
       // Enhanced dialog options for better compatibility
       const result = await openDialog({
@@ -463,21 +399,16 @@ export class APIManager {
         title: "Select Input CSV File",
       });
 
-      console.log("Dialog result:", result);
-
       if (result && typeof result === "string") {
-        console.log("Setting input value to:", result);
         input.value = result;
         input.dispatchEvent(new Event("input", { bubbles: true }));
         input.dispatchEvent(new Event("change", { bubbles: true }));
         this.showFileSelectionSuccess("curve-path", result);
         return result;
       } else if (result === null) {
-        console.log("Dialog cancelled by user");
       } else if (Array.isArray(result) && result.length > 0) {
         // Handle array result (shouldn't happen with multiple: false, but just in case)
         const filePath = result[0];
-        console.log("Setting input value to (from array):", filePath);
         input.value = filePath;
         input.dispatchEvent(new Event("input", { bubbles: true }));
         input.dispatchEvent(new Event("change", { bubbles: true }));
@@ -495,15 +426,12 @@ export class APIManager {
   }
 
   async selectTargetFile(): Promise<string | null> {
-    console.log("selectTargetFile called");
     try {
       const input = document.getElementById("target_path") as HTMLInputElement;
       if (!input) {
         console.error("Target path input element not found");
         return null;
       }
-
-      console.log("Opening file dialog for target file...");
 
       // Enhanced dialog options for better compatibility
       const result = await openDialog({
@@ -522,21 +450,15 @@ export class APIManager {
         title: "Select Target CSV File (Optional)",
       });
 
-      console.log("Dialog result:", result);
-
       if (result && typeof result === "string") {
-        console.log("Setting input value to:", result);
         input.value = result;
         input.dispatchEvent(new Event("input", { bubbles: true }));
         input.dispatchEvent(new Event("change", { bubbles: true }));
         this.showFileSelectionSuccess("target-path", result);
         return result;
-      } else if (result === null) {
-        console.log("Dialog cancelled by user");
       } else if (Array.isArray(result) && result.length > 0) {
         // Handle array result (shouldn't happen with multiple: false, but just in case)
         const filePath = result[0];
-        console.log("Setting input value to (from array):", filePath);
         input.value = filePath;
         input.dispatchEvent(new Event("input", { bubbles: true }));
         input.dispatchEvent(new Event("change", { bubbles: true }));
@@ -554,7 +476,6 @@ export class APIManager {
   }
 
   async selectHeadphoneCurveFile(): Promise<string | null> {
-    console.log("selectHeadphoneCurveFile called");
     try {
       const input = document.getElementById(
         "headphone_curve_path",
@@ -563,8 +484,6 @@ export class APIManager {
         console.error("Headphone curve path input element not found");
         return null;
       }
-
-      console.log("Opening file dialog for headphone curve file...");
 
       // Enhanced dialog options for better compatibility
       const result = await openDialog({
@@ -583,21 +502,15 @@ export class APIManager {
         title: "Select Headphone Curve CSV File",
       });
 
-      console.log("Dialog result:", result);
-
       if (result && typeof result === "string") {
-        console.log("Setting input value to:", result);
         input.value = result;
         input.dispatchEvent(new Event("input", { bubbles: true }));
         input.dispatchEvent(new Event("change", { bubbles: true }));
         this.showFileSelectionSuccess("headphone_curve_path", result);
         return result;
-      } else if (result === null) {
-        console.log("Dialog cancelled by user");
       } else if (Array.isArray(result) && result.length > 0) {
         // Handle array result (shouldn't happen with multiple: false, but just in case)
         const filePath = result[0];
-        console.log("Setting input value to (from array):", filePath);
         input.value = filePath;
         input.dispatchEvent(new Event("input", { bubbles: true }));
         input.dispatchEvent(new Event("change", { bubbles: true }));
@@ -699,12 +612,6 @@ export class APIManager {
       if (inputContainer) {
         inputContainer.style.position = "relative";
         inputContainer.appendChild(autocompleteContainer);
-        console.log(
-          "Autocomplete dropdown shown with",
-          suggestions.length,
-          "suggestions in container:",
-          inputContainer.className,
-        );
       } else {
         console.warn(
           "Could not find suitable container, appending to document body",
@@ -717,7 +624,6 @@ export class APIManager {
         autocompleteContainer.style.width = `${rect.width}px`;
         autocompleteContainer.style.zIndex = "10001"; // Higher than modal z-index
         document.body.appendChild(autocompleteContainer);
-        console.log("Autocomplete dropdown positioned at body level");
       }
     };
 
@@ -767,9 +673,7 @@ export class APIManager {
     try {
       // Try to get demo audio list from backend first
       audioList = (await invoke("get_demo_audio_list")) as string[];
-      console.log("Loaded demo audio list from backend:", audioList);
     } catch (_error) {
-      console.log("Backend demo audio list not available, using local files");
       // Fallback: Use actual demo audio files from public/demo-audio/
       audioList = [
         "classical.flac",
@@ -780,7 +684,6 @@ export class APIManager {
         "piano.flac",
         "rock.flac",
       ];
-      console.log("Using local demo audio files:", audioList);
     }
 
     const demoAudioSelect = document.getElementById(
@@ -824,19 +727,13 @@ export class APIManager {
       const url = (await invoke("get_demo_audio_url", {
         audio_name: audioName,
       })) as string;
-      console.log("Got demo audio URL from backend:", url);
       return url;
     } catch (_error) {
-      console.log(
-        "Backend demo audio URL not available, using local file path",
-      );
-
       // Fallback: Use local file path
       const fileName = audioName.endsWith(".flac")
         ? audioName
         : `${audioName}.flac`;
       const localUrl = `public/demo-audio/${fileName}`;
-      console.log("Using local demo audio URL:", localUrl);
       return localUrl;
     }
   }
@@ -848,12 +745,6 @@ export class APIManager {
   } {
     const errors: string[] = [];
 
-    // Debug: Log all form data
-    console.log("Form validation - FormData contents:");
-    for (const [key, value] of formData.entries()) {
-      console.log(`  ${key}: ${value}`);
-    }
-
     // Helper function to get and validate numeric values with defaults
     const getNumericValue = (
       key: string,
@@ -863,16 +754,10 @@ export class APIManager {
     ): number => {
       const str = formData.get(key) as string;
       if (!str || str.trim() === "") {
-        console.log(
-          `${key}: using default value ${defaultValue} (form value was empty)`,
-        );
         return defaultValue;
       }
       const value = parseFloat(str);
       if (isNaN(value)) {
-        console.log(
-          `${key}: using default value ${defaultValue} (form value "${str}" was not a number)`,
-        );
         return defaultValue;
       }
       return value;
@@ -964,7 +849,6 @@ export class APIManager {
   private showFileSelectionSuccess(inputId: string, filePath: string): void {
     const fileName = filePath.split("/").pop() || filePath;
     const message = `Selected file: ${fileName}`;
-    console.log("File selection success:", message);
 
     // Add visual feedback to the input
     const input = document.getElementById(inputId) as HTMLInputElement;
@@ -987,7 +871,6 @@ export class APIManager {
 
   private fallbackFileDialog(inputId: string): Promise<string | null> {
     return new Promise((resolve) => {
-      console.log("Using fallback file dialog for:", inputId);
       const input = document.getElementById(inputId) as HTMLInputElement;
       const fileInput = document.createElement("input");
       fileInput.type = "file";

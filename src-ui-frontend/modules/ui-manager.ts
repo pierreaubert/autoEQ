@@ -121,11 +121,6 @@ export class UIManager {
     ) as HTMLElement;
 
     // Debug element initialization
-    console.log("[UI INIT] Modal elements found:");
-    console.log("  optimizationModal:", !!this.optimizationModal);
-    console.log("  progressStatus:", !!this.progressStatus);
-    console.log("  elapsedTimeElement:", !!this.elapsedTimeElement);
-    console.log("  progressTableBody:", !!this.progressTableBody);
     this.cancelOptimizationBtn = document.getElementById(
       "cancel_optimization",
     ) as HTMLButtonElement;
@@ -146,22 +141,10 @@ export class UIManager {
     this.eqOnBtn = document.getElementById("eq_on_btn") as HTMLButtonElement;
     this.eqOffBtn = document.getElementById("eq_off_btn") as HTMLButtonElement;
     this.listenBtn = document.getElementById("listen_btn") as HTMLButtonElement;
-    console.log("Listen button found:", this.listenBtn);
-    console.log("Listen button initial state:", {
-      id: this.listenBtn?.id,
-      className: this.listenBtn?.className,
-      disabled: this.listenBtn?.disabled,
-      tagName: this.listenBtn?.tagName,
-    });
 
     // Check for duplicate elements
     const allListenButtons = document.querySelectorAll("#listen_btn");
     const allListenButtonsByClass = document.querySelectorAll(".listen-button");
-    console.log("Total elements with ID listen_btn:", allListenButtons.length);
-    console.log(
-      "Total elements with class listen-button:",
-      allListenButtonsByClass.length,
-    );
     if (allListenButtons.length > 1) {
       console.warn(
         "Multiple elements found with ID listen_btn!",
@@ -178,9 +161,6 @@ export class UIManager {
       if (originalDisabledSetter) {
         Object.defineProperty(this.listenBtn, "disabled", {
           set: function (value: boolean) {
-            console.log(
-              `Listen button disabled property being set to: ${value}`,
-            );
             console.trace("Stack trace for disabled setter:");
             originalDisabledSetter.call(this, value);
           },
@@ -280,33 +260,17 @@ export class UIManager {
     });
 
     // Sweep duration selector
-    this.sweepDurationSelect?.addEventListener("change", () => {
-      console.log(
-        "Sweep duration changed to:",
-        this.sweepDurationSelect?.value,
-      );
-    });
+    this.sweepDurationSelect?.addEventListener("change", () => {});
 
     // Output channel selector
-    this.outputChannelSelect?.addEventListener("change", () => {
-      console.log(
-        "Output channel changed to:",
-        this.outputChannelSelect?.value,
-      );
-    });
+    this.outputChannelSelect?.addEventListener("change", () => {});
 
     // Sample rate selector
-    this.captureSampleRateSelect?.addEventListener("change", () => {
-      console.log(
-        "Sample rate changed to:",
-        this.captureSampleRateSelect?.value,
-      );
-    });
+    this.captureSampleRateSelect?.addEventListener("change", () => {});
 
     // Signal type selector
     this.signalTypeSelect?.addEventListener("change", () => {
       const signalType = this.signalTypeSelect?.value;
-      console.log("Signal type changed to:", signalType);
 
       // Show/hide sweep duration based on signal type
       const durationContainer = document.getElementById(
@@ -524,7 +488,6 @@ export class UIManager {
   }
 
   clearResults(): void {
-    console.log("clearResults called");
     // Reset scores to default values instead of hiding
     const scoreBeforeElement = document.getElementById(
       "score_before",
@@ -616,16 +579,9 @@ export class UIManager {
     details: string,
     percentage: number,
   ): void {
-    console.log(
-      `[UI DEBUG] updateProgress called: stage="${stage}", status="${status}", details="${details}"`,
-    );
-
     void percentage; // percentage is documented
     if (this.progressStatus) {
       this.progressStatus.textContent = `${stage}: ${status}`;
-      console.log(
-        `[UI DEBUG] Updated progress status text to: "${stage}: ${status}"`,
-      );
     } else {
       console.warn("[UI DEBUG] progressStatus element not found!");
     }
@@ -643,7 +599,6 @@ export class UIManager {
       const timeString = `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
 
       this.elapsedTimeElement.textContent = timeString;
-      console.log(`[UI DEBUG] Updated elapsed time to: ${timeString}`);
     }
   }
 
@@ -651,16 +606,10 @@ export class UIManager {
 
   collapseAllAccordion(): void {
     // Grid layout - accordion functionality removed
-    console.log(
-      "[UI] Accordion collapse functionality not needed in grid layout",
-    );
   }
 
   showAccordionSection(sectionId: string): void {
     // Grid layout - accordion functionality removed
-    console.log(
-      `[UI] Grid layout - section ${sectionId} visibility managed automatically`,
-    );
   }
 
   setEQEnabled(enabled: boolean): void {
@@ -676,8 +625,6 @@ export class UIManager {
         this.eqOffBtn.classList.add("active");
       }
     }
-
-    console.log(`EQ ${enabled ? "enabled" : "disabled"}`);
   }
 
   resetToDefaults(): void {
@@ -701,7 +648,6 @@ export class UIManager {
           } else {
             element.value = String(value);
           }
-          console.log(`Set ${id} = ${value}`);
         } else if (!optional) {
           console.warn(`Element with id '${id}' not found`);
         }
@@ -764,7 +710,6 @@ export class UIManager {
     }
 
     this.updateConditionalParameters();
-    console.log("Form reset to defaults");
   }
 
   updateConditionalParameters(): void {
@@ -818,8 +763,6 @@ export class UIManager {
   }
 
   private switchTab(tabName: string): void {
-    console.log("Switching to tab:", tabName);
-
     // Remove active class from all tab labels
     const tabLabels = document.querySelectorAll(".tab-label");
     tabLabels.forEach((label) => label.classList.remove("active"));
@@ -851,13 +794,11 @@ export class UIManager {
         // Only set to speaker-flat if current value is not a speaker option
         if (!lossSelect.value.startsWith("speaker-")) {
           lossSelect.value = "speaker-flat";
-          console.log("Set loss function to speaker-flat for speaker tab");
         }
       } else if (tabName === "headphone") {
         // Only set to headphone-flat if current value is not a headphone option
         if (!lossSelect.value.startsWith("headphone-")) {
           lossSelect.value = "headphone-flat";
-          console.log("Set loss function to headphone-flat for headphone tab");
         }
       }
       // For 'file' and 'capture' tabs, keep whatever value is currently selected
@@ -910,12 +851,9 @@ export class UIManager {
   // Event handlers (to be connected to main application logic)
   private onOptimizeClick(): void {
     // This will be connected to the main optimization logic
-    console.log("Optimize button clicked");
   }
 
   private async onCaptureClick(): Promise<void> {
-    console.log("Capture button clicked");
-
     if (!this.captureBtn) return;
 
     const isCapturing = this.captureBtn.textContent?.includes("Stop");
@@ -932,14 +870,9 @@ export class UIManager {
   private async startCapture(): Promise<void> {
     // Audio capture is now handled by CaptureModalManager
     // This method is kept for backward compatibility but does nothing
-    console.log(
-      "startCapture called - capture is handled by CaptureModalManager",
-    );
   }
 
   private stopCapture(): void {
-    console.log("Stopping capture...");
-
     // Reset UI immediately
     if (this.captureBtn) {
       this.captureBtn.textContent = "🎤 Start Capture";
@@ -952,8 +885,6 @@ export class UIManager {
   }
 
   private plotCapturedData(frequencies: number[], magnitudes: number[]): void {
-    console.log("Plotting captured data...");
-
     if (!this.capturePlot) {
       console.warn("Capture plot element not found");
       return;
@@ -1087,13 +1018,10 @@ export class UIManager {
     ctx.rotate(-Math.PI / 2);
     ctx.fillText("Magnitude (dB)", 0, 0);
     ctx.restore();
-
-    console.log("Capture plot rendered successfully");
   }
 
   private async initializeAudioDevices(): Promise<void> {
     // Audio device enumeration is now handled by CaptureModalManager
-    console.log("initializeAudioDevices - handled by CaptureModalManager");
   }
 
   private clearCaptureResults(): void {
@@ -1112,8 +1040,6 @@ export class UIManager {
     if (this.onCaptureComplete) {
       this.onCaptureComplete([], []);
     }
-
-    console.log("Capture results cleared");
   }
 
   private onListenClick(): void {
@@ -1144,8 +1070,6 @@ export class UIManager {
         }
       },
     );
-
-    console.log("CaptureModalManager initialized");
   }
 
   private async openCaptureModal(): Promise<void> {
@@ -1263,10 +1187,8 @@ export class UIManager {
 
   // Audio control methods
   setAudioStatus(status: string): void {
-    console.log("setAudioStatus called with:", status);
     if (this.audioStatusText) {
       this.audioStatusText.textContent = status;
-      console.log("Audio status updated to:", status);
     } else {
       console.warn("Audio status text element not found!");
     }
@@ -1289,19 +1211,16 @@ export class UIManager {
   enableDownloadButton(): void {
     if (this.downloadApoBtn) {
       this.downloadApoBtn.disabled = false;
-      console.log("Download APO button enabled");
     }
   }
 
   disableDownloadButton(): void {
     if (this.downloadApoBtn) {
       this.downloadApoBtn.disabled = true;
-      console.log("Download APO button disabled");
     }
   }
 
   private async onDownloadApoClick(): Promise<void> {
-    console.log("Download APO button clicked");
 
     try {
       if (!this.getOptimizationResult) {
@@ -1320,15 +1239,6 @@ export class UIManager {
       // Get selected export format
       const format = (this.exportFormatSelect?.value || "apo") as ExportFormat;
 
-      console.log(`[DOWNLOAD] Exporting ${format.toUpperCase()} format...`, {
-        numParams: result.filterParams.length,
-        sampleRate: result.sampleRate,
-        peqModel: result.peqModel,
-        lossType: result.lossType,
-        speakerName: result.speakerName,
-        format,
-      });
-
       await exportEQ(
         result.filterParams,
         result.sampleRate,
@@ -1338,7 +1248,6 @@ export class UIManager {
         format,
       );
 
-      console.log("[DOWNLOAD] APO export successful");
     } catch (error) {
       console.error("[DOWNLOAD] Error exporting APO:", error);
       this.showError(

@@ -239,7 +239,7 @@ export class StreamingManager {
 
       // Reset position tracking
       this.currentPosition = 0;
-      this.callbacks.onStateChange?.("playing");
+      // Note: onStateChange("playing") will be called via backend event when playback actually starts
       this.startStatePolling();
     } catch (error) {
       const errorMsg = `Failed to start playback: ${error}`;

@@ -31,7 +31,6 @@ export class ProgressPlot {
         '<div style="text-align: center; padding: 20px; color: #666;">Waiting for optimization data...</div>';
     }
     this.progressData = [];
-    console.log("[PLOT DEBUG] Progress graph cleared and reset");
   }
 
   addProgressData(
@@ -39,30 +38,20 @@ export class ProgressPlot {
     fitness: number,
     convergence: number,
   ): void {
-    console.log(
-      `[PLOT DEBUG] Adding progress data: iteration=${iteration}, fitness=${fitness}, convergence=${convergence}`,
-    );
     this.progressData.push({
       iteration,
       fitness,
       convergence,
       timestamp: Date.now(),
     });
-    console.log(
-      `[PLOT DEBUG] Progress data array now has ${this.progressData.length} entries`,
-    );
   }
 
   async updateProgressGraph(): Promise<void> {
-    console.log(
-      `[PLOT DEBUG] updateProgressGraph called, element exists: ${!!this.progressGraphElement}, data length: ${this.progressData.length}`,
-    );
     if (!this.progressGraphElement) {
       console.error("[PLOT DEBUG] Progress graph element not found!");
       return;
     }
     if (this.progressData.length === 0) {
-      console.log("[PLOT DEBUG] No progress data to plot yet");
       return;
     }
 
@@ -150,14 +139,6 @@ export class ProgressPlot {
     };
 
     try {
-      console.log("[PLOT DEBUG] Creating/updating progress graph with Plotly");
-      console.log("[PLOT DEBUG] Fitness data:", fitness.slice(0, 5), "...");
-      console.log(
-        "[PLOT DEBUG] Convergence data:",
-        convergence.slice(0, 5),
-        "...",
-      );
-
       // Clear placeholder text
       if (
         this.progressGraphElement.innerHTML.includes(
@@ -172,7 +153,6 @@ export class ProgressPlot {
         this.progressGraphElement.children.length > 0
       ) {
         // Update existing plot
-        console.log("[PLOT DEBUG] Updating existing plot");
         await Plotly.react(
           this.progressGraphElement,
           [fitnessTrace, convergenceTrace],
@@ -181,7 +161,6 @@ export class ProgressPlot {
         );
       } else {
         // Create new plot
-        console.log("[PLOT DEBUG] Creating new plot");
         await Plotly.newPlot(
           this.progressGraphElement,
           [fitnessTrace, convergenceTrace],
@@ -189,11 +168,6 @@ export class ProgressPlot {
           config,
         );
       }
-      console.log(
-        "[PLOT DEBUG] ✅ Progress graph updated successfully with",
-        this.progressData.length,
-        "data points",
-      );
     } catch (error) {
       console.error("[PLOT DEBUG] ❌ Error updating progress graph:", error);
       // Add error message to the element

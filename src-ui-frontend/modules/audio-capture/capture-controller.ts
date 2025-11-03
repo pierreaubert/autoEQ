@@ -3,8 +3,15 @@
  * Separates audio capture functionality from UI concerns
  */
 
-import type { CaptureResult } from "@audio-player/audio-processor";
 import { getAudioDevices as tauriGetAudioDevices } from "@audio-player/audio-interface";
+
+export interface CaptureResult {
+  success: boolean;
+  frequencies: number[];
+  magnitudes: number[];
+  phases?: number[];
+  error?: string;
+}
 
 export interface CaptureParameters {
   inputDevice: string;

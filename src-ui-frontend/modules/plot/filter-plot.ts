@@ -59,7 +59,6 @@ export class FilterPlot {
           layout,
           config,
         ).then(() => {
-          console.log("[FILTER PLOT] Filter plot created successfully");
           this.filterPlotElement.classList.add("has-plot");
           this.showPlotContainer("filter_plot");
           setTimeout(() => Plotly.Plots.resize(this.filterPlotElement), 100);
@@ -88,9 +87,6 @@ export class FilterPlot {
       const element = document.getElementById(verticalItemId);
       if (element) {
         element.style.display = "flex";
-        console.log(
-          `[VERTICAL DEBUG] Showed plot container: ${plotId} via vertical item ${verticalItemId}`,
-        );
       }
     }
   }

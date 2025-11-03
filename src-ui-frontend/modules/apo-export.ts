@@ -18,13 +18,6 @@ export async function exportEQ(
   format: ExportFormat,
 ): Promise<void> {
   try {
-    console.log(`[EXPORT] Starting ${format.toUpperCase()} export`, {
-      numParams: filterParams.length,
-      sampleRate,
-      peqModel,
-      format,
-    });
-
     // Generate content based on format
     let content: string;
     switch (format) {
@@ -63,10 +56,6 @@ export async function exportEQ(
         throw new Error(`Unsupported export format: ${format}`);
     }
 
-    console.log(
-      `[EXPORT] Generated ${format.toUpperCase()} content: ${content.length} bytes`,
-    );
-
     // Generate default filename with loss type and speaker name
     const defaultFilename = generateFilename(lossType, speakerName, format);
 
@@ -80,14 +69,11 @@ export async function exportEQ(
     });
 
     if (!filePath) {
-      console.log(`[EXPORT] User cancelled save dialog`);
       return;
     }
 
     // Write the file using Tauri's filesystem API
     await writeTextFile(filePath, content);
-
-    console.log(`[EXPORT] Successfully saved to: ${filePath}`);
   } catch (error) {
     console.error(`[EXPORT] Export failed:`, error);
     throw error;

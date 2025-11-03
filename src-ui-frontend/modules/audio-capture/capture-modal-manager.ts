@@ -7,7 +7,7 @@ import {
 import { CaptureStorage } from "./capture-storage";
 import { CSVExporter } from "./csv-export";
 import { CaptureGraphRenderer } from "./capture-graph";
-import { RoutingMatrix } from "@audio-player/audio-routing";
+import { RoutingMatrix, type RoutingConfig } from "@audio-player/audio-routing";
 import { invoke } from "@tauri-apps/api/core";
 
 export interface CaptureData {

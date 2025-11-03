@@ -1,5 +1,4 @@
 // Standalone Audio Player Module
-// Extracted from audio-processor.ts and related UI components
 
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -230,7 +229,7 @@ export class AudioPlayer {
   }
 
   private handleStateChange(state: string): void {
-    console.log("[AudioPlayer] Backend state changed:", state);
+    console.log("[AudioPlayer] Backend state:", state);
 
     if (state === "playing") {
       this.isAudioPlaying = true;
@@ -663,20 +662,19 @@ export class AudioPlayer {
           }));
       }
 
+      // Enable monitoring BEFORE starting playback so the decoder thread has access to monitors
+      if (this.spectrumAnalyzer) {
+        await this.spectrumAnalyzer.start();
+      }
+      await this.streamingManager.enableLoudnessMonitoring();
+
       await this.streamingManager.play(filters);
 
       this.isAudioPlaying = true;
       this.isAudioPaused = false;
       this.audioStartTime = Date.now();
 
-      // Start spectrum analyzer
-      if (this.spectrumAnalyzer) {
-        await this.spectrumAnalyzer.start();
-      }
-
-      // Start loudness monitoring
-      console.log('[AudioPlayer] Enabling and starting loudness monitoring...');
-      await this.streamingManager.enableLoudnessMonitoring();
+      // Start loudness polling
       this.streamingManager.startLoudnessPolling(100, (loudnessInfo) => {
         this.updateLoudnessDisplay(loudnessInfo);
       });
@@ -698,6 +696,11 @@ export class AudioPlayer {
       this.isAudioPlaying = false;
       this.isAudioPaused = true;
       this.audioPauseTime = Date.now();
+
+      // Stop spectrum analyzer
+      if (this.spectrumAnalyzer) {
+        await this.spectrumAnalyzer.stop();
+      }
 
       // Stop loudness monitoring
       this.streamingManager.stopLoudnessPolling();
@@ -753,6 +756,8 @@ export class AudioPlayer {
       await this.streamingManager.resume();
       this.isAudioPlaying = true;
       this.isAudioPaused = false;
+
+      // Note: Spectrum analyzer will be started in handleStateChange() when backend confirms "playing"
 
       // Restart loudness monitoring
       await this.streamingManager.enableLoudnessMonitoring();

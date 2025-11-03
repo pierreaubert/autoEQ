@@ -61,7 +61,6 @@ export class TonalPlot {
           layout,
           config,
         ).then(() => {
-          console.log("Tonal subplot grid (2x2) created successfully");
           this.tonalPlotElement!.classList.add("has-plot");
           this.showPlotContainer("tonal_plot");
           setTimeout(() => Plotly.Plots.resize(this.tonalPlotElement!), 100);
@@ -87,9 +86,6 @@ export class TonalPlot {
       const element = document.getElementById(verticalItemId);
       if (element) {
         element.style.display = "flex";
-        console.log(
-          `[VERTICAL DEBUG] Showed plot container: ${plotId} via vertical item ${verticalItemId}`,
-        );
       }
     }
   }

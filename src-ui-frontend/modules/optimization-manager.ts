@@ -72,56 +72,35 @@ export class OptimizationManager {
 
   private async setupProgressListener(): Promise<void> {
     try {
-      console.log("[OPT DEBUG] 🔧 Setting up progress listeners...");
-
       // Listen to optimization-progress events
       this.progressUnlisten = await listen("optimization-progress", (event) => {
         const data = event.payload as Record<string, unknown>;
-        console.log(
-          "[OPT DEBUG] 📊 optimization-progress event received:",
-          event,
-        );
-        console.log("[OPT DEBUG] Event payload:", data);
         this.handleProgressEvent(data);
       });
 
       // Also listen to progress events (alternative name)
       await listen("progress", (event) => {
         const data = event.payload as Record<string, unknown>;
-        console.log("[OPT DEBUG] 📈 progress event received:", event);
-        console.log("[OPT DEBUG] Event payload:", data);
         this.handleProgressEvent(data);
       });
 
       // Listen to optimization_progress events (underscore variant)
       await listen("optimization_progress", (event) => {
         const data = event.payload as Record<string, unknown>;
-        console.log(
-          "[OPT DEBUG] 📉 optimization_progress event received:",
-          event,
-        );
-        console.log("[OPT DEBUG] Event payload:", data);
         this.handleProgressEvent(data);
       });
 
       // Listen to iteration events (another possible name)
       await listen("iteration", (event) => {
         const data = event.payload as Record<string, unknown>;
-        console.log("[OPT DEBUG] 🔄 iteration event received:", event);
-        console.log("[OPT DEBUG] Event payload:", data);
         this.handleProgressEvent(data);
       });
 
       // Listen to progress_update events (the actual event name from Rust!)
       await listen("progress_update", (event) => {
         const data = event.payload as Record<string, unknown>;
-        console.log("[OPT DEBUG] 🎯 progress_update event received!");
-        console.log("[OPT DEBUG] Event payload:", data);
         this.handleProgressEvent(data);
       });
-
-      console.log("[OPT DEBUG] ✅ All progress listeners setup completed");
-      console.log("[OPT DEBUG] 🎯 Primary listener: progress_update");
     } catch (error) {
       console.error("❌ Failed to setup progress listener:", error);
     }
@@ -133,15 +112,11 @@ export class OptimizationManager {
       this.handleProgressUpdate(data);
     } else if (data.iteration !== undefined || data.fitness !== undefined) {
       // Direct progress data format
-      console.log("[OPT DEBUG] Direct progress data detected");
       this.handleProgressUpdate(data);
-    } else {
-      console.log("[OPT DEBUG] Unknown event format, keys:", Object.keys(data));
     }
   }
 
   private handleProgressUpdate(data: Record<string, unknown>): void {
-    console.log("[OPT DEBUG] handleProgressUpdate called with data:", data);
     const { stage, status, details = "", percentage } = data;
 
     // Calculate percentage if we have iteration data
@@ -167,7 +142,6 @@ export class OptimizationManager {
         convergence,
       };
 
-      console.log("[OPT DEBUG] Adding progress entry:", progressEntry);
       this.progressData.push(progressEntry);
 
       // Calculate percentage based on iteration (assuming max 300 iterations as seen in Rust output)
@@ -177,31 +151,16 @@ export class OptimizationManager {
         100,
         (iteration / estimatedMaxIterations) * 100,
       );
-      console.log(
-        "[OPT DEBUG] Calculated percentage from iteration:",
-        calculatedPercentage,
-      );
-
       // Notify progress data callback for plotting
       if (this.onProgressDataUpdate) {
-        console.log("[OPT DEBUG] Calling onProgressDataUpdate callback");
         this.onProgressDataUpdate(iteration, fitness, convergence);
       } else {
         console.warn("[OPT DEBUG] No onProgressDataUpdate callback set!");
       }
-    } else {
-      console.log(
-        "[OPT DEBUG] No fitness data in progress update, data keys:",
-        Object.keys(data),
-      );
     }
 
     // Notify UI with calculated percentage
     if (this.onProgressUpdate) {
-      console.log(
-        "[OPT DEBUG] Calling onProgressUpdate with percentage:",
-        calculatedPercentage,
-      );
       this.onProgressUpdate(
         typeof stage === "string" ? stage : "Optimization",
         typeof status === "string" ? status : "running",
@@ -251,14 +210,9 @@ export class OptimizationManager {
     this.progressData = [];
 
     try {
-      console.log("Starting optimization with params:", params);
-
-      // Call the Tauri backend
       const result = (await invoke("run_optimization", {
         params,
       })) as OptimizationResult;
-
-      console.log("Optimization completed:", result);
 
       if (result.success) {
         // Store the optimization results for later use (e.g., APO export)
@@ -268,13 +222,6 @@ export class OptimizationManager {
           this.lastPeqModel = params.peq_model || "pk";
           this.lastLossType = params.loss || "flat";
           this.lastSpeakerName = params.speaker || null;
-          console.log("Stored filter params for APO export:", {
-            numParams: this.lastFilterParams.length,
-            sampleRate: this.lastSampleRate,
-            peqModel: this.lastPeqModel,
-            lossType: this.lastLossType,
-            speakerName: this.lastSpeakerName,
-          });
         }
 
         if (this.onOptimizationComplete) {
@@ -306,16 +253,12 @@ export class OptimizationManager {
 
   async cancelOptimization(): Promise<void> {
     if (!this.isOptimizationRunning || !this.currentOptimizationId) {
-      console.log("No optimization running to cancel");
       return;
     }
 
     try {
-      console.log("Cancelling optimization:", this.currentOptimizationId);
-
       // Cancel via backend command
       await invoke("cancel_optimization");
-      console.log("Optimization cancelled via backend command");
 
       // Always perform local cleanup regardless of backend response
       this.isOptimizationRunning = false;
@@ -326,8 +269,6 @@ export class OptimizationManager {
         this.progressUnlisten();
         this.progressUnlisten = null;
       }
-
-      console.log("Optimization cancelled successfully");
     } catch (error) {
       console.error("Failed to cancel optimization:", error);
       // Even if there's an error, we should still clean up local state
@@ -432,10 +373,6 @@ export class OptimizationManager {
         if (targetData) {
           baseParams.target_frequencies = targetData.frequencies;
           baseParams.target_magnitudes = targetData.magnitudes;
-          console.log("[OPTIMIZATION] Loaded headphone target data:", {
-            target: headphoneTarget,
-            points: targetData.frequencies.length,
-          });
         } else {
           console.error(
             "[OPTIMIZATION] Failed to load headphone target:",
@@ -490,19 +427,6 @@ export class OptimizationManager {
         parseFloat(formData.get("adaptive_weight_cr") as string) || 0.1;
     }
 
-    // Debug log the parameters being sent
-    console.log("[OPTIMIZATION] Input type:", inputType);
-    console.log("[OPTIMIZATION] Parameters to send:", {
-      curve_path: baseParams.curve_path,
-      curve_name: baseParams.curve_name,
-      target_path: baseParams.target_path,
-      speaker: baseParams.speaker,
-      version: baseParams.version,
-      measurement: baseParams.measurement,
-      num_filters: baseParams.num_filters,
-      algo: baseParams.algo,
-    });
-
     return baseParams;
   }
 
@@ -511,8 +435,6 @@ export class OptimizationManager {
     targetName: string,
   ): Promise<{ frequencies: number[]; magnitudes: number[] } | null> {
     try {
-      console.log(`[OPTIMIZATION] Loading headphone target: ${targetName}`);
-
       // Fetch the CSV file from the public directory
       const response = await fetch(
         `/public/headphone-targets/${targetName}.csv`,
@@ -556,9 +478,6 @@ export class OptimizationManager {
         }
       }
 
-      console.log(
-        `[OPTIMIZATION] Loaded ${frequencies.length} points from ${targetName}.csv`,
-      );
       return { frequencies, magnitudes };
     } catch (error) {
       console.error(
@@ -569,17 +488,15 @@ export class OptimizationManager {
     }
   }
 
-  // Methods to store captured data from AudioProcessor
+  // Methods to store captured data from audio capture
   setCapturedData(frequencies: number[], magnitudes: number[]): void {
     this.capturedFrequencies = [...frequencies];
     this.capturedMagnitudes = [...magnitudes];
-    console.log(`Stored captured data: ${frequencies.length} frequency points`);
   }
 
   clearCapturedData(): void {
     this.capturedFrequencies = null;
     this.capturedMagnitudes = null;
-    console.log("Cleared captured data");
   }
 
   hasCapturedData(): boolean {

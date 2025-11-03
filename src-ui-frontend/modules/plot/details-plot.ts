@@ -67,7 +67,6 @@ export class DetailsPlot {
         this.detailsPlotElement.classList.add("has-plot");
         this.showPlotContainer("details_plot");
         setTimeout(() => Plotly.Plots.resize(this.detailsPlotElement!), 100);
-        console.log("Details subplot grid (2x2) generated successfully");
       } else {
         console.warn("Invalid details plot data structure:", plotData);
       }
@@ -88,9 +87,6 @@ export class DetailsPlot {
       const element = document.getElementById(verticalItemId);
       if (element) {
         element.style.display = "flex";
-        console.log(
-          `[VERTICAL DEBUG] Showed plot container: ${plotId} via vertical item ${verticalItemId}`,
-        );
       }
     }
   }

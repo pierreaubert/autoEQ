@@ -1,4 +1,4 @@
-use autoeq::Curve;
+use autoeq::{Curve, LossType, cli::Args as AutoEQArgs, plot_filters, plot_spin, plot_spin_details, plot_spin_tonal};
 use ndarray::Array1;
 use plotly::Plot;
 use serde::{Deserialize, Serialize};
@@ -196,3 +196,143 @@ pub fn generate_optimization_plots(params: OptimizationPlotParams) -> Optimizati
         deviation_curve: deviation_curve_plot,
     }
 }
+
+
+#[tauri::command]
+pub async fn generate_plot_filters(params: PlotFiltersParams) -> Result<serde_json::Value, String> {
+    // Convert CurveData to autoeq::Curve
+    let input_curve = curve_data_to_curve(&params.input_curve);
+    let target_curve = curve_data_to_curve(&params.target_curve);
+    let deviation_curve = curve_data_to_curve(&params.deviation_curve);
+
+    // Create a minimal Args struct for the plot function
+    let args = AutoEQArgs {
+        num_filters: params.num_filters,
+        curve: None,
+        target: None,
+        sample_rate: params.sample_rate,
+        max_db: 3.0,
+        min_db: 1.0,
+        max_q: 3.0,
+        min_q: 1.0,
+        min_freq: 60.0,
+        max_freq: 16000.0,
+        output: None,
+        speaker: None,
+        version: None,
+        measurement: None,
+        curve_name: "Listening Window".to_string(),
+        algo: "autoeq:de".to_string(),
+        population: 300,
+        maxeval: 2000,
+        refine: false,
+        local_algo: "cobyla".to_string(),
+        min_spacing_oct: 0.5,
+        spacing_weight: 20.0,
+        smooth: true,
+        smooth_n: 2,
+        loss: LossType::SpeakerFlat,
+        peq_model: match params.peq_model.as_deref() {
+            Some("hp-pk") => autoeq::cli::PeqModel::HpPk,
+            Some("hp-pk-lp") => autoeq::cli::PeqModel::HpPkLp,
+            Some("free-pk-free") => autoeq::cli::PeqModel::FreePkFree,
+            Some("free") => autoeq::cli::PeqModel::Free,
+            Some("pk") | _ => autoeq::cli::PeqModel::Pk,
+        },
+        peq_model_list: false,
+        algo_list: false,
+        tolerance: 1e-3,
+        atolerance: 1e-4,
+        recombination: 0.9,
+        strategy: "currenttobest1bin".to_string(),
+        strategy_list: false,
+        adaptive_weight_f: 0.9,
+        adaptive_weight_cr: 0.9,
+        no_parallel: false,
+        parallel_threads: 0,
+        seed: None, // Random seed for deterministic optimization (None = random)
+        qa: None,   // Quality assurance mode disabled for UI (None = disabled)
+    };
+
+    // Generate the plot
+    let plot = plot_filters(
+        &args,
+        &input_curve,
+        &target_curve,
+        &deviation_curve,
+        &params.optimized_params,
+    );
+
+    // Convert to JSON
+    plot_to_json(plot)
+}
+
+#[tauri::command]
+pub async fn generate_plot_spin(params: PlotSpinParams) -> Result<serde_json::Value, String> {
+    // Convert CurveData HashMap to autoeq::Curve HashMap if provided
+    let cea2034_curves = params.cea2034_curves.as_ref().map(|curves| {
+        curves
+            .iter()
+            .map(|(name, curve_data)| (name.clone(), curve_data_to_curve(curve_data)))
+            .collect::<HashMap<String, Curve>>()
+    });
+
+    // Convert eq_response to Array1 if provided
+    let eq_response = params
+        .eq_response
+        .as_ref()
+        .map(|response| Array1::from_vec(response.clone()));
+
+    // Generate the plot
+    let plot = plot_spin(cea2034_curves.as_ref(), eq_response.as_ref());
+
+    // Convert to JSON
+    plot_to_json(plot)
+}
+
+#[tauri::command]
+pub async fn generate_plot_spin_details(params: PlotSpinParams) -> Result<serde_json::Value, String> {
+    // Convert CurveData HashMap to autoeq::Curve HashMap if provided
+    let cea2034_curves = params.cea2034_curves.as_ref().map(|curves| {
+        curves
+            .iter()
+            .map(|(name, curve_data)| (name.clone(), curve_data_to_curve(curve_data)))
+            .collect::<HashMap<String, Curve>>()
+    });
+
+    // Convert eq_response to Array1 if provided
+    let eq_response = params
+        .eq_response
+        .as_ref()
+        .map(|response| Array1::from_vec(response.clone()));
+
+    // Generate the plot
+    let plot = plot_spin_details(cea2034_curves.as_ref(), eq_response.as_ref());
+
+    // Convert to JSON
+    plot_to_json(plot)
+}
+
+#[tauri::command]
+pub async fn generate_plot_spin_tonal(params: PlotSpinParams) -> Result<serde_json::Value, String> {
+    // Convert CurveData HashMap to autoeq::Curve HashMap if provided
+    let cea2034_curves = params.cea2034_curves.as_ref().map(|curves| {
+        curves
+            .iter()
+            .map(|(name, curve_data)| (name.clone(), curve_data_to_curve(curve_data)))
+            .collect::<HashMap<String, Curve>>()
+    });
+
+    // Convert eq_response to Array1 if provided
+    let eq_response = params
+        .eq_response
+        .as_ref()
+        .map(|response| Array1::from_vec(response.clone()));
+
+    // Generate the plot
+    let plot = plot_spin_tonal(cea2034_curves.as_ref(), eq_response.as_ref());
+
+    // Convert to JSON
+    plot_to_json(plot)
+}
+

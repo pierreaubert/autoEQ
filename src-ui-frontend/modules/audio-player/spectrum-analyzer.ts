@@ -50,7 +50,7 @@ export class SpectrumAnalyzerComponent {
   constructor(config: SpectrumDisplayConfig) {
     this.canvas = config.canvas;
     this.ctx = this.canvas.getContext("2d");
-    
+
     // Initialize config regardless of context availability
     this.config = {
       canvas: config.canvas,
@@ -62,14 +62,14 @@ export class SpectrumAnalyzerComponent {
       showLabels: config.showLabels ?? true,
       showGrid: config.showGrid ?? true,
     };
-    
+
     if (!this.ctx) {
       console.warn("[Spectrum] Failed to get 2D context for canvas");
       return;
     }
 
     this.setupCanvas();
-    
+
     // Do initial render to show proper "no data" state
     // Note: This is just a single render, not starting the animation loop
     requestAnimationFrame(() => this.render());
@@ -97,21 +97,15 @@ export class SpectrumAnalyzerComponent {
    */
   async start(): Promise<void> {
     if (this.isMonitoring) {
-      console.log("[Spectrum] Already monitoring, skipping start");
       return;
     }
 
     try {
-      console.log("[Spectrum] Starting spectrum monitoring...");
       await invoke("stream_enable_spectrum_monitoring");
       this.isMonitoring = true;
-      console.log("[Spectrum] Backend monitoring enabled, starting polling and rendering");
       this.startPolling();
       this.startRendering();
-      console.log("[Spectrum] Spectrum monitoring started successfully", {
-        animationFrameId: this.animationFrameId,
-        pollInterval: this.pollInterval
-      });
+      // Rendering will start when first data is received
     } catch (error) {
       console.error("[Spectrum] Failed to start spectrum monitoring:", error);
       throw error;
@@ -140,6 +134,7 @@ export class SpectrumAnalyzerComponent {
    */
   private startPolling(): void {
     let pollCount = 0;
+    let firstDataReceived = false;
     this.pollInterval = window.setInterval(async () => {
       try {
         const spectrum = await invoke<SpectrumInfo | null>(
@@ -147,6 +142,13 @@ export class SpectrumAnalyzerComponent {
         );
         if (spectrum) {
           this.currentSpectrum = spectrum;
+
+          // Start rendering on first data received
+          if (!firstDataReceived) {
+            firstDataReceived = true;
+            this.startRendering();
+          }
+
           if (pollCount++ % 10 === 0) {
             console.log("[Spectrum] Received data:", {
               frequencies: spectrum.frequencies.length,
@@ -177,11 +179,9 @@ export class SpectrumAnalyzerComponent {
   private startRendering(): void {
     // Prevent duplicate rendering loops
     if (this.animationFrameId !== null) {
-      console.log("[Spectrum] Rendering already active");
       return;
     }
-    
-    console.log("[Spectrum] Starting rendering loop");
+
     const render = () => {
       this.render();
       this.animationFrameId = requestAnimationFrame(render);
@@ -225,12 +225,6 @@ export class SpectrumAnalyzerComponent {
       this.drawNoData(width, height);
       return;
     }
-    
-    // If we reach here, we have spectrum data to render
-    // Only log occasionally to avoid console spam
-    if (Math.random() < 0.01) {
-      console.log("[Spectrum] Rendering spectrum data");
-    }
 
     // Draw grid and labels
     if (this.config.showGrid) {
@@ -239,9 +233,6 @@ export class SpectrumAnalyzerComponent {
 
     // Draw spectrum bars
     this.drawSpectrum(width, height);
-
-    // Draw horizontal dB grid lines ON TOP of spectrum bars
-    this.drawVerticalGridLines(width, height);
 
     // Draw labels
     if (this.config.showLabels) {
@@ -268,27 +259,21 @@ export class SpectrumAnalyzerComponent {
   private drawGrid(width: number, height: number): void {
     if (!this.ctx) return;
     const isDarkMode = this.config.colorScheme === "dark";
-    this.ctx.strokeStyle = isDarkMode ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.1)";
-    this.ctx.lineWidth = 1;
-    const freqMarkers = [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000];
+    const lineColor = isDarkMode ? "rgba(255, 255, 255, 0.8)" : "rgba(0, 0, 0, 0.8)";
+    const freqMarkers = [20, 40, 60, 100, 200, 400, 600, 1000, 2000, 4000, 6000, 10000, 20000];
+    const dashPattern = [1, 2];
     freqMarkers.forEach(freq => {
       if (!this.ctx) return;
       const x = this.freqToX(freq, width);
+      this.ctx.strokeStyle = lineColor;
+      this.ctx.lineWidth = 1;
       this.ctx.beginPath();
+      this.ctx.setLineDash(dashPattern);
       this.ctx.moveTo(x, 0);
-      this.ctx.lineTo(x, height - 10);
+      this.ctx.lineTo(x, height-20);
       this.ctx.stroke();
     });
-  }
 
-  /**
-   * Draw vertical dB grid lines
-   */
-  private drawVerticalGridLines(width: number, height: number): void {
-    if (!this.ctx) return;
-    const isDarkMode = this.config.colorScheme === "dark";
-
-    // Draw horizontal lines for dB levels (0, -10, -20, -30, -40, -50, -60)
     const dbLevels = [0, -10, -20, -30, -40, -50, -60];
 
     dbLevels.forEach(db => {
@@ -296,15 +281,14 @@ export class SpectrumAnalyzerComponent {
       const y = this.dbToY(db, height);
 
       // Set dotted line style - full opacity
-      const lineColor = isDarkMode ? "rgba(255, 255, 255, 1)" : "rgba(0, 0, 0, 1)";
       this.ctx.strokeStyle = lineColor;
       this.ctx.lineWidth = 1;
-      this.ctx.setLineDash([1, 4]); // Dotted pattern: 2px dash, 3px gap
+      this.ctx.setLineDash(dashPattern);
 
       // Draw horizontal line across full width
       this.ctx.beginPath();
-      this.ctx.moveTo(0, y);
-      this.ctx.lineTo(width, y);
+      this.ctx.moveTo(20, y);
+      this.ctx.lineTo(width-5, y);
       this.ctx.stroke();
     });
 
@@ -317,7 +301,7 @@ export class SpectrumAnalyzerComponent {
    */
   private dbToY(db: number, height: number): number {
     const normalized = (db + this.config.dbRange) / this.config.dbRange;
-    return height - 10 - (normalized * (height - 10));
+    return height - 20 - (normalized * (height - 20));
   }
 
   /**
@@ -355,7 +339,7 @@ export class SpectrumAnalyzerComponent {
       const color = this.getMagnitudeColor(magnitude);
       this.ctx.fillStyle = color;
       // Draw bars from bottom, leaving 10px for labels
-      this.ctx.fillRect(x, height - 10 - barHeight, barWidth, barHeight);
+      this.ctx.fillRect(x, height - 20 - barHeight, barWidth, barHeight);
     }
   }
 
@@ -416,7 +400,7 @@ export class SpectrumAnalyzerComponent {
       if (!this.ctx) return;
       const db = -i * (this.config.dbRange / 3);
       // Adjust Y positioning for 72px height
-      const y = 8 + (i * (height - 18)) / 3;
+      const y = 3 + (i * (height - 27)) / 3;
 
       const label = `${db.toFixed(0)}dB`;
 
@@ -448,15 +432,11 @@ export class SpectrumAnalyzerComponent {
    */
   private dbToHeight(magnitude: number, height: number): number {
     if (!isFinite(magnitude)) {
-      return 0;
+      return 0.0;
     }
-
-    // Clamp to display range
     const clamped = Math.max(-this.config.dbRange, Math.min(0, magnitude));
     const normalized = (clamped + this.config.dbRange) / this.config.dbRange;
-
-    // Use full height minus 10px for labels
-    return normalized * (height - 10);
+    return normalized * height;
   }
 
   /**

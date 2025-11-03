@@ -18,7 +18,6 @@ export class PlotBase {
       const element = document.getElementById(id);
       if (element) {
         element.style.display = "flex";
-        console.log(`[VERTICAL DEBUG] Showed vertical item: ${id}`);
       }
     });
   }
@@ -33,7 +32,6 @@ export class PlotBase {
       const element = document.getElementById(id);
       if (element) {
         element.style.display = "none";
-        console.log(`[VERTICAL DEBUG] Hid vertical item: ${id}`);
       }
     });
   }
@@ -51,9 +49,6 @@ export class PlotBase {
       const element = document.getElementById(verticalItemId);
       if (element) {
         element.style.display = "flex";
-        console.log(
-          `[VERTICAL DEBUG] Showed plot container: ${plotId} via vertical item ${verticalItemId}`,
-        );
       }
     }
   }
@@ -71,30 +66,16 @@ export class PlotBase {
       const element = document.getElementById(verticalItemId);
       if (element) {
         element.style.display = "none";
-        console.log(
-          `[VERTICAL DEBUG] Hid plot container: ${plotId} via vertical item ${verticalItemId}`,
-        );
       }
     }
   }
 
   configureVerticalVisibility(hasSpinData: boolean): void {
-    console.log(
-      "[VERTICAL DEBUG] Configuring vertical visibility, hasSpinData:",
-      hasSpinData,
-    );
-
     if (hasSpinData) {
       // Speaker-based: show all 3 graphs (Filter Response + 2 spinorama graphs)
-      console.log(
-        "[VERTICAL DEBUG] Showing all graphs for speaker-based optimization",
-      );
       this.showSpinVerticalItems();
     } else {
       // Curve+target: only show Filter Response graph
-      console.log(
-        "[VERTICAL DEBUG] Showing only Filter Response for curve+target optimization",
-      );
       this.hideSpinVerticalItems();
     }
   }
