@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand};
-use sotf_audio::camilla::LoudnessCompensation;
+use sotf_audio::loudness_compensation::LoudnessCompensation;
 use sotf_audio::{
-    AudioManager, AudioStreamingManager, CamillaError, FilterParams, StreamingState, audio,
+    AudioManager, AudioStreamingManager, CamillaError, FilterParams, StreamingState,
 };
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -292,7 +292,7 @@ async fn list_devices() -> Result<(), String> {
     println!("Enumerating audio devices...\n");
 
     let devices =
-        audio::get_audio_devices().map_err(|e| format!("Failed to get devices: {}", e))?;
+        sotf_audio::devices::get_audio_devices().map_err(|e| format!("Failed to get devices: {}", e))?;
 
     // Print input devices
     if let Some(input_devices) = devices.get("input") {

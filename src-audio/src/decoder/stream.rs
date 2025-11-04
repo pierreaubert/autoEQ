@@ -4,8 +4,8 @@ use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
-use crate::audio_decoder::decoder::{AudioSpec, create_decoder};
-use crate::audio_decoder::error::{AudioDecoderError, AudioDecoderResult};
+use crate::decoder::decoder::{AudioSpec, create_decoder};
+use crate::decoder::error::{AudioDecoderError, AudioDecoderResult};
 
 /// Configuration for audio streaming
 #[derive(Debug, Clone)]

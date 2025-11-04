@@ -1,4 +1,4 @@
-use sotf_audio::audio_decoder::{AudioFormat, create_decoder, probe_file};
+use sotf_audio::decoder::{AudioFormat, create_decoder, probe_file};
 use std::env;
 
 fn main() {

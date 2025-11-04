@@ -1,4 +1,4 @@
-use crate::audio_decoder::{AudioDecoderError, AudioDecoderResult, create_decoder};
+use crate::decoder::{AudioDecoderError, AudioDecoderResult, create_decoder};
 use ebur128::{EbuR128, Mode};
 use serde::{Deserialize, Serialize};
 use std::path::Path;

@@ -90,8 +90,8 @@ pub fn user_friendly_error(error: &AudioDecoderError) -> String {
         }
         AudioDecoderError::UnsupportedFormat(_) => {
             format!(
-                "This audio format is not supported. Currently supported formats: {}", 
-                crate::audio_decoder::formats::AudioFormat::supported_formats_string()
+                "This audio format is not supported. Currently supported formats: {}",
+                crate::decoder::formats::AudioFormat::supported_formats_string()
             )
         }
         AudioDecoderError::InvalidFile(_) => {

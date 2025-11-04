@@ -12,7 +12,9 @@ use autoeq_env::{log_debug, log_error, log_info, log_warn};
 
 const FRAMES_PER_CHUNK: usize = 256;
 
-use crate::camilla::{AudioManager, ChannelMapMode, FilterParams, LoudnessCompensation};
+use crate::camilla::{AudioManager, ChannelMapMode};
+use crate::filters::FilterParams;
+use crate::loudness_compensation::LoudnessCompensation;
 use crate::loudness_monitor::{LoudnessInfo, LoudnessMonitor};
 use crate::spectrum_analyzer::{SpectrumAnalyzer, SpectrumConfig, SpectrumInfo};
 use crate::{
@@ -128,11 +130,7 @@ impl AudioStreamingManager {
     ) -> AudioDecoderResult<AudioFileInfo> {
         let path = file_path.as_ref().to_path_buf();
 
-        // Set state to loading
-        {
-            let mut state = self.state.lock().unwrap();
-            *state = StreamingState::Loading;
-        }
+        self.set_state(StreamingState::Loading);
 
         // Stop any current playback
         self.stop().await?;
@@ -161,11 +159,7 @@ impl AudioStreamingManager {
 
         self.current_audio_info = Some(audio_info.clone());
 
-        // Set state to ready
-        {
-            let mut state = self.state.lock().unwrap();
-            *state = StreamingState::Ready;
-        }
+        self.set_state(StreamingState::Ready);
 
         Ok(audio_info)
     }
@@ -224,10 +218,7 @@ impl AudioStreamingManager {
                 .map_err(|_| AudioDecoderError::StreamEnded)?;
         }
 
-        {
-            let mut state = self.state.lock().unwrap();
-            *state = StreamingState::Paused;
-        }
+        self.set_state(StreamingState::Paused);
 
         Ok(())
     }
@@ -242,10 +233,7 @@ impl AudioStreamingManager {
                 .map_err(|_| AudioDecoderError::StreamEnded)?;
         }
 
-        {
-            let mut state = self.state.lock().unwrap();
-            *state = StreamingState::Playing;
-        }
+        self.set_state(StreamingState::Playing);
 
         Ok(())
     }
@@ -274,11 +262,7 @@ impl AudioStreamingManager {
         self.command_tx = None;
         self.event_rx = None;
 
-        // Set state to idle
-        {
-            let mut state = self.state.lock().unwrap();
-            *state = StreamingState::Idle;
-        }
+        self.set_state(StreamingState::Idle);
 
         Ok(())
     }
@@ -293,12 +277,17 @@ impl AudioStreamingManager {
                 .map_err(|_| AudioDecoderError::StreamEnded)?;
         }
 
-        {
-            let mut state = self.state.lock().unwrap();
-            *state = StreamingState::Seeking;
-        }
+        self.set_state(StreamingState::Seeking);
 
         Ok(())
+    }
+
+    /// Get current streaming state
+    fn set_state(&self, new_state : StreamingState) {
+        {
+            let mut state = self.state.lock().unwrap();
+            *state = new_state;
+        }
     }
 
     /// Get current streaming state
@@ -399,7 +388,6 @@ impl AudioStreamingManager {
     }
 
     /// Start the decoder thread that feeds PCM data to CamillaDSP via stdin
-    /// Start the decoder thread that feeds PCM data to CamillaDSP via stdin
     async fn start_decoder_thread(&mut self) -> AudioDecoderResult<()> {
         let audio_info = self.current_audio_info.as_ref().unwrap();
         let path = audio_info.path.clone();
@@ -443,6 +431,7 @@ impl AudioStreamingManager {
 
         Ok(())
     }
+
     /// Main decoder thread function with pre-buffering and adaptive buffering
     fn decoder_thread_main(
         path: PathBuf,

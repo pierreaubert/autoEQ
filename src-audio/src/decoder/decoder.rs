@@ -1,5 +1,5 @@
-use crate::audio_decoder::error::{AudioDecoderError, AudioDecoderResult};
-use crate::audio_decoder::formats::{AudioFormat, SymphoniaDecoder};
+use crate::decoder::error::{AudioDecoderError, AudioDecoderResult};
+use crate::decoder::formats::{AudioFormat, SymphoniaDecoder};
 use std::path::Path;
 use std::time::Duration;
 

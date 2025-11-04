@@ -1,4 +1,4 @@
-use crate::audio_decoder::error::{AudioDecoderError, AudioDecoderResult};
+use crate::decoder::error::{AudioDecoderError, AudioDecoderResult};
 use std::fs::File;
 use std::path::Path;
 
@@ -10,7 +10,7 @@ use symphonia::core::io::MediaSourceStream;
 use symphonia::core::meta::MetadataOptions;
 use symphonia::core::probe::{Hint, Probe};
 
-use crate::audio_decoder::decoder::{AudioDecoder, AudioSpec, DecodedAudio};
+use crate::decoder::decoder::{AudioDecoder, AudioSpec, DecodedAudio};
 
 /// Create a custom probe with all supported format readers registered
 fn create_probe() -> Probe {
