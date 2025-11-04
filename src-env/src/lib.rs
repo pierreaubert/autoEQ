@@ -7,6 +7,10 @@
 pub mod constants;
 pub mod env_utils;
 
+// Include the log macros module to make macros available
+#[macro_use]
+pub mod log;
+
 // Re-export commonly used items
 pub use constants::{DATA_CACHED, DATA_GENERATED};
 pub use env_utils::{

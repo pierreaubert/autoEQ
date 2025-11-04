@@ -1,6 +1,6 @@
 [package]
 name = "autoeq-env"
-version = "0.2.2"
+version = "0.2.3"
 edition = { workspace = true }
 repository = { workspace = true }
 authors = { workspace = true }
@@ -8,3 +8,4 @@ license = { workspace = true }
 
 [dependencies]
 thiserror = { workspace = true }
+chrono = { workspace = true }
