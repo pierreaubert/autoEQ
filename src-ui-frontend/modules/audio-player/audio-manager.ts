@@ -139,6 +139,25 @@ export class StreamingManager {
         },
       );
       this.eventUnlisteners.push(fileLoadedUnlisten);
+
+      // Listen for filter update events
+      const filtersUpdatedUnlisten = await listen<{
+        ok: boolean;
+        error?: string;
+      }>("stream:filters-updated", (event) => {
+        if (event.payload.ok) {
+          console.log("[StreamingManager] Filters updated successfully");
+        } else {
+          console.error(
+            "[StreamingManager] Filter update failed:",
+            event.payload.error,
+          );
+          this.callbacks.onError?.(
+            event.payload.error || "Failed to update filters",
+          );
+        }
+      });
+      this.eventUnlisteners.push(filtersUpdatedUnlisten);
     } catch (error) {
       console.error(
         "[StreamingManager] Failed to setup event listeners:",
@@ -312,31 +331,33 @@ export class StreamingManager {
   }
 
   /**
-   * Update EQ filters in real-time
-   * Note: This requires restarting playback with new filters in current implementation
+   * Update EQ filters in real-time without restarting playback
+   * Uses the new stream_update_filters command for gap-free updates
    */
   async updateFilters(filters: FilterParam[]): Promise<void> {
+    if (!this.isTauriAvailable) {
+      throw new Error("Tauri not available. Run app via 'npm run tauri dev'.");
+    }
+
     try {
-      console.log("[StreamingManager] Updating filters:", filters);
+      console.log("[StreamingManager] Updating filters (hot-reload):", filters);
 
-      // Get current state
-      const state = await this.getPlaybackState();
+      // Convert FilterParam to backend format
+      const backendFilters = filters.map((f) => ({
+        frequency: f.frequency,
+        q: f.q,
+        gain: f.gain,
+        filter_type: "Peaking",
+      }));
 
-      if (state === "playing" || state === "paused") {
-        // Need to restart playback with new filters
-        // This is a limitation of the current backend implementation
-        const wasPlaying = state === "playing";
+      // Call the new stream_update_filters command
+      // This updates filters without restarting CamillaDSP
+      await invoke("stream_update_filters", {
+        filters: backendFilters,
+        loudness: null, // TODO: Add loudness support when needed
+      });
 
-        // Stop current playback
-        await this.stop();
-
-        // Restart with new filters
-        await this.play(filters);
-
-        if (!wasPlaying) {
-          await this.pause();
-        }
-      }
+      console.log("[StreamingManager] Filters updated successfully (no gaps)");
     } catch (error) {
       console.error("[StreamingManager] Failed to update filters:", error);
       throw error;
@@ -434,7 +455,10 @@ export class StreamingManager {
       await invoke("stream_enable_loudness_monitoring");
       console.log("[StreamingManager] Loudness monitoring enabled");
     } catch (error) {
-      console.error("[StreamingManager] Failed to enable loudness monitoring:", error);
+      console.error(
+        "[StreamingManager] Failed to enable loudness monitoring:",
+        error,
+      );
       throw error;
     }
   }
@@ -451,7 +475,10 @@ export class StreamingManager {
       await invoke("stream_disable_loudness_monitoring");
       console.log("[StreamingManager] Loudness monitoring disabled");
     } catch (error) {
-      console.error("[StreamingManager] Failed to disable loudness monitoring:", error);
+      console.error(
+        "[StreamingManager] Failed to disable loudness monitoring:",
+        error,
+      );
     }
   }
 
@@ -480,20 +507,23 @@ export class StreamingManager {
     onUpdate: (info: LoudnessInfo | null) => void,
   ): void {
     if (this.loudnessPollingInterval !== null) {
-      console.log('[StreamingManager] Loudness polling already active');
+      console.log("[StreamingManager] Loudness polling already active");
       return; // Already polling
     }
 
-    console.log('[StreamingManager] Starting loudness polling with interval:', intervalMs);
+    console.log(
+      "[StreamingManager] Starting loudness polling with interval:",
+      intervalMs,
+    );
     this.loudnessCallback = onUpdate;
 
     this.loudnessPollingInterval = window.setInterval(async () => {
       try {
         const loudness = await this.getLoudness();
-        console.log('[StreamingManager] Got loudness data:', loudness);
+        console.log("[StreamingManager] Got loudness data:", loudness);
         this.loudnessCallback?.(loudness);
       } catch (error) {
-        console.error('[StreamingManager] Error polling loudness:', error);
+        console.error("[StreamingManager] Error polling loudness:", error);
       }
     }, intervalMs);
   }

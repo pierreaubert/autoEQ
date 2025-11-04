@@ -1,4 +1,7 @@
-use autoeq::{Curve, LossType, cli::Args as AutoEQArgs, plot_filters, plot_spin, plot_spin_details, plot_spin_tonal};
+use autoeq::{
+    Curve, LossType, cli::Args as AutoEQArgs, plot_filters, plot_spin, plot_spin_details,
+    plot_spin_tonal,
+};
 use ndarray::Array1;
 use plotly::Plot;
 use serde::{Deserialize, Serialize};
@@ -197,7 +200,6 @@ pub fn generate_optimization_plots(params: OptimizationPlotParams) -> Optimizati
     }
 }
 
-
 #[tauri::command]
 pub async fn generate_plot_filters(params: PlotFiltersParams) -> Result<serde_json::Value, String> {
     // Convert CurveData to autoeq::Curve
@@ -291,7 +293,9 @@ pub async fn generate_plot_spin(params: PlotSpinParams) -> Result<serde_json::Va
 }
 
 #[tauri::command]
-pub async fn generate_plot_spin_details(params: PlotSpinParams) -> Result<serde_json::Value, String> {
+pub async fn generate_plot_spin_details(
+    params: PlotSpinParams,
+) -> Result<serde_json::Value, String> {
     // Convert CurveData HashMap to autoeq::Curve HashMap if provided
     let cea2034_curves = params.cea2034_curves.as_ref().map(|curves| {
         curves
@@ -335,4 +339,3 @@ pub async fn generate_plot_spin_tonal(params: PlotSpinParams) -> Result<serde_js
     // Convert to JSON
     plot_to_json(plot)
 }
-

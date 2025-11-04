@@ -2,9 +2,9 @@
 // Real-time Spectrum Analysis Commands
 // ============================================================================
 
+use sotf_audio::AudioStreamingManager;
 use tauri::State;
 use tokio::sync::Mutex;
-use sotf_audio::AudioStreamingManager;
 
 #[tauri::command]
 pub async fn stream_enable_spectrum_monitoring(
@@ -34,4 +34,3 @@ pub async fn stream_get_spectrum(
     let manager = streaming_manager.lock().await;
     Ok(manager.get_spectrum())
 }
-

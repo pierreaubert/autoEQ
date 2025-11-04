@@ -35,12 +35,12 @@ cp target/release/camilladsp /path/to/autoeq-app/src-ui/src-tauri/binaries/camil
 ## Platform Support
 
 ### Currently Bundled
-- ✅ macOS ARM64 (aarch64-apple-darwin)
+- macOS ARM64 (aarch64-apple-darwin)
+-️ Linux x86_64 (x86_64-unknown-linux-gnu)
 
 ### To Add
-- ⚠️ macOS Intel (x86_64-apple-darwin)
-- ⚠️ Linux x86_64 (x86_64-unknown-linux-gnu)
-- ⚠️ Windows x86_64 (x86_64-pc-windows-msvc)
+-️ macOS Intel (x86_64-apple-darwin)
+-️ Windows x86_64 (x86_64-pc-windows-msvc)
 
 ## Tauri Configuration
 

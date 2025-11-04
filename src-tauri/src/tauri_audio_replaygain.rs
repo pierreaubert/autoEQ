@@ -19,4 +19,3 @@ pub async fn analyze_replaygain(file_path: String) -> Result<ReplayGainInfo, Str
         }
     }
 }
-

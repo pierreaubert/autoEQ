@@ -47,7 +47,10 @@ pub async fn get_speaker_versions(speaker: String) -> Result<Vec<String>, String
 }
 
 #[tauri::command]
-pub async fn get_speaker_measurements(speaker: String, version: String) -> Result<Vec<String>, String> {
+pub async fn get_speaker_measurements(
+    speaker: String,
+    version: String,
+) -> Result<Vec<String>, String> {
     let url = format!(
         "https://api.spinorama.org/v1/speaker/{}/version/{}/measurements",
         urlencoding::encode(&speaker),

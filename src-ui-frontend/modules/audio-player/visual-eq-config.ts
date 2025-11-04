@@ -60,7 +60,7 @@ export class VisualEQConfig {
   private eqMiniCtx: CanvasRenderingContext2D | null = null;
   private selectedFilterIndex: number = -1;
   private isDraggingHandle: boolean = false;
-  private dragMode: 'ring' | 'bar' = 'ring';
+  private dragMode: "ring" | "bar" = "ring";
   private lastMouseY: number = 0;
 
   // EQ Response data
@@ -91,7 +91,7 @@ export class VisualEQConfig {
     instanceId: string,
     streamingManager: StreamingManager,
     callbacks: VisualEQConfigCallbacks = {},
-    eqMiniCanvas: HTMLCanvasElement | null = null
+    eqMiniCanvas: HTMLCanvasElement | null = null,
   ) {
     this.container = container;
     this.instanceId = instanceId;
@@ -101,7 +101,7 @@ export class VisualEQConfig {
     // Initialize mini canvas
     this.eqMiniCanvas = eqMiniCanvas;
     if (this.eqMiniCanvas) {
-      this.eqMiniCtx = this.eqMiniCanvas.getContext('2d');
+      this.eqMiniCtx = this.eqMiniCanvas.getContext("2d");
     }
 
     this.createEQModal();
@@ -120,7 +120,9 @@ export class VisualEQConfig {
     console.log("[EQ Debug] Creating modal element");
 
     // Check if modal already exists
-    const existingModal = document.getElementById(this.instanceId + "-eq-modal");
+    const existingModal = document.getElementById(
+      this.instanceId + "-eq-modal",
+    );
     if (existingModal) {
       console.log("[EQ Debug] Modal already exists:", existingModal);
       return;
@@ -168,7 +170,7 @@ export class VisualEQConfig {
 
     console.log(
       "[EQ Debug] Modal element lookup ID:",
-      this.instanceId + "-eq-modal"
+      this.instanceId + "-eq-modal",
     );
     console.log("[EQ Debug] Modal element found:", this.eqModal);
     console.log("[EQ Debug] Backdrop element found:", this.eqBackdrop);
@@ -176,7 +178,7 @@ export class VisualEQConfig {
     if (this.eqModal) {
       this.eqModalCloseBtn = this.eqModal.querySelector(".eq-modal-close-btn");
       this.playbackOptionsContainer = this.eqModal.querySelector(
-        ".playback-options-container"
+        ".playback-options-container",
       );
       this.eqTableContainer = this.eqModal.querySelector(".eq-table-container");
 
@@ -273,7 +275,7 @@ export class VisualEQConfig {
       this.computeEQResponse();
     } else {
       console.error(
-        "[EQ Debug] Modal, backdrop, or gear button element is null or undefined"
+        "[EQ Debug] Modal, backdrop, or gear button element is null or undefined",
       );
     }
   }
@@ -294,7 +296,7 @@ export class VisualEQConfig {
 
     console.log(
       "[EQ Debug] Playback options container:",
-      this.playbackOptionsContainer
+      this.playbackOptionsContainer,
     );
     console.log("[EQ Debug] EQ table container:", this.eqTableContainer);
     console.log("[EQ Debug] Current filter params:", this.currentFilterParams);
@@ -317,19 +319,19 @@ export class VisualEQConfig {
       <div class="playback-options-section">
         <div class="option-row">
           <label class="option-label">
-            <input type="checkbox" class="auto-gain-toggle" ${autoGain ? 'checked' : ''}>
+            <input type="checkbox" class="auto-gain-toggle" ${autoGain ? "checked" : ""}>
             Auto Gain
           </label>
           <span class="option-help">Automatically adjust volume to prevent clipping</span>
         </div>
         <div class="option-row">
           <label class="option-label">
-            <input type="checkbox" class="loudness-compensation-toggle" ${loudnessComp ? 'checked' : ''}>
+            <input type="checkbox" class="loudness-compensation-toggle" ${loudnessComp ? "checked" : ""}>
             Loudness Compensation
           </label>
           <span class="option-help">Apply equal-loudness curve adjustment</span>
         </div>
-        <div class="option-row spl-amplitude-row" style="display: ${loudnessComp ? 'flex' : 'none'}; padding-left: 24px;">
+        <div class="option-row spl-amplitude-row" style="display: ${loudnessComp ? "flex" : "none"}; padding-left: 24px;">
           <label class="option-label" style="flex-direction: column; align-items: flex-start; gap: 4px;">
             <span>SPL Amplitude: <span class="spl-value">${splAmplitude}</span> dB</span>
             <div style="display: flex; align-items: center; gap: 8px; width: 100%;">
@@ -346,25 +348,35 @@ export class VisualEQConfig {
     `;
 
     // Setup event listeners for playback options
-    const autoGainToggle = this.playbackOptionsContainer.querySelector('.auto-gain-toggle') as HTMLInputElement;
-    const loudnessToggle = this.playbackOptionsContainer.querySelector('.loudness-compensation-toggle') as HTMLInputElement;
-    const splSlider = this.playbackOptionsContainer.querySelector('.spl-amplitude-slider') as HTMLInputElement;
-    const splValue = this.playbackOptionsContainer.querySelector('.spl-value') as HTMLSpanElement;
-    const splRow = this.playbackOptionsContainer.querySelector('.spl-amplitude-row') as HTMLDivElement;
+    const autoGainToggle = this.playbackOptionsContainer.querySelector(
+      ".auto-gain-toggle",
+    ) as HTMLInputElement;
+    const loudnessToggle = this.playbackOptionsContainer.querySelector(
+      ".loudness-compensation-toggle",
+    ) as HTMLInputElement;
+    const splSlider = this.playbackOptionsContainer.querySelector(
+      ".spl-amplitude-slider",
+    ) as HTMLInputElement;
+    const splValue = this.playbackOptionsContainer.querySelector(
+      ".spl-value",
+    ) as HTMLSpanElement;
+    const splRow = this.playbackOptionsContainer.querySelector(
+      ".spl-amplitude-row",
+    ) as HTMLDivElement;
 
-    autoGainToggle?.addEventListener('change', () => {
+    autoGainToggle?.addEventListener("change", () => {
       this.callbacks.onAutoGainChange?.(autoGainToggle.checked);
     });
 
-    loudnessToggle?.addEventListener('change', () => {
+    loudnessToggle?.addEventListener("change", () => {
       this.callbacks.onLoudnessCompensationChange?.(loudnessToggle.checked);
       // Show/hide SPL slider
       if (splRow) {
-        splRow.style.display = loudnessToggle.checked ? 'flex' : 'none';
+        splRow.style.display = loudnessToggle.checked ? "flex" : "none";
       }
     });
 
-    splSlider?.addEventListener('input', () => {
+    splSlider?.addEventListener("input", () => {
       const value = parseFloat(splSlider.value);
       if (splValue) {
         splValue.textContent = value.toString();
@@ -411,7 +423,7 @@ export class VisualEQConfig {
                 <button class="filter-remove-btn" data-index="${index}" title="Remove filter" style="background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 16px; padding: 0 4px; line-height: 1;">&times;</button>
               </div>
             </th>
-          `
+          `,
           )
           .join("")}
         <th class="eq-row-label">
@@ -434,12 +446,15 @@ export class VisualEQConfig {
           (filter, index) => `
           <td data-filter-index="${index}" class="${index === this.selectedFilterIndex ? "selected" : ""}">
             <select data-index="${index}" class="eq-filter-type">
-              ${Object.entries(FILTER_TYPES).map(([type, config]) =>
-                `<option value="${type}" ${filter.filter_type === type ? "selected" : ""}>${config.label}</option>`
-              ).join('')}
+              ${Object.entries(FILTER_TYPES)
+                .map(
+                  ([type, config]) =>
+                    `<option value="${type}" ${filter.filter_type === type ? "selected" : ""}>${config.label}</option>`,
+                )
+                .join("")}
             </select>
           </td>
-        `
+        `,
         )
         .join("")}
       <td class="eq-row-label"></td>
@@ -457,7 +472,7 @@ export class VisualEQConfig {
           <td data-filter-index="${index}" class="${index === this.selectedFilterIndex ? "selected" : ""}">
             <input type="checkbox" data-index="${index}" class="eq-enabled" ${filter.enabled ? "checked" : ""}>
           </td>
-        `
+        `,
         )
         .join("")}
       <td class="eq-row-label"></td>
@@ -475,7 +490,7 @@ export class VisualEQConfig {
           <td data-filter-index="${index}" class="${index === this.selectedFilterIndex ? "selected" : ""}">
             <input type="number" data-index="${index}" class="eq-frequency" value="${filter.frequency.toFixed(1)}" step="1" min="20" max="20000">
           </td>
-        `
+        `,
         )
         .join("")}
       <td class="eq-row-label"></td>
@@ -493,7 +508,7 @@ export class VisualEQConfig {
           <td data-filter-index="${index}" class="${index === this.selectedFilterIndex ? "selected" : ""}">
             <input type="number" data-index="${index}" class="eq-gain" value="${filter.gain.toFixed(2)}" step="0.1">
           </td>
-        `
+        `,
         )
         .join("")}
       <td class="eq-row-label"></td>
@@ -511,7 +526,7 @@ export class VisualEQConfig {
           <td data-filter-index="${index}" class="${index === this.selectedFilterIndex ? "selected" : ""}">
             <input type="number" data-index="${index}" class="eq-q" value="${filter.q.toFixed(2)}" step="0.1" min="0.1" max="3.0">
           </td>
-        `
+        `,
         )
         .join("")}
       <td class="eq-row-label"></td>
@@ -545,7 +560,7 @@ export class VisualEQConfig {
       const target = e.target as HTMLElement;
 
       // Handle remove filter button
-      if (target.classList.contains('filter-remove-btn')) {
+      if (target.classList.contains("filter-remove-btn")) {
         e.stopPropagation();
         const index = parseInt(target.dataset.index!, 10);
         this.removeFilter(index);
@@ -553,7 +568,7 @@ export class VisualEQConfig {
       }
 
       // Handle add filter button
-      if (target.classList.contains('filter-add-btn')) {
+      if (target.classList.contains("filter-add-btn")) {
         e.stopPropagation();
         this.addFilter();
         return;
@@ -601,10 +616,8 @@ export class VisualEQConfig {
     }
 
     // Update the filter parameter
-    (this.currentFilterParams[index] as unknown as Record<
-      string,
-      any
-    >)[type] = value;
+    (this.currentFilterParams[index] as unknown as Record<string, any>)[type] =
+      value;
 
     // Select this filter in the graph
     this.selectedFilterIndex = index;
@@ -628,7 +641,7 @@ export class VisualEQConfig {
       q: 1.0,
       gain: 0,
       enabled: true,
-      filter_type: "Peak"
+      filter_type: "Peak",
     };
 
     this.currentFilterParams.push(newFilter);
@@ -643,7 +656,7 @@ export class VisualEQConfig {
 
   private removeFilter(index: number): void {
     if (this.currentFilterParams.length <= 1) {
-      console.warn('[VisualEQConfig] Cannot remove last filter');
+      console.warn("[VisualEQConfig] Cannot remove last filter");
       return;
     }
 
@@ -703,7 +716,7 @@ export class VisualEQConfig {
 
     console.log(
       `Created ${activeFilterCount} EQ filters with gain compensation`,
-      maxPositiveGain
+      maxPositiveGain,
     );
 
     // Notify streaming manager if playing
@@ -847,7 +860,7 @@ export class VisualEQConfig {
       "hasData:",
       !!this.eqResponseData,
       "selectedFilter:",
-      this.selectedFilterIndex
+      this.selectedFilterIndex,
     );
 
     if (this.eqResponseData) {
@@ -869,7 +882,7 @@ export class VisualEQConfig {
     let maxGain = -Infinity;
 
     // Include filter gain values in range calculation
-    this.currentFilterParams.forEach(filter => {
+    this.currentFilterParams.forEach((filter) => {
       if (filter.enabled) {
         minGain = Math.min(minGain, filter.gain);
         maxGain = Math.max(maxGain, filter.gain);
@@ -878,7 +891,10 @@ export class VisualEQConfig {
 
     // Include response data if available
     if (this.eqResponseData) {
-      if (this.eqResponseData.combined_response && Array.isArray(this.eqResponseData.combined_response)) {
+      if (
+        this.eqResponseData.combined_response &&
+        Array.isArray(this.eqResponseData.combined_response)
+      ) {
         this.eqResponseData.combined_response.forEach((gain: number) => {
           minGain = Math.min(minGain, gain);
           maxGain = Math.max(maxGain, gain);
@@ -896,7 +912,7 @@ export class VisualEQConfig {
               });
             }
           });
-        } else if (typeof responses === 'object') {
+        } else if (typeof responses === "object") {
           Object.values(responses).forEach((response: any) => {
             if (Array.isArray(response)) {
               response.forEach((gain: number) => {
@@ -934,11 +950,15 @@ export class VisualEQConfig {
       this.eqGraphMinGain.toFixed(1),
       "to",
       this.eqGraphMaxGain.toFixed(1),
-      "dB"
+      "dB",
     );
   }
 
-  private drawGrid(ctx: CanvasRenderingContext2D, width: number, height: number): void {
+  private drawGrid(
+    ctx: CanvasRenderingContext2D,
+    width: number,
+    height: number,
+  ): void {
     ctx.strokeStyle = "rgba(255, 255, 255, 0.1)";
     ctx.lineWidth = 1;
 
@@ -968,9 +988,11 @@ export class VisualEQConfig {
       gainStep = Math.ceil(idealStep / 10) * 10;
     }
 
-    for (let gain = Math.ceil(this.eqGraphMinGain / gainStep) * gainStep;
-         gain <= this.eqGraphMaxGain;
-         gain += gainStep) {
+    for (
+      let gain = Math.ceil(this.eqGraphMinGain / gainStep) * gainStep;
+      gain <= this.eqGraphMaxGain;
+      gain += gainStep
+    ) {
       const y = this.gainToY(gain, height);
       ctx.beginPath();
       ctx.moveTo(60, y);
@@ -987,7 +1009,11 @@ export class VisualEQConfig {
     }
   }
 
-  private drawFrequencyLabels(ctx: CanvasRenderingContext2D, width: number, height: number): void {
+  private drawFrequencyLabels(
+    ctx: CanvasRenderingContext2D,
+    width: number,
+    height: number,
+  ): void {
     ctx.fillStyle = "rgba(255, 255, 255, 0.7)";
     ctx.font = "11px sans-serif";
     ctx.textAlign = "center";
@@ -1001,7 +1027,11 @@ export class VisualEQConfig {
     });
   }
 
-  private drawGainLabels(ctx: CanvasRenderingContext2D, width: number, height: number): void {
+  private drawGainLabels(
+    ctx: CanvasRenderingContext2D,
+    width: number,
+    height: number,
+  ): void {
     ctx.fillStyle = "rgba(255, 255, 255, 0.7)";
     ctx.font = "11px sans-serif";
     ctx.textAlign = "right";
@@ -1027,21 +1057,27 @@ export class VisualEQConfig {
 
     // Generate labels
     const labels: number[] = [];
-    for (let gain = Math.ceil(this.eqGraphMinGain / gainStep) * gainStep;
-         gain <= this.eqGraphMaxGain && labels.length < maxLabels;
-         gain += gainStep) {
+    for (
+      let gain = Math.ceil(this.eqGraphMinGain / gainStep) * gainStep;
+      gain <= this.eqGraphMaxGain && labels.length < maxLabels;
+      gain += gainStep
+    ) {
       labels.push(gain);
     }
 
     // Draw labels on the left
-    labels.forEach(gain => {
+    labels.forEach((gain) => {
       const y = this.gainToY(gain, height);
-      const label = `${gain > 0 ? '+' : ''}${gain.toFixed(0)}dB`;
+      const label = `${gain > 0 ? "+" : ""}${gain.toFixed(0)}dB`;
       ctx.fillText(label, 55, y);
     });
   }
 
-  private drawCombinedResponse(ctx: CanvasRenderingContext2D, width: number, height: number): void {
+  private drawCombinedResponse(
+    ctx: CanvasRenderingContext2D,
+    width: number,
+    height: number,
+  ): void {
     if (!this.eqResponseData?.combined_response) return;
     const { frequencies, combined_response } = this.eqResponseData;
 
@@ -1065,7 +1101,11 @@ export class VisualEQConfig {
     ctx.stroke();
   }
 
-  private drawIndividualResponses(ctx: CanvasRenderingContext2D, width: number, height: number): void {
+  private drawIndividualResponses(
+    ctx: CanvasRenderingContext2D,
+    width: number,
+    height: number,
+  ): void {
     if (!this.eqResponseData?.individual_responses) return;
     const { frequencies, individual_responses } = this.eqResponseData;
 
@@ -1116,7 +1156,7 @@ export class VisualEQConfig {
     ctx: CanvasRenderingContext2D,
     width: number,
     height: number,
-    isDarkMode: boolean
+    isDarkMode: boolean,
   ): void {
     this.currentFilterParams.forEach((filter, idx) => {
       if (!filter.enabled) return;
@@ -1193,12 +1233,14 @@ export class VisualEQConfig {
   private setupGraphInteractions(): void {
     if (!this.eqGraphCanvas) return;
 
-    this.eqGraphCanvas.addEventListener('mousedown', (e) => this.handleGraphMouseDown(e));
-    document.addEventListener('mousemove', (e) => this.handleGraphMouseMove(e));
-    document.addEventListener('mouseup', () => this.handleGraphMouseUp());
+    this.eqGraphCanvas.addEventListener("mousedown", (e) =>
+      this.handleGraphMouseDown(e),
+    );
+    document.addEventListener("mousemove", (e) => this.handleGraphMouseMove(e));
+    document.addEventListener("mouseup", () => this.handleGraphMouseUp());
 
     // Set cursor style
-    this.eqGraphCanvas.style.cursor = 'crosshair';
+    this.eqGraphCanvas.style.cursor = "crosshair";
   }
 
   handleGraphMouseDown(e: MouseEvent): void {
@@ -1217,7 +1259,9 @@ export class VisualEQConfig {
 
     this.currentFilterParams.forEach((filter, idx) => {
       if (!filter.enabled) return;
-      const freqDist = Math.abs(Math.log10(filter.frequency) - Math.log10(clickedFreq));
+      const freqDist = Math.abs(
+        Math.log10(filter.frequency) - Math.log10(clickedFreq),
+      );
       if (freqDist < minFreqDist) {
         minFreqDist = freqDist;
         closestIdx = idx;
@@ -1285,15 +1329,22 @@ export class VisualEQConfig {
     if (!table) return;
 
     // Update selected column
-    const cells = table.querySelectorAll(`td[data-filter-index="${this.selectedFilterIndex}"], th[data-filter-index="${this.selectedFilterIndex}"]`);
-    cells.forEach(cell => cell.classList.add("selected"));
+    const cells = table.querySelectorAll(
+      `td[data-filter-index="${this.selectedFilterIndex}"], th[data-filter-index="${this.selectedFilterIndex}"]`,
+    );
+    cells.forEach((cell) => cell.classList.add("selected"));
 
     // Remove selection from other columns
-    const allCells = table.querySelectorAll('td[data-filter-index], th[data-filter-index]');
-    allCells.forEach(cell => {
-      const index = parseInt(cell.getAttribute('data-filter-index') || '-1', 10);
+    const allCells = table.querySelectorAll(
+      "td[data-filter-index], th[data-filter-index]",
+    );
+    allCells.forEach((cell) => {
+      const index = parseInt(
+        cell.getAttribute("data-filter-index") || "-1",
+        10,
+      );
       if (index !== this.selectedFilterIndex) {
-        cell.classList.remove('selected');
+        cell.classList.remove("selected");
       }
     });
   }
@@ -1333,12 +1384,12 @@ export class VisualEQConfig {
     ctx.clearRect(0, 0, width, height);
 
     // Draw background with theme awareness
-    const isDark = document.documentElement.classList.contains('dark');
-    ctx.fillStyle = isDark ? '#1a1a1a' : '#ffffff';
+    const isDark = document.documentElement.classList.contains("dark");
+    ctx.fillStyle = isDark ? "#1a1a1a" : "#ffffff";
     ctx.fillRect(0, 0, width, height);
 
     // Draw center line (0 dB)
-    ctx.strokeStyle = isDark ? '#404040' : '#d0d0d0';
+    ctx.strokeStyle = isDark ? "#404040" : "#d0d0d0";
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(0, height / 2);
@@ -1346,7 +1397,11 @@ export class VisualEQConfig {
     ctx.stroke();
 
     // Draw EQ curve if we have response data
-    if (this.eqResponseData && this.eqResponseData.frequencies && this.eqResponseData.combined_response) {
+    if (
+      this.eqResponseData &&
+      this.eqResponseData.frequencies &&
+      this.eqResponseData.combined_response
+    ) {
       const frequencies = this.eqResponseData.frequencies;
       const magnitudes = this.eqResponseData.combined_response; // Use combined_response, not magnitude_db
 
@@ -1356,7 +1411,7 @@ export class VisualEQConfig {
       const gainRange = Math.max(Math.abs(minGain), Math.abs(maxGain));
       const displayRange = Math.max(6, gainRange); // At least ±6dB range
 
-      ctx.strokeStyle = isDark ? '#4a9eff' : '#2563eb';
+      ctx.strokeStyle = isDark ? "#4a9eff" : "#2563eb";
       ctx.lineWidth = 2;
       ctx.beginPath();
 
@@ -1365,8 +1420,10 @@ export class VisualEQConfig {
         const mag = magnitudes[i];
 
         // Map frequency to x (logarithmic)
-        const x = (Math.log10(freq / this.EQ_GRAPH_MIN_FREQ) /
-                   Math.log10(this.EQ_GRAPH_MAX_FREQ / this.EQ_GRAPH_MIN_FREQ)) * width;
+        const x =
+          (Math.log10(freq / this.EQ_GRAPH_MIN_FREQ) /
+            Math.log10(this.EQ_GRAPH_MAX_FREQ / this.EQ_GRAPH_MIN_FREQ)) *
+          width;
 
         // Map magnitude to y (inverted, 0dB at center)
         const y = height / 2 - (mag / displayRange) * (height / 2);

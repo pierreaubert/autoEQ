@@ -38,7 +38,7 @@ export class RoutingMatrix {
 
   updateChannelCount(newCount: number): void {
     if (newCount === this.channelCount) return;
-    
+
     this.channelCount = newCount;
     // Reinitialize routing matrix with new channel count
     this.routing = Array.from({ length: newCount }, (_, i) =>

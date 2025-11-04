@@ -259,10 +259,14 @@ export class SpectrumAnalyzerComponent {
   private drawGrid(width: number, height: number): void {
     if (!this.ctx) return;
     const isDarkMode = this.config.colorScheme === "dark";
-    const lineColor = isDarkMode ? "rgba(255, 255, 255, 0.8)" : "rgba(0, 0, 0, 0.8)";
-    const freqMarkers = [20, 40, 60, 100, 200, 400, 600, 1000, 2000, 4000, 6000, 10000, 20000];
+    const lineColor = isDarkMode
+      ? "rgba(255, 255, 255, 0.8)"
+      : "rgba(0, 0, 0, 0.8)";
+    const freqMarkers = [
+      20, 40, 60, 100, 200, 400, 600, 1000, 2000, 4000, 6000, 10000, 20000,
+    ];
     const dashPattern = [1, 2];
-    freqMarkers.forEach(freq => {
+    freqMarkers.forEach((freq) => {
       if (!this.ctx) return;
       const x = this.freqToX(freq, width);
       this.ctx.strokeStyle = lineColor;
@@ -270,13 +274,13 @@ export class SpectrumAnalyzerComponent {
       this.ctx.beginPath();
       this.ctx.setLineDash(dashPattern);
       this.ctx.moveTo(x, 0);
-      this.ctx.lineTo(x, height-20);
+      this.ctx.lineTo(x, height - 20);
       this.ctx.stroke();
     });
 
     const dbLevels = [0, -10, -20, -30, -40, -50, -60];
 
-    dbLevels.forEach(db => {
+    dbLevels.forEach((db) => {
       if (!this.ctx) return;
       const y = this.dbToY(db, height);
 
@@ -288,7 +292,7 @@ export class SpectrumAnalyzerComponent {
       // Draw horizontal line across full width
       this.ctx.beginPath();
       this.ctx.moveTo(20, y);
-      this.ctx.lineTo(width-5, y);
+      this.ctx.lineTo(width - 5, y);
       this.ctx.stroke();
     });
 
@@ -301,7 +305,7 @@ export class SpectrumAnalyzerComponent {
    */
   private dbToY(db: number, height: number): number {
     const normalized = (db + this.config.dbRange) / this.config.dbRange;
-    return height - 20 - (normalized * (height - 20));
+    return height - 20 - normalized * (height - 20);
   }
 
   /**

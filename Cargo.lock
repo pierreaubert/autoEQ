@@ -373,8 +373,9 @@ dependencies = [
 
 [[package]]
 name = "autoeq-env"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
+ "chrono",
  "thiserror 2.0.17",
 ]
 
@@ -5500,7 +5501,7 @@ dependencies = [
 
 [[package]]
 name = "sotf"
-version = "0.4.49"
+version = "0.4.50"
 dependencies = [
  "accelerate-src",
  "autoeq",
@@ -5527,8 +5528,9 @@ dependencies = [
 
 [[package]]
 name = "sotf_audio"
-version = "0.2.462"
+version = "0.2.464"
 dependencies = [
+ "autoeq-env",
  "chrono",
  "clap",
  "cpal",

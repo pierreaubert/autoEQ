@@ -1,5 +1,4 @@
-use autoeq::iir::{Biquad, BiquadFilterType, Peq};
-use ndarray::Array1;
+use autoeq::iir::BiquadFilterType;
 use serde::{Deserialize, Serialize};
 
 /// Filter parameter for EQ response computation
@@ -107,7 +106,6 @@ mod tests {
     }
 }
 
-
 #[tauri::command]
 pub async fn compute_eq_response(
     filters: Vec<FilterParam>,
@@ -167,4 +165,3 @@ pub async fn compute_eq_response(
         combined_response,
     })
 }
-

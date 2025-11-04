@@ -1221,7 +1221,6 @@ export class UIManager {
   }
 
   private async onDownloadApoClick(): Promise<void> {
-
     try {
       if (!this.getOptimizationResult) {
         console.error("[DOWNLOAD] Optimization result getter not set");
@@ -1247,7 +1246,6 @@ export class UIManager {
         result.speakerName,
         format,
       );
-
     } catch (error) {
       console.error("[DOWNLOAD] Error exporting APO:", error);
       this.showError(

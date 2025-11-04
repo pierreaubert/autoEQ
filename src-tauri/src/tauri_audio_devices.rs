@@ -2,13 +2,13 @@
 // Audio Device Management Commands (Tauri wrappers for backend functions)
 // ============================================================================
 
-use sotf_audio::audio::{AudioDevice, AudioConfig};
-use tauri::State;
 use sotf_audio::SharedAudioState;
+use sotf_audio::audio::{AudioConfig, AudioDevice};
+use tauri::State;
 
 #[tauri::command]
-pub async fn get_audio_devices() -> Result<std::collections::HashMap<String, Vec<AudioDevice>>, String>
-{
+pub async fn get_audio_devices()
+-> Result<std::collections::HashMap<String, Vec<AudioDevice>>, String> {
     sotf_audio::audio::get_audio_devices()
 }
 
@@ -36,4 +36,3 @@ pub async fn get_device_properties(
 ) -> Result<serde_json::Value, String> {
     sotf_audio::audio::get_device_properties(device_name, is_input)
 }
-

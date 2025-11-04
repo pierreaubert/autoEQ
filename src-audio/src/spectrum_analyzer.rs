@@ -74,10 +74,10 @@ pub struct SpectrumAnalyzer {
 impl SpectrumAnalyzer {
     /// Create a new spectrum analyzer
     pub fn new(channels: u32, sample_rate: u32, config: SpectrumConfig) -> Result<Self, String> {
-        eprintln!(
-            "[Spectrum Analyzer] Creating new analyzer: {}ch, {}Hz",
-            channels, sample_rate
-        );
+        // eprintln!(
+        //     "[Spectrum Analyzer] Creating new analyzer: {}ch, {}Hz",
+        //     channels, sample_rate
+        // );
 
         if config.num_bins < 2 {
             return Err("num_bins must be at least 2".to_string());
@@ -96,10 +96,10 @@ impl SpectrumAnalyzer {
         let (bin_edges, bin_centers) =
             Self::generate_log_bins(config.num_bins, config.min_freq, config.max_freq);
 
-        eprintln!(
-            "[Spectrum Analyzer] Generated {} bins from {:.0}Hz to {:.0}Hz",
-            config.num_bins, config.min_freq, config.max_freq
-        );
+        // eprintln!(
+        //     "[Spectrum Analyzer] Generated {} bins from {:.0}Hz to {:.0}Hz",
+        //     config.num_bins, config.min_freq, config.max_freq
+        // );
 
         let current_spectrum = Arc::new(Mutex::new(SpectrumInfo {
             frequencies: bin_centers.clone(),
@@ -148,11 +148,11 @@ impl SpectrumAnalyzer {
         // Mix all channels to mono for spectrum analysis
         let mono_samples = self.mix_to_mono(samples);
 
-        eprintln!(
-            "[Spectrum Analyzer] add_frames: {} samples, buffer_pos={}",
-            mono_samples.len(),
-            self.buffer_pos
-        );
+        // eprintln!(
+        //     "[Spectrum Analyzer] add_frames: {} samples, buffer_pos={}",
+        //     mono_samples.len(),
+        //     self.buffer_pos
+        // );
 
         // Add samples to circular buffer
         for sample in mono_samples {
@@ -219,10 +219,10 @@ impl SpectrumAnalyzer {
             spectrum.peak_magnitude = peak_magnitude;
         }
 
-        eprintln!(
-            "[Spectrum Analyzer] Computed spectrum: peak={:.1}dB",
-            peak_magnitude
-        );
+        // eprintln!(
+        //     "[Spectrum Analyzer] Computed spectrum: peak={:.1}dB",
+        //     peak_magnitude
+        // );
 
         Ok(())
     }

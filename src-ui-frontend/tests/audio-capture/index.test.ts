@@ -17,5 +17,4 @@ describe.skip("Audio Module Exports", () => {
     expect(captureResult.success).toBe(true);
     expect(captureResult.frequencies).toHaveLength(3);
   });
-
 });

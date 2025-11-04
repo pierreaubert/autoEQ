@@ -11,7 +11,7 @@ describe.skip("AudioProcessor - DEPRECATED", () => {
       phases: [0, 0.5, 1.0],
       error: undefined,
     };
-    
+
     expect(result.success).toBe(true);
     expect(result.frequencies).toHaveLength(3);
     expect(result.magnitudes).toHaveLength(3);
@@ -101,4 +101,3 @@ const _mockAudioContext = {
   state: "running",
   sampleRate: 44100,
 };
-

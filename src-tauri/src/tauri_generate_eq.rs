@@ -28,10 +28,7 @@ pub async fn generate_apo_format(
     // Generate APO format string
     let apo_string = autoeq::iir::peq_format_apo("AutoEQ Optimization Result", &peq);
 
-    println!(
-        "[TAURI] Generated {} bytes of APO data",
-        apo_string.len()
-    );
+    println!("[TAURI] Generated {} bytes of APO data", apo_string.len());
 
     Ok(apo_string)
 }
@@ -106,10 +103,7 @@ pub async fn generate_rme_format(
     // Generate RME format string
     let rme_string = autoeq::iir::peq_format_rme_channel(&peq);
 
-    println!(
-        "[TAURI] Generated {} bytes of RME data",
-        rme_string.len()
-    );
+    println!("[TAURI] Generated {} bytes of RME data", rme_string.len());
 
     Ok(rme_string)
 }
@@ -152,4 +146,3 @@ pub async fn generate_rme_room_format(
 
     Ok(rme_room_string)
 }
-

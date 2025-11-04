@@ -36,6 +36,7 @@ ctrlc = { workspace = true }
 reqwest = { workspace = true }
 chrono = { workspace = true }
 libc = "0.2"
+autoeq-env = { path = "../src-env" }
 
 # Audio decoding/encoding
 symphonia = { version = "0.5", default-features = false }

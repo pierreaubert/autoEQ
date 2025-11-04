@@ -46,11 +46,14 @@ fn format_to_string(format: cpal::SampleFormat) -> String {
 /// Get information about all available audio devices
 pub fn get_audio_devices() -> Result<HashMap<String, Vec<AudioDevice>>, String> {
     println!("[AUDIO DEBUG] Enumerating audio devices...");
+    println!("[AUDIO DEBUG] Getting default host...");
     let host = cpal::default_host();
+    println!("[AUDIO DEBUG] Host obtained successfully");
     let mut devices_map = HashMap::new();
 
     // Get input devices
     let mut input_devices = Vec::new();
+    println!("[AUDIO DEBUG] About to enumerate input devices...");
     match host.input_devices() {
         Ok(devices) => {
             let default_input = host.default_input_device();
@@ -262,8 +265,11 @@ pub fn get_audio_devices() -> Result<HashMap<String, Vec<AudioDevice>>, String> 
     devices_map.insert("output".to_string(), output_devices);
 
     // Check if no devices were found at all
-    if devices_map.get("input").is_none_or(|v| v.is_empty())
-        && devices_map.get("output").is_none_or(|v| v.is_empty())
+    // Note: Using map_or instead of is_none_or for Rust 1.90.0 stability
+    // (is_none_or requires Rust 1.82.0+)
+    #[allow(clippy::unnecessary_map_or)]
+    if devices_map.get("input").map_or(true, |v| v.is_empty())
+        && devices_map.get("output").map_or(true, |v| v.is_empty())
     {
         eprintln!("[AUDIO WARNING] No audio devices found on the system");
     }

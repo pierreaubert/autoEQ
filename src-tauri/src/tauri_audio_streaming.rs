@@ -2,11 +2,11 @@
 // Streaming Audio Commands
 // ============================================================================
 
-use tauri::{State, AppHandle, Emitter};
-use tokio::sync::Mutex;
-use sotf_audio::{AudioStreamingManager, AudioFileInfo, StreamingState, FilterParams};
-use sotf_audio::camilla::ChannelMapMode;
 use crate::tauri_audio_recording::AudioError;
+use sotf_audio::camilla::{ChannelMapMode, LoudnessCompensation};
+use sotf_audio::{AudioFileInfo, AudioStreamingManager, FilterParams, StreamingState};
+use tauri::{AppHandle, Emitter, State};
+use tokio::sync::Mutex;
 
 /// Audio file information for the frontend
 #[derive(Clone, serde::Serialize)]
@@ -225,3 +225,44 @@ pub async fn stream_get_file_info(
     }
 }
 
+#[tauri::command]
+pub async fn stream_update_filters(
+    filters: Vec<FilterParams>,
+    loudness: Option<LoudnessCompensation>,
+    streaming_manager: State<'_, Mutex<AudioStreamingManager>>,
+    app_handle: AppHandle,
+) -> Result<(), String> {
+    println!(
+        "[TAURI] Updating filters: {} filters{}",
+        filters.len(),
+        if loudness.is_some() {
+            " with loudness"
+        } else {
+            ""
+        }
+    );
+
+    let manager = streaming_manager.lock().await;
+    match manager.update_filters(filters, loudness).await {
+        Ok(_) => {
+            let _ = app_handle.emit(
+                "stream:filters-updated",
+                serde_json::json!({
+                    "ok": true,
+                }),
+            );
+            Ok(())
+        }
+        Err(e) => {
+            let error_msg = format!("{}", e);
+            let _ = app_handle.emit(
+                "stream:filters-updated",
+                serde_json::json!({
+                    "ok": false,
+                    "error": error_msg.clone(),
+                }),
+            );
+            Err(error_msg)
+        }
+    }
+}

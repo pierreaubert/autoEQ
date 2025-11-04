@@ -2,9 +2,9 @@
 // Real-time Loudness Monitoring Commands
 // ============================================================================
 
+use sotf_audio::{AudioStreamingManager, LoudnessInfo};
 use tauri::State;
 use tokio::sync::Mutex;
-use sotf_audio::{AudioStreamingManager, LoudnessInfo};
 
 #[tauri::command]
 pub async fn stream_enable_loudness_monitoring(
@@ -34,4 +34,3 @@ pub async fn stream_get_loudness(
     let manager = streaming_manager.lock().await;
     Ok(manager.get_loudness())
 }
-

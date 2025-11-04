@@ -3,16 +3,13 @@
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { resolveResource } from "@tauri-apps/api/path";
-import {
-  StreamingManager,
-  type AudioFileInfo,
-} from "./audio-manager";
+import { StreamingManager, type AudioFileInfo } from "./audio-manager";
 import { SpectrumAnalyzerComponent } from "./spectrum-analyzer";
 import {
   VisualEQConfig,
   type ExtendedFilterParam,
   type FilterParam,
-  FILTER_TYPES
+  FILTER_TYPES,
 } from "./visual-eq-config";
 
 export interface ReplayGainInfo {
@@ -188,7 +185,9 @@ export class AudioPlayer {
       // Initialize Visual EQ Configuration after UI is created
       if (this.config.enableEQ) {
         // Get mini canvas after UI is created
-        const eqMiniCanvas = this.container.querySelector('.eq-mini-canvas') as HTMLCanvasElement | null;
+        const eqMiniCanvas = this.container.querySelector(
+          ".eq-mini-canvas",
+        ) as HTMLCanvasElement | null;
 
         this.visualEQConfig = new VisualEQConfig(
           this.container,
@@ -218,7 +217,7 @@ export class AudioPlayer {
             getLoudnessCompensation: () => this.loudnessCompensation,
             getSplAmplitude: () => this.splAmplitude,
           },
-          eqMiniCanvas
+          eqMiniCanvas,
         );
       }
       this.setupEventListeners();
@@ -301,11 +300,11 @@ export class AudioPlayer {
         <select id="${selectId}" class="demo-audio-select">
           <option value="">Pick a track...</option>
           ${Object.keys(this.config.demoTracks || {})
-          .map(
-          (key) =>
-          `<option value="${key}">${this.formatTrackName(key)}</option>`,
-          )
-          .join("")}
+            .map(
+              (key) =>
+                `<option value="${key}">${this.formatTrackName(key)}</option>`,
+            )
+            .join("")}
         </select>
         <button type="button" class="file-upload-btn">Load a file: 📁</button>
       </div>
@@ -418,7 +417,9 @@ export class AudioPlayer {
     this.loudnessDisplayShortterm = this.container.querySelector(
       ".loudness-shortterm",
     );
-    this.replayGainDisplay = this.container.querySelector("#metrics-replay-gain");
+    this.replayGainDisplay = this.container.querySelector(
+      "#metrics-replay-gain",
+    );
     this.peakDisplay = this.container.querySelector("#metrics-peak");
 
     if (this.spectrumCanvas) {
@@ -426,7 +427,9 @@ export class AudioPlayer {
       // Initialize spectrum analyzer component
       if (this.config.enableSpectrum) {
         // Detect system color scheme
-        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const prefersDark = window.matchMedia(
+          "(prefers-color-scheme: dark)",
+        ).matches;
         const colorScheme = prefersDark ? "dark" : "light";
 
         this.spectrumAnalyzer = new SpectrumAnalyzerComponent({
@@ -582,10 +585,10 @@ export class AudioPlayer {
 
     // Reset displays
     if (this.replayGainDisplay) {
-      this.replayGainDisplay.textContent = '--';
+      this.replayGainDisplay.textContent = "--";
     }
     if (this.peakDisplay) {
-      this.peakDisplay.textContent = '--';
+      this.peakDisplay.textContent = "--";
     }
 
     // Hide ReplayGain display
@@ -597,9 +600,7 @@ export class AudioPlayer {
   // ===== UI HELPER METHODS =====
 
   private formatTrackName(key: string): string {
-    return key
-      .replace(/_/g, " ")
-      .replace(/\b\w/g, (l) => l.toUpperCase());
+    return key.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
   }
 
   private updateAudioInfo(): void {
@@ -650,7 +651,7 @@ export class AudioPlayer {
       }
 
       // Get filter parameters from VisualEQConfig if available
-      let filters: Array<{frequency: number; q: number; gain: number}> = [];
+      let filters: Array<{ frequency: number; q: number; gain: number }> = [];
       if (this.visualEQConfig && this.visualEQConfig.isEQEnabled()) {
         const filterParams = this.visualEQConfig.getFilterParams();
         filters = filterParams
@@ -839,22 +840,31 @@ export class AudioPlayer {
 
   // ===== LOUDNESS MONITORING =====
 
-  private updateLoudnessDisplay(loudnessInfo: {momentary_lufs: number; shortterm_lufs: number; peak: number} | null): void {
-    console.log('[AudioPlayer] updateLoudnessDisplay called with:', loudnessInfo);
-    console.log('[AudioPlayer] Elements cached:', {
+  private updateLoudnessDisplay(
+    loudnessInfo: {
+      momentary_lufs: number;
+      shortterm_lufs: number;
+      peak: number;
+    } | null,
+  ): void {
+    console.log(
+      "[AudioPlayer] updateLoudnessDisplay called with:",
+      loudnessInfo,
+    );
+    console.log("[AudioPlayer] Elements cached:", {
       momentary: !!this.loudnessDisplayMomentary,
       shortterm: !!this.loudnessDisplayShortterm,
       peak: !!this.peakDisplay,
-      replayGain: !!this.replayGainDisplay
+      replayGain: !!this.replayGainDisplay,
     });
 
     if (!loudnessInfo) {
       // Reset LUFS displays to -∞ when no data
       if (this.loudnessDisplayMomentary) {
-        this.loudnessDisplayMomentary.textContent = '-∞';
+        this.loudnessDisplayMomentary.textContent = "-∞";
       }
       if (this.loudnessDisplayShortterm) {
-        this.loudnessDisplayShortterm.textContent = '-∞';
+        this.loudnessDisplayShortterm.textContent = "-∞";
       }
       // Note: Don't reset ReplayGain and Peak - they're set by analyzeReplayGain() and should persist
       return;
@@ -863,21 +873,23 @@ export class AudioPlayer {
     // Update momentary LUFS (M)
     if (this.loudnessDisplayMomentary) {
       const mValue = loudnessInfo.momentary_lufs;
-      const text = (mValue !== null && isFinite(mValue)) ? mValue.toFixed(1) : '-∞';
-      console.log('[AudioPlayer] Setting momentary LUFS to:', text);
+      const text =
+        mValue !== null && isFinite(mValue) ? mValue.toFixed(1) : "-∞";
+      console.log("[AudioPlayer] Setting momentary LUFS to:", text);
       this.loudnessDisplayMomentary.textContent = text;
     } else {
-      console.warn('[AudioPlayer] loudnessDisplayMomentary element not found');
+      console.warn("[AudioPlayer] loudnessDisplayMomentary element not found");
     }
 
     // Update short-term LUFS (S)
     if (this.loudnessDisplayShortterm) {
       const sValue = loudnessInfo.shortterm_lufs;
-      const text = (sValue !== null && isFinite(sValue)) ? sValue.toFixed(1) : '-∞';
-      console.log('[AudioPlayer] Setting shortterm LUFS to:', text);
+      const text =
+        sValue !== null && isFinite(sValue) ? sValue.toFixed(1) : "-∞";
+      console.log("[AudioPlayer] Setting shortterm LUFS to:", text);
       this.loudnessDisplayShortterm.textContent = text;
     } else {
-      console.warn('[AudioPlayer] loudnessDisplayShortterm element not found');
+      console.warn("[AudioPlayer] loudnessDisplayShortterm element not found");
     }
 
     // Note: Peak display is handled by ReplayGain analysis and should not be overwritten
@@ -885,21 +897,23 @@ export class AudioPlayer {
 
     // Display stored ReplayGain if available (keep it displayed during playback)
     if (this.currentReplayGain && this.replayGainDisplay) {
-      this.replayGainDisplay.textContent = `${this.currentReplayGain.gain >= 0 ? '+' : ''}${this.currentReplayGain.gain.toFixed(2)} dB`;
+      this.replayGainDisplay.textContent = `${this.currentReplayGain.gain >= 0 ? "+" : ""}${this.currentReplayGain.gain.toFixed(2)} dB`;
     }
   }
 
   private async analyzeReplayGain(filePath: string): Promise<void> {
     try {
-      console.log('[AudioPlayer] Analyzing ReplayGain for:', filePath);
-      const result = await invoke<ReplayGainInfo>('analyze_replaygain', { filePath });
+      console.log("[AudioPlayer] Analyzing ReplayGain for:", filePath);
+      const result = await invoke<ReplayGainInfo>("analyze_replaygain", {
+        filePath,
+      });
 
       this.currentReplayGain = result;
-      console.log('[AudioPlayer] ReplayGain analysis complete:', result);
+      console.log("[AudioPlayer] ReplayGain analysis complete:", result);
 
       // Update ReplayGain display
       if (this.replayGainDisplay) {
-        this.replayGainDisplay.textContent = `${result.gain >= 0 ? '+' : ''}${result.gain.toFixed(2)} dB`;
+        this.replayGainDisplay.textContent = `${result.gain >= 0 ? "+" : ""}${result.gain.toFixed(2)} dB`;
       }
 
       // Update Peak display
@@ -907,7 +921,7 @@ export class AudioPlayer {
         this.peakDisplay.textContent = result.peak.toFixed(2);
       }
     } catch (error) {
-      console.error('[AudioPlayer] Failed to analyze ReplayGain:', error);
+      console.error("[AudioPlayer] Failed to analyze ReplayGain:", error);
       // Don't show error to user, just log it
     }
   }

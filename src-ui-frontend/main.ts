@@ -22,7 +22,6 @@ class AutoEQApplication {
   private plotManager: PlotManager;
 
   constructor() {
-
     // Generate and inject HTML content FIRST, before initializing managers
     this.injectHTML();
 
@@ -31,7 +30,9 @@ class AutoEQApplication {
     this.apiManager = new APIManager();
 
     // Initialize AudioPlayer
-    const audioControlsContainer = document.querySelector(".audio-controls") as HTMLElement;
+    const audioControlsContainer = document.querySelector(
+      ".audio-controls",
+    ) as HTMLElement;
     if (audioControlsContainer) {
       // Clear the old controls and let the AudioPlayer component build its own UI
       audioControlsContainer.innerHTML = "";
@@ -53,17 +54,23 @@ class AutoEQApplication {
         },
       );
     } else {
-      console.error(
-        "Audio controls container (.audio-controls) not found!",
-      );
+      console.error("Audio controls container (.audio-controls) not found!");
     }
 
     // Initialize plot manager with DOM elements
-    const progressGraphElement = document.getElementById("progress_graph") as HTMLElement;
-    const tonalPlotElement = document.getElementById("tonal_plot") as HTMLElement;
-    const filterPlotElement = document.getElementById("filter_plot") as HTMLElement;
+    const progressGraphElement = document.getElementById(
+      "progress_graph",
+    ) as HTMLElement;
+    const tonalPlotElement = document.getElementById(
+      "tonal_plot",
+    ) as HTMLElement;
+    const filterPlotElement = document.getElementById(
+      "filter_plot",
+    ) as HTMLElement;
     const spinPlotElement = document.getElementById("spin_plot") as HTMLElement;
-    const detailsPlotElement = document.getElementById("details_plot") as HTMLElement;
+    const detailsPlotElement = document.getElementById(
+      "details_plot",
+    ) as HTMLElement;
 
     this.plotComposer = new PlotComposer(
       filterPlotElement,
@@ -243,7 +250,6 @@ class AutoEQApplication {
 
       // Setup autocomplete
       this.apiManager.setupAutocomplete();
-
     } catch (error) {
       console.error("Error during application initialization:", error);
       this.uiManager.showError("Failed to initialize application: " + error);
@@ -299,7 +305,6 @@ class AutoEQApplication {
   private async handleOptimizationSuccess(
     result: OptimizationResult,
   ): Promise<void> {
-
     try {
       // Update scores if available
       if (
@@ -347,7 +352,6 @@ class AutoEQApplication {
 
       // Force layout recalculation after plots are updated
       this.plotManager.forceRecalculate();
-
     } catch (error) {
       console.error("Error processing optimization results:", error);
       this.uiManager.showError("Error processing results: " + error);
@@ -375,7 +379,6 @@ class AutoEQApplication {
   private async generateOptimizationPlots(
     result: OptimizationResult,
   ): Promise<void> {
-
     try {
       // ALWAYS generate the filter plot - backend always provides this data
       if (result.filter_params && result.filter_params.length > 0) {
@@ -445,7 +448,6 @@ class AutoEQApplication {
 
       // Generate spinorama plots if we have spin data
       if (result.spin_details) {
-
         try {
           // Convert curves data to CurveData format
           const cea2034_curves: Record<
@@ -498,7 +500,6 @@ class AutoEQApplication {
           console.error("Error generating spinorama plots:", plotError);
         }
       }
-
     } catch (error) {
       console.error("Error in generateOptimizationPlots:", error);
       // Don't throw - we want optimization to continue even if plot generation fails

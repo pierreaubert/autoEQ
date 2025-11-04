@@ -7,36 +7,10 @@ use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
+// Import logging macros from autoeq-env
+use autoeq_env::{log_debug, log_error, log_info, log_warn};
+
 const FRAMES_PER_CHUNK: usize = 256;
-
-// Logging macro for consistent timestamp format
-macro_rules! log_debug {
-    ($($arg:tt)*) => {{
-        let now = chrono::Local::now();
-        eprintln!("{}  DEBUG [audio_streaming] {}", now.format("%Y-%m-%d %H:%M:%S%.6f"), format!($($arg)*));
-    }};
-}
-
-macro_rules! log_info {
-    ($($arg:tt)*) => {{
-        let now = chrono::Local::now();
-        eprintln!("{}  INFO  [audio_streaming] {}", now.format("%Y-%m-%d %H:%M:%S%.6f"), format!($($arg)*));
-    }};
-}
-
-macro_rules! log_warn {
-    ($($arg:tt)*) => {{
-        let now = chrono::Local::now();
-        eprintln!("{}  WARN  [audio_streaming] {}", now.format("%Y-%m-%d %H:%M:%S%.6f"), format!($($arg)*));
-    }};
-}
-
-macro_rules! log_error {
-    ($($arg:tt)*) => {{
-        let now = chrono::Local::now();
-        eprintln!("{}  ERROR [audio_streaming] {}", now.format("%Y-%m-%d %H:%M:%S%.6f"), format!($($arg)*));
-    }};
-}
 
 use crate::camilla::{AudioManager, ChannelMapMode, FilterParams, LoudnessCompensation};
 use crate::loudness_monitor::{LoudnessInfo, LoudnessMonitor};
@@ -818,6 +792,19 @@ impl AudioStreamingManager {
 
         println!("[AudioStreamingManager] Decoder thread exiting");
         Ok(())
+    }
+
+    /// Update EQ filters and loudness in real-time without restarting playback
+    /// Works for both streaming and file-based playback modes
+    pub async fn update_filters(
+        &self,
+        filters: Vec<FilterParams>,
+        loudness: Option<LoudnessCompensation>,
+    ) -> AudioDecoderResult<()> {
+        self.audio_manager
+            .update_filters(filters, loudness)
+            .await
+            .map_err(|e| AudioDecoderError::ConfigError(format!("Failed to update filters: {}", e)))
     }
 }
 

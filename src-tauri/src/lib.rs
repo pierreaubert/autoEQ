@@ -1,8 +1,4 @@
-use ndarray::Array1;
-use std::collections::HashMap;
-use std::path::PathBuf;
-use std::sync::Arc;
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{Emitter, Manager};
 use tokio::sync::Mutex;
 
 // Import audio streaming types
@@ -11,86 +7,56 @@ use sotf_audio::AudioStreamingManager;
 use sotf_audio::SharedAudioState;
 
 // Declare modules
-mod tauri_speakers;
-mod tauri_optim;
-mod tauri_plots;
 mod tauri_audio_devices;
+mod tauri_audio_loudness;
 mod tauri_audio_recording;
+mod tauri_audio_replaygain;
+mod tauri_audio_spectrum;
 mod tauri_audio_streaming;
-mod tauri_loudness;
-mod tauri_spectrum;
-mod tauri_replay_gain;
 mod tauri_compute_eq;
 mod tauri_generate_eq;
+mod tauri_optim;
+mod tauri_plots;
+mod tauri_speakers;
 
-pub use tauri_speakers::{
-    get_speakers,
-    get_speaker_versions,
-    get_speaker_measurements,
-};
+pub use tauri_speakers::{get_speaker_measurements, get_speaker_versions, get_speakers};
 
-pub use tauri_optim::{
-    CancellationState,
-    run_optimization,
-    cancel_optimization,
-};
+pub use tauri_optim::{CancellationState, cancel_optimization, run_optimization};
 
 pub use tauri_plots::{
-    generate_plot_filters,
-    generate_plot_spin,
-    generate_plot_spin_details,
-    generate_plot_spin_tonal,
+    generate_plot_filters, generate_plot_spin, generate_plot_spin_details, generate_plot_spin_tonal,
 };
 
 pub use tauri_audio_devices::{
-    get_audio_devices,
-    set_audio_device,
-    get_audio_config,
-    get_device_properties,
+    get_audio_config, get_audio_devices, get_device_properties, set_audio_device,
 };
 
 pub use tauri_audio_recording::{
-    audio_start_recording,
-    audio_stop_recording,
-    audio_get_signal_peak,
-    audio_get_recording_spl,
+    audio_get_recording_spl, audio_get_signal_peak, audio_start_recording, audio_stop_recording,
 };
 
-pub use tauri_audio_streaming::{
-    stream_load_file,
-    stream_start_playback,
-    stream_pause_playback,
-    stream_resume_playback,
-    stream_stop_playback,
-    stream_seek,
-    stream_get_state,
-    stream_get_file_info,
-};
 pub use sotf_audio::StreamingState;
-
-pub use tauri_loudness::{
-    stream_enable_loudness_monitoring,
-    stream_disable_loudness_monitoring,
-    stream_get_loudness,
+pub use tauri_audio_streaming::{
+    stream_get_file_info, stream_get_state, stream_load_file, stream_pause_playback,
+    stream_resume_playback, stream_seek, stream_start_playback, stream_stop_playback,
+    stream_update_filters,
 };
 
-pub use tauri_spectrum::{
-    stream_enable_spectrum_monitoring,
-    stream_disable_spectrum_monitoring,
-    stream_get_spectrum,
+pub use tauri_audio_loudness::{
+    stream_disable_loudness_monitoring, stream_enable_loudness_monitoring, stream_get_loudness,
 };
 
-pub use tauri_replay_gain::analyze_replaygain;
+pub use tauri_audio_spectrum::{
+    stream_disable_spectrum_monitoring, stream_enable_spectrum_monitoring, stream_get_spectrum,
+};
+
+pub use tauri_audio_replaygain::analyze_replaygain;
 
 pub use tauri_compute_eq::compute_eq_response;
 
 pub use tauri_generate_eq::{
-    generate_apo_format,
-    generate_aupreset_format,
-    generate_rme_format,
-    generate_rme_room_format,
+    generate_apo_format, generate_aupreset_format, generate_rme_format, generate_rme_room_format,
 };
-
 
 #[tauri::command]
 fn exit_app(window: tauri::Window) {
@@ -207,6 +173,7 @@ pub fn run() {
             stream_seek,
             stream_get_state,
             stream_get_file_info,
+            stream_update_filters,
             stream_enable_loudness_monitoring,
             stream_disable_loudness_monitoring,
             stream_get_loudness,

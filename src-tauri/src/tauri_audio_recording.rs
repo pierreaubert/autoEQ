@@ -2,16 +2,10 @@
 // Audio Recording Commands (using AudioManager)
 // ============================================================================
 
-use tauri::{State, AppHandle, Emitter};
-use tokio::sync::Mutex;
+use sotf_audio::AudioManager;
 use std::path::PathBuf;
-use sotf_audio::FilterParams;
-use sotf_audio::audio::{AudioConfig, AudioDevice};
-use sotf_audio::camilla::ChannelMapMode;
-use sotf_audio::{
-    AudioFileInfo, AudioManager, AudioStreamingManager, LoudnessInfo, SharedAudioState,
-    StreamingState,
-};
+use tauri::{AppHandle, Emitter, State};
+use tokio::sync::Mutex;
 
 /// Audio state change event payload (for recording)
 #[derive(Clone, serde::Serialize)]
@@ -150,4 +144,3 @@ pub async fn audio_get_recording_spl(
 
     Ok(db_spl)
 }
-

@@ -1,11 +1,11 @@
 use crate::tauri_plots::{OptimizationPlotParams, PlotData, generate_optimization_plots};
 use autoeq::{LossType, cli::Args as AutoEQArgs};
-use tauri::{AppHandle, State, Emitter};
 use ndarray::Array1;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use tauri::{AppHandle, Emitter, State};
 
 // Global cancellation state
 pub struct CancellationState {
@@ -717,7 +717,6 @@ pub async fn run_optimization_internal<P: ProgressCallback + 'static>(
     })
 }
 
-
 #[cfg(test)]
 #[allow(dead_code)]
 pub mod mocks {
@@ -1143,7 +1142,6 @@ pub mod mocks {
         ]
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -1635,15 +1633,6 @@ mod tests {
     }
 }
 
-
-use autoeq::{
-    Curve, plot_filters, plot_spin, plot_spin_details,
-    plot_spin_tonal,
-};
-
-// Note: These types are defined in this same file above
-use crate::tauri_plots::{PlotFiltersParams, PlotSpinParams, curve_data_to_curve, plot_to_json};
-
 // Tauri-specific ProgressCallback implementation
 struct TauriProgressCallback {
     app_handle: AppHandle,
@@ -1668,10 +1657,7 @@ pub async fn run_optimization(
     app_handle: AppHandle,
     cancellation_state: State<'_, CancellationState>,
 ) -> Result<OptimizationResult, String> {
-    println!(
-        "[TAURI] run_optimization called with algo: {}",
-        params.algo
-    );
+    println!("[TAURI] run_optimization called with algo: {}", params.algo);
     println!(
         "[TAURI] Parameters: num_filters={}, population={}, maxeval={}",
         params.num_filters, params.population, params.maxeval
@@ -1720,4 +1706,3 @@ pub fn cancel_optimization(cancellation_state: State<CancellationState>) -> Resu
     cancellation_state.cancel();
     Ok(())
 }
-

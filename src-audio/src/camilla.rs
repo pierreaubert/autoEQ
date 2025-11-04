@@ -668,9 +668,9 @@ impl CamillaWebSocketClient {
         // Build and send command
         match command {
             CamillaCommand::SetConfig { ref config } => {
-                let command_json =
-                    serde_json::json!({ "SetConfig": { "config": config } }).to_string();
-                println!("[WebSocket] Sending command: {}", command_json);
+                // CamillaDSP expects: {"SetConfig": "<yaml_string>"}
+                let command_json = serde_json::json!({ "SetConfig": config }).to_string();
+                println!("[WebSocket] Sending SetConfig command");
                 write
                     .send(Message::Text(command_json))
                     .await
@@ -786,18 +786,35 @@ impl CamillaWebSocketClient {
             .await?;
         let v: serde_json::Value = serde_json::from_str(&text)
             .map_err(|e| CamillaError::WebSocketError(format!("JSON parse error: {}", e)))?;
-        let ok = v
-            .get("SetConfig")
-            .and_then(|x| x.get("result"))
+
+        // Debug: print the full response to help diagnose the issue
+        println!("[WebSocket] SetConfig response JSON: {:?}", v);
+
+        let set_config = v.get("SetConfig").ok_or_else(|| {
+            CamillaError::WebSocketError(format!(
+                "Unexpected response format: missing SetConfig field. Got: {}",
+                serde_json::to_string(&v).unwrap_or_else(|_| "<invalid>".to_string())
+            ))
+        })?;
+
+        let result = set_config
+            .get("result")
             .and_then(|x| x.as_str())
-            .unwrap_or("")
-            == "Ok";
-        if ok {
+            .unwrap_or("");
+
+        if result == "Ok" {
             Ok(())
         } else {
-            Err(CamillaError::ProcessCommunicationFailed(
-                "SetConfig failed".to_string(),
-            ))
+            // Extract the error message from the "value" field if available
+            let error_msg = set_config
+                .get("value")
+                .and_then(|x| x.as_str())
+                .unwrap_or("SetConfig failed with unknown error");
+
+            Err(CamillaError::ProcessCommunicationFailed(format!(
+                "SetConfig failed: {}",
+                error_msg
+            )))
         }
     }
 
@@ -1212,17 +1229,47 @@ impl AudioManager {
         Ok(())
     }
 
-    /// Update EQ filters in real-time
-    pub async fn update_filters(&self, filters: Vec<FilterParams>) -> CamillaResult<()> {
-        println!("[AudioManager] Updating {} filters", filters.len());
+    /// Update EQ filters and loudness in real-time without restarting CamillaDSP
+    /// Supports both streaming (stdin) and file-based playback modes
+    pub async fn update_filters(
+        &self,
+        filters: Vec<FilterParams>,
+        loudness: Option<LoudnessCompensation>,
+    ) -> CamillaResult<()> {
+        println!(
+            "[AudioManager] Updating {} filters{}",
+            filters.len(),
+            if loudness.is_some() {
+                " with loudness compensation"
+            } else {
+                ""
+            }
+        );
+
+        // Check if CamillaDSP is running
+        {
+            let mut process = self.process.lock().map_err(|e| {
+                CamillaError::ProcessCommunicationFailed(format!("Failed to lock process: {}", e))
+            })?;
+            if !process.is_running() {
+                println!("[AudioManager] CamillaDSP not running, skipping filter update");
+                return Ok(()); // Silently succeed - filters will be applied when playback starts
+            }
+        }
 
         // Validate filters
         for filter in &filters {
             filter.validate()?;
         }
 
-        // Get current state to rebuild config
+        // Validate loudness if provided
+        if let Some(ref lc) = loudness {
+            lc.validate()?;
+        }
+
+        // Get current state to determine mode and rebuild config
         let (
+            is_streaming,
             audio_file,
             output_device,
             sample_rate,
@@ -1234,12 +1281,12 @@ impl AudioManager {
                 CamillaError::ProcessCommunicationFailed(format!("Failed to lock state: {}", e))
             })?;
 
-            let file = state
-                .current_file
-                .clone()
-                .ok_or(CamillaError::ProcessNotRunning)?;
+            // Streaming mode has no current_file
+            let is_streaming = state.current_file.is_none();
+            let file = state.current_file.clone();
 
             (
+                is_streaming,
                 file,
                 state.output_device.clone(),
                 state.sample_rate,
@@ -1249,21 +1296,36 @@ impl AudioManager {
             )
         };
 
-        // Generate new config with updated filters
-        let config = generate_playback_config(
-            &audio_file,
-            output_device.as_deref(),
-            sample_rate,
-            channels,
-            &filters,
-            channel_map_mode,
-            playback_channel_map.as_deref(),
-            None,
-        )?;
+        // Generate new config based on mode (streaming vs file-based)
+        let config = if is_streaming {
+            println!("[AudioManager] Updating filters for streaming mode");
+            generate_streaming_config(
+                output_device.as_deref(),
+                sample_rate,
+                channels,
+                &filters,
+                channel_map_mode,
+                playback_channel_map.as_deref(),
+                loudness.as_ref(),
+            )?
+        } else {
+            println!("[AudioManager] Updating filters for file playback mode");
+            let file = audio_file.ok_or(CamillaError::ProcessNotRunning)?;
+            generate_playback_config(
+                &file,
+                output_device.as_deref(),
+                sample_rate,
+                channels,
+                &filters,
+                channel_map_mode,
+                playback_channel_map.as_deref(),
+                loudness.as_ref(),
+            )?
+        };
 
         let config_yaml = serde_yaml::to_string(&config)?;
 
-        // Send config update via WebSocket
+        // Send config update via WebSocket (hot-reload without restarting)
         let ws_url = {
             let process = self.process.lock().map_err(|e| {
                 CamillaError::ProcessCommunicationFailed(format!("Failed to lock process: {}", e))
@@ -1274,7 +1336,7 @@ impl AudioManager {
         let client = CamillaWebSocketClient::new(ws_url);
         client.set_config(config_yaml).await?;
 
-        // Update state with new filters
+        // Update state with new filters only after successful WebSocket update
         {
             let mut state = self.state.lock().map_err(|e| {
                 CamillaError::ProcessCommunicationFailed(format!("Failed to lock state: {}", e))
@@ -1282,7 +1344,7 @@ impl AudioManager {
             state.filters = filters;
         }
 
-        println!("[AudioManager] Filters updated successfully");
+        println!("[AudioManager] Filters updated successfully via WebSocket");
         Ok(())
     }
 

@@ -78,7 +78,6 @@ export class APIManager {
           }
         }, 20);
       });
-
     } catch (error) {
       console.error("Error enabling select element:", error);
       // Fallback: just set disabled to false
@@ -116,7 +115,6 @@ export class APIManager {
 
       // Replace the old element
       parent.replaceChild(newSelect, selectElement);
-
     } catch (error) {
       console.error("Nuclear enable failed:", error);
     }
