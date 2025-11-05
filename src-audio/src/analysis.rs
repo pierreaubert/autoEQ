@@ -169,38 +169,82 @@ pub fn analyze_recording(
     let ref_spectrum = compute_fft(aligned_ref, fft_size)?;
     let rec_spectrum = compute_fft(aligned_rec, fft_size)?;
 
-    // Compute frequency bins
-    let num_bins = fft_size / 2; // Single-sided spectrum
-    let mut frequencies = Vec::with_capacity(num_bins);
-    let mut spl_db = Vec::with_capacity(num_bins);
-    let mut phase_deg = Vec::with_capacity(num_bins);
+    // Generate 200 log-spaced frequency points between 20 Hz and 20 kHz
+    let num_output_points = 200;
+    let log_start = 20.0_f32.ln();
+    let log_end = 20000.0_f32.ln();
+
+    let mut frequencies = Vec::with_capacity(num_output_points);
+    let mut spl_db = Vec::with_capacity(num_output_points);
+    let mut phase_deg = Vec::with_capacity(num_output_points);
 
     let freq_resolution = sample_rate as f32 / fft_size as f32;
+    let num_bins = fft_size / 2; // Single-sided spectrum
 
-    // Skip DC bin (k=0), compute for k=1..num_bins
-    for k in 1..=num_bins {
-        let freq = k as f32 * freq_resolution;
+    // Apply 1/24 octave smoothing for each target frequency
+    for i in 0..num_output_points {
+        // Log-spaced target frequency
+        let target_freq =
+            (log_start + (log_end - log_start) * i as f32 / (num_output_points - 1) as f32).exp();
 
-        // Compute transfer function: H(f) = recorded / reference
-        // This gives us the system response (for loopback, should be ~1.0 or 0 dB)
-        let transfer_function = rec_spectrum[k] / ref_spectrum[k];
-        let magnitude = transfer_function.norm();
+        // 1/24 octave bandwidth: ±1/48 octave around target frequency
+        // Lower and upper frequency bounds: f * 2^(±1/48)
+        let octave_fraction = 1.0 / 48.0;
+        let freq_lower = target_freq * 2.0_f32.powf(-octave_fraction);
+        let freq_upper = target_freq * 2.0_f32.powf(octave_fraction);
 
-        // Convert to dB (no windowing correction needed for transfer function)
-        let db = 20.0 * magnitude.max(1e-10).log10();
+        // Find FFT bins within this frequency range
+        let bin_lower = ((freq_lower / freq_resolution).floor() as usize).max(1);
+        let bin_upper = ((freq_upper / freq_resolution).ceil() as usize).min(num_bins);
 
-        // Phase from cross-spectrum (signals are already time-aligned)
-        let cross_spectrum = ref_spectrum[k].conj() * rec_spectrum[k];
-        let mut phase_rad = cross_spectrum.arg();
+        if bin_lower > bin_upper || bin_upper >= ref_spectrum.len() {
+            continue; // Skip if range is invalid
+        }
 
-        // Wrap phase to [-π, π] range before converting to degrees
-        // Use atan2 trick: atan2(sin(θ), cos(θ)) = θ wrapped to [-π, π]
-        phase_rad = phase_rad.sin().atan2(phase_rad.cos());
+        // Average transfer function magnitude and phase across bins in the smoothing range
+        let mut sum_magnitude = 0.0;
+        let mut sum_sin = 0.0; // For circular averaging of phase
+        let mut sum_cos = 0.0;
+        let mut bin_count = 0;
 
-        // Convert to degrees in [-180, 180] range
-        let phase = phase_rad * 180.0 / PI;
+        for k in bin_lower..=bin_upper {
+            if k >= ref_spectrum.len() {
+                break;
+            }
 
-        frequencies.push(freq);
+            // Compute transfer function: H(f) = recorded / reference
+            let transfer_function = rec_spectrum[k] / ref_spectrum[k];
+            let magnitude = transfer_function.norm();
+
+            // Phase from cross-spectrum (signals are already time-aligned)
+            let cross_spectrum = ref_spectrum[k].conj() * rec_spectrum[k];
+            let mut phase_rad = cross_spectrum.arg();
+
+            // Wrap phase to [-π, π] range
+            phase_rad = phase_rad.sin().atan2(phase_rad.cos());
+
+            // Accumulate for averaging
+            sum_magnitude += magnitude;
+            sum_sin += phase_rad.sin();
+            sum_cos += phase_rad.cos();
+            bin_count += 1;
+        }
+
+        if bin_count == 0 {
+            continue; // Skip if no bins in range
+        }
+
+        // Average magnitude
+        let avg_magnitude = sum_magnitude / bin_count as f32;
+
+        // Convert to dB
+        let db = 20.0 * avg_magnitude.max(1e-10).log10();
+
+        // Average phase using circular mean
+        let avg_phase_rad = sum_sin.atan2(sum_cos);
+        let phase = avg_phase_rad * 180.0 / PI;
+
+        frequencies.push(target_freq);
         spl_db.push(db);
         phase_deg.push(phase);
     }
