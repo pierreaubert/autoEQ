@@ -39,8 +39,8 @@ pub async fn audio_start_recording(
     let manager = audio_manager.lock().await;
     let result = manager
         .start_recording(
-            PathBuf::from(&output_path),
             input_device.clone(),
+            PathBuf::from(&output_path),
             sample_rate,
             channels,
             None,

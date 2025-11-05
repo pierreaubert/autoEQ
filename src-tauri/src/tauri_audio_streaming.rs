@@ -3,7 +3,8 @@
 // ============================================================================
 
 use crate::tauri_audio_recording::AudioError;
-use sotf_audio::camilla::{ChannelMapMode, LoudnessCompensation};
+use sotf_audio::camilla::ChannelMapMode;
+use sotf_audio::loudness_compensation::LoudnessCompensation;
 use sotf_audio::{AudioFileInfo, AudioStreamingManager, FilterParams, StreamingState};
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::Mutex;
