@@ -271,7 +271,7 @@ pub async fn record_and_analyze(
 
     // Calculate duration based on reference signal length
     let duration_seconds = reference_signal.len() as f32 / sample_rate as f32;
-    let wait_time = duration_seconds + 1.0; // Add 1 second padding
+    let wait_time = duration_seconds + 2.0; // Add 2 seconds padding for latency
 
     tokio::time::sleep(tokio::time::Duration::from_secs_f32(wait_time)).await;
 

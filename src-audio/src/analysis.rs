@@ -45,10 +45,9 @@ pub fn analyze_recording(
     println!("[FFT Analysis] Loaded {} samples from recording", recorded.len());
     println!("[FFT Analysis] Reference has {} samples", reference_signal.len());
 
-    // Ensure both signals have the same length for analysis
-    let min_len = recorded.len().min(reference_signal.len());
-    let recorded = &recorded[..min_len];
-    let reference = &reference_signal[..min_len];
+    // Don't truncate yet - we need full signals for lag estimation
+    let recorded = &recorded[..];
+    let reference = &reference_signal[..];
 
     // Debug: Check signal statistics
     let ref_max = reference.iter().map(|&x| x.abs()).fold(0.0_f32, |a, b| a.max(b));
@@ -63,15 +62,16 @@ pub fn analyze_recording(
     println!("[FFT Analysis] First 5 reference samples: {:?}", &reference[..5.min(reference.len())]);
     println!("[FFT Analysis] First 5 recorded samples:  {:?}", &recorded[..5.min(recorded.len())]);
     
-    // Check if signals are identical
+    // Check if signals are identical (compare overlap region)
+    let check_len = reference.len().min(recorded.len());
     let mut identical_count = 0;
-    for (r, c) in reference.iter().zip(recorded.iter()) {
+    for (r, c) in reference[..check_len].iter().zip(recorded[..check_len].iter()) {
         if (r - c).abs() < 1e-6 {
             identical_count += 1;
         }
     }
-    println!("[FFT Analysis] Identical samples: {}/{} ({:.1}%)", 
-        identical_count, min_len, identical_count as f32 * 100.0 / min_len as f32);
+    println!("[FFT Analysis] Identical samples: {}/{} ({:.1}%)",
+        identical_count, check_len, identical_count as f32 * 100.0 / check_len as f32);
 
     // Estimate lag using cross-correlation
     let lag = estimate_lag(reference, recorded);
@@ -82,11 +82,48 @@ pub fn analyze_recording(
         lag as f32 * 1000.0 / sample_rate as f32
     );
 
-    // Compute FFT for both signals
-    let fft_size = next_power_of_two(min_len);
-    
-    let ref_spectrum = compute_fft(reference, fft_size)?;
-    let rec_spectrum = compute_fft(recorded, fft_size)?;
+    // Time-align the signals before FFT
+    // Use the full reference signal length and align the recorded signal to it
+    // If recorded is delayed (positive lag), skip the lag samples in recorded
+    // If recorded leads (negative lag), we need to handle it differently
+    let analysis_len = reference.len();
+
+    let (aligned_ref, aligned_rec) = if lag >= 0 {
+        let lag_usize = lag as usize;
+        if lag_usize >= recorded.len() {
+            return Err("Lag is larger than recorded signal length".to_string());
+        }
+        // Check if we have enough recorded samples after the lag
+        let available_rec_len = recorded.len() - lag_usize;
+        if available_rec_len < analysis_len {
+            println!("[FFT Analysis] Warning: Only {} samples available after lag alignment (need {})",
+                available_rec_len, analysis_len);
+            println!("[FFT Analysis] Analysis will be truncated to available length");
+            let truncated_len = available_rec_len;
+            (&reference[..truncated_len], &recorded[lag_usize..lag_usize + truncated_len])
+        } else {
+            // We have enough samples - use full reference length
+            (&reference[..], &recorded[lag_usize..lag_usize + analysis_len])
+        }
+    } else {
+        // Recorded leads reference - this shouldn't happen in normal loopback
+        let lag_usize = (-lag) as usize;
+        if lag_usize >= reference.len() {
+            return Err("Negative lag is larger than reference signal length".to_string());
+        }
+        let new_len = (reference.len() - lag_usize).min(recorded.len());
+        (&reference[lag_usize..lag_usize + new_len], &recorded[..new_len])
+    };
+
+    println!("[FFT Analysis] Aligned signal length: {} samples ({:.2}s)",
+        aligned_ref.len(),
+        aligned_ref.len() as f32 / sample_rate as f32);
+
+    // Compute FFT for both aligned signals
+    let fft_size = next_power_of_two(aligned_ref.len());
+
+    let ref_spectrum = compute_fft(aligned_ref, fft_size)?;
+    let rec_spectrum = compute_fft(aligned_rec, fft_size)?;
 
     // Compute frequency bins
     let num_bins = fft_size / 2; // Single-sided spectrum
@@ -108,16 +145,15 @@ pub fn analyze_recording(
         // Convert to dB (no windowing correction needed for transfer function)
         let db = 20.0 * magnitude.max(1e-10).log10();
         
-        // Phase from cross-spectrum with lag compensation
+        // Phase from cross-spectrum (signals are already time-aligned)
         let cross_spectrum = ref_spectrum[k].conj() * rec_spectrum[k];
         let mut phase_rad = cross_spectrum.arg();
-        
-        // Compensate for lag
-        let lag_phase = -2.0 * PI * freq * lag as f32 / sample_rate as f32;
-        phase_rad += lag_phase;
-        
-        // Keep phase unwrapped (continuous) - convert directly to degrees
-        // This allows proper phase analysis and visualization
+
+        // Wrap phase to [-π, π] range before converting to degrees
+        // Use atan2 trick: atan2(sin(θ), cos(θ)) = θ wrapped to [-π, π]
+        phase_rad = phase_rad.sin().atan2(phase_rad.cos());
+
+        // Convert to degrees in [-180, 180] range
         let phase = phase_rad * 180.0 / PI;
         
         frequencies.push(freq);

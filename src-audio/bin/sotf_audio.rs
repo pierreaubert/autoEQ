@@ -178,11 +178,11 @@ enum Commands {
         freq2: Option<f32>,
 
         /// Start frequency in Hz (for sweep signal)
-        #[arg(long, default_value= "20")]
+        #[arg(long, default_value = "5")]
         start_freq: Option<f32>,
 
         /// End frequency in Hz (for sweep signal)
-        #[arg(long, default_value= "20000")]
+        #[arg(long, default_value = "22000")]
         end_freq: Option<f32>,
 
         /// Amplitude (0.0-1.0)
