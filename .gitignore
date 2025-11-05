@@ -25,6 +25,8 @@ CTAGS
 # Logs
 logs
 *.log
+/*.csv
+/*.wav
 
 # Editor directories and files
 /.vs

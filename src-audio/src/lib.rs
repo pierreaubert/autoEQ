@@ -29,9 +29,15 @@ pub use camilla::{
 
 pub mod replaygain;
 pub mod signals;
+pub mod signal_recorder;
 
 pub mod loudness_monitor;
 pub use loudness_monitor::{LoudnessInfo, LoudnessMonitor};
 
 pub mod spectrum_analyzer;
 pub use spectrum_analyzer::{SpectrumAnalyzer, SpectrumConfig, SpectrumInfo};
+
+pub mod analysis;
+
+// pub mod audio_playback;
+// pub use audio_playback::{PlaybackRecorder, PlaybackRecordingConfig, AudioPlaybackError};

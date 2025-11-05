@@ -335,7 +335,8 @@ mod tests {
         assert_eq!(edges.len(), 31);
         assert_eq!(centers.len(), 30);
         assert!(edges[0] >= 20.0);
-        assert!(edges[30] <= 20000.0);
+        // Allow small floating point tolerance
+        assert!(edges[30] <= 20000.01);
 
         // Check that bins are logarithmically spaced
         for i in 0..30 {

@@ -126,31 +126,76 @@ enum Commands {
         loudness_compensation: Option<Vec<f64>>,
     },
 
-    /// Record audio from input device
+    /// Generate and record test signals with analysis
     Record {
-        /// Output file path
-        #[arg(value_name = "FILE")]
-        output: PathBuf,
+        /// Signal type: tone, two-tone, sweep, white-noise, pink-noise, m-noise
+        #[arg(long)]
+        signal: String,
 
-        /// Input device name (optional, uses default)
-        #[arg(short, long)]
-        device: Option<String>,
+        /// Duration in seconds
+        #[arg(long)]
+        duration: f32,
 
         /// Sample rate in Hz
-        #[arg(short = 'r', long, default_value = "48000")]
+        #[arg(long, default_value = "48000")]
         sample_rate: u32,
 
-        /// Number of channels
-        #[arg(short, long, default_value = "2")]
+        /// Number of signal channels (must be 1)
+        #[arg(long, default_value = "1")]
         channels: u16,
 
-        /// Hardware input channel map (comma-separated indices)
-        #[arg(long = "hwaudio-record", value_delimiter = ',')]
-        hwaudio_record: Option<Vec<u16>>,
+        /// Hardware output channel to send signal to (1-based, single channel only)
+        #[arg(long)]
+        hwaudio_send_to: String,
 
-        /// Duration to record in seconds
-        #[arg(short = 't', long, default_value = "10")]
-        duration: u64,
+        /// Hardware input channels to record from (1-based, comma-separated)
+        #[arg(long)]
+        hwaudio_record_from: String,
+
+        /// Optional filename prefix
+        #[arg(long)]
+        name: Option<String>,
+
+        /// Output device name (optional, uses default)
+        #[arg(long = "output-device")]
+        output_device: Option<String>,
+
+        /// Input device name (optional, uses default)
+        #[arg(long = "input-device")]
+        input_device: Option<String>,
+
+        // Signal-specific parameters
+        /// Tone frequency in Hz (for tone signal)
+        #[arg(long)]
+        freq: Option<f32>,
+
+        /// First frequency in Hz (for two-tone signal)
+        #[arg(long)]
+        freq1: Option<f32>,
+
+        /// Second frequency in Hz (for two-tone signal)
+        #[arg(long)]
+        freq2: Option<f32>,
+
+        /// Start frequency in Hz (for sweep signal)
+        #[arg(long, default_value= "20")]
+        start_freq: Option<f32>,
+
+        /// End frequency in Hz (for sweep signal)
+        #[arg(long, default_value= "20000")]
+        end_freq: Option<f32>,
+
+        /// Amplitude (0.0-1.0)
+        #[arg(long)]
+        amp: Option<f32>,
+
+        /// First amplitude (0.0-1.0, for two-tone signal)
+        #[arg(long)]
+        amp1: Option<f32>,
+
+        /// Second amplitude (0.0-1.0, for two-tone signal)
+        #[arg(long)]
+        amp2: Option<f32>,
     },
 
     /// Get current playback status
@@ -260,24 +305,44 @@ async fn main() {
             }
         }
         Commands::Record {
-            output,
-            device,
+            signal,
+            duration,
             sample_rate,
             channels,
-            hwaudio_record,
-            duration,
+            hwaudio_send_to,
+            hwaudio_record_from,
+            name,
+            output_device,
+            input_device,
+            freq,
+            freq1,
+            freq2,
+            start_freq,
+            end_freq,
+            amp,
+            amp1,
+            amp2,
         } => {
-            if let Err(e) = record_audio(
+            if let Err(e) = record_signal(
                 binary_path,
-                output,
-                device,
+                signal,
+                duration,
                 sample_rate,
                 channels,
-                duration,
-                hwaudio_record,
-            )
-            .await
-            {
+                hwaudio_send_to,
+                hwaudio_record_from,
+                name,
+                output_device,
+                input_device,
+                freq,
+                freq1,
+                freq2,
+                start_freq,
+                end_freq,
+                amp,
+                amp1,
+                amp2,
+            ).await {
                 eprintln!("Error: {}", e);
                 std::process::exit(1);
             }
@@ -332,71 +397,6 @@ async fn list_devices() -> Result<(), String> {
         println!();
     }
 
-    Ok(())
-}
-
-async fn record_audio(
-    binary_path: PathBuf,
-    output: PathBuf,
-    device: Option<String>,
-    sample_rate: u32,
-    channels: u16,
-    duration: u64,
-    hwaudio_record: Option<Vec<u16>>,
-) -> Result<(), String> {
-    println!("Starting recording...");
-    println!("  Output: {:?}", output);
-    println!("  Device: {:?}", device.as_deref().unwrap_or("default"));
-    println!("  Sample rate: {}Hz", sample_rate);
-    println!("  Channels: {}", channels);
-    println!("  Duration: {}s", duration);
-    println!();
-
-    // Create audio manager
-    let manager = AudioManager::new(binary_path);
-
-    // Set up shutdown handler (Ctrl+C / SIGTERM)
-    let running = Arc::new(AtomicBool::new(true));
-    install_shutdown_handler(running.clone())?;
-
-    // Start recording
-    manager
-        .start_recording(
-            output.clone(),
-            device,
-            sample_rate,
-            channels,
-            hwaudio_record,
-        )
-        .await
-        .map_err(|e| format!("Failed to start recording: {}", e))?;
-
-    println!("Recording started!");
-    println!("Press Ctrl+C to stop early\n");
-
-    // Monitor recording
-    let start_time = std::time::Instant::now();
-
-    while running.load(Ordering::SeqCst) {
-        let elapsed = start_time.elapsed().as_secs();
-        print!("\rRecording: {}s / {}s", elapsed, duration);
-        std::io::Write::flush(&mut std::io::stdout()).ok();
-
-        if elapsed >= duration {
-            break;
-        }
-
-        sleep(Duration::from_secs(1)).await;
-    }
-
-    // Stop recording
-    println!("\n\nStopping recording...");
-    manager
-        .stop_recording()
-        .await
-        .map_err(|e| format!("Failed to stop recording: {}", e))?;
-
-    println!("Recording saved to: {:?}", output);
     Ok(())
 }
 
@@ -628,5 +628,168 @@ async fn play_stream(
     }
 
     println!("Streaming playback stopped successfully");
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn record_signal(
+    _binary_path: PathBuf,
+    signal: String,
+    duration: f32,
+    sample_rate: u32,
+    channels: u16,
+    hwaudio_send_to: String,
+    hwaudio_record_from: String,
+    name: Option<String>,
+    _output_device: Option<String>,
+    _input_device: Option<String>,
+    freq: Option<f32>,
+    freq1: Option<f32>,
+    freq2: Option<f32>,
+    start_freq: Option<f32>,
+    end_freq: Option<f32>,
+    amp: Option<f32>,
+    amp1: Option<f32>,
+    amp2: Option<f32>,
+) -> Result<(), String> {
+    use sotf_audio::signal_recorder::*;
+
+    println!("{}", "=".repeat(60));
+    println!("Signal Recording and Analysis");
+    println!("{}", "=".repeat(60));
+
+    // Validate channels
+    if channels != 1 {
+        return Err(format!(
+            "Channels must be 1 (mono signal generation), got {}",
+            channels
+        ));
+    }
+
+    // Parse signal type
+    let signal_type = SignalType::from_str(&signal)?;
+
+    // Parse channel lists
+    let send_to_channels = parse_channel_list(&hwaudio_send_to)?;
+    let record_from_channels = parse_channel_list(&hwaudio_record_from)?;
+
+    // Validate that we have at least one send-to channel
+    if send_to_channels.is_empty() {
+        return Err("hwaudio-send-to must specify at least 1 channel".to_string());
+    }
+
+    // Build signal parameters based on signal type
+    let params = match signal_type {
+        SignalType::Tone => {
+            let freq = freq.ok_or("--freq is required for tone signal")?;
+            let amp = amp.unwrap_or(0.5).clamp(0.0, 1.0);
+            SignalParams::Tone { freq, amp }
+        }
+        SignalType::TwoTone => {
+            let freq1 = freq1.ok_or("--freq1 is required for two-tone signal")?;
+            let freq2 = freq2.ok_or("--freq2 is required for two-tone signal")?;
+            let amp1 = amp1.unwrap_or(0.5).clamp(0.0, 1.0);
+            let amp2 = amp2.unwrap_or(0.5).clamp(0.0, 1.0);
+            SignalParams::TwoTone {
+                freq1,
+                amp1,
+                freq2,
+                amp2,
+            }
+        }
+        SignalType::Sweep => {
+            let start_freq = start_freq.ok_or("--start-freq is required for sweep signal")?;
+            let end_freq = end_freq.ok_or("--end-freq is required for sweep signal")?;
+            let amp = amp.unwrap_or(0.5).clamp(0.0, 1.0);
+            SignalParams::Sweep {
+                start_freq,
+                end_freq,
+                amp,
+            }
+        }
+        SignalType::WhiteNoise | SignalType::PinkNoise | SignalType::MNoise => {
+            let amp = amp.unwrap_or(0.5).clamp(0.0, 1.0);
+            SignalParams::Noise { amp }
+        }
+    };
+
+    // Validate parameters
+    validate_signal_params(signal_type, &params, duration, sample_rate)?;
+
+    println!("\nConfiguration:");
+    println!("  Signal: {}", signal_type.as_str());
+    println!("  Duration: {:.2}s", duration);
+    println!("  Sample rate: {}Hz", sample_rate);
+    println!("  Send to hardware channels: {:?}", send_to_channels);
+    println!("  Record from hardware channels: {:?}", record_from_channels);
+    if let Some(ref n) = name {
+        println!("  Output prefix: {}", n);
+    }
+    println!();
+
+    // Generate the base signal
+    let total_recordings = record_from_channels.len() * send_to_channels.len();
+    println!("[1/{}] Generating signal...", total_recordings + 2);
+    let base_signal = generate_signal(signal_type, &params, duration, sample_rate)?;
+
+    // Validate that the signal is mono (Vec<f32> represents mono)
+    // All our signal generation functions return mono signals
+    println!("  ✓ Generated mono signal with {} samples", base_signal.len());
+
+    // Prepare mono signal with fades and padding
+    println!("\n[2/{}] Preparing mono signal...", total_recordings + 2);
+    let prepared_signal = prepare_signal(base_signal.clone(), sample_rate);
+    println!("  ✓ Prepared mono signal with {} samples", prepared_signal.len());
+
+    // Perform recording for each record-from channel
+    for (record_idx, &record_ch) in record_from_channels.iter().enumerate() {
+        for (send_idx, &send_ch) in send_to_channels.iter().enumerate() {
+            let take_num = record_idx * send_to_channels.len() + send_idx + 1;
+            let total_takes = record_from_channels.len() * send_to_channels.len();
+
+            println!("\n[{}/{}] Recording from channel {} (playing mono to channel {})...",
+                take_num + 2, total_takes + 2, record_ch, send_ch
+            );
+
+            // Generate output filenames - include both send and record channels
+            let (wav_path, csv_path) = generate_output_filenames_stereo(
+                name.as_deref(),
+                signal_type,
+                send_ch,
+                record_ch,
+                sample_rate,
+            );
+
+            println!("  Output WAV: {:?}", wav_path);
+            println!("  Output CSV: {:?}", csv_path);
+
+            // Write mono signal to temporary WAV file
+            println!("  Writing temporary mono WAV file...");
+            let temp_wav = write_temp_wav(&prepared_signal, sample_rate, 1)?;
+            println!("  Temp file: {:?}", temp_wav.path());
+
+            // Perform actual playback and recording
+            println!("  Starting playback and recording...");
+            println!("  Playing mono temp WAV to hw channel {}", send_ch);
+            println!("  Recording from hw channel {}", record_ch);
+
+            record_and_analyze(
+                temp_wav.path(),  // Use the temporary WAV file for playback
+                &wav_path,        // Record to the final output WAV file
+                &prepared_signal, // Use the prepared mono signal for analysis
+                sample_rate,
+                &csv_path,
+                send_ch,          // Output channel
+                record_ch,        // Input channel
+            ).await?;
+
+            println!("  ✓ Recording complete");
+        }
+    }
+
+    println!("\n{}", "=".repeat(60));
+    println!("All recordings complete!");
+    println!("{}", "=".repeat(60));
+
     Ok(())
 }

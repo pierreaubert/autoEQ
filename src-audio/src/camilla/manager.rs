@@ -12,7 +12,8 @@ use super::types::{AudioState, AudioStreamState, SharedAudioStreamState};
 use super::websocket::CamillaWebSocketClient;
 use super::config::{
     generate_streaming_config, generate_playback_config, generate_recording_config,
-    write_config_to_temp, convert_raw_to_wav
+    generate_recording_config_with_output_type, RecordingOutputType,
+    write_config_to_temp, convert_raw_to_wav, fix_rf64_wav, validate_config
 };
 use crate::filters::FilterParams;
 use crate::loudness_compensation::LoudnessCompensation;
@@ -206,11 +207,10 @@ impl AudioManager {
             output_device.as_deref(),
             sample_rate,
             channels,
-            &filters,
-            channel_map_mode,
-            output_map.as_deref(),
-            loudness.as_ref(),
         )?;
+
+        // Validate the configuration
+        validate_config(&config, "playback")?;
 
         // Print the configuration for debugging
         println!("[CamillaDSP] Generated configuration:");
@@ -405,10 +405,6 @@ impl AudioManager {
                 output_device.as_deref(),
                 sample_rate,
                 channels,
-                &filters,
-                channel_map_mode,
-                playback_channel_map.as_deref(),
-                loudness.as_ref(),
             )?
         };
 
@@ -440,8 +436,8 @@ impl AudioManager {
     /// Start recording from input device
     pub async fn start_recording(
         &self,
-        output_file: PathBuf,
         input_device: Option<String>,
+        output_file: PathBuf,
         sample_rate: u32,
         channels: u16,
         input_map: Option<Vec<u16>>,
@@ -463,16 +459,20 @@ impl AudioManager {
             state.error_message = None;
             state.capture_channel_map = input_map.clone();
             state.recording_output_file = Some(output_file.clone());
+            state.output_device = None; // No output device for recording
         }
 
         // Generate recording config
         let config = generate_recording_config(
-            &output_file,
             input_device.as_deref(),
+            &output_file,
             sample_rate,
             channels,
             input_map.as_deref(),
         )?;
+
+        // Validate the configuration
+        validate_config(&config, "recording")?;
 
         // Write config to temp file
         let temp_file = write_config_to_temp(&config)?;
@@ -528,12 +528,13 @@ impl AudioManager {
         let raw_file = output_file.with_extension("");
         let raw_file = PathBuf::from(format!("{}.raw", raw_file.display()));
 
-        // If the output file already exists (as raw data), convert it
+        // CamillaDSP with wav_header=true writes a complete WAV file directly
+        // But it may use RF64 format with 0xFFFFFFFF placeholders - fix those
         if output_file.exists() {
-            println!("[AudioManager] Converting raw audio to WAV format...");
-            convert_raw_to_wav(&output_file, &output_file, sample_rate, channels)?;
+            fix_rf64_wav(&output_file)?;
             println!("[AudioManager] Recording saved as WAV: {:?}", output_file);
         } else if raw_file.exists() {
+            // Fallback: if we get a .raw file instead, convert it
             println!("[AudioManager] Converting raw audio to WAV format...");
             convert_raw_to_wav(&raw_file, &output_file, sample_rate, channels)?;
             // Remove raw file after conversion

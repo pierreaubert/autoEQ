@@ -10,3 +10,11 @@
 # Downloaded and cached
 /data
 /data_cached
+
+# python stuff
+/.venv
+/.virtual_documents
+/.ipynb_checkpoints
+
+*.csv
+*.wav

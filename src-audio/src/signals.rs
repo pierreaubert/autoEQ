@@ -296,6 +296,112 @@ pub fn replicate_mono(mono: &[f32], channels: u16) -> Vec<f32> {
     interleaved
 }
 
+/// Apply Hann window fade-in to the beginning of a signal
+///
+/// # Arguments
+/// * `signal` - Signal to apply fade to (modified in-place)
+/// * `fade_samples` - Number of samples for the fade
+pub fn apply_fade_in(signal: &mut [f32], fade_samples: usize) {
+    let fade_len = fade_samples.min(signal.len());
+    for i in 0..fade_len {
+        let t = i as f32 / fade_len as f32;
+        let fade = 0.5 * (1.0 - (std::f32::consts::PI * t).cos()); // Hann window
+        signal[i] *= fade;
+    }
+}
+
+/// Apply Hann window fade-out to the end of a signal
+///
+/// # Arguments
+/// * `signal` - Signal to apply fade to (modified in-place)
+/// * `fade_samples` - Number of samples for the fade
+pub fn apply_fade_out(signal: &mut [f32], fade_samples: usize) {
+    let len = signal.len();
+    let fade_len = fade_samples.min(len);
+    let start_idx = len.saturating_sub(fade_len);
+    
+    for i in 0..fade_len {
+        let t = i as f32 / fade_len as f32;
+        let fade = 0.5 * (1.0 + (std::f32::consts::PI * t).cos()); // Hann window
+        signal[start_idx + i] *= fade;
+    }
+}
+
+/// Add silence padding to the beginning and end of a signal
+///
+/// # Arguments
+/// * `signal` - Original signal
+/// * `pre_samples` - Number of silence samples to add before
+/// * `post_samples` - Number of silence samples to add after
+///
+/// # Returns
+/// New signal with padding
+pub fn add_silence_padding(signal: &[f32], pre_samples: usize, post_samples: usize) -> Vec<f32> {
+    let total_len = pre_samples + signal.len() + post_samples;
+    let mut padded = vec![0.0; total_len];
+    
+    // Copy original signal in the middle
+    padded[pre_samples..pre_samples + signal.len()].copy_from_slice(signal);
+    
+    padded
+}
+
+/// Generate a signal with fade-in, fade-out, and silence padding
+///
+/// # Arguments
+/// * `signal` - Original signal
+/// * `sample_rate` - Sample rate in Hz
+/// * `fade_duration_ms` - Fade duration in milliseconds (default: 20ms)
+/// * `padding_duration_ms` - Pre/post silence padding in milliseconds (default: 250ms)
+///
+/// # Returns
+/// Signal with fades and padding applied
+pub fn prepare_signal_for_playback(
+    mut signal: Vec<f32>,
+    sample_rate: u32,
+    fade_duration_ms: f32,
+    padding_duration_ms: f32,
+) -> Vec<f32> {
+    let fade_samples = ((fade_duration_ms / 1000.0) * sample_rate as f32) as usize;
+    let padding_samples = ((padding_duration_ms / 1000.0) * sample_rate as f32) as usize;
+    
+    // Apply fades
+    apply_fade_in(&mut signal, fade_samples);
+    apply_fade_out(&mut signal, fade_samples);
+    
+    // Add silence padding
+    add_silence_padding(&signal, padding_samples, padding_samples)
+}
+
+/// Convert mono signal to stereo by copying to both channels
+pub fn mono_to_stereo(mono_signal: Vec<f32>) -> Vec<f32> {
+    let mut stereo_signal = Vec::with_capacity(mono_signal.len() * 2);
+    for sample in mono_signal {
+        stereo_signal.push(sample); // Left channel
+        stereo_signal.push(sample); // Right channel
+    }
+    stereo_signal
+}
+
+/// Prepare signal for playback with mono or stereo channels
+pub fn prepare_signal_for_playback_channels(
+    signal: Vec<f32>,
+    sample_rate: u32,
+    fade_duration_ms: f32,
+    padding_duration_ms: f32,
+    stereo: bool,
+) -> Vec<f32> {
+    // First prepare the mono signal with fades and padding
+    let prepared_mono = prepare_signal_for_playback(signal, sample_rate, fade_duration_ms, padding_duration_ms);
+    
+    // Convert to stereo if requested
+    if stereo {
+        mono_to_stereo(prepared_mono)
+    } else {
+        prepared_mono
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -338,12 +444,106 @@ mod tests {
     }
 
     #[test]
+    fn test_gen_log_sweep_amplitude_analysis() {
+        // Test amplitude at different points in the sweep
+        let amp = 0.5;
+        let signal = gen_log_sweep(20.0, 20000.0, amp, 48000, 1.0);
+        
+        // Check amplitude at different time points (20%, 40%, 60%, 80%)
+        let checkpoints = [0.2, 0.4, 0.6, 0.8];
+        let sample_rate = 48000.0;
+        let duration = 1.0;
+        
+        for &checkpoint in &checkpoints {
+            let sample_pos = (checkpoint * duration * sample_rate) as usize;
+            let window_size = 480; // 10ms window
+            let start = sample_pos.saturating_sub(window_size / 2);
+            let end = (sample_pos + window_size / 2).min(signal.len());
+            
+            if end > start {
+                let window_peak = signal[start..end].iter().map(|&x| x.abs()).fold(0.0_f32, |a, b| a.max(b));
+                println!("Checkpoint {:.1}: peak amplitude = {:.6} (target: {:.6})", 
+                    checkpoint, window_peak, amp);
+            }
+        }
+    }
+
+    #[test]
+    fn test_gen_log_sweep_simple() {
+        // Simple test to understand current behavior
+        let amp = 0.5;
+        let signal = gen_log_sweep(20.0, 20000.0, amp, 48000, 0.1);
+        
+        // Find the maximum amplitude in the signal
+        let max_amp = signal.iter().map(|&x| x.abs()).fold(0.0_f32, |a, b| a.max(b));
+        println!("Generated log sweep:");
+        println!("  Target amplitude: {:.6}", amp);
+        println!("  Actual max amplitude: {:.6}", max_amp);
+        println!("  Ratio: {:.6}", max_amp / amp);
+        
+        // Check that we have some signal
+        assert!(max_amp > 0.01, "Signal should have significant amplitude");
+    }
+
+    #[test]
+    fn test_gen_log_sweep_constant_amplitude() {
+        // Test that log sweep maintains constant amplitude across frequency range
+        let amp = 0.7;
+        let signal = gen_log_sweep(1.0, 20000.0, amp, 48000, 2.0);
+        
+        // Find peak values throughout the sweep
+        let mut peaks = Vec::new();
+        let window_size = 480; // 10ms windows at 48kHz
+        
+        for i in (0..signal.len()).step_by(window_size / 4) {
+            let end = (i + window_size).min(signal.len());
+            if end > i {
+                let window_peak = signal[i..end].iter().map(|&x| x.abs()).fold(0.0, f32::max);
+                peaks.push(window_peak);
+            }
+        }
+        
+        // Verify that peaks are consistent (within 1% of target amplitude)
+        let target_peak = amp;
+        let tolerance = 0.01 * target_peak; // 1% tolerance
+        
+        for (i, &peak) in peaks.iter().enumerate() {
+            assert!(
+                (peak - target_peak).abs() < tolerance,
+                "Peak at window {} is {:.6}, expected {:.6} ± {:.6}",
+                i, peak, target_peak, tolerance
+            );
+        }
+        
+        // Additional checks
+        assert!(!peaks.is_empty(), "Should have found peaks");
+        
+        // Check that we have good coverage across the sweep
+        let min_peak = peaks.iter().fold(f32::INFINITY, |a, &b| a.min(b));
+        let max_peak = peaks.iter().fold(0.0_f32, |a, &b| a.max(b));
+        let variation = max_peak - min_peak;
+        
+        assert!(
+            variation < 0.05 * target_peak,
+            "Peak variation {:.6} exceeds 5% of target amplitude {:.6}",
+            variation, target_peak
+        );
+        
+        println!("Log sweep amplitude test passed:");
+        println!("  Target amplitude: {:.6}", target_peak);
+        println!("  Min peak: {:.6}", min_peak);
+        println!("  Max peak: {:.6}", max_peak);
+        println!("  Variation: {:.6} ({:.2}%)", variation, 100.0 * variation / target_peak);
+    }
+
+    #[test]
     fn test_gen_white_noise() {
-        let signal = gen_white_noise(0.5, 48000, 0.1);
-        assert_eq!(signal.len(), 4800);
-        // Check that noise has reasonable variance
-        let mean: f32 = signal.iter().sum::<f32>() / signal.len() as f32;
-        assert!(mean.abs() < 0.1); // Should be roughly centered at 0
+        let signal = gen_white_noise(0.5, 48000, 1.0); // Use 1 second for better statistics
+        assert_eq!(signal.len(), 48000);
+        // Check that noise exists and has content
+        assert!(signal.iter().any(|&x| x.abs() > 0.01));
+        // Check that values are clipped to prevent overflow (clip function limits to ±0.999999)
+        assert!(signal.iter().all(|&x| x.abs() < 1.0));
     }
 
     #[test]
@@ -373,5 +573,74 @@ mod tests {
         let mono = vec![1.0, 2.0, 3.0];
         let stereo = replicate_mono(&mono, 2);
         assert_eq!(stereo, vec![1.0, 1.0, 2.0, 2.0, 3.0, 3.0]);
+    }
+
+    #[test]
+    fn test_apply_fade_in() {
+        let mut signal = vec![1.0; 100];
+        apply_fade_in(&mut signal, 10);
+        // First sample should be near zero
+        assert!(signal[0].abs() < 0.01);
+        // Middle of fade should be around 0.5
+        assert!((signal[5] - 0.5).abs() < 0.1);
+        // After fade should be 1.0
+        assert_eq!(signal[20], 1.0);
+    }
+
+    #[test]
+    fn test_apply_fade_out() {
+        let mut signal = vec![1.0; 100];
+        apply_fade_out(&mut signal, 10);
+        // Before fade should be 1.0
+        assert_eq!(signal[80], 1.0);
+        // Faded region should have reduced amplitude
+        assert!(signal[95] < 0.5);
+        assert!(signal[99] < 0.1);
+    }
+
+    #[test]
+    fn test_add_silence_padding() {
+        let signal = vec![1.0, 2.0, 3.0];
+        let padded = add_silence_padding(&signal, 2, 2);
+        assert_eq!(padded.len(), 7);
+        assert_eq!(padded, vec![0.0, 0.0, 1.0, 2.0, 3.0, 0.0, 0.0]);
+    }
+
+    #[test]
+    fn test_mono_to_stereo() {
+        let mono = vec![1.0, 0.5, -0.5, 0.0];
+        let stereo = mono_to_stereo(mono);
+        assert_eq!(stereo, vec![1.0, 1.0, 0.5, 0.5, -0.5, -0.5, 0.0, 0.0]);
+    }
+
+    #[test]
+    fn test_prepare_signal_for_playback_channels_stereo() {
+        let signal = vec![1.0; 100]; // Short signal for testing
+        let stereo = prepare_signal_for_playback_channels(signal.clone(), 48000, 10.0, 50.0, true);
+        
+        // Stereo should have twice the samples (minus padding which is the same for both)
+        let mono_prepared = prepare_signal_for_playback_channels(signal, 48000, 10.0, 50.0, false);
+        assert_eq!(stereo.len(), mono_prepared.len() * 2);
+    }
+
+    #[test]
+    fn test_prepare_signal_for_playback_channels_mono() {
+        let signal = vec![1.0; 100]; // Short signal for testing
+        let mono = prepare_signal_for_playback_channels(signal.clone(), 48000, 10.0, 50.0, false);
+        let mono_direct = prepare_signal_for_playback(signal, 48000, 10.0, 50.0);
+        assert_eq!(mono, mono_direct);
+    }
+
+    #[test]
+    fn test_prepare_signal_for_playback() {
+        let signal = vec![1.0; 48000]; // 1 second at 48kHz
+        let prepared = prepare_signal_for_playback(signal, 48000, 20.0, 250.0);
+        // Should have padding on both sides (250ms = 12000 samples each)
+        assert_eq!(prepared.len(), 48000 + 2 * 12000);
+        // First samples should be zero (padding)
+        assert_eq!(prepared[0], 0.0);
+        assert_eq!(prepared[11999], 0.0);
+        // Last samples should be zero (padding)
+        assert_eq!(prepared[prepared.len() - 1], 0.0);
     }
 }

@@ -25,6 +25,6 @@ pub use config::{
     generate_streaming_config, generate_playback_config, generate_recording_config,
     generate_filters_yaml, generate_matrix_mixer_yaml, generate_pipeline,
     write_config_to_temp, write_config_to_file, get_device_native_sample_rate,
-    map_output_device, map_input_device, convert_raw_to_wav
+    map_output_device, map_input_device, convert_raw_to_wav, fix_rf64_wav
 };
 pub use utils::find_camilladsp_binary;
