@@ -175,7 +175,7 @@ impl Default for CamillaDSPConfig {
                     device_type: "CoreAudio".to_string(),
                     device: None,
                     filename: None,
-                    channels: Some(ChannelsSetting::Count(2)),  // Restore individual device channels
+                    channels: Some(ChannelsSetting::Count(2)), // Restore individual device channels
                     format: None,
                     wav_header: None,
                 },
@@ -189,7 +189,12 @@ impl Default for CamillaDSPConfig {
 }
 
 impl DeviceConfig {
-    pub fn new(sample_rate: u32, capture: Option<CaptureDevice>, playback: PlaybackDevice, resampler_config: Option<serde_yaml::Value>) -> Self {
+    pub fn new(
+        sample_rate: u32,
+        capture: Option<CaptureDevice>,
+        playback: PlaybackDevice,
+        resampler_config: Option<serde_yaml::Value>,
+    ) -> Self {
         let devices = DeviceConfig {
             // Use the requested playback sample rate in the config; add a resampler if needed
             samplerate: sample_rate,

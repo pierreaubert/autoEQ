@@ -6,18 +6,18 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tempfile::NamedTempFile;
 
+use super::config::{
+    RecordingOutputType, convert_raw_to_wav, fix_rf64_wav, generate_playback_config,
+    generate_recording_config, generate_recording_config_with_output_type,
+    generate_streaming_config, validate_config, write_config_to_temp,
+};
 use super::errors::{CamillaError, CamillaResult};
 use super::process::CamillaDSPProcess;
 use super::types::{AudioState, AudioStreamState, SharedAudioStreamState};
 use super::websocket::CamillaWebSocketClient;
-use super::config::{
-    generate_streaming_config, generate_playback_config, generate_recording_config,
-    generate_recording_config_with_output_type, RecordingOutputType,
-    write_config_to_temp, convert_raw_to_wav, fix_rf64_wav, validate_config
-};
+use crate::decoder::decoder::AudioSpec;
 use crate::filters::FilterParams;
 use crate::loudness_compensation::LoudnessCompensation;
-use crate::decoder::decoder::AudioSpec;
 
 /// High-level audio manager that coordinates CamillaDSP subprocess,
 /// WebSocket communication, and state management
@@ -202,12 +202,8 @@ impl AudioManager {
         }
 
         // Generate config
-        let config = generate_playback_config(
-            &audio_file,
-            output_device.as_deref(),
-            sample_rate,
-            channels,
-        )?;
+        let config =
+            generate_playback_config(&audio_file, output_device.as_deref(), sample_rate, channels)?;
 
         // Validate the configuration
         validate_config(&config, "playback")?;
@@ -400,12 +396,7 @@ impl AudioManager {
         } else {
             println!("[AudioManager] Updating filters for file playback mode");
             let file = audio_file.ok_or(CamillaError::ProcessNotRunning)?;
-            generate_playback_config(
-                &file,
-                output_device.as_deref(),
-                sample_rate,
-                channels,
-            )?
+            generate_playback_config(&file, output_device.as_deref(), sample_rate, channels)?
         };
 
         let config_yaml = serde_yaml::to_string(&config)?;

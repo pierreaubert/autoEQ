@@ -319,7 +319,7 @@ pub fn apply_fade_out(signal: &mut [f32], fade_samples: usize) {
     let len = signal.len();
     let fade_len = fade_samples.min(len);
     let start_idx = len.saturating_sub(fade_len);
-    
+
     for i in 0..fade_len {
         let t = i as f32 / fade_len as f32;
         let fade = 0.5 * (1.0 + (std::f32::consts::PI * t).cos()); // Hann window
@@ -339,10 +339,10 @@ pub fn apply_fade_out(signal: &mut [f32], fade_samples: usize) {
 pub fn add_silence_padding(signal: &[f32], pre_samples: usize, post_samples: usize) -> Vec<f32> {
     let total_len = pre_samples + signal.len() + post_samples;
     let mut padded = vec![0.0; total_len];
-    
+
     // Copy original signal in the middle
     padded[pre_samples..pre_samples + signal.len()].copy_from_slice(signal);
-    
+
     padded
 }
 
@@ -364,11 +364,11 @@ pub fn prepare_signal_for_playback(
 ) -> Vec<f32> {
     let fade_samples = ((fade_duration_ms / 1000.0) * sample_rate as f32) as usize;
     let padding_samples = ((padding_duration_ms / 1000.0) * sample_rate as f32) as usize;
-    
+
     // Apply fades
     apply_fade_in(&mut signal, fade_samples);
     apply_fade_out(&mut signal, fade_samples);
-    
+
     // Add silence padding
     add_silence_padding(&signal, padding_samples, padding_samples)
 }
@@ -392,8 +392,9 @@ pub fn prepare_signal_for_playback_channels(
     stereo: bool,
 ) -> Vec<f32> {
     // First prepare the mono signal with fades and padding
-    let prepared_mono = prepare_signal_for_playback(signal, sample_rate, fade_duration_ms, padding_duration_ms);
-    
+    let prepared_mono =
+        prepare_signal_for_playback(signal, sample_rate, fade_duration_ms, padding_duration_ms);
+
     // Convert to stereo if requested
     if stereo {
         mono_to_stereo(prepared_mono)
@@ -448,22 +449,27 @@ mod tests {
         // Test amplitude at different points in the sweep
         let amp = 0.5;
         let signal = gen_log_sweep(20.0, 20000.0, amp, 48000, 1.0);
-        
+
         // Check amplitude at different time points (20%, 40%, 60%, 80%)
         let checkpoints = [0.2, 0.4, 0.6, 0.8];
         let sample_rate = 48000.0;
         let duration = 1.0;
-        
+
         for &checkpoint in &checkpoints {
             let sample_pos = (checkpoint * duration * sample_rate) as usize;
             let window_size = 480; // 10ms window
             let start = sample_pos.saturating_sub(window_size / 2);
             let end = (sample_pos + window_size / 2).min(signal.len());
-            
+
             if end > start {
-                let window_peak = signal[start..end].iter().map(|&x| x.abs()).fold(0.0_f32, |a, b| a.max(b));
-                println!("Checkpoint {:.1}: peak amplitude = {:.6} (target: {:.6})", 
-                    checkpoint, window_peak, amp);
+                let window_peak = signal[start..end]
+                    .iter()
+                    .map(|&x| x.abs())
+                    .fold(0.0_f32, |a, b| a.max(b));
+                println!(
+                    "Checkpoint {:.1}: peak amplitude = {:.6} (target: {:.6})",
+                    checkpoint, window_peak, amp
+                );
             }
         }
     }
@@ -473,14 +479,17 @@ mod tests {
         // Simple test to understand current behavior
         let amp = 0.5;
         let signal = gen_log_sweep(20.0, 20000.0, amp, 48000, 0.1);
-        
+
         // Find the maximum amplitude in the signal
-        let max_amp = signal.iter().map(|&x| x.abs()).fold(0.0_f32, |a, b| a.max(b));
+        let max_amp = signal
+            .iter()
+            .map(|&x| x.abs())
+            .fold(0.0_f32, |a, b| a.max(b));
         println!("Generated log sweep:");
         println!("  Target amplitude: {:.6}", amp);
         println!("  Actual max amplitude: {:.6}", max_amp);
         println!("  Ratio: {:.6}", max_amp / amp);
-        
+
         // Check that we have some signal
         assert!(max_amp > 0.01, "Signal should have significant amplitude");
     }
@@ -490,11 +499,11 @@ mod tests {
         // Test that log sweep maintains constant amplitude across frequency range
         let amp = 0.7;
         let signal = gen_log_sweep(1.0, 20000.0, amp, 48000, 2.0);
-        
+
         // Find peak values throughout the sweep
         let mut peaks = Vec::new();
         let window_size = 480; // 10ms windows at 48kHz
-        
+
         for i in (0..signal.len()).step_by(window_size / 4) {
             let end = (i + window_size).min(signal.len());
             if end > i {
@@ -502,38 +511,46 @@ mod tests {
                 peaks.push(window_peak);
             }
         }
-        
+
         // Verify that peaks are consistent (within 1% of target amplitude)
         let target_peak = amp;
         let tolerance = 0.01 * target_peak; // 1% tolerance
-        
+
         for (i, &peak) in peaks.iter().enumerate() {
             assert!(
                 (peak - target_peak).abs() < tolerance,
                 "Peak at window {} is {:.6}, expected {:.6} ± {:.6}",
-                i, peak, target_peak, tolerance
+                i,
+                peak,
+                target_peak,
+                tolerance
             );
         }
-        
+
         // Additional checks
         assert!(!peaks.is_empty(), "Should have found peaks");
-        
+
         // Check that we have good coverage across the sweep
         let min_peak = peaks.iter().fold(f32::INFINITY, |a, &b| a.min(b));
         let max_peak = peaks.iter().fold(0.0_f32, |a, &b| a.max(b));
         let variation = max_peak - min_peak;
-        
+
         assert!(
             variation < 0.05 * target_peak,
             "Peak variation {:.6} exceeds 5% of target amplitude {:.6}",
-            variation, target_peak
+            variation,
+            target_peak
         );
-        
+
         println!("Log sweep amplitude test passed:");
         println!("  Target amplitude: {:.6}", target_peak);
         println!("  Min peak: {:.6}", min_peak);
         println!("  Max peak: {:.6}", max_peak);
-        println!("  Variation: {:.6} ({:.2}%)", variation, 100.0 * variation / target_peak);
+        println!(
+            "  Variation: {:.6} ({:.2}%)",
+            variation,
+            100.0 * variation / target_peak
+        );
     }
 
     #[test]
@@ -617,7 +634,7 @@ mod tests {
     fn test_prepare_signal_for_playback_channels_stereo() {
         let signal = vec![1.0; 100]; // Short signal for testing
         let stereo = prepare_signal_for_playback_channels(signal.clone(), 48000, 10.0, 50.0, true);
-        
+
         // Stereo should have twice the samples (minus padding which is the same for both)
         let mono_prepared = prepare_signal_for_playback_channels(signal, 48000, 10.0, 50.0, false);
         assert_eq!(stereo.len(), mono_prepared.len() * 2);

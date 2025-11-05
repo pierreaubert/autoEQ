@@ -287,7 +287,9 @@ impl CamillaWebSocketClient {
 
     /// Set volume for all channels
     pub async fn set_volume(&self, volume: f32) -> CamillaResult<()> {
-        let text = self.send_command(CamillaCommand::SetVolume { volume }).await?;
+        let text = self
+            .send_command(CamillaCommand::SetVolume { volume })
+            .await?;
         let v: serde_json::Value = serde_json::from_str(&text)
             .map_err(|e| CamillaError::WebSocketError(format!("JSON parse error: {}", e)))?;
         let result = v
@@ -299,7 +301,10 @@ impl CamillaWebSocketClient {
             })?;
 
         if result != "Ok" {
-            return Err(CamillaError::WebSocketError(format!("SetVolume failed: {}", text)));
+            return Err(CamillaError::WebSocketError(format!(
+                "SetVolume failed: {}",
+                text
+            )));
         }
 
         Ok(())

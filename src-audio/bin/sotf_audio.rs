@@ -1,8 +1,6 @@
 use clap::{Parser, Subcommand};
 use sotf_audio::loudness_compensation::LoudnessCompensation;
-use sotf_audio::{
-    AudioManager, AudioStreamingManager, CamillaError, FilterParams, StreamingState,
-};
+use sotf_audio::{AudioManager, AudioStreamingManager, CamillaError, FilterParams, StreamingState};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -342,7 +340,9 @@ async fn main() {
                 amp,
                 amp1,
                 amp2,
-            ).await {
+            )
+            .await
+            {
                 eprintln!("Error: {}", e);
                 std::process::exit(1);
             }
@@ -356,8 +356,8 @@ async fn main() {
 async fn list_devices() -> Result<(), String> {
     println!("Enumerating audio devices...\n");
 
-    let devices =
-        sotf_audio::devices::get_audio_devices().map_err(|e| format!("Failed to get devices: {}", e))?;
+    let devices = sotf_audio::devices::get_audio_devices()
+        .map_err(|e| format!("Failed to get devices: {}", e))?;
 
     // Print input devices
     if let Some(input_devices) = devices.get("input") {
@@ -721,7 +721,10 @@ pub async fn record_signal(
     println!("  Duration: {:.2}s", duration);
     println!("  Sample rate: {}Hz", sample_rate);
     println!("  Send to hardware channels: {:?}", send_to_channels);
-    println!("  Record from hardware channels: {:?}", record_from_channels);
+    println!(
+        "  Record from hardware channels: {:?}",
+        record_from_channels
+    );
     if let Some(ref n) = name {
         println!("  Output prefix: {}", n);
     }
@@ -734,12 +737,18 @@ pub async fn record_signal(
 
     // Validate that the signal is mono (Vec<f32> represents mono)
     // All our signal generation functions return mono signals
-    println!("  ✓ Generated mono signal with {} samples", base_signal.len());
+    println!(
+        "  ✓ Generated mono signal with {} samples",
+        base_signal.len()
+    );
 
     // Prepare mono signal with fades and padding
     println!("\n[2/{}] Preparing mono signal...", total_recordings + 2);
     let prepared_signal = prepare_signal(base_signal.clone(), sample_rate);
-    println!("  ✓ Prepared mono signal with {} samples", prepared_signal.len());
+    println!(
+        "  ✓ Prepared mono signal with {} samples",
+        prepared_signal.len()
+    );
 
     // Perform recording for each record-from channel
     for (record_idx, &record_ch) in record_from_channels.iter().enumerate() {
@@ -747,8 +756,12 @@ pub async fn record_signal(
             let take_num = record_idx * send_to_channels.len() + send_idx + 1;
             let total_takes = record_from_channels.len() * send_to_channels.len();
 
-            println!("\n[{}/{}] Recording from channel {} (playing mono to channel {})...",
-                take_num + 2, total_takes + 2, record_ch, send_ch
+            println!(
+                "\n[{}/{}] Recording from channel {} (playing mono to channel {})...",
+                take_num + 2,
+                total_takes + 2,
+                record_ch,
+                send_ch
             );
 
             // Generate output filenames - include both send and record channels
@@ -779,9 +792,10 @@ pub async fn record_signal(
                 &prepared_signal, // Use the prepared mono signal for analysis
                 sample_rate,
                 &csv_path,
-                send_ch,          // Output channel
-                record_ch,        // Input channel
-            ).await?;
+                send_ch,   // Output channel
+                record_ch, // Input channel
+            )
+            .await?;
 
             println!("  ✓ Recording complete");
         }

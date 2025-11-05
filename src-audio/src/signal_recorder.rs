@@ -51,10 +51,24 @@ impl SignalType {
 /// Parameters for signal generation
 #[derive(Debug, Clone)]
 pub enum SignalParams {
-    Tone { freq: f32, amp: f32 },
-    TwoTone { freq1: f32, amp1: f32, freq2: f32, amp2: f32 },
-    Sweep { start_freq: f32, end_freq: f32, amp: f32 },
-    Noise { amp: f32 },
+    Tone {
+        freq: f32,
+        amp: f32,
+    },
+    TwoTone {
+        freq1: f32,
+        amp1: f32,
+        freq2: f32,
+        amp2: f32,
+    },
+    Sweep {
+        start_freq: f32,
+        end_freq: f32,
+        amp: f32,
+    },
+    Noise {
+        amp: f32,
+    },
 }
 
 /// Generate a signal based on parameters
@@ -68,12 +82,23 @@ pub fn generate_signal(
         (SignalType::Tone, SignalParams::Tone { freq, amp }) => {
             gen_tone(*freq, *amp, sample_rate, duration)
         }
-        (SignalType::TwoTone, SignalParams::TwoTone { freq1, amp1, freq2, amp2 }) => {
-            gen_two_tone(*freq1, *amp1, *freq2, *amp2, sample_rate, duration)
-        }
-        (SignalType::Sweep, SignalParams::Sweep { start_freq, end_freq, amp }) => {
-            gen_log_sweep(*start_freq, *end_freq, *amp, sample_rate, duration)
-        }
+        (
+            SignalType::TwoTone,
+            SignalParams::TwoTone {
+                freq1,
+                amp1,
+                freq2,
+                amp2,
+            },
+        ) => gen_two_tone(*freq1, *amp1, *freq2, *amp2, sample_rate, duration),
+        (
+            SignalType::Sweep,
+            SignalParams::Sweep {
+                start_freq,
+                end_freq,
+                amp,
+            },
+        ) => gen_log_sweep(*start_freq, *end_freq, *amp, sample_rate, duration),
         (SignalType::WhiteNoise, SignalParams::Noise { amp }) => {
             gen_white_noise(*amp, sample_rate, duration)
         }
@@ -87,7 +112,7 @@ pub fn generate_signal(
             return Err(format!(
                 "Signal type {:?} does not match parameters {:?}",
                 signal_type, params
-            ))
+            ));
         }
     };
 
@@ -95,10 +120,7 @@ pub fn generate_signal(
 }
 
 /// Prepare a signal for playback with fades and padding
-pub fn prepare_signal(
-    signal: Vec<f32>,
-    sample_rate: u32,
-) -> Vec<f32> {
+pub fn prepare_signal(signal: Vec<f32>, sample_rate: u32) -> Vec<f32> {
     const FADE_MS: f32 = 20.0;
     const PADDING_MS: f32 = 250.0;
 
@@ -111,8 +133,8 @@ pub fn write_temp_wav(
     sample_rate: u32,
     channels: u16,
 ) -> Result<NamedTempFile, String> {
-    let temp_file = NamedTempFile::new()
-        .map_err(|e| format!("Failed to create temp file: {}", e))?;
+    let temp_file =
+        NamedTempFile::new().map_err(|e| format!("Failed to create temp file: {}", e))?;
 
     write_wav_file(temp_file.path(), signal, sample_rate, channels)?;
 
@@ -133,8 +155,8 @@ pub fn write_wav_file(
         sample_format: SampleFormat::Float,
     };
 
-    let mut writer = WavWriter::create(path, spec)
-        .map_err(|e| format!("Failed to create WAV writer: {}", e))?;
+    let mut writer =
+        WavWriter::create(path, spec).map_err(|e| format!("Failed to create WAV writer: {}", e))?;
 
     for &sample in signal {
         writer
@@ -158,7 +180,8 @@ pub fn generate_output_filenames_stereo(
     sample_rate: u32,
 ) -> (PathBuf, PathBuf) {
     let base_name = if let Some(prefix) = name_prefix {
-        format!("{}_{}_send{}_rec{}_{}",
+        format!(
+            "{}_{}_send{}_rec{}_{}",
             prefix,
             signal_type.as_str(),
             send_channel,
@@ -166,7 +189,8 @@ pub fn generate_output_filenames_stereo(
             sample_rate
         )
     } else {
-        format!("{}_send{}_rec{}_{}",
+        format!(
+            "{}_send{}_rec{}_{}",
             signal_type.as_str(),
             send_channel,
             record_channel,
@@ -188,7 +212,13 @@ pub fn generate_output_filenames(
     sample_rate: u32,
 ) -> (PathBuf, PathBuf) {
     let base_name = if let Some(prefix) = name_prefix {
-        format!("{}_{}_ch{}_{}", prefix, signal_type.as_str(), channel, sample_rate)
+        format!(
+            "{}_{}_ch{}_{}",
+            prefix,
+            signal_type.as_str(),
+            channel,
+            sample_rate
+        )
     } else {
         format!("{}_ch{}_{}", signal_type.as_str(), channel, sample_rate)
     };
@@ -212,7 +242,10 @@ pub async fn record_and_analyze(
     println!("[Recording] Starting playback and recording with CamillaDSP...");
     println!("[Recording] Playing from: {:?}", temp_wav_path);
     println!("[Recording] Recording to: {:?}", recorded_wav_path);
-    println!("[Recording] Output channel: {}, Input channel: {}", output_channel, input_channel);
+    println!(
+        "[Recording] Output channel: {}, Input channel: {}",
+        output_channel, input_channel
+    );
 
     // Find CamillaDSP binary path
     let camilla_binary = crate::camilla::find_camilladsp_binary()
@@ -224,11 +257,17 @@ pub async fn record_and_analyze(
 
     // Configure channel mappings
     let output_map = Some(vec![output_channel]); // Output channel for playback
-    let input_map = Some(vec![input_channel]);   // Input channel for recording
+    let input_map = Some(vec![input_channel]); // Input channel for recording
 
     println!("[Recording] Channel mapping:");
-    println!("  Output map: {:?} (play to hardware channel {})", output_map, output_channel);
-    println!("  Input map: {:?} (record from hardware channel {})", input_map, input_channel);
+    println!(
+        "  Output map: {:?} (play to hardware channel {})",
+        output_map, output_channel
+    );
+    println!(
+        "  Input map: {:?} (record from hardware channel {})",
+        input_map, input_channel
+    );
 
     // Start recording first
     println!("[Recording] Starting CamillaDSP recording...");
@@ -237,7 +276,7 @@ pub async fn record_and_analyze(
             None, // Use default input device
             recorded_wav_path.to_path_buf(),
             sample_rate,
-            1,    // Mono recording
+            1, // Mono recording
             input_map,
         )
         .await
@@ -255,11 +294,11 @@ pub async fn record_and_analyze(
             temp_wav_path.to_path_buf(),
             None, // Use default output device
             sample_rate,
-            1,    // Mono input file
+            1,      // Mono input file
             vec![], // No filters for measurement
             ChannelMapMode::Normal,
             output_map, // Route to specific hardware channel
-            None, // No loudness compensation
+            None,       // No loudness compensation
         )
         .await
         .map_err(|e| format!("Failed to start CamillaDSP playback: {}", e))?;
@@ -309,7 +348,8 @@ pub async fn record_and_analyze(
         .map_err(|e| format!("Failed to write analysis CSV: {}", e))?;
 
     println!("[Analysis] Analysis complete");
-    println!("[Analysis] Lag: {} samples ({:.2} ms)",
+    println!(
+        "[Analysis] Lag: {} samples ({:.2} ms)",
         result.estimated_lag_samples,
         result.estimated_lag_samples as f32 * 1000.0 / sample_rate as f32
     );
@@ -374,7 +414,15 @@ pub fn validate_signal_params(
                 return Err(format!("Amplitude {} must be in range (0, 1]", amp));
             }
         }
-        (SignalType::TwoTone, SignalParams::TwoTone { freq1, amp1, freq2, amp2 }) => {
+        (
+            SignalType::TwoTone,
+            SignalParams::TwoTone {
+                freq1,
+                amp1,
+                freq2,
+                amp2,
+            },
+        ) => {
             if *freq1 <= 0.0 || *freq1 >= nyquist {
                 return Err(format!(
                     "First frequency {} Hz must be in range (0, {} Hz)",
@@ -394,7 +442,14 @@ pub fn validate_signal_params(
                 return Err(format!("Second amplitude {} must be in range (0, 1]", amp2));
             }
         }
-        (SignalType::Sweep, SignalParams::Sweep { start_freq, end_freq, amp }) => {
+        (
+            SignalType::Sweep,
+            SignalParams::Sweep {
+                start_freq,
+                end_freq,
+                amp,
+            },
+        ) => {
             if *start_freq <= 0.0 || *start_freq >= nyquist {
                 return Err(format!(
                     "Start frequency {} Hz must be in range (0, {} Hz)",
@@ -437,9 +492,15 @@ mod tests {
     #[test]
     fn test_signal_type_from_str() {
         assert_eq!(SignalType::from_str("tone").unwrap(), SignalType::Tone);
-        assert_eq!(SignalType::from_str("two-tone").unwrap(), SignalType::TwoTone);
+        assert_eq!(
+            SignalType::from_str("two-tone").unwrap(),
+            SignalType::TwoTone
+        );
         assert_eq!(SignalType::from_str("sweep").unwrap(), SignalType::Sweep);
-        assert_eq!(SignalType::from_str("white-noise").unwrap(), SignalType::WhiteNoise);
+        assert_eq!(
+            SignalType::from_str("white-noise").unwrap(),
+            SignalType::WhiteNoise
+        );
         assert!(SignalType::from_str("invalid").is_err());
     }
 
@@ -457,13 +518,22 @@ mod tests {
 
     #[test]
     fn test_validate_signal_params_tone() {
-        let params = SignalParams::Tone { freq: 1000.0, amp: 0.5 };
+        let params = SignalParams::Tone {
+            freq: 1000.0,
+            amp: 0.5,
+        };
         assert!(validate_signal_params(SignalType::Tone, &params, 1.0, 48000).is_ok());
 
-        let params_bad_freq = SignalParams::Tone { freq: 30000.0, amp: 0.5 };
+        let params_bad_freq = SignalParams::Tone {
+            freq: 30000.0,
+            amp: 0.5,
+        };
         assert!(validate_signal_params(SignalType::Tone, &params_bad_freq, 1.0, 48000).is_err());
 
-        let params_bad_amp = SignalParams::Tone { freq: 1000.0, amp: 2.0 };
+        let params_bad_amp = SignalParams::Tone {
+            freq: 1000.0,
+            amp: 2.0,
+        };
         assert!(validate_signal_params(SignalType::Tone, &params_bad_amp, 1.0, 48000).is_err());
     }
 
@@ -472,9 +542,9 @@ mod tests {
         let (wav, csv) = generate_output_filenames_stereo(
             Some("test"),
             SignalType::Sweep,
-            2,  // send channel
-            1,  // record channel
-            48000
+            2, // send channel
+            1, // record channel
+            48000,
         );
         assert_eq!(wav, PathBuf::from("test_sweep_send2_rec1_48000.wav"));
         assert_eq!(csv, PathBuf::from("test_sweep_send2_rec1_48000.csv"));
@@ -482,9 +552,9 @@ mod tests {
         let (wav, csv) = generate_output_filenames_stereo(
             None,
             SignalType::Tone,
-            1,  // send channel
-            3,  // record channel
-            44100
+            1, // send channel
+            3, // record channel
+            44100,
         );
         assert_eq!(wav, PathBuf::from("tone_send1_rec3_44100.wav"));
         assert_eq!(csv, PathBuf::from("tone_send1_rec3_44100.csv"));
@@ -492,36 +562,36 @@ mod tests {
 
     #[test]
     fn test_generate_output_filenames() {
-        let (wav, csv) = generate_output_filenames(
-            Some("test"),
-            SignalType::Sweep,
-            1,
-            48000
-        );
+        let (wav, csv) = generate_output_filenames(Some("test"), SignalType::Sweep, 1, 48000);
         assert_eq!(wav, PathBuf::from("test_sweep_ch1_48000.wav"));
         assert_eq!(csv, PathBuf::from("test_sweep_ch1_48000.csv"));
 
-        let (wav, csv) = generate_output_filenames(
-            None,
-            SignalType::Tone,
-            2,
-            44100
-        );
+        let (wav, csv) = generate_output_filenames(None, SignalType::Tone, 2, 44100);
         assert_eq!(wav, PathBuf::from("tone_ch2_44100.wav"));
         assert_eq!(csv, PathBuf::from("tone_ch2_44100.csv"));
     }
 
     #[test]
     fn test_generate_signal_tone() {
-        let params = SignalParams::Tone { freq: 1000.0, amp: 0.5 };
+        let params = SignalParams::Tone {
+            freq: 1000.0,
+            amp: 0.5,
+        };
         let signal = generate_signal(SignalType::Tone, &params, 0.1, 48000)
             .expect("Failed to generate tone");
 
         assert_eq!(signal.len(), 4800); // 0.1s * 48000 Hz
 
         // Check signal is non-zero and within amplitude bounds
-        let max_val = signal.iter().map(|&x| x.abs()).fold(0.0_f32, |a, b| a.max(b));
-        assert!(max_val > 0.4 && max_val <= 0.5, "Tone amplitude out of range: {}", max_val);
+        let max_val = signal
+            .iter()
+            .map(|&x| x.abs())
+            .fold(0.0_f32, |a, b| a.max(b));
+        assert!(
+            max_val > 0.4 && max_val <= 0.5,
+            "Tone amplitude out of range: {}",
+            max_val
+        );
     }
 
     #[test]
@@ -529,15 +599,22 @@ mod tests {
         let params = SignalParams::Sweep {
             start_freq: 20.0,
             end_freq: 20000.0,
-            amp: 0.5
+            amp: 0.5,
         };
         let signal = generate_signal(SignalType::Sweep, &params, 1.0, 48000)
             .expect("Failed to generate sweep");
 
         assert_eq!(signal.len(), 48000);
 
-        let max_val = signal.iter().map(|&x| x.abs()).fold(0.0_f32, |a, b| a.max(b));
-        assert!(max_val > 0.4 && max_val <= 0.5, "Sweep amplitude out of range: {}", max_val);
+        let max_val = signal
+            .iter()
+            .map(|&x| x.abs())
+            .fold(0.0_f32, |a, b| a.max(b));
+        assert!(
+            max_val > 0.4 && max_val <= 0.5,
+            "Sweep amplitude out of range: {}",
+            max_val
+        );
     }
 
     #[test]
@@ -549,14 +626,19 @@ mod tests {
         assert_eq!(signal.len(), 48000);
 
         // Check that noise has content (not all zeros) - matches existing test pattern
-        assert!(signal.iter().any(|&x| x.abs() > 0.01),
-            "Noise signal should have non-zero samples");
+        assert!(
+            signal.iter().any(|&x| x.abs() > 0.01),
+            "Noise signal should have non-zero samples"
+        );
     }
 
     #[test]
     fn test_generate_signal_type_mismatch() {
         // Wrong params for signal type should fail
-        let params = SignalParams::Tone { freq: 1000.0, amp: 0.5 };
+        let params = SignalParams::Tone {
+            freq: 1000.0,
+            amp: 0.5,
+        };
         let result = generate_signal(SignalType::Sweep, &params, 1.0, 48000);
         assert!(result.is_err());
     }
@@ -567,16 +649,22 @@ mod tests {
         let prepared = prepare_signal(signal.clone(), 48000);
 
         // Should be longer due to fades and padding
-        assert!(prepared.len() > signal.len(),
-            "Prepared signal should be longer than original");
+        assert!(
+            prepared.len() > signal.len(),
+            "Prepared signal should be longer than original"
+        );
 
         // First samples should be faded (smaller than original)
-        assert!(prepared[0].abs() < signal[0].abs(),
-            "First sample should be faded in");
+        assert!(
+            prepared[0].abs() < signal[0].abs(),
+            "First sample should be faded in"
+        );
 
         // Last samples should be faded
-        assert!(prepared[prepared.len() - 1].abs() < 0.1,
-            "Last sample should be faded out or padded");
+        assert!(
+            prepared[prepared.len() - 1].abs() < 0.1,
+            "Last sample should be faded out or padded"
+        );
     }
 
     #[test]
@@ -588,33 +676,39 @@ mod tests {
         let sample_rate = 48000;
         let duration = 0.1;
         let signal: Vec<f32> = (0..(sample_rate as f32 * duration) as usize)
-            .map(|i| (2.0 * std::f32::consts::PI * 1000.0 * i as f32 / sample_rate as f32).sin() * 0.5)
+            .map(|i| {
+                (2.0 * std::f32::consts::PI * 1000.0 * i as f32 / sample_rate as f32).sin() * 0.5
+            })
             .collect();
 
         // Write WAV
-        write_wav_file(&wav_path, &signal, sample_rate, 1)
-            .expect("Failed to write WAV");
+        write_wav_file(&wav_path, &signal, sample_rate, 1).expect("Failed to write WAV");
 
         assert!(wav_path.exists(), "WAV file should exist");
 
         // Read it back using hound
-        let mut reader = WavReader::open(&wav_path)
-            .expect("Failed to open WAV for reading");
+        let mut reader = WavReader::open(&wav_path).expect("Failed to open WAV for reading");
 
         let spec = reader.spec();
         assert_eq!(spec.channels, 1);
         assert_eq!(spec.sample_rate, sample_rate);
         assert_eq!(spec.sample_format, SampleFormat::Float);
 
-        let read_samples: Vec<f32> = reader.samples::<f32>()
+        let read_samples: Vec<f32> = reader
+            .samples::<f32>()
             .collect::<Result<Vec<_>, _>>()
             .expect("Failed to read samples");
 
         // Verify samples match (with small floating point tolerance)
         assert_eq!(read_samples.len(), signal.len());
         for (i, (&original, &read)) in signal.iter().zip(read_samples.iter()).enumerate() {
-            assert!((original - read).abs() < 1e-6,
-                "Sample {} mismatch: original={}, read={}", i, original, read);
+            assert!(
+                (original - read).abs() < 1e-6,
+                "Sample {} mismatch: original={}, read={}",
+                i,
+                original,
+                read
+            );
         }
     }
 
@@ -623,14 +717,12 @@ mod tests {
         let signal = vec![0.5, 0.3, -0.2, -0.4, 0.0];
         let sample_rate = 48000;
 
-        let temp_file = write_temp_wav(&signal, sample_rate, 1)
-            .expect("Failed to write temp WAV");
+        let temp_file = write_temp_wav(&signal, sample_rate, 1).expect("Failed to write temp WAV");
 
         assert!(temp_file.path().exists());
 
         // Verify it's a valid WAV
-        let reader = WavReader::open(temp_file.path())
-            .expect("Failed to open temp WAV");
+        let reader = WavReader::open(temp_file.path()).expect("Failed to open temp WAV");
         let spec = reader.spec();
         assert_eq!(spec.channels, 1);
         assert_eq!(spec.sample_rate, sample_rate);
@@ -638,7 +730,10 @@ mod tests {
 
     #[test]
     fn test_validate_signal_params_duration() {
-        let params = SignalParams::Tone { freq: 1000.0, amp: 0.5 };
+        let params = SignalParams::Tone {
+            freq: 1000.0,
+            amp: 0.5,
+        };
 
         // Valid duration
         assert!(validate_signal_params(SignalType::Tone, &params, 1.0, 48000).is_ok());
@@ -654,15 +749,24 @@ mod tests {
         let nyquist = sample_rate as f32 / 2.0;
 
         // Valid frequency
-        let params_valid = SignalParams::Tone { freq: 1000.0, amp: 0.5 };
+        let params_valid = SignalParams::Tone {
+            freq: 1000.0,
+            amp: 0.5,
+        };
         assert!(validate_signal_params(SignalType::Tone, &params_valid, 1.0, sample_rate).is_ok());
 
         // Frequency above Nyquist
-        let params_high = SignalParams::Tone { freq: nyquist + 100.0, amp: 0.5 };
+        let params_high = SignalParams::Tone {
+            freq: nyquist + 100.0,
+            amp: 0.5,
+        };
         assert!(validate_signal_params(SignalType::Tone, &params_high, 1.0, sample_rate).is_err());
 
         // Zero frequency
-        let params_zero = SignalParams::Tone { freq: 0.0, amp: 0.5 };
+        let params_zero = SignalParams::Tone {
+            freq: 0.0,
+            amp: 0.5,
+        };
         assert!(validate_signal_params(SignalType::Tone, &params_zero, 1.0, sample_rate).is_err());
     }
 
@@ -674,7 +778,7 @@ mod tests {
         let params_valid = SignalParams::Sweep {
             start_freq: 20.0,
             end_freq: 20000.0,
-            amp: 0.5
+            amp: 0.5,
         };
         assert!(validate_signal_params(SignalType::Sweep, &params_valid, 1.0, sample_rate).is_ok());
 
@@ -682,16 +786,20 @@ mod tests {
         let params_reversed = SignalParams::Sweep {
             start_freq: 20000.0,
             end_freq: 20.0,
-            amp: 0.5
+            amp: 0.5,
         };
-        assert!(validate_signal_params(SignalType::Sweep, &params_reversed, 1.0, sample_rate).is_err());
+        assert!(
+            validate_signal_params(SignalType::Sweep, &params_reversed, 1.0, sample_rate).is_err()
+        );
 
         let params_equal = SignalParams::Sweep {
             start_freq: 1000.0,
             end_freq: 1000.0,
-            amp: 0.5
+            amp: 0.5,
         };
-        assert!(validate_signal_params(SignalType::Sweep, &params_equal, 1.0, sample_rate).is_err());
+        assert!(
+            validate_signal_params(SignalType::Sweep, &params_equal, 1.0, sample_rate).is_err()
+        );
     }
 
     /// Regression test: Verify that record_and_analyze doesn't just copy the input file
@@ -721,14 +829,15 @@ mod tests {
             // This won't run, but ensures the signature is correct
             if false {
                 let _result = record_and_analyze(
-                    temp_path,       // temp_wav_path (for playback)
-                    output_path,     // recorded_wav_path (for recording output)
-                    &reference,      // reference_signal
-                    48000_u32,       // sample_rate
-                    csv_path,        // output_csv_path
-                    1_u16,           // output_channel
-                    1_u16,           // input_channel
-                ).await;
+                    temp_path,   // temp_wav_path (for playback)
+                    output_path, // recorded_wav_path (for recording output)
+                    &reference,  // reference_signal
+                    48000_u32,   // sample_rate
+                    csv_path,    // output_csv_path
+                    1_u16,       // output_channel
+                    1_u16,       // input_channel
+                )
+                .await;
             }
         };
 

@@ -283,7 +283,7 @@ impl AudioStreamingManager {
     }
 
     /// Get current streaming state
-    fn set_state(&self, new_state : StreamingState) {
+    fn set_state(&self, new_state: StreamingState) {
         {
             let mut state = self.state.lock().unwrap();
             *state = new_state;

@@ -42,36 +42,67 @@ pub fn analyze_recording(
     // Load recorded WAV
     println!("[FFT Analysis] Loading recorded file: {:?}", recorded_path);
     let recorded = load_wav_mono(recorded_path)?;
-    println!("[FFT Analysis] Loaded {} samples from recording", recorded.len());
-    println!("[FFT Analysis] Reference has {} samples", reference_signal.len());
+    println!(
+        "[FFT Analysis] Loaded {} samples from recording",
+        recorded.len()
+    );
+    println!(
+        "[FFT Analysis] Reference has {} samples",
+        reference_signal.len()
+    );
 
     // Don't truncate yet - we need full signals for lag estimation
     let recorded = &recorded[..];
     let reference = &reference_signal[..];
 
     // Debug: Check signal statistics
-    let ref_max = reference.iter().map(|&x| x.abs()).fold(0.0_f32, |a, b| a.max(b));
-    let rec_max = recorded.iter().map(|&x| x.abs()).fold(0.0_f32, |a, b| a.max(b));
+    let ref_max = reference
+        .iter()
+        .map(|&x| x.abs())
+        .fold(0.0_f32, |a, b| a.max(b));
+    let rec_max = recorded
+        .iter()
+        .map(|&x| x.abs())
+        .fold(0.0_f32, |a, b| a.max(b));
     let ref_rms = (reference.iter().map(|&x| x * x).sum::<f32>() / reference.len() as f32).sqrt();
     let rec_rms = (recorded.iter().map(|&x| x * x).sum::<f32>() / recorded.len() as f32).sqrt();
-    
-    println!("[FFT Analysis] Reference: max={:.4}, RMS={:.4}", ref_max, ref_rms);
-    println!("[FFT Analysis] Recorded:  max={:.4}, RMS={:.4}", rec_max, rec_rms);
-    
+
+    println!(
+        "[FFT Analysis] Reference: max={:.4}, RMS={:.4}",
+        ref_max, ref_rms
+    );
+    println!(
+        "[FFT Analysis] Recorded:  max={:.4}, RMS={:.4}",
+        rec_max, rec_rms
+    );
+
     // Show first 10 samples for comparison
-    println!("[FFT Analysis] First 5 reference samples: {:?}", &reference[..5.min(reference.len())]);
-    println!("[FFT Analysis] First 5 recorded samples:  {:?}", &recorded[..5.min(recorded.len())]);
-    
+    println!(
+        "[FFT Analysis] First 5 reference samples: {:?}",
+        &reference[..5.min(reference.len())]
+    );
+    println!(
+        "[FFT Analysis] First 5 recorded samples:  {:?}",
+        &recorded[..5.min(recorded.len())]
+    );
+
     // Check if signals are identical (compare overlap region)
     let check_len = reference.len().min(recorded.len());
     let mut identical_count = 0;
-    for (r, c) in reference[..check_len].iter().zip(recorded[..check_len].iter()) {
+    for (r, c) in reference[..check_len]
+        .iter()
+        .zip(recorded[..check_len].iter())
+    {
         if (r - c).abs() < 1e-6 {
             identical_count += 1;
         }
     }
-    println!("[FFT Analysis] Identical samples: {}/{} ({:.1}%)",
-        identical_count, check_len, identical_count as f32 * 100.0 / check_len as f32);
+    println!(
+        "[FFT Analysis] Identical samples: {}/{} ({:.1}%)",
+        identical_count,
+        check_len,
+        identical_count as f32 * 100.0 / check_len as f32
+    );
 
     // Estimate lag using cross-correlation
     let lag = estimate_lag(reference, recorded);
@@ -96,14 +127,22 @@ pub fn analyze_recording(
         // Check if we have enough recorded samples after the lag
         let available_rec_len = recorded.len() - lag_usize;
         if available_rec_len < analysis_len {
-            println!("[FFT Analysis] Warning: Only {} samples available after lag alignment (need {})",
-                available_rec_len, analysis_len);
+            println!(
+                "[FFT Analysis] Warning: Only {} samples available after lag alignment (need {})",
+                available_rec_len, analysis_len
+            );
             println!("[FFT Analysis] Analysis will be truncated to available length");
             let truncated_len = available_rec_len;
-            (&reference[..truncated_len], &recorded[lag_usize..lag_usize + truncated_len])
+            (
+                &reference[..truncated_len],
+                &recorded[lag_usize..lag_usize + truncated_len],
+            )
         } else {
             // We have enough samples - use full reference length
-            (&reference[..], &recorded[lag_usize..lag_usize + analysis_len])
+            (
+                &reference[..],
+                &recorded[lag_usize..lag_usize + analysis_len],
+            )
         }
     } else {
         // Recorded leads reference - this shouldn't happen in normal loopback
@@ -112,12 +151,17 @@ pub fn analyze_recording(
             return Err("Negative lag is larger than reference signal length".to_string());
         }
         let new_len = (reference.len() - lag_usize).min(recorded.len());
-        (&reference[lag_usize..lag_usize + new_len], &recorded[..new_len])
+        (
+            &reference[lag_usize..lag_usize + new_len],
+            &recorded[..new_len],
+        )
     };
 
-    println!("[FFT Analysis] Aligned signal length: {} samples ({:.2}s)",
+    println!(
+        "[FFT Analysis] Aligned signal length: {} samples ({:.2}s)",
         aligned_ref.len(),
-        aligned_ref.len() as f32 / sample_rate as f32);
+        aligned_ref.len() as f32 / sample_rate as f32
+    );
 
     // Compute FFT for both aligned signals
     let fft_size = next_power_of_two(aligned_ref.len());
@@ -136,15 +180,15 @@ pub fn analyze_recording(
     // Skip DC bin (k=0), compute for k=1..num_bins
     for k in 1..=num_bins {
         let freq = k as f32 * freq_resolution;
-        
+
         // Compute transfer function: H(f) = recorded / reference
         // This gives us the system response (for loopback, should be ~1.0 or 0 dB)
         let transfer_function = rec_spectrum[k] / ref_spectrum[k];
         let magnitude = transfer_function.norm();
-        
+
         // Convert to dB (no windowing correction needed for transfer function)
         let db = 20.0 * magnitude.max(1e-10).log10();
-        
+
         // Phase from cross-spectrum (signals are already time-aligned)
         let cross_spectrum = ref_spectrum[k].conj() * rec_spectrum[k];
         let mut phase_rad = cross_spectrum.arg();
@@ -155,7 +199,7 @@ pub fn analyze_recording(
 
         // Convert to degrees in [-180, 180] range
         let phase = phase_rad * 180.0 / PI;
-        
+
         frequencies.push(freq);
         spl_db.push(db);
         phase_deg.push(phase);
@@ -178,8 +222,8 @@ pub fn write_analysis_csv(result: &AnalysisResult, output_path: &Path) -> Result
     use std::fs::File;
     use std::io::Write;
 
-    let mut file = File::create(output_path)
-        .map_err(|e| format!("Failed to create CSV file: {}", e))?;
+    let mut file =
+        File::create(output_path).map_err(|e| format!("Failed to create CSV file: {}", e))?;
 
     // Write header
     writeln!(file, "frequency_hz,spl_db,phase_deg")
@@ -210,29 +254,29 @@ pub fn write_analysis_csv(result: &AnalysisResult, output_path: &Path) -> Result
 /// Estimated lag in samples (negative means recorded leads)
 fn estimate_lag(reference: &[f32], recorded: &[f32]) -> isize {
     let len = reference.len().min(recorded.len());
-    
+
     // Zero-pad to avoid circular correlation artifacts
     let fft_size = next_power_of_two(len * 2);
-    
+
     let ref_fft = compute_fft_padded(reference, fft_size).unwrap();
     let rec_fft = compute_fft_padded(recorded, fft_size).unwrap();
-    
+
     // Cross-correlation in frequency domain: conj(X) * Y
     let mut cross_corr_fft: Vec<Complex<f32>> = ref_fft
         .iter()
         .zip(rec_fft.iter())
         .map(|(x, y)| x.conj() * y)
         .collect();
-    
+
     // IFFT to get cross-correlation in time domain
     let mut planner = FftPlanner::new();
     let ifft = planner.plan_fft_inverse(fft_size);
     ifft.process(&mut cross_corr_fft);
-    
+
     // Find peak
     let mut max_val = 0.0;
     let mut max_idx = 0;
-    
+
     for (i, &val) in cross_corr_fft.iter().enumerate() {
         let magnitude = val.norm();
         if magnitude > max_val {
@@ -240,14 +284,14 @@ fn estimate_lag(reference: &[f32], recorded: &[f32]) -> isize {
             max_idx = i;
         }
     }
-    
+
     // Convert index to lag (handle wrap-around)
     let lag = if max_idx <= fft_size / 2 {
         max_idx as isize
     } else {
         max_idx as isize - fft_size as isize
     };
-    
+
     lag
 }
 
@@ -262,24 +306,21 @@ fn estimate_lag(reference: &[f32], recorded: &[f32]) -> isize {
 fn compute_fft(signal: &[f32], fft_size: usize) -> Result<Vec<Complex<f32>>, String> {
     // Apply Hann window
     let windowed = apply_hann_window(signal);
-    
+
     compute_fft_padded(&windowed, fft_size)
 }
 
 /// Compute FFT with zero-padding
 fn compute_fft_padded(signal: &[f32], fft_size: usize) -> Result<Vec<Complex<f32>>, String> {
     // Zero-pad to fft_size
-    let mut buffer: Vec<Complex<f32>> = signal
-        .iter()
-        .map(|&x| Complex::new(x, 0.0))
-        .collect();
+    let mut buffer: Vec<Complex<f32>> = signal.iter().map(|&x| Complex::new(x, 0.0)).collect();
     buffer.resize(fft_size, Complex::new(0.0, 0.0));
-    
+
     // Compute FFT
     let mut planner = FftPlanner::new();
     let fft = planner.plan_fft_forward(fft_size);
     fft.process(&mut buffer);
-    
+
     Ok(buffer)
 }
 
@@ -306,8 +347,8 @@ fn next_power_of_two(n: usize) -> usize {
 
 /// Load a mono WAV file and convert to f32 samples
 fn load_wav_mono(path: &Path) -> Result<Vec<f32>, String> {
-    let mut reader = WavReader::open(path)
-        .map_err(|e| format!("Failed to open WAV file: {}", e))?;
+    let mut reader =
+        WavReader::open(path).map_err(|e| format!("Failed to open WAV file: {}", e))?;
 
     let spec = reader.spec();
     let channels = spec.channels as usize;
@@ -347,55 +388,67 @@ mod tests {
         let duration = 1.0;
         let amp = 0.5;
         let frequencies = [100.0, 1000.0, 10000.0];
-        
+
         let mut spl_values = Vec::new();
-        
+
         for &freq in &frequencies {
             // Generate a simple sine wave
             let signal = generate_sine_wave(freq, amp, sample_rate, duration);
-            
+
             // Analyze the signal
             let result = analyze_recording_direct(&signal, &signal, sample_rate)
                 .expect("Failed to analyze recording");
-            
+
             // Find the SPL at the target frequency - look for peak in a wider range
             let search_range = 200.0; // Wider search range for better peak detection
-            if let Some(spl) = result.frequencies.iter()
+            if let Some(spl) = result
+                .frequencies
+                .iter()
                 .zip(&result.spl_db)
                 .filter(|&(&f, _)| (f - freq).abs() < search_range)
                 .max_by(|&(_, spl1), &(_, spl2)| spl1.partial_cmp(spl2).unwrap())
-                .map(|(_, &spl)| spl) {
+                .map(|(_, &spl)| spl)
+            {
                 spl_values.push(spl);
                 println!("Sine wave {} Hz: SPL = {:.2} dB", freq, spl);
             }
         }
-        
+
         // Check consistency
         if spl_values.len() >= 2 {
             let min_spl = spl_values.iter().fold(f32::INFINITY, |a, &b| a.min(b));
             let max_spl = spl_values.iter().fold(f32::NEG_INFINITY, |a, &b| a.max(b));
             let variation = max_spl - min_spl;
-            
-            println!("Sine wave SPL variation: {:.2} dB (min: {:.2}, max: {:.2})", 
-                variation, min_spl, max_spl);
-            
+
+            println!(
+                "Sine wave SPL variation: {:.2} dB (min: {:.2}, max: {:.2})",
+                variation, min_spl, max_spl
+            );
+
             // Simple sine waves should have very consistent SPL
-            assert!(variation < 1.0, 
-                "Sine wave SPL variation {:.2} dB exceeds 1 dB tolerance", 
-                variation);
+            assert!(
+                variation < 1.0,
+                "Sine wave SPL variation {:.2} dB exceeds 1 dB tolerance",
+                variation
+            );
         }
     }
 
-    fn generate_sine_wave(frequency: f32, amplitude: f32, sample_rate: u32, duration: f32) -> Vec<f32> {
+    fn generate_sine_wave(
+        frequency: f32,
+        amplitude: f32,
+        sample_rate: u32,
+        duration: f32,
+    ) -> Vec<f32> {
         let n_frames = (duration * sample_rate as f32) as usize;
         let mut signal = Vec::with_capacity(n_frames);
-        
+
         for n in 0..n_frames {
             let t = n as f32 / sample_rate as f32;
             let sample = amplitude * (2.0 * std::f32::consts::PI * frequency * t).sin();
             signal.push(sample);
         }
-        
+
         signal
     }
 
@@ -406,43 +459,50 @@ mod tests {
         let sample_rate = 48000;
         let duration = 0.5; // Shorter for faster test
         let signal = signals::gen_log_sweep(20.0, 20000.0, amp, sample_rate, duration);
-        
+
         // Analyze the signal directly (simulating a perfect recording)
         let result = analyze_recording_direct(&signal, &signal, sample_rate)
             .expect("Failed to analyze recording");
-        
+
         // Check SPL consistency across the practical audio range (100 Hz and above)
         let mut spl_values = Vec::new();
         let freq_checkpoints = [100.0, 1000.0, 10000.0]; // Practical audio range frequencies
-        
+
         for &target_freq in &freq_checkpoints {
             // Find the peak SPL in the frequency range around the target frequency
             let search_range = 200.0; // Wider search range for better peak detection
-            if let Some(spl) = result.frequencies.iter()
+            if let Some(spl) = result
+                .frequencies
+                .iter()
                 .zip(&result.spl_db)
                 .filter(|&(&f, _)| (f - target_freq).abs() < search_range)
                 .max_by(|&(_, spl1), &(_, spl2)| spl1.partial_cmp(spl2).unwrap())
-                .map(|(_, &spl)| spl) {
+                .map(|(_, &spl)| spl)
+            {
                 spl_values.push(spl);
                 println!("Frequency ~{} Hz: SPL = {:.2} dB", target_freq, spl);
             }
         }
-        
+
         // For a constant amplitude signal in a loopback test,
         // we should see very consistent SPL across the practical audio range (100 Hz+)
         if spl_values.len() >= 2 {
             let min_spl = spl_values.iter().fold(f32::INFINITY, |a, &b| a.min(b));
             let max_spl = spl_values.iter().fold(f32::NEG_INFINITY, |a, &b| a.max(b));
             let variation = max_spl - min_spl;
-            
-            println!("SPL variation: {:.2} dB (min: {:.2}, max: {:.2})", 
-                variation, min_spl, max_spl);
-            
+
+            println!(
+                "SPL variation: {:.2} dB (min: {:.2}, max: {:.2})",
+                variation, min_spl, max_spl
+            );
+
             // For a loopback test with constant amplitude sweep, we expect sub-0.5 dB accuracy
             // This accounts only for FFT windowing effects and peak detection
-            assert!(variation < 0.5, 
-                "SPL variation {:.2} dB exceeds 0.5 dB tolerance for constant amplitude loopback test", 
-                variation);
+            assert!(
+                variation < 0.5,
+                "SPL variation {:.2} dB exceeds 0.5 dB tolerance for constant amplitude loopback test",
+                variation
+            );
         }
     }
 
@@ -467,7 +527,7 @@ mod tests {
 
         // Compute FFT for both signals
         let fft_size = next_power_of_two(min_len);
-        
+
         let ref_spectrum = compute_fft(reference, fft_size)?;
         let rec_spectrum = compute_fft(recorded, fft_size)?;
 
@@ -482,27 +542,27 @@ mod tests {
         // Skip DC bin (k=0), compute for k=1..num_bins
         for k in 1..=num_bins {
             let freq = k as f32 * freq_resolution;
-            
+
             // Magnitude from recorded signal
             // Compute transfer function: H(f) = recorded / reference
             // This gives us the system response (for loopback, should be ~1.0 or 0 dB)
             let transfer_function = rec_spectrum[k] / ref_spectrum[k];
             let magnitude = transfer_function.norm();
-            
+
             // Convert to dB (no windowing correction needed for transfer function)
             let db = 20.0 * magnitude.max(1e-10).log10();
-            
+
             // Phase from cross-spectrum with lag compensation
             let cross_spectrum = ref_spectrum[k].conj() * rec_spectrum[k];
             let mut phase_rad = cross_spectrum.arg();
-            
+
             // Compensate for lag
             let lag_phase = -2.0 * PI * freq * lag as f32 / sample_rate as f32;
             phase_rad += lag_phase;
-            
+
             // Keep phase unwrapped (continuous) - convert directly to degrees
             let phase_degrees = phase_rad * 180.0 / PI;
-            
+
             frequencies.push(freq);
             spl_db.push(db);
             phase_deg.push(phase_degrees);
@@ -530,11 +590,11 @@ mod tests {
     fn test_hann_window() {
         let signal = vec![1.0; 100];
         let windowed = apply_hann_window(&signal);
-        
+
         // First and last samples should be near zero
         assert!(windowed[0].abs() < 0.01);
         assert!(windowed[99].abs() < 0.01);
-        
+
         // Middle sample should be near 1.0
         assert!((windowed[50] - 1.0).abs() < 0.01);
     }
@@ -557,23 +617,23 @@ mod tests {
     }
 
     /// Regression test: Detect suspiciously identical signals
-    /// 
+    ///
     /// In a real recording scenario, the recorded signal should NEVER be
     /// 100% identical to the reference due to:
     /// - Latency/lag
     /// - Noise
     /// - DAC/ADC quantization
     /// - Audio path differences
-    /// 
+    ///
     /// If signals are 100% identical, it indicates a bug where the
     /// reference file was copied instead of actually recorded.
     #[test]
     fn test_detect_suspicious_identical_signals() {
         let sample_rate = 48000;
-        
+
         // Generate a reference signal
         let reference = generate_sine_wave(1000.0, 0.5, sample_rate, 0.1);
-        
+
         // Simulate a realistic recording with small latency and noise
         let mut realistic_recording = reference.clone();
         // Add 10 sample delay
@@ -583,28 +643,30 @@ mod tests {
         for sample in &mut realistic_recording {
             *sample += 0.0001 * (rand::random::<f32>() - 0.5);
         }
-        
+
         // Test with realistic recording - should work fine
-        let result = analyze_recording_direct(
-            &realistic_recording,
-            &reference,
-            sample_rate,
+        let result = analyze_recording_direct(&realistic_recording, &reference, sample_rate);
+        assert!(
+            result.is_ok(),
+            "Realistic recording should analyze successfully"
         );
-        assert!(result.is_ok(), "Realistic recording should analyze successfully");
-        
+
         // Test with identical signals - this is suspicious!
-        let identical_count = reference.iter()
+        let identical_count = reference
+            .iter()
             .zip(&realistic_recording)
             .filter(|(r, c)| (*r - *c).abs() < 1e-6)
             .count();
-        
+
         let identical_percent = identical_count as f32 * 100.0 / reference.len() as f32;
-        
+
         // In a realistic recording, we should NOT have 100% identical samples
-        assert!(identical_percent < 99.0, 
+        assert!(
+            identical_percent < 99.0,
             "Recording is suspiciously identical to reference ({:.1}% identical). \
              This suggests a file copy bug instead of actual recording.",
-            identical_percent);
+            identical_percent
+        );
     }
 
     #[test]

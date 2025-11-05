@@ -2,14 +2,16 @@
 // Config Generation
 // ============================================================================
 
+use serde_yaml::{Mapping, Value};
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
 use tempfile::NamedTempFile;
-use serde_yaml::{Mapping, Value};
 
 use super::errors::{CamillaError, CamillaResult};
-use super::types::{CamillaDSPConfig, DeviceConfig, CaptureDevice, PlaybackDevice, ChannelsSetting};
+use super::types::{
+    CamillaDSPConfig, CaptureDevice, ChannelsSetting, DeviceConfig, PlaybackDevice,
+};
 use crate::filters::FilterParams;
 use crate::loudness_compensation::LoudnessCompensation;
 
@@ -45,7 +47,7 @@ pub fn generate_streaming_config(
         device_type: "Stdin".to_string(),
         device: None,
         filename: None,
-        channels: None,  // Stdin capture doesn't need channels - it's in the stream format
+        channels: None, // Stdin capture doesn't need channels - it's in the stream format
         format: Some("FLOAT32LE".to_string()), // Our decoder outputs f32 samples
     };
 
@@ -79,8 +81,8 @@ pub fn generate_streaming_config(
         device_type: playback_type,
         device: device_name,
         filename: None,
-        channels: Some(ChannelsSetting::Count(mixer_out_channels)),  // Restore individual device channels
-        format: None, // Let CoreAudio use default format
+        channels: Some(ChannelsSetting::Count(mixer_out_channels)), // Restore individual device channels
+        format: None,     // Let CoreAudio use default format
         wav_header: None, // Not applicable for CoreAudio playback
     };
 
@@ -228,23 +230,22 @@ pub fn generate_playback_config(
     sample_rate: u32,
     num_channels: u16,
 ) -> CamillaResult<CamillaDSPConfig> {
-
     let capture = CaptureDevice {
-        device_type: "WavFile".to_string(),  // CamillaDSP v3 uses "WavFile" for WAV file input
+        device_type: "WavFile".to_string(), // CamillaDSP v3 uses "WavFile" for WAV file input
         filename: Some(audio_file.to_str().unwrap().to_string()),
         device: None,
         format: None,
-        channels: None,  // File capture doesn't need channels - it's embedded in the file
+        channels: None, // File capture doesn't need channels - it's embedded in the file
     };
 
     let (playback_type, device_name) = map_output_device(output_device)?;
     let playback = PlaybackDevice {
         device_type: playback_type,
         device: device_name,
-	filename: None,
-	format: None,
-	wav_header: None,
-	channels: Some(ChannelsSetting::Count(num_channels)),  // Restore individual device channels
+        filename: None,
+        format: None,
+        wav_header: None,
+        channels: Some(ChannelsSetting::Count(num_channels)), // Restore individual device channels
     };
 
     // Detect device native sample rate for file playback too
@@ -383,7 +384,8 @@ pub fn fix_rf64_wav(wav_path: &std::path::Path) -> CamillaResult<()> {
         .map_err(|e| CamillaError::IOError(format!("Failed to open WAV file: {}", e)))?;
 
     // Get file size
-    let file_size = file.metadata()
+    let file_size = file
+        .metadata()
         .map_err(|e| CamillaError::IOError(format!("Failed to get file size: {}", e)))?
         .len() as u32;
 
@@ -398,7 +400,12 @@ pub fn fix_rf64_wav(wav_path: &std::path::Path) -> CamillaResult<()> {
     }
 
     // Check if RIFF size is 0xFFFFFFFF (RF64 placeholder)
-    let riff_size = u32::from_le_bytes([riff_header[4], riff_header[5], riff_header[6], riff_header[7]]);
+    let riff_size = u32::from_le_bytes([
+        riff_header[4],
+        riff_header[5],
+        riff_header[6],
+        riff_header[7],
+    ]);
     if riff_size == 0xFFFFFFFF {
         // Fix RIFF chunk size (file_size - 8)
         let correct_riff_size = file_size - 8;
@@ -407,7 +414,10 @@ pub fn fix_rf64_wav(wav_path: &std::path::Path) -> CamillaResult<()> {
         file.write_all(&correct_riff_size.to_le_bytes())
             .map_err(|e| CamillaError::IOError(format!("Failed to write RIFF size: {}", e)))?;
 
-        println!("[CamillaDSP] Fixed RF64 RIFF size: {} -> {}", riff_size, correct_riff_size);
+        println!(
+            "[CamillaDSP] Fixed RF64 RIFF size: {} -> {}",
+            riff_size, correct_riff_size
+        );
     }
 
     // Seek to find data chunk
@@ -421,20 +431,30 @@ pub fn fix_rf64_wav(wav_path: &std::path::Path) -> CamillaResult<()> {
         }
 
         let chunk_id = &chunk_header[0..4];
-        let chunk_size = u32::from_le_bytes([chunk_header[4], chunk_header[5], chunk_header[6], chunk_header[7]]);
+        let chunk_size = u32::from_le_bytes([
+            chunk_header[4],
+            chunk_header[5],
+            chunk_header[6],
+            chunk_header[7],
+        ]);
 
         if chunk_id == b"data" && chunk_size == 0xFFFFFFFF {
             // Fix data chunk size
-            let current_pos = file.stream_position()
+            let current_pos = file
+                .stream_position()
                 .map_err(|e| CamillaError::IOError(format!("Failed to get position: {}", e)))?;
             let correct_data_size = file_size - current_pos as u32;
 
-            file.seek(SeekFrom::Start(current_pos - 4))
-                .map_err(|e| CamillaError::IOError(format!("Failed to seek to data size: {}", e)))?;
+            file.seek(SeekFrom::Start(current_pos - 4)).map_err(|e| {
+                CamillaError::IOError(format!("Failed to seek to data size: {}", e))
+            })?;
             file.write_all(&correct_data_size.to_le_bytes())
                 .map_err(|e| CamillaError::IOError(format!("Failed to write data size: {}", e)))?;
 
-            println!("[CamillaDSP] Fixed RF64 data size: {} -> {}", chunk_size, correct_data_size);
+            println!(
+                "[CamillaDSP] Fixed RF64 data size: {} -> {}",
+                chunk_size, correct_data_size
+            );
             break;
         }
 
@@ -483,12 +503,15 @@ pub fn generate_recording_config_with_output_type(
 ) -> CamillaResult<CamillaDSPConfig> {
     // Create capture device (audio input)
     let (capture_type, device_name) = map_input_device(input_device)?;
-    println!("[CamillaDSP Recording] Input device: type={}, name={:?}", capture_type, device_name);
+    println!(
+        "[CamillaDSP Recording] Input device: type={}, name={:?}",
+        capture_type, device_name
+    );
 
     let capture = CaptureDevice {
         device_type: capture_type,
         device: device_name,
-        channels: Some(ChannelsSetting::Count(channels)),  // Restore individual device channels
+        channels: Some(ChannelsSetting::Count(channels)), // Restore individual device channels
         filename: None,
         format: None,
     };
@@ -496,26 +519,26 @@ pub fn generate_recording_config_with_output_type(
     // Create playback device based on output type
     let playback = match output_type {
         RecordingOutputType::WavFile(ref path) => PlaybackDevice {
-            device_type: "File".to_string(),  // CamillaDSP v3 uses "File" for file output
+            device_type: "File".to_string(), // CamillaDSP v3 uses "File" for file output
             device: None,
             filename: Some(path.to_string_lossy().to_string()),
-            channels: Some(ChannelsSetting::Count(channels)),  // Restore individual device channels
-            format: Some("S32LE".to_string()),  // Use S32LE instead of FLOAT32LE to avoid CamillaDSP double-header bug
-            wav_header: Some(true), // Enable WAV header for WAV file output
+            channels: Some(ChannelsSetting::Count(channels)), // Restore individual device channels
+            format: Some("S32LE".to_string()), // Use S32LE instead of FLOAT32LE to avoid CamillaDSP double-header bug
+            wav_header: Some(true),            // Enable WAV header for WAV file output
         },
         RecordingOutputType::StdOut => PlaybackDevice {
-            device_type: "Stdout".to_string(),  // "Stdout" is correct for stdout output
+            device_type: "Stdout".to_string(), // "Stdout" is correct for stdout output
             device: None,
             filename: None,
-            channels: Some(ChannelsSetting::Count(channels)),  // Restore individual device channels
+            channels: Some(ChannelsSetting::Count(channels)), // Restore individual device channels
             format: Some("FLOAT32LE".to_string()),
             wav_header: None, // No WAV header for stdout
         },
         RecordingOutputType::RawFile(ref path) => PlaybackDevice {
-            device_type: "File".to_string(),  // CamillaDSP v3 uses "File" for file output
+            device_type: "File".to_string(), // CamillaDSP v3 uses "File" for file output
             device: None,
             filename: Some(path.to_string_lossy().to_string()),
-            channels: Some(ChannelsSetting::Count(channels)),  // Restore individual device channels
+            channels: Some(ChannelsSetting::Count(channels)), // Restore individual device channels
             format: Some("FLOAT32LE".to_string()),
             wav_header: Some(false), // No WAV header for raw file
         },
@@ -623,7 +646,10 @@ pub fn map_input_device(device: Option<&str>) -> CamillaResult<(String, Option<S
 }
 
 /// Generate the filters section as YAML
-pub fn generate_filters_yaml(filters: &[FilterParams], loudness: Option<&LoudnessCompensation>) -> CamillaResult<serde_yaml::Value> {
+pub fn generate_filters_yaml(
+    filters: &[FilterParams],
+    loudness: Option<&LoudnessCompensation>,
+) -> CamillaResult<serde_yaml::Value> {
     let mut filters_map = serde_yaml::Mapping::new();
 
     // Add volume gain filter if loudness compensation is active
@@ -673,8 +699,10 @@ pub fn generate_filters_yaml(filters: &[FilterParams], loudness: Option<&Loudnes
             serde_yaml::Value::Mapping(filter_config),
         );
 
-        println!("[CamillaDSP] Added volume attenuation filter: {:.1}dB (compensation: {:.1}/{:.1})",
-                 attenuation_db, lc.low_boost, lc.high_boost);
+        println!(
+            "[CamillaDSP] Added volume attenuation filter: {:.1}dB (compensation: {:.1}/{:.1})",
+            attenuation_db, lc.low_boost, lc.high_boost
+        );
     }
 
     for (idx, filter) in filters.iter().enumerate() {
@@ -836,7 +864,6 @@ pub fn write_config_to_temp(config: &CamillaDSPConfig) -> CamillaResult<NamedTem
     Ok(temp_file)
 }
 
-
 /// Write a config to a specific file path
 pub fn write_config_to_file(config: &CamillaDSPConfig, path: &PathBuf) -> CamillaResult<()> {
     let yaml = serde_yaml::to_string(config)?;
@@ -850,7 +877,10 @@ pub fn write_config_to_file(config: &CamillaDSPConfig, path: &PathBuf) -> Camill
 
 /// Validate and debug a CamillaDSP configuration
 pub fn validate_config(config: &CamillaDSPConfig, config_type: &str) -> CamillaResult<()> {
-    println!("[CamillaDSP Debug] Validating {} configuration", config_type);
+    println!(
+        "[CamillaDSP Debug] Validating {} configuration",
+        config_type
+    );
 
     // Check basic device configuration
     println!("  Sample rate: {}", config.devices.samplerate);
@@ -882,13 +912,19 @@ pub fn validate_config(config: &CamillaDSPConfig, config_type: &str) -> CamillaR
 
     // Recording-specific validations
     if config_type == "recording" {
-        if config.devices.playback.device_type == "Stdout" && config.devices.playback.wav_header.is_some() {
+        if config.devices.playback.device_type == "Stdout"
+            && config.devices.playback.wav_header.is_some()
+        {
             warnings.push("WAV header should be None for Stdout output");
         }
-        if config.devices.playback.device_type == "File" && config.devices.playback.filename.is_none() {
+        if config.devices.playback.device_type == "File"
+            && config.devices.playback.filename.is_none()
+        {
             warnings.push("Filename required for File output type");
         }
-        if config.devices.playback.device_type == "File" && config.devices.playback.wav_header.is_none() {
+        if config.devices.playback.device_type == "File"
+            && config.devices.playback.wav_header.is_none()
+        {
             warnings.push("WAV header setting should be specified for File output");
         }
     }
@@ -897,7 +933,8 @@ pub fn validate_config(config: &CamillaDSPConfig, config_type: &str) -> CamillaR
     if config_type == "playback" {
         if let Some(ref capture) = config.devices.capture {
             if (capture.device_type == "WavFile" || capture.device_type == "RawFile")
-                && capture.filename.is_none() {
+                && capture.filename.is_none()
+            {
                 warnings.push("Filename required for file input types");
             }
         }
@@ -916,12 +953,13 @@ pub fn validate_config(config: &CamillaDSPConfig, config_type: &str) -> CamillaR
     Ok(())
 }
 
-
 #[cfg(test)]
 mod config_tests {
     use super::*;
+    use crate::camilla::config::{
+        RecordingOutputType, generate_recording_config, generate_recording_config_with_output_type,
+    };
     use std::path::PathBuf;
-    use crate::camilla::config::{generate_recording_config, generate_recording_config_with_output_type, RecordingOutputType};
 
     #[test]
     fn test_recording_config_wav_output() {
@@ -932,7 +970,8 @@ mod config_tests {
             48000,
             1,
             None,
-        ).unwrap();
+        )
+        .unwrap();
 
         // Convert to YAML string for verification
         let yaml = serde_yaml::to_string(&config).unwrap();
@@ -958,7 +997,8 @@ mod config_tests {
             44100,
             2,
             None,
-        ).unwrap();
+        )
+        .unwrap();
 
         // Convert to YAML string for verification
         let yaml = serde_yaml::to_string(&config).unwrap();
@@ -985,7 +1025,8 @@ mod config_tests {
             96000,
             1,
             None,
-        ).unwrap();
+        )
+        .unwrap();
 
         // Convert to YAML string for verification
         let yaml = serde_yaml::to_string(&config).unwrap();
@@ -1006,13 +1047,9 @@ mod config_tests {
     #[test]
     fn test_recording_config_with_device_name() {
         let output_file = PathBuf::from("/tmp/record.wav");
-        let config = generate_recording_config(
-            Some("Built-in Microphone"),
-            &output_file,
-            48000,
-            1,
-            None,
-        ).unwrap();
+        let config =
+            generate_recording_config(Some("Built-in Microphone"), &output_file, 48000, 1, None)
+                .unwrap();
 
         // Convert to YAML string for verification
         let yaml = serde_yaml::to_string(&config).unwrap();
@@ -1030,7 +1067,8 @@ mod config_tests {
             48000,
             1,
             None,
-        ).unwrap();
+        )
+        .unwrap();
 
         // Convert to YAML string for verification
         let yaml = serde_yaml::to_string(&config).unwrap();

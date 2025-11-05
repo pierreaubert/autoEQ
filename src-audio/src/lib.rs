@@ -23,13 +23,12 @@ pub use loudness_compensation::LoudnessCompensation;
 
 pub mod camilla;
 pub use camilla::{
-    AudioManager, AudioState, AudioStreamState, CamillaError, CamillaResult,
-    SharedAudioStreamState,
+    AudioManager, AudioState, AudioStreamState, CamillaError, CamillaResult, SharedAudioStreamState,
 };
 
 pub mod replaygain;
-pub mod signals;
 pub mod signal_recorder;
+pub mod signals;
 
 pub mod loudness_monitor;
 pub use loudness_monitor::{LoudnessInfo, LoudnessMonitor};
