@@ -6,8 +6,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
 
-use sotf_backend::camilla::{ChannelMapMode, find_camilladsp_binary};
-use sotf_backend::{AudioManager, FilterParams, create_decoder};
+use sotf_audio::camilla::{ChannelMapMode, find_camilladsp_binary};
+use sotf_audio::{AudioManager, FilterParams, create_decoder};
 
 fn parse_list_u16(var: &str) -> Option<Vec<u16>> {
     env::var(var).ok().and_then(|s| {
@@ -180,7 +180,7 @@ async fn e2e_loopback_id_and_thd() {
     // Start recorder
     let rec_mgr = AudioManager::new(cam_bin.clone());
     rec_mgr
-        .start_recording(capture_path.clone(), in_dev.clone(), sr, ch, in_map.clone())
+        .start_recording(in_dev.clone(), capture_path.clone(), sr, ch, in_map.clone())
         .await
         .unwrap();
     tokio::time::sleep(Duration::from_millis(300)).await;
@@ -273,8 +273,8 @@ async fn e2e_loopback_id_and_thd() {
 
     let rec2 = AudioManager::new(cam_bin.clone());
     rec2.start_recording(
-        capture_path_thd.clone(),
         in_dev.clone(),
+        capture_path_thd.clone(),
         sr,
         ch,
         in_map.clone(),

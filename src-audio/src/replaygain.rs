@@ -46,7 +46,7 @@ pub struct ReplayGainInfo {
 /// # Example
 ///
 /// ```no_run
-/// use sotf_backend::replaygain::analyze_file;
+/// use sotf_audio::replaygain::analyze_file;
 ///
 /// let info = analyze_file("track.flac").unwrap();
 /// println!("ReplayGain: {:.2} dB", info.gain);

@@ -486,7 +486,7 @@ pub fn validate_signal_params(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use hound::{WavReader, WavSpec};
+    use hound::WavReader;
     use tempfile::tempdir;
 
     #[test]

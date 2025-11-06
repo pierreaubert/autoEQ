@@ -383,10 +383,10 @@ fn apply_hann_window(signal: &[f32]) -> Vec<f32> {
 
 /// Find the next power of two greater than or equal to n
 fn next_power_of_two(n: usize) -> usize {
-    if n <= 1 {
+    if n == 0 {
         return 1;
     }
-    (n - 1).next_power_of_two()
+    n.next_power_of_two()
 }
 
 /// Load a mono WAV file and convert to f32 samples

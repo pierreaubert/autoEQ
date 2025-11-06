@@ -95,7 +95,6 @@ pub fn find_camilladsp_binary() -> CamillaResult<PathBuf> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
 
     #[test]
     fn test_filter_params_validation() {

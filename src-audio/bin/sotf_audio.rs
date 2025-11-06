@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 use sotf_audio::loudness_compensation::LoudnessCompensation;
-use sotf_audio::{AudioManager, AudioStreamingManager, CamillaError, FilterParams, StreamingState};
+use sotf_audio::{AudioStreamingManager, CamillaError, FilterParams, StreamingState};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -678,6 +678,15 @@ pub async fn record_signal(
         return Err("hwaudio-send-to must specify at least 1 channel".to_string());
     }
 
+    // Validate that the number of send and record channels match
+    if send_to_channels.len() != record_from_channels.len() {
+        return Err(format!(
+            "Number of send-to channels ({}) must equal number of record-from channels ({})",
+            send_to_channels.len(),
+            record_from_channels.len()
+        ));
+    }
+
     // Build signal parameters based on signal type
     let params = match signal_type {
         SignalType::Tone => {
@@ -720,10 +729,13 @@ pub async fn record_signal(
     println!("  Signal: {}", signal_type.as_str());
     println!("  Duration: {:.2}s", duration);
     println!("  Sample rate: {}Hz", sample_rate);
-    println!("  Send to hardware channels: {:?}", send_to_channels);
+    println!("  Channel pairs (send → record):");
+    for (&send_ch, &record_ch) in send_to_channels.iter().zip(record_from_channels.iter()) {
+        println!("    hw output {} → hw input {}", send_ch, record_ch);
+    }
     println!(
-        "  Record from hardware channels: {:?}",
-        record_from_channels
+        "  Total recordings: {} (one mono file per pair)",
+        send_to_channels.len()
     );
     if let Some(ref n) = name {
         println!("  Output prefix: {}", n);
@@ -731,7 +743,7 @@ pub async fn record_signal(
     println!();
 
     // Generate the base signal
-    let total_recordings = record_from_channels.len() * send_to_channels.len();
+    let total_recordings = send_to_channels.len(); // One recording per send/record pair
     println!("[1/{}] Generating signal...", total_recordings + 2);
     let base_signal = generate_signal(signal_type, &params, duration, sample_rate)?;
 
@@ -750,55 +762,55 @@ pub async fn record_signal(
         prepared_signal.len()
     );
 
-    // Perform recording for each record-from channel
-    for (record_idx, &record_ch) in record_from_channels.iter().enumerate() {
-        for (send_idx, &send_ch) in send_to_channels.iter().enumerate() {
-            let take_num = record_idx * send_to_channels.len() + send_idx + 1;
-            let total_takes = record_from_channels.len() * send_to_channels.len();
+    // Perform recording for each send/record channel pair (one-to-one mapping)
+    // Each send channel is paired with exactly one record channel
+    for (idx, (&send_ch, &record_ch)) in send_to_channels
+        .iter()
+        .zip(record_from_channels.iter())
+        .enumerate()
+    {
+        println!(
+            "\n[{}/{}] Playing to hw channel {}, recording from hw channel {}...",
+            idx + 3,
+            total_recordings + 2,
+            send_ch,
+            record_ch
+        );
 
-            println!(
-                "\n[{}/{}] Recording from channel {} (playing mono to channel {})...",
-                take_num + 2,
-                total_takes + 2,
-                record_ch,
-                send_ch
-            );
+        // Generate output filenames - include both send and record channels
+        let (wav_path, csv_path) = generate_output_filenames_stereo(
+            name.as_deref(),
+            signal_type,
+            send_ch,
+            record_ch,
+            sample_rate,
+        );
 
-            // Generate output filenames - include both send and record channels
-            let (wav_path, csv_path) = generate_output_filenames_stereo(
-                name.as_deref(),
-                signal_type,
-                send_ch,
-                record_ch,
-                sample_rate,
-            );
+        println!("  Output WAV: {:?}", wav_path);
+        println!("  Output CSV: {:?}", csv_path);
 
-            println!("  Output WAV: {:?}", wav_path);
-            println!("  Output CSV: {:?}", csv_path);
+        // Write mono signal to temporary WAV file
+        println!("  Writing temporary mono WAV file...");
+        let temp_wav = write_temp_wav(&prepared_signal, sample_rate, 1)?;
+        println!("  Temp file: {:?}", temp_wav.path());
 
-            // Write mono signal to temporary WAV file
-            println!("  Writing temporary mono WAV file...");
-            let temp_wav = write_temp_wav(&prepared_signal, sample_rate, 1)?;
-            println!("  Temp file: {:?}", temp_wav.path());
+        // Perform actual playback and recording
+        println!("  Starting playback and recording...");
+        println!("  Playing mono signal to hw output channel {}", send_ch);
+        println!("  Recording mono from hw input channel {}", record_ch);
 
-            // Perform actual playback and recording
-            println!("  Starting playback and recording...");
-            println!("  Playing mono temp WAV to hw channel {}", send_ch);
-            println!("  Recording from hw channel {}", record_ch);
+        record_and_analyze(
+            temp_wav.path(),  // Use the temporary WAV file for playback
+            &wav_path,        // Record to the final output WAV file
+            &prepared_signal, // Use the prepared mono signal for analysis
+            sample_rate,
+            &csv_path,
+            send_ch,   // Output channel
+            record_ch, // Input channel
+        )
+        .await?;
 
-            record_and_analyze(
-                temp_wav.path(),  // Use the temporary WAV file for playback
-                &wav_path,        // Record to the final output WAV file
-                &prepared_signal, // Use the prepared mono signal for analysis
-                sample_rate,
-                &csv_path,
-                send_ch,   // Output channel
-                record_ch, // Input channel
-            )
-            .await?;
-
-            println!("  ✓ Recording complete");
-        }
+        println!("  ✓ Recording complete");
     }
 
     println!("\n{}", "=".repeat(60));

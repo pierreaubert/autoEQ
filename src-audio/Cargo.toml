@@ -27,7 +27,7 @@ cpal = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "tracing"] }
 tokio-tungstenite = { workspace = true }
 futures-util = { workspace = true }
-futures = "0.3"
+futures = { workspace = true }
 tempfile = { workspace = true }
 serde_yaml = { workspace = true }
 which = { workspace = true }
@@ -35,24 +35,24 @@ clap = { workspace = true }
 ctrlc = { workspace = true }
 reqwest = { workspace = true }
 chrono = { workspace = true }
-libc = "0.2"
+libc = { workspace = true }
 autoeq-env = { path = "../src-env" }
 
 # Audio decoding/encoding
-symphonia = { version = "0.5", default-features = false }
-symphonia-core = "0.5"
-symphonia-metadata = "0.5"
-symphonia-bundle-flac = "0.5"
-symphonia-bundle-mp3 = "0.5"
-symphonia-codec-aac = "0.5"
-symphonia-codec-pcm = "0.5"
-symphonia-codec-vorbis = "0.5"
-symphonia-format-riff = "0.5"
-symphonia-format-ogg = "0.5"
-symphonia-format-isomp4 = "0.5"
-ebur128 = "0.1.10"
-hound = "3.5"
-rustfft = "6.2"
+symphonia = { workspace = true, default-features = false }
+symphonia-core ={ workspace = true }
+symphonia-metadata ={ workspace = true }
+symphonia-bundle-flac ={ workspace = true }
+symphonia-bundle-mp3 ={ workspace = true }
+symphonia-codec-aac ={ workspace = true }
+symphonia-codec-pcm ={ workspace = true }
+symphonia-codec-vorbis ={ workspace = true }
+symphonia-format-riff ={ workspace = true }
+symphonia-format-ogg ={ workspace = true }
+symphonia-format-isomp4 ={ workspace = true }
+ebur128 = { workspace = true }
+hound = { workspace = true }
+rustfft = { workspace = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 signal-hook-tokio = { workspace = true }
@@ -69,5 +69,5 @@ signal-hook-tokio = { workspace = true }
 [dev-dependencies]
 # Needed for async integration tests
 tokio = { workspace = true, features = ["rt-multi-thread", "tracing"] }
-rand = "0.8"
+rand = { workspace = true }
 

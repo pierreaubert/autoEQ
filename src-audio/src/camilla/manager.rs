@@ -7,8 +7,7 @@ use std::sync::{Arc, Mutex};
 use tempfile::NamedTempFile;
 
 use super::config::{
-    RecordingOutputType, convert_raw_to_wav, fix_rf64_wav, generate_playback_config,
-    generate_recording_config, generate_recording_config_with_output_type,
+    convert_raw_to_wav, fix_rf64_wav, generate_playback_config, generate_recording_config,
     generate_streaming_config, validate_config, write_config_to_temp,
 };
 use super::errors::{CamillaError, CamillaResult};
@@ -201,9 +200,17 @@ impl AudioManager {
             return Err(CamillaError::IOError(error));
         }
 
-        // Generate config
-        let config =
-            generate_playback_config(&audio_file, output_device.as_deref(), sample_rate, channels)?;
+        // Generate config with filters and loudness support
+        let config = generate_playback_config(
+            &audio_file,
+            output_device.as_deref(),
+            sample_rate,
+            channels,
+            &filters,
+            channel_map_mode,
+            output_map.as_deref(),
+            loudness.as_ref(),
+        )?;
 
         // Validate the configuration
         validate_config(&config, "playback")?;
@@ -396,7 +403,16 @@ impl AudioManager {
         } else {
             println!("[AudioManager] Updating filters for file playback mode");
             let file = audio_file.ok_or(CamillaError::ProcessNotRunning)?;
-            generate_playback_config(&file, output_device.as_deref(), sample_rate, channels)?
+            generate_playback_config(
+                &file,
+                output_device.as_deref(),
+                sample_rate,
+                channels,
+                &filters,
+                channel_map_mode,
+                playback_channel_map.as_deref(),
+                loudness.as_ref(),
+            )?
         };
 
         let config_yaml = serde_yaml::to_string(&config)?;

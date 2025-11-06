@@ -47,8 +47,8 @@ pub fn generate_streaming_config(
         device_type: "Stdin".to_string(),
         device: None,
         filename: None,
-        channels: None, // Stdin capture doesn't need channels - it's in the stream format
-        format: Some("FLOAT32LE".to_string()), // Our decoder outputs f32 samples
+        channels: Some(ChannelsSetting::Count(channels)), // Stdin needs channel count for proper setup
+        format: Some("FLOAT32LE".to_string()),            // Our decoder outputs f32 samples
     };
 
     // Create playback device
@@ -229,7 +229,16 @@ pub fn generate_playback_config(
     output_device: Option<&str>,
     sample_rate: u32,
     num_channels: u16,
+    filters: &[FilterParams],
+    map_mode: super::types::ChannelMapMode,
+    output_map: Option<&[u16]>,
+    loudness: Option<&LoudnessCompensation>,
 ) -> CamillaResult<CamillaDSPConfig> {
+    // Validate all filters
+    for filter in filters {
+        filter.validate()?;
+    }
+
     let capture = CaptureDevice {
         device_type: "WavFile".to_string(), // CamillaDSP v3 uses "WavFile" for WAV file input
         filename: Some(audio_file.to_str().unwrap().to_string()),
@@ -239,13 +248,37 @@ pub fn generate_playback_config(
     };
 
     let (playback_type, device_name) = map_output_device(output_device)?;
+
+    // Prepare output channel_map if provided
+    let effective_output_map: Option<Vec<u16>> = if let Some(map) = output_map {
+        if map.len() as u16 >= num_channels {
+            let start = map.len() - num_channels as usize;
+            Some(map[start..].to_vec())
+        } else {
+            return Err(CamillaError::InvalidConfiguration(format!(
+                "Output channel_map length ({}) must be >= channels ({})",
+                map.len(),
+                num_channels
+            )));
+        }
+    } else {
+        None
+    };
+
+    // Determine total number of output channels required
+    let mixer_out_channels: u16 = if let Some(ref outs) = effective_output_map {
+        outs.iter().copied().max().unwrap_or(1) + 1
+    } else {
+        num_channels
+    };
+
     let playback = PlaybackDevice {
         device_type: playback_type,
         device: device_name,
         filename: None,
         format: None,
         wav_header: None,
-        channels: Some(ChannelsSetting::Count(num_channels)), // Restore individual device channels
+        channels: Some(ChannelsSetting::Count(mixer_out_channels)),
     };
 
     // Detect device native sample rate for file playback too
@@ -290,13 +323,75 @@ pub fn generate_playback_config(
 
     println!("[CamillaDSP Playback Config]");
     println!("  Input channels: {}", num_channels);
-    println!("  Output channels: {}", num_channels);
+    println!("  Output channels: {}", mixer_out_channels);
+    println!("  Filters: {}", filters.len());
+    if let Some(ref lc) = loudness {
+        println!(
+            "  Loudness compensation: ref={}, low={}, high={}",
+            lc.reference_level, lc.low_boost, lc.high_boost
+        );
+    }
+
+    // Generate filters section if we have filters or loudness
+    let filters_section = {
+        let mut fm = serde_yaml::Mapping::new();
+
+        if !filters.is_empty() || loudness.is_some() {
+            let peq_val = generate_filters_yaml(filters, loudness)?;
+            if let serde_yaml::Value::Mapping(m) = peq_val {
+                for (k, val) in m {
+                    fm.insert(k, val);
+                }
+            }
+        }
+
+        if fm.is_empty() {
+            None
+        } else {
+            Some(serde_yaml::Value::Mapping(fm))
+        }
+    };
+
+    // Build destination map per input channel
+    let dest_map: Vec<u16> = {
+        let mut base: Vec<u16> = (0..num_channels).collect();
+        if let Some(ref outs) = effective_output_map {
+            if outs.len() as u16 >= num_channels {
+                let start = outs.len() - num_channels as usize;
+                base = outs[start..].to_vec();
+            }
+        }
+        // Optional swap for first two channels
+        if map_mode == super::types::ChannelMapMode::Swap && num_channels >= 2 {
+            let mut swapped = base.clone();
+            swapped.swap(0, 1);
+            swapped
+        } else {
+            base
+        }
+    };
+
+    // Generate mixers section (matrix routing)
+    let mixers_section = Some(generate_matrix_mixer_yaml(
+        num_channels,
+        mixer_out_channels,
+        &dest_map,
+    ));
+
+    // Generate pipeline - always include mixer; add filters and resampler if needed
+    let pipeline = Some(generate_pipeline(
+        mixer_out_channels,
+        filters,
+        needs_resampling,
+        loudness.is_some(),
+        loudness,
+    ));
 
     let config = CamillaDSPConfig {
         devices,
-        filters: None,
-        mixers: None,
-        pipeline: None,
+        filters: filters_section,
+        mixers: mixers_section,
+        pipeline,
     };
 
     // Debug: Print generated config
@@ -508,10 +603,23 @@ pub fn generate_recording_config_with_output_type(
         capture_type, device_name
     );
 
+    // Build input channel map to determine hardware channels needed
+    let input_channel_map: Vec<u16> = if let Some(ref map) = input_map {
+        map.to_vec()
+    } else {
+        (0..channels).collect()
+    };
+    let max_hw_channel = input_channel_map
+        .iter()
+        .copied()
+        .max()
+        .unwrap_or(channels - 1);
+    let hw_channels = max_hw_channel + 1;
+
     let capture = CaptureDevice {
         device_type: capture_type,
         device: device_name,
-        channels: Some(ChannelsSetting::Count(channels)), // Restore individual device channels
+        channels: Some(ChannelsSetting::Count(hw_channels)), // Open all hardware channels we need
         filename: None,
         format: None,
     };
@@ -561,12 +669,37 @@ pub fn generate_recording_config_with_output_type(
     println!("  Sample rate: {}", sample_rate);
     println!("  Channels: {}", channels);
     println!("  Input map: {:?}", input_map);
+    println!("[CamillaDSP Recording] Channel routing:");
+    println!("  Hardware input channels: {}", hw_channels);
+    println!("  Recording channels: {}", channels);
+    println!("  Channel mapping: {:?}", input_channel_map);
+
+    // Generate mixer section to route hardware inputs to file outputs
+    let mixers_section = Some(generate_matrix_mixer_yaml(
+        hw_channels,
+        channels,
+        &input_channel_map,
+    ));
+
+    // Generate pipeline with just the mixer (no filters for recording)
+    let mut pipeline_steps: Vec<serde_yaml::Value> = Vec::new();
+    let mut mixer_map = serde_yaml::Mapping::new();
+    mixer_map.insert(
+        serde_yaml::Value::String("type".to_string()),
+        serde_yaml::Value::String("Mixer".to_string()),
+    );
+    mixer_map.insert(
+        serde_yaml::Value::String("name".to_string()),
+        serde_yaml::Value::String("matrix_mixer".to_string()),
+    );
+    pipeline_steps.push(serde_yaml::Value::Mapping(mixer_map));
+    let pipeline = Some(pipeline_steps);
 
     let config = CamillaDSPConfig {
         devices,
         filters: None,
-        mixers: None,
-        pipeline: None,
+        mixers: mixers_section,
+        pipeline,
     };
 
     // Debug: Print generated config
@@ -985,8 +1118,11 @@ mod config_tests {
         assert!(yaml.contains("type: File"));
         assert!(yaml.contains("filename: /tmp/record.wav"));
         assert!(yaml.contains("channels: 1"));
-        assert!(yaml.contains("format: FLOAT32LE"));
+        assert!(yaml.contains("format: S32LE")); // S32LE to avoid CamillaDSP double-header bug
         assert!(yaml.contains("wav_header: true"));
+        // Check for mixer and pipeline sections (added for channel routing)
+        assert!(yaml.contains("mixers:"));
+        assert!(yaml.contains("pipeline:"));
     }
 
     #[test]
@@ -1086,8 +1222,12 @@ mod config_tests {
         assert!(yaml.contains("playback:"));
         assert!(yaml.contains("type: File"));
         assert!(yaml.contains("channels: 1"));
-        assert!(yaml.contains("format: FLOAT32LE"));
+        assert!(yaml.contains("format: S32LE")); // S32LE to avoid CamillaDSP double-header bug
         assert!(yaml.contains("wav_header: true"));
         assert!(yaml.contains("filename: record.wav"));
+        // Check for mixer and pipeline sections (added for channel routing)
+        assert!(yaml.contains("mixers:"));
+        assert!(yaml.contains("matrix_mixer:"));
+        assert!(yaml.contains("pipeline:"));
     }
 }
