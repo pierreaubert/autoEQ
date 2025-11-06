@@ -283,14 +283,16 @@ pub fn setup_drivers_bounds(
         let driver_low = &drivers_data.drivers[i];
         let driver_high = &drivers_data.drivers[i + 1];
 
-        // Get frequency ranges
-        let (_, max_low) = driver_low.freq_range();
-        let (min_high, _) = driver_high.freq_range();
+        // Use geometric mean frequencies as characteristic frequencies of each driver
+        let mean_low = driver_low.mean_freq();
+        let mean_high = driver_high.mean_freq();
 
-        // Crossover should be between the two drivers with some margin
+        // Crossover should be between the geometric means with reasonable margin
         // Use log10 space for better optimization
-        let xover_min = (max_low * 0.5).max(args.min_freq).log10();
-        let xover_max = (min_high * 2.0).min(args.max_freq).log10();
+        // Allow range from 0.5x mean_low to 2x mean_high, centered on geometric mean of the two means
+        let geometric_center = (mean_low * mean_high).sqrt();
+        let xover_min = (geometric_center * 0.5).max(args.min_freq).log10();
+        let xover_max = (geometric_center * 2.0).min(args.max_freq).log10();
 
         // Ensure bounds are valid
         let xover_min = xover_min.min(xover_max - 0.1);

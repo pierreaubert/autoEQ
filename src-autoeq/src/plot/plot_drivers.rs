@@ -198,6 +198,7 @@ pub fn plot_drivers(
             Axis::new()
                 .title("Frequency (Hz)".to_string())
                 .type_(AxisType::Log)
+                .range(vec![1.301, 4.301])
                 .grid_color("rgba(128, 128, 128, 0.2)"),
         )
         .y_axis(
