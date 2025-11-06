@@ -260,6 +260,26 @@ pub struct Args {
     /// If a threshold is provided (e.g., --qa 0.4), also perform QA analysis
     #[arg(long, value_name = "THRESHOLD")]
     pub qa: Option<f64>,
+
+    /// Path to first driver measurement CSV file (for multi-driver optimization with --loss drivers-flat)
+    #[arg(long)]
+    pub driver1: Option<PathBuf>,
+
+    /// Path to second driver measurement CSV file (for multi-driver optimization with --loss drivers-flat)
+    #[arg(long)]
+    pub driver2: Option<PathBuf>,
+
+    /// Path to third driver measurement CSV file (for multi-driver optimization with --loss drivers-flat)
+    #[arg(long)]
+    pub driver3: Option<PathBuf>,
+
+    /// Path to fourth driver measurement CSV file (for multi-driver optimization with --loss drivers-flat)
+    #[arg(long)]
+    pub driver4: Option<PathBuf>,
+
+    /// Crossover type for multi-driver optimization (butterworth2, linkwitzriley2, linkwitzriley4)
+    #[arg(long, default_value = "linkwitzriley4")]
+    pub crossover_type: String,
 }
 
 impl Args {
@@ -711,6 +731,41 @@ pub fn validate_args(args: &Args) -> Result<(), String> {
 
     if args.adaptive_weight_cr < 0.0 || args.adaptive_weight_cr > 1.0 {
         return Err("Adaptive weight for CR must be between 0.0 and 1.0".to_string());
+    }
+
+    // Validate multi-driver arguments
+    if args.loss == LossType::DriversFlat {
+        // Check that at least driver1 and driver2 are provided
+        if args.driver1.is_none() || args.driver2.is_none() {
+            return Err("Multi-driver optimization requires at least --driver1 and --driver2 when using --loss drivers-flat".to_string());
+        }
+
+        // Check crossover type
+        let valid_crossover_types = ["butterworth2", "linkwitzriley2", "linkwitzriley4"];
+        if !valid_crossover_types.contains(&args.crossover_type.as_str()) {
+            return Err(format!(
+                "Invalid crossover type '{}'. Valid types: {}",
+                args.crossover_type,
+                valid_crossover_types.join(", ")
+            ));
+        }
+
+        // Count number of drivers
+        let n_drivers = [&args.driver1, &args.driver2, &args.driver3, &args.driver4]
+            .iter()
+            .filter(|d| d.is_some())
+            .count();
+        if n_drivers < 2 || n_drivers > 4 {
+            return Err(format!(
+                "Multi-driver optimization requires 2-4 drivers, got {}",
+                n_drivers
+            ));
+        }
+    } else {
+        // If not using drivers-flat loss, driver arguments should not be provided
+        if args.driver1.is_some() || args.driver2.is_some() || args.driver3.is_some() || args.driver4.is_some() {
+            return Err("Driver arguments (--driver1, --driver2, etc.) can only be used with --loss drivers-flat".to_string());
+        }
     }
 
     Ok(())

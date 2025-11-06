@@ -33,6 +33,7 @@ pub use directory::sanitize_dir_name;
 pub use interpolate::*;
 pub use normalize::*;
 pub use read_api::*;
+pub use read_csv::load_driver_measurement;
 pub use read_csv::load_frequency_response;
 pub use read_csv::read_curve_from_csv;
 pub use smooth::smooth_gaussian;

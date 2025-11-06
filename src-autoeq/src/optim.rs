@@ -18,7 +18,8 @@
 use super::cli::PeqModel;
 use super::constraints::{viol_ceiling_from_spl, viol_min_gain_from_xs, viol_spacing_from_xs};
 use super::loss::{
-    HeadphoneLossData, LossType, SpeakerLossData, flat_loss, headphone_loss, speaker_score_loss,
+    DriversLossData, HeadphoneLossData, LossType, SpeakerLossData, drivers_flat_loss, flat_loss,
+    headphone_loss, speaker_score_loss,
 };
 use super::optim_de::optimize_filters_autoeq;
 use super::optim_mh::optimize_filters_mh;
@@ -290,6 +291,8 @@ pub struct ObjectiveData {
     pub headphone_score_data: Option<HeadphoneLossData>,
     /// Input curve for headphone loss (optional)
     pub input_curve: Option<Curve>,
+    /// Optional data for multi-driver crossover optimization
+    pub drivers_data: Option<DriversLossData>,
     /// Penalty weights used when the optimizer does not support nonlinear constraints
     /// If zero, penalties are disabled and true constraints (if any) are used.
     /// Penalty for ceiling constraint
@@ -358,14 +361,38 @@ pub fn parse_algorithm_name(name: &str) -> Option<AlgorithmCategory> {
 ///
 /// This is the unified fitness function used by both NLOPT and metaheuristics optimizers.
 pub fn compute_base_fitness(x: &[f64], data: &ObjectiveData) -> f64 {
-    let peq_spl = x2spl(&data.freqs, x, data.srate, data.peq_model);
-
     match data.loss_type {
+        LossType::DriversFlat => {
+            // Multi-driver crossover optimization
+            if let Some(ref drivers_data) = data.drivers_data {
+                let n_drivers = drivers_data.drivers.len();
+                // Parameter layout: [gain1, gain2, ..., gainN, xover_freq1, xover_freq2, ..., xover_freq(N-1)]
+                let gains = &x[0..n_drivers];
+                let xover_freqs_log10 = &x[n_drivers..];
+
+                // Convert crossover frequencies from log10 to Hz
+                let xover_freqs: Vec<f64> = xover_freqs_log10.iter().map(|f| 10.0_f64.powf(*f)).collect();
+
+                drivers_flat_loss(
+                    drivers_data,
+                    gains,
+                    &xover_freqs,
+                    data.srate,
+                    data.min_freq,
+                    data.max_freq,
+                )
+            } else {
+                eprintln!("Error: drivers-flat loss requested but driver data is missing");
+                process::exit(1);
+            }
+        }
         LossType::HeadphoneFlat | LossType::SpeakerFlat => {
+            let peq_spl = x2spl(&data.freqs, x, data.srate, data.peq_model);
             let error = &peq_spl - &data.deviation;
             flat_loss(&data.freqs, &error, data.min_freq, data.max_freq)
         }
         LossType::SpeakerScore => {
+            let peq_spl = x2spl(&data.freqs, x, data.srate, data.peq_model);
             if let Some(ref sd) = data.speaker_score_data {
                 let error = &peq_spl - &data.deviation;
                 let s = speaker_score_loss(sd, &data.freqs, &peq_spl);
@@ -377,6 +404,7 @@ pub fn compute_base_fitness(x: &[f64], data: &ObjectiveData) -> f64 {
             }
         }
         LossType::HeadphoneScore => {
+            let peq_spl = x2spl(&data.freqs, x, data.srate, data.peq_model);
             if let Some(ref _hd) = data.headphone_score_data {
                 // Compute remaining deviation: target - (input + peq) = deviation - peq
                 // where deviation = target - input

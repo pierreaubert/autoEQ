@@ -307,7 +307,7 @@ checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 
 [[package]]
 name = "autoeq"
-version = "0.2.252"
+version = "0.2.253"
 dependencies = [
  "accelerate-src",
  "autoeq-cea2034",
@@ -381,7 +381,7 @@ dependencies = [
 
 [[package]]
 name = "autoeq-iir"
-version = "0.2.23"
+version = "0.2.24"
 dependencies = [
  "base64 0.22.1",
  "byteorder",
@@ -5551,7 +5551,7 @@ dependencies = [
 
 [[package]]
 name = "sotf_audio"
-version = "0.2.464"
+version = "0.2.465"
 dependencies = [
  "autoeq-env",
  "chrono",
@@ -5564,7 +5564,7 @@ dependencies = [
  "hound",
  "libc",
  "ndarray",
- "rand 0.8.5",
+ "rand 0.9.2",
  "reqwest 0.12.24",
  "rustfft",
  "serde",

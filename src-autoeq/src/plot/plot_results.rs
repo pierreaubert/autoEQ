@@ -110,7 +110,7 @@ pub async fn plot_results(
     let html: String = {
         let base = HtmlPage::new()
             .with_title(title_text)
-            .with_script_link("https://cdn.plot.ly/plotly-latest.min.js")
+            .with_script_link("https://cdn.plot.ly/plotly-3.2.0.min.js")
             .with_raw(plot_filters.to_inline_html(Some("filters")));
         let page = if let Some(ref plot_spin) = plot_spin_details {
             base.with_raw(plot_spin.to_inline_html(Some("details")))

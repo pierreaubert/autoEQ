@@ -78,6 +78,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Validate CLI arguments
     autoeq::cli::validate_args_or_exit(&args);
 
+    // Check if this is multi-driver mode
+    if args.loss == autoeq::LossType::DriversFlat {
+        return run_multi_driver_optimization(&args).await;
+    }
+
     // Load and prepare all input data
     let (standard_freq, input_curve, target_curve, deviation_curve, spin_data) =
         load::load_and_prepare(&args).await?;
@@ -132,6 +137,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
             post_metrics.pre_cea2034.as_ref().map(|m| m.pref_score),
             post_metrics.cea2034_metrics.as_ref().map(|m| m.pref_score),
         ),
+        autoeq::LossType::DriversFlat => {
+            // Unreachable: DriversFlat mode uses a separate code path
+            unreachable!("DriversFlat mode should not reach this point");
+        }
     };
 
     // Check spacing constraints
@@ -217,6 +226,146 @@ async fn main() -> Result<(), Box<dyn Error>> {
         &objective_data.loss_type,
     )
     .await?;
+
+    Ok(())
+}
+
+/// Run multi-driver crossover optimization
+async fn run_multi_driver_optimization(
+    args: &autoeq::cli::Args,
+) -> Result<(), Box<dyn Error>> {
+    qa_println!(args, "🎵 Multi-driver crossover optimization mode");
+    qa_println!(args, "");
+
+    // Load multi-driver data
+    let drivers_data = load::load_drivers_data(args).await?;
+
+    qa_println!(
+        args,
+        "📊 Drivers sorted by frequency (lowest to highest):"
+    );
+    for (i, driver) in drivers_data.drivers.iter().enumerate() {
+        let (min_f, max_f) = driver.freq_range();
+        qa_println!(
+            args,
+            "   Driver {}: {:.0} Hz - {:.0} Hz (mean: {:.0} Hz)",
+            i + 1,
+            min_f,
+            max_f,
+            driver.mean_freq()
+        );
+    }
+    qa_println!(args, "");
+
+    // Set up objective data
+    let objective_data = autoeq::workflow::setup_drivers_objective_data(args, drivers_data);
+
+    // Get bounds
+    let bounds = autoeq::workflow::setup_drivers_bounds(
+        args,
+        objective_data.drivers_data.as_ref().unwrap(),
+    );
+
+    qa_println!(args, "🎯 Optimization parameters:");
+    qa_println!(
+        args,
+        "   {} driver gains + {} crossover frequencies = {} parameters",
+        objective_data.drivers_data.as_ref().unwrap().drivers.len(),
+        objective_data.drivers_data.as_ref().unwrap().drivers.len() - 1,
+        bounds.0.len()
+    );
+    qa_println!(args, "   Gain bounds: [{:.1}, {:.1}] dB", -args.max_db, args.max_db);
+    qa_println!(args, "");
+
+    // Optimize
+    qa_println!(args, "🚀 Starting optimization...");
+    let opt_result = runopt::perform_optimization_with_bounds(args, &objective_data, Some(bounds))?;
+
+    // Extract results
+    let n_drivers = objective_data.drivers_data.as_ref().unwrap().drivers.len();
+    let gains = &opt_result.params[0..n_drivers];
+    let xover_freqs_log10 = &opt_result.params[n_drivers..];
+    let xover_freqs: Vec<f64> = xover_freqs_log10.iter().map(|f| 10.0_f64.powf(*f)).collect();
+
+    // Display results
+    qa_println!(args, "");
+    qa_println!(args, "✅ Optimization complete!");
+    qa_println!(args, "");
+    qa_println!(args, "📊 Results:");
+    qa_println!(args, "");
+    qa_println!(args, "Driver Gains:");
+    for (i, gain) in gains.iter().enumerate() {
+        qa_println!(args, "   Driver {}: {:+.2} dB", i + 1, gain);
+    }
+    qa_println!(args, "");
+    qa_println!(args, "Crossover Frequencies:");
+    for (i, freq) in xover_freqs.iter().enumerate() {
+        qa_println!(
+            args,
+            "   Between Driver {} and {}: {:.0} Hz",
+            i + 1,
+            i + 2,
+            freq
+        );
+    }
+    qa_println!(args, "");
+    qa_println!(
+        args,
+        "Crossover Type: {:?}",
+        objective_data
+            .drivers_data
+            .as_ref()
+            .unwrap()
+            .crossover_type
+    );
+    qa_println!(args, "");
+
+    // Compute pre and post objective values
+    if let (Some(pre_obj), Some(post_obj)) = (opt_result.pre_objective, opt_result.post_objective)
+    {
+        qa_println!(args, "Loss (RMS deviation from flat):");
+        qa_println!(args, "   Before optimization: {:.6} dB", pre_obj);
+        qa_println!(args, "   After optimization:  {:.6} dB", post_obj);
+        qa_println!(
+            args,
+            "   Improvement: {:.2}%",
+            (pre_obj - post_obj) / pre_obj * 100.0
+        );
+    }
+
+    // Generate plot
+    qa_println!(args, "");
+    let output_path = args.output.clone().unwrap_or_else(|| {
+        let mut path = std::path::PathBuf::from(autoeq_env::DATA_GENERATED);
+        path.push("autoeq");
+        path.push("drivers_crossover_results");
+        path
+    });
+
+    qa_println!(args, "📊 Generating plots: {}", output_path.display());
+    if let Err(e) = autoeq::plot::plot_drivers_results(
+        objective_data.drivers_data.as_ref().unwrap(),
+        gains,
+        &xover_freqs,
+        args.sample_rate,
+        &output_path,
+    ) {
+        qa_eprintln!(args, "⚠️ Warning: Failed to generate plots: {}", e);
+    } else {
+        qa_println!(args, "✅ Plots generated successfully");
+    }
+
+    // QA mode output
+    if let Some(_qa_threshold) = args.qa {
+        let converge_str = if opt_result.converged { "true" } else { "false" };
+        let pre_obj = opt_result.pre_objective.unwrap_or(f64::NAN);
+        let post_obj = opt_result.post_objective.unwrap_or(f64::NAN);
+
+        println!(
+            "Converge: {} | Pre: {:.6} | Post: {:.6}",
+            converge_str, pre_obj, post_obj
+        );
+    }
 
     Ok(())
 }

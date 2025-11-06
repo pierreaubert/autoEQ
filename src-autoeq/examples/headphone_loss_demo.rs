@@ -209,7 +209,7 @@ fn generate_plots(
 <html>
 <head>
     <title>Headphone Loss Analysis Plots</title>
-    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <script src="https://cdn.plot.ly/plotly-3.2.0.min.js"></script>
 </head>
 <body>
     <h1>Headphone Loss Analysis Plots</h1>

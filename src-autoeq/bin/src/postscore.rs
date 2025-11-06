@@ -62,6 +62,10 @@ pub(super) async fn compute_post_optimization_metrics(
                 cea2034_metrics = Some(metrics);
             }
         }
+        autoeq::LossType::DriversFlat => {
+            // Unreachable: DriversFlat mode uses a separate code path
+            unreachable!("DriversFlat mode should not reach this point");
+        }
     }
 
     Ok(PostOptMetrics {
@@ -106,6 +110,10 @@ pub(super) fn print_optimization_scores(args: &autoeq::cli::Args, post: &PostOpt
                     after.sm_pir
                 );
             }
+        }
+        autoeq::LossType::DriversFlat => {
+            // Unreachable: DriversFlat mode uses a separate code path
+            unreachable!("DriversFlat mode should not reach this point");
         }
     }
 }

@@ -14,8 +14,23 @@ pub(super) fn perform_optimization(
     args: &autoeq::cli::Args,
     objective_data: &ObjectiveData,
 ) -> Result<OptimizationResult, Box<dyn Error>> {
-    let (lower_bounds, upper_bounds) = autoeq::workflow::setup_bounds(args);
-    let mut x = autoeq::workflow::initial_guess(args, &lower_bounds, &upper_bounds);
+    perform_optimization_with_bounds(args, objective_data, None)
+}
+
+pub(super) fn perform_optimization_with_bounds(
+    args: &autoeq::cli::Args,
+    objective_data: &ObjectiveData,
+    bounds: Option<(Vec<f64>, Vec<f64>)>,
+) -> Result<OptimizationResult, Box<dyn Error>> {
+    let (lower_bounds, upper_bounds) = bounds.unwrap_or_else(|| autoeq::workflow::setup_bounds(args));
+
+    // Generate initial guess based on loss type
+    let mut x = if objective_data.loss_type == autoeq::LossType::DriversFlat {
+        let n_drivers = objective_data.drivers_data.as_ref().unwrap().drivers.len();
+        autoeq::workflow::drivers_initial_guess(&lower_bounds, &upper_bounds, n_drivers)
+    } else {
+        autoeq::workflow::initial_guess(args, &lower_bounds, &upper_bounds)
+    };
 
     // Calculate pre-optimization objective value
     let pre_objective = {
@@ -48,7 +63,7 @@ pub(super) fn perform_optimization(
             );
             converged = true;
             post_objective = Some(val);
-            if args.qa.is_none() {
+            if args.qa.is_none() && objective_data.loss_type != autoeq::LossType::DriversFlat {
                 print_freq_spacing(&x, args, "global");
             }
         }
@@ -80,7 +95,7 @@ pub(super) fn perform_optimization(
                 // Update convergence status based on local refinement
                 converged = true;
                 post_objective = Some(local_val);
-                if args.qa.is_none() {
+                if args.qa.is_none() && objective_data.loss_type != autoeq::LossType::DriversFlat {
                     print_freq_spacing(&x, args, "local");
                     autoeq::x2peq::peq_print_from_x(&x, args.effective_peq_model());
                 }

@@ -34,6 +34,8 @@ pub enum LossType {
     HeadphoneFlat,
     /// Harmann/Olive Score-based loss function (maximize preference score)
     HeadphoneScore,
+    /// Multi-driver crossover optimization (flatten combined response)
+    DriversFlat,
 }
 
 /// Data required for computing speaker score-based loss
@@ -108,6 +110,109 @@ impl HeadphoneLossData {
     /// * `smooth_n` - Smoothing level as 1/N octave
     pub fn new(smooth: bool, smooth_n: usize) -> Self {
         Self { smooth, smooth_n }
+    }
+}
+
+/// Crossover filter type for multi-driver optimization
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CrossoverType {
+    /// 2nd order Butterworth (12 dB/octave)
+    Butterworth2,
+    /// 2nd order Linkwitz-Riley (12 dB/octave)
+    LinkwitzRiley2,
+    /// 4th order Linkwitz-Riley (24 dB/octave)
+    LinkwitzRiley4,
+}
+
+/// Measurement data for a single driver
+#[derive(Debug, Clone)]
+pub struct DriverMeasurement {
+    /// Frequency points in Hz
+    pub freq: Array1<f64>,
+    /// SPL measurements in dB
+    pub spl: Array1<f64>,
+    /// Phase measurements in degrees (optional for now)
+    pub phase: Option<Array1<f64>>,
+}
+
+impl DriverMeasurement {
+    /// Create a new DriverMeasurement
+    pub fn new(freq: Array1<f64>, spl: Array1<f64>, phase: Option<Array1<f64>>) -> Self {
+        assert_eq!(freq.len(), spl.len(), "freq and spl must have same length");
+        if let Some(ref p) = phase {
+            assert_eq!(freq.len(), p.len(), "freq and phase must have same length");
+        }
+        Self { freq, spl, phase }
+    }
+
+    /// Get the frequency range covered by this driver
+    pub fn freq_range(&self) -> (f64, f64) {
+        let min_freq = self.freq.iter().copied().fold(f64::INFINITY, f64::min);
+        let max_freq = self.freq.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+        (min_freq, max_freq)
+    }
+
+    /// Get the mean frequency (geometric mean)
+    pub fn mean_freq(&self) -> f64 {
+        let (min_freq, max_freq) = self.freq_range();
+        (min_freq * max_freq).sqrt()
+    }
+}
+
+/// Data required for multi-driver crossover optimization
+#[derive(Debug, Clone)]
+pub struct DriversLossData {
+    /// Measurements for each driver (sorted by frequency range, lowest first)
+    pub drivers: Vec<DriverMeasurement>,
+    /// Crossover type to use between driver pairs
+    pub crossover_type: CrossoverType,
+    /// Common frequency grid for evaluation
+    pub freq_grid: Array1<f64>,
+}
+
+impl DriversLossData {
+    /// Create a new DriversLossData instance
+    ///
+    /// # Arguments
+    /// * `drivers` - Vector of driver measurements (will be sorted by frequency)
+    /// * `crossover_type` - Type of crossover filter to use
+    pub fn new(mut drivers: Vec<DriverMeasurement>, crossover_type: CrossoverType) -> Self {
+        assert!(
+            drivers.len() >= 2 && drivers.len() <= 4,
+            "Must have 2-4 drivers, got {}",
+            drivers.len()
+        );
+
+        // Sort drivers by their mean frequency (woofer -> midrange -> tweeter)
+        drivers.sort_by(|a, b| {
+            a.mean_freq()
+                .partial_cmp(&b.mean_freq())
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+
+        // Create a common frequency grid spanning all drivers
+        // Use logarithmic spacing from lowest to highest frequency
+        let min_freq = drivers
+            .iter()
+            .map(|d| d.freq_range().0)
+            .fold(f64::INFINITY, f64::min);
+        let max_freq = drivers
+            .iter()
+            .map(|d| d.freq_range().1)
+            .fold(f64::NEG_INFINITY, f64::max);
+
+        // Create log-spaced frequency grid (10 points per octave)
+        let freq_grid = crate::read::create_log_frequency_grid(
+            10 * 10, // 10 octaves * 10 points per octave
+            min_freq.max(20.0),
+            max_freq.min(20000.0),
+        );
+
+        Self {
+            drivers,
+            crossover_type,
+            freq_grid,
+        }
     }
 }
 
@@ -286,6 +391,152 @@ pub fn regression_slope_per_octave_in_range(
 /// Convenience wrapper for slope per octave on a `Curve`.
 pub fn curve_slope_per_octave_in_range(curve: &crate::Curve, fmin: f64, fmax: f64) -> Option<f64> {
     regression_slope_per_octave_in_range(&curve.freq, &curve.spl, fmin, fmax)
+}
+
+/// Compute the combined frequency response of multiple drivers with crossovers and gains
+///
+/// # Arguments
+/// * `data` - DriversLossData containing driver measurements and crossover type
+/// * `gains` - Gain in dB for each driver
+/// * `crossover_freqs` - Crossover frequencies between successive driver pairs
+/// * `sample_rate` - Sample rate for filter design
+///
+/// # Returns
+/// * Combined frequency response in dB on the common frequency grid
+pub fn compute_drivers_combined_response(
+    data: &DriversLossData,
+    gains: &[f64],
+    crossover_freqs: &[f64],
+    sample_rate: f64,
+) -> Array1<f64> {
+    use crate::iir::{
+        compute_peq_response, peq_butterworth_highpass, peq_butterworth_lowpass,
+        peq_linkwitzriley_highpass, peq_linkwitzriley_lowpass,
+    };
+
+    let n_drivers = data.drivers.len();
+    assert_eq!(
+        gains.len(),
+        n_drivers,
+        "Must have one gain per driver (got {} gains for {} drivers)",
+        gains.len(),
+        n_drivers
+    );
+    assert_eq!(
+        crossover_freqs.len(),
+        n_drivers - 1,
+        "Must have {} crossover frequencies for {} drivers (got {})",
+        n_drivers - 1,
+        n_drivers,
+        crossover_freqs.len()
+    );
+
+    // Interpolate each driver's response to the common frequency grid
+    let mut driver_responses = Vec::new();
+    for driver in &data.drivers {
+        let interpolated = crate::read::normalize_and_interpolate_response(&data.freq_grid, &Curve {
+            freq: driver.freq.clone(),
+            spl: driver.spl.clone(),
+        });
+        driver_responses.push(interpolated.spl);
+    }
+
+    // Apply gain and crossover filters to each driver
+    let mut filtered_responses = Vec::new();
+
+    for i in 0..n_drivers {
+        let mut response = &driver_responses[i] + gains[i]; // Apply gain
+
+        // Apply crossover filters based on position
+        if i > 0 {
+            // Apply highpass from crossover with previous driver
+            let xover_freq = crossover_freqs[i - 1];
+            let hp_filter = match data.crossover_type {
+                CrossoverType::Butterworth2 => {
+                    peq_butterworth_highpass(2, xover_freq, sample_rate)
+                }
+                CrossoverType::LinkwitzRiley2 => {
+                    peq_linkwitzriley_highpass(2, xover_freq, sample_rate)
+                }
+                CrossoverType::LinkwitzRiley4 => {
+                    peq_linkwitzriley_highpass(4, xover_freq, sample_rate)
+                }
+            };
+            let hp_response = compute_peq_response(&data.freq_grid, &hp_filter, sample_rate);
+            response = response + hp_response;
+        }
+
+        if i < n_drivers - 1 {
+            // Apply lowpass from crossover with next driver
+            let xover_freq = crossover_freqs[i];
+            let lp_filter = match data.crossover_type {
+                CrossoverType::Butterworth2 => {
+                    peq_butterworth_lowpass(2, xover_freq, sample_rate)
+                }
+                CrossoverType::LinkwitzRiley2 => {
+                    peq_linkwitzriley_lowpass(2, xover_freq, sample_rate)
+                }
+                CrossoverType::LinkwitzRiley4 => {
+                    peq_linkwitzriley_lowpass(4, xover_freq, sample_rate)
+                }
+            };
+            let lp_response = compute_peq_response(&data.freq_grid, &lp_filter, sample_rate);
+            response = response + lp_response;
+        }
+
+        filtered_responses.push(response);
+    }
+
+    // Sum the filtered responses in linear domain (convert dB to linear, sum, convert back)
+    let mut combined_linear = Array1::zeros(data.freq_grid.len());
+    for response in &filtered_responses {
+        // Convert dB to linear amplitude
+        let linear = response.mapv(|db| 10.0_f64.powf(db / 20.0));
+        combined_linear = combined_linear + linear;
+    }
+
+    // Convert back to dB
+    combined_linear.mapv(|lin: f64| 20.0 * lin.log10())
+}
+
+/// Compute the loss for multi-driver crossover optimization
+///
+/// # Arguments
+/// * `data` - DriversLossData containing driver measurements
+/// * `gains` - Gain in dB for each driver
+/// * `crossover_freqs` - Crossover frequencies between successive driver pairs
+/// * `sample_rate` - Sample rate for filter design
+/// * `min_freq` - Minimum frequency for loss evaluation
+/// * `max_freq` - Maximum frequency for loss evaluation
+///
+/// # Returns
+/// * Loss value (lower is better)
+pub fn drivers_flat_loss(
+    data: &DriversLossData,
+    gains: &[f64],
+    crossover_freqs: &[f64],
+    sample_rate: f64,
+    min_freq: f64,
+    max_freq: f64,
+) -> f64 {
+    // Compute combined response
+    let combined_response = compute_drivers_combined_response(data, gains, crossover_freqs, sample_rate);
+
+    // Normalize the response (subtract the mean in the evaluation range)
+    let mut sum = 0.0;
+    let mut count = 0;
+    for i in 0..data.freq_grid.len() {
+        let freq = data.freq_grid[i];
+        if freq >= min_freq && freq <= max_freq {
+            sum += combined_response[i];
+            count += 1;
+        }
+    }
+    let mean = if count > 0 { sum / count as f64 } else { 0.0 };
+    let normalized = &combined_response - mean;
+
+    // Compute flatness loss (RMS deviation from zero)
+    flat_loss(&data.freq_grid, &normalized, min_freq, max_freq)
 }
 
 /// Calculate the standard deviation (SD) of the deviation error over the specified frequency range.

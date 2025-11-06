@@ -68,15 +68,19 @@ pub fn setup_de_common(
     penalty_data.penalty_w_spacing = 0.0;
     penalty_data.penalty_w_mingain = 0.0;
 
-    // Calculate number of filters based on PEQ model
-    let params_per_filter = crate::param_utils::params_per_filter(penalty_data.peq_model);
-    let num_filters = bounds.len() / params_per_filter;
-
     // Log setup configuration (unless in QA mode)
     if !qa_mode {
+        let params_desc = if penalty_data.loss_type == crate::LossType::DriversFlat {
+            format!("{} parameters", bounds.len())
+        } else {
+            let params_per_filter = crate::param_utils::params_per_filter(penalty_data.peq_model);
+            let num_filters = bounds.len() / params_per_filter;
+            format!("{} filters", num_filters)
+        };
+
         eprintln!(
-            "DE Setup: {} filters, pop_size={}, max_iter={}, maxeval={}",
-            num_filters, pop_size, max_iter, maxeval
+            "DE Setup: {}, pop_size={}, max_iter={}, maxeval={}",
+            params_desc, pop_size, max_iter, maxeval
         );
         eprintln!(
             "  Penalty weights: ceiling={:.1e}, spacing={:.1e}, mingain={:.1e}",
@@ -256,32 +260,38 @@ pub fn optimize_filters_autoeq_with_callback(
     let base_objective_fn = create_de_objective(setup.penalty_data.clone());
 
     // Create smart initialization based on frequency response analysis
-    let params_per_filter = crate::param_utils::params_per_filter(cli_args.effective_peq_model());
-    let num_filters = x.len() / params_per_filter;
-    let smart_config = SmartInitConfig {
-        seed: cli_args.seed, // Pass seed for deterministic initialization
-        ..SmartInitConfig::default()
+    // Skip for drivers-flat loss as it uses a different parameter layout
+    let smart_guesses = if setup.penalty_data.loss_type == crate::LossType::DriversFlat {
+        Vec::new()
+    } else {
+        let params_per_filter = crate::param_utils::params_per_filter(cli_args.effective_peq_model());
+        let num_filters = x.len() / params_per_filter;
+        let smart_config = SmartInitConfig {
+            seed: cli_args.seed, // Pass seed for deterministic initialization
+            ..SmartInitConfig::default()
+        };
+
+        // Use the inverted target as the response to analyze for problems
+        let target_response = &setup.penalty_data.deviation;
+        let freq_grid = &setup.penalty_data.freqs;
+
+        if cli_args.qa.is_none() {
+            eprintln!("🧠 Generating smart initial guesses based on frequency response analysis...");
+        }
+        let guesses = create_smart_initial_guesses(
+            target_response,
+            freq_grid,
+            num_filters,
+            &setup.bounds,
+            &smart_config,
+            cli_args.effective_peq_model(),
+        );
+
+        if cli_args.qa.is_none() {
+            eprintln!("📊 Generated {} smart initial guesses", guesses.len());
+        }
+        guesses
     };
-
-    // Use the inverted target as the response to analyze for problems
-    let target_response = &setup.penalty_data.deviation;
-    let freq_grid = &setup.penalty_data.freqs;
-
-    if cli_args.qa.is_none() {
-        eprintln!("🧠 Generating smart initial guesses based on frequency response analysis...");
-    }
-    let smart_guesses = create_smart_initial_guesses(
-        target_response,
-        freq_grid,
-        num_filters,
-        &setup.bounds,
-        &smart_config,
-        cli_args.effective_peq_model(),
-    );
-
-    if cli_args.qa.is_none() {
-        eprintln!("📊 Generated {} smart initial guesses", smart_guesses.len());
-    }
 
     // Generate Sobol quasi-random population for better space coverage
     let sobol_samples = init_sobol(
