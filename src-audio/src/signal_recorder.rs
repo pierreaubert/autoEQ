@@ -371,10 +371,6 @@ pub fn parse_channel_list(s: &str) -> Result<Vec<u16>, String> {
             .parse()
             .map_err(|_| format!("Invalid channel number: {}", part))?;
 
-        if ch == 0 {
-            return Err("Channel numbers must be >= 1 (1-based indexing)".to_string());
-        }
-
         if channels.contains(&ch) {
             return Err(format!("Duplicate channel number: {}", ch));
         }
