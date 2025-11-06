@@ -416,6 +416,182 @@ mod tests {
             assert!(v.is_finite(), "response at idx {} not finite: {}", i, v);
         }
     }
+
+    #[test]
+    fn test_a_weighting() {
+        // Test A-weighting at specific frequencies
+        // At 1kHz, A-weighting should be close to 0 dB
+        let w_1k = a_weighting_db(1000.0);
+        assert!(
+            (w_1k - 0.0).abs() < 1.0,
+            "A-weighting at 1kHz should be ~0 dB"
+        );
+
+        // At 100Hz, A-weighting should be significantly negative (low frequencies attenuated)
+        let w_100 = a_weighting_db(100.0);
+        assert!(w_100 < -15.0, "A-weighting at 100Hz should be < -15 dB");
+
+        // At 4kHz, A-weighting should be slightly positive
+        let w_4k = a_weighting_db(4000.0);
+        assert!(w_4k > 0.0, "A-weighting at 4kHz should be positive");
+    }
+
+    #[test]
+    fn test_k_weighting() {
+        // Test K-weighting approximation
+        // Below 38Hz should be heavily attenuated
+        let w_30 = k_weighting_db(30.0);
+        assert!(w_30 < -5.0, "K-weighting at 30Hz should be attenuated");
+
+        // Mid-frequencies should have less attenuation
+        let w_1k = k_weighting_db(1000.0);
+        assert!(
+            w_1k > w_30,
+            "K-weighting at 1kHz should be less attenuated than 30Hz"
+        );
+
+        // High frequencies should have boost
+        let w_5k = k_weighting_db(5000.0);
+        assert!(
+            w_5k > w_1k,
+            "K-weighting at 5kHz should have more gain than 1kHz"
+        );
+    }
+
+    #[test]
+    fn test_peq_loudness_gain_flat() {
+        // Empty PEQ should return 0 dB
+        let peq: Peq = vec![];
+        let gain = peq_loudness_gain(&peq, "k");
+        assert_eq!(gain, 0.0);
+    }
+
+    #[test]
+    fn test_peq_loudness_gain_boost() {
+        // PEQ with +6 dB peak at 1kHz should require negative gain compensation
+        let bq = Biquad::new(BiquadFilterType::Peak, 1000.0, 48000.0, 1.0, 6.0);
+        let peq = vec![(1.0, bq)];
+
+        let gain_k = peq_loudness_gain(&peq, "k");
+        let gain_a = peq_loudness_gain(&peq, "a");
+
+        println!("Test: +6 dB peak at 1kHz");
+        println!("  K-weighted gain: {:.2} dB", gain_k);
+        println!("  A-weighted gain: {:.2} dB", gain_a);
+
+        // Should be negative (reducing gain to compensate for boost)
+        assert!(
+            gain_k < 0.0,
+            "Gain compensation for boost should be negative (K-weighting)"
+        );
+        assert!(
+            gain_a < 0.0,
+            "Gain compensation for boost should be negative (A-weighting)"
+        );
+
+        // Should be roughly in the range of -1 to -4 dB for a +6 dB peak
+        assert!(
+            gain_k > -5.0 && gain_k < 0.0,
+            "K-weighted gain should be between -5 and 0 dB"
+        );
+        assert!(
+            gain_a > -5.0 && gain_a < 0.0,
+            "A-weighted gain should be between -5 and 0 dB"
+        );
+    }
+
+    #[test]
+    fn test_peq_loudness_gain_demo() {
+        println!("\n=== PEQ Loudness Compensation Demo ===\n");
+
+        // Example 1: Mid-range boost
+        println!("1. +6 dB peak at 1 kHz:");
+        let bq1 = Biquad::new(BiquadFilterType::Peak, 1000.0, 48000.0, 1.0, 6.0);
+        let peq1 = vec![(1.0, bq1)];
+        println!(
+            "   Anti-clip: {:.2} dB, K-weighted: {:.2} dB, A-weighted: {:.2} dB",
+            peq_preamp_gain(&peq1),
+            peq_loudness_gain(&peq1, "k"),
+            peq_loudness_gain(&peq1, "a")
+        );
+
+        // Example 2: Bass boost
+        println!("2. +6 dB bass at 100 Hz:");
+        let bq2 = Biquad::new(BiquadFilterType::Peak, 100.0, 48000.0, 1.0, 6.0);
+        let peq2 = vec![(1.0, bq2)];
+        println!(
+            "   Anti-clip: {:.2} dB, K-weighted: {:.2} dB, A-weighted: {:.2} dB",
+            peq_preamp_gain(&peq2),
+            peq_loudness_gain(&peq2, "k"),
+            peq_loudness_gain(&peq2, "a")
+        );
+
+        // Example 3: Treble boost
+        println!("3. +6 dB treble at 8 kHz:");
+        let bq3 = Biquad::new(BiquadFilterType::Peak, 8000.0, 48000.0, 1.0, 6.0);
+        let peq3 = vec![(1.0, bq3)];
+        println!(
+            "   Anti-clip: {:.2} dB, K-weighted: {:.2} dB, A-weighted: {:.2} dB",
+            peq_preamp_gain(&peq3),
+            peq_loudness_gain(&peq3, "k"),
+            peq_loudness_gain(&peq3, "a")
+        );
+
+        // Example 4: V-shape EQ
+        println!("4. V-shape: bass+4dB, mid-3dB, treble+3dB:");
+        let bass = Biquad::new(BiquadFilterType::Lowshelf, 150.0, 48000.0, 0.7, 4.0);
+        let mid = Biquad::new(BiquadFilterType::Peak, 1000.0, 48000.0, 1.0, -3.0);
+        let treble = Biquad::new(BiquadFilterType::Highshelf, 8000.0, 48000.0, 0.7, 3.0);
+        let peq4 = vec![(1.0, bass), (1.0, mid), (1.0, treble)];
+        println!(
+            "   Anti-clip: {:.2} dB, K-weighted: {:.2} dB, A-weighted: {:.2} dB",
+            peq_preamp_gain(&peq4),
+            peq_loudness_gain(&peq4, "k"),
+            peq_loudness_gain(&peq4, "a")
+        );
+
+        println!("\nNote: Anti-clip prevents clipping, K/A-weighted maintains loudness balance");
+    }
+
+    #[test]
+    fn test_peq_loudness_gain_cut() {
+        // PEQ with -6 dB cut at 1kHz should require positive gain compensation
+        let bq = Biquad::new(BiquadFilterType::Peak, 1000.0, 48000.0, 1.0, -6.0);
+        let peq = vec![(1.0, bq)];
+
+        let gain_k = peq_loudness_gain(&peq, "k");
+        let gain_a = peq_loudness_gain(&peq, "a");
+
+        // Should be positive (increasing gain to compensate for cut)
+        assert!(
+            gain_k > 0.0,
+            "Gain compensation for cut should be positive (K-weighting)"
+        );
+        assert!(
+            gain_a > 0.0,
+            "Gain compensation for cut should be positive (A-weighting)"
+        );
+    }
+
+    #[test]
+    fn test_peq_loudness_gain_bass_boost() {
+        // Bass boost (100 Hz) should have different impact with K vs A weighting
+        let bq = Biquad::new(BiquadFilterType::Peak, 100.0, 48000.0, 1.0, 6.0);
+        let peq = vec![(1.0, bq)];
+
+        let gain_k = peq_loudness_gain(&peq, "k");
+        let gain_a = peq_loudness_gain(&peq, "a");
+
+        // Both should be negative (compensation for boost)
+        assert!(gain_k < 0.0);
+        assert!(gain_a < 0.0);
+
+        // A-weighting attenuates low frequencies more, so compensation should be less negative
+        assert!(
+            gain_a > gain_k,
+            "A-weighted gain should be less negative (bass is less perceptually important)"
+        );
+    }
 }
 
 /// Check if two PEQs are equal
@@ -454,6 +630,138 @@ pub fn peq_spl(freq: &Array1<f64>, peq: &Peq) -> Array1<f64> {
     }
 
     current_filter
+}
+
+/// Compute A-weighting in dB for a given frequency
+///
+/// A-weighting approximates the frequency response of the human ear
+/// and is used for loudness estimation.
+///
+/// # Arguments
+/// * `f` - Frequency in Hz
+///
+/// # Returns
+/// * A-weighting value in dB
+fn a_weighting_db(f: f64) -> f64 {
+    // A-weighting formula (IEC 61672-1)
+    let f2 = f * f;
+    let f4 = f2 * f2;
+
+    let numerator = 12194.0_f64.powi(2) * f4;
+    let denominator = (f2 + 20.6_f64.powi(2))
+        * ((f2 + 107.7_f64.powi(2)) * (f2 + 737.9_f64.powi(2))).sqrt()
+        * (f2 + 12194.0_f64.powi(2));
+
+    let ra = numerator / denominator;
+    20.0 * ra.log10() + 2.0 // +2.0 is normalization constant
+}
+
+/// Compute K-weighting in dB for a given frequency
+///
+/// K-weighting is used by EBU R128 loudness measurement standard.
+/// It's composed of a pre-filter and RLB weighting.
+///
+/// # Arguments
+/// * `f` - Frequency in Hz
+///
+/// # Returns
+/// * K-weighting value in dB (approximate)
+fn k_weighting_db(f: f64) -> f64 {
+    // Simplified K-weighting approximation
+    // Based on high-shelf at ~1500Hz and high-pass around 40Hz
+
+    // High-pass stage (4th order Butterworth at 38Hz)
+    let f_hp = 38.0;
+    let hp_response = if f > 1.0 {
+        20.0 * 4.0 * (f / f_hp).log10() // 4th order = 80 dB/decade
+    } else {
+        -200.0
+    };
+    let hp_gain = hp_response.min(0.0);
+
+    // High-shelf stage (+4 dB above 1500 Hz)
+    let f_hs = 1500.0;
+    let hs_gain = if f > f_hs {
+        4.0 * (1.0 - (f_hs / f).powf(2.0).min(1.0))
+    } else {
+        0.0
+    };
+
+    hp_gain + hs_gain
+}
+
+/// Compute loudness-weighted gain adjustment for PEQ to maintain spectral balance
+///
+/// This function estimates the perceived loudness change caused by a PEQ
+/// by analyzing its frequency response with perceptual weighting.
+/// Much faster than full Replay Gain analysis.
+///
+/// # Arguments
+/// * `peq` - PEQ vector containing weighted biquad filters
+/// * `weighting` - Weighting type: "a" for A-weighting, "k" for K-weighting (EBU R128-like)
+///
+/// # Returns
+/// * Gain adjustment in dB to maintain similar loudness (0 dB = no change needed)
+///
+/// # Example
+/// ```no_run
+/// use autoeq_iir::{Biquad, BiquadFilterType, peq_loudness_gain};
+///
+/// let bq = Biquad::new(BiquadFilterType::Peak, 1000.0, 48000.0, 1.0, 6.0);
+/// let peq = vec![(1.0, bq)];
+/// let gain_adj = peq_loudness_gain(&peq, "k");
+/// println!("Apply {} dB to maintain loudness balance", gain_adj);
+/// ```
+pub fn peq_loudness_gain(peq: &Peq, weighting: &str) -> f64 {
+    if peq.is_empty() {
+        return 0.0;
+    }
+
+    // Generate logarithmic frequency array from 20Hz to 20kHz with 500 points
+    // More points than preamp_gain for better loudness integration
+    let n_points = 500;
+    let freq = Array1::logspace(
+        10.0,
+        (2.0f64 * 10.0).log10(),
+        (2.0f64 * 10000.0).log10(),
+        n_points,
+    );
+
+    // Get PEQ frequency response in dB
+    let peq_response_db = peq_spl(&freq, peq);
+
+    // Apply perceptual weighting
+    let weighted_change: f64 = freq
+        .iter()
+        .zip(peq_response_db.iter())
+        .map(|(f, peq_db)| {
+            let weight_db = match weighting {
+                "a" => a_weighting_db(*f),
+                "k" => k_weighting_db(*f),
+                _ => 0.0, // No weighting
+            };
+
+            // Convert to linear domain for integration
+            // Original: 10^(weight/20)
+            // After PEQ: 10^((weight + peq)/20)
+            // Ratio: 10^(peq/20)
+
+            let weight_linear = 10.0_f64.powf(weight_db / 20.0);
+            let peq_ratio = 10.0_f64.powf(*peq_db / 20.0);
+
+            // Weighted energy change
+            weight_linear * weight_linear * (peq_ratio * peq_ratio - 1.0)
+        })
+        .sum();
+
+    // Average weighted energy change across frequency
+    let avg_energy_change = weighted_change / n_points as f64;
+
+    // Convert back to dB (half because we squared for energy)
+    // Negative because we want to compensate (reduce if PEQ increases loudness)
+    let loudness_change_db = 10.0 * (1.0 + avg_energy_change).log10();
+
+    -loudness_change_db
 }
 
 /// Compute preamp gain for a PEQ: well adapted to computers
