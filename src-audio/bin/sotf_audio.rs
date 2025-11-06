@@ -142,11 +142,11 @@ enum Commands {
         #[arg(long, default_value = "1")]
         channels: u16,
 
-        /// Hardware output channel to send signal to (1-based, single channel only)
+        /// Hardware output channel to send signal to (0-based, single channel only)
         #[arg(long)]
         hwaudio_send_to: String,
 
-        /// Hardware input channels to record from (1-based, comma-separated)
+        /// Hardware input channels to record from (0-based, comma-separated)
         #[arg(long)]
         hwaudio_record_from: String,
 
