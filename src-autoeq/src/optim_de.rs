@@ -264,7 +264,8 @@ pub fn optimize_filters_autoeq_with_callback(
     let smart_guesses = if setup.penalty_data.loss_type == crate::LossType::DriversFlat {
         Vec::new()
     } else {
-        let params_per_filter = crate::param_utils::params_per_filter(cli_args.effective_peq_model());
+        let params_per_filter =
+            crate::param_utils::params_per_filter(cli_args.effective_peq_model());
         let num_filters = x.len() / params_per_filter;
         let smart_config = SmartInitConfig {
             seed: cli_args.seed, // Pass seed for deterministic initialization
@@ -276,7 +277,9 @@ pub fn optimize_filters_autoeq_with_callback(
         let freq_grid = &setup.penalty_data.freqs;
 
         if cli_args.qa.is_none() {
-            eprintln!("🧠 Generating smart initial guesses based on frequency response analysis...");
+            eprintln!(
+                "🧠 Generating smart initial guesses based on frequency response analysis..."
+            );
         }
         let guesses = create_smart_initial_guesses(
             target_response,

@@ -314,9 +314,7 @@ pub fn validate_params(
             || params.driver3_path.is_some()
             || params.driver4_path.is_some()
         {
-            return Err(
-                "Driver paths can only be provided when using loss='drivers-flat'".into(),
-            );
+            return Err("Driver paths can only be provided when using loss='drivers-flat'".into());
         }
     }
 
@@ -1216,7 +1214,9 @@ pub mod mocks {
 
 #[cfg(test)]
 mod tests {
-    use crate::tauri_optim::{OptimizationParams, OptimizationResult, ProgressUpdate, validate_params};
+    use crate::tauri_optim::{
+        OptimizationParams, OptimizationResult, ProgressUpdate, validate_params,
+    };
     use crate::tauri_plots::{CurveData, PlotData, curve_data_to_curve};
     use std::collections::HashMap;
 

@@ -763,7 +763,11 @@ pub fn validate_args(args: &Args) -> Result<(), String> {
         }
     } else {
         // If not using drivers-flat loss, driver arguments should not be provided
-        if args.driver1.is_some() || args.driver2.is_some() || args.driver3.is_some() || args.driver4.is_some() {
+        if args.driver1.is_some()
+            || args.driver2.is_some()
+            || args.driver3.is_some()
+            || args.driver4.is_some()
+        {
             return Err("Driver arguments (--driver1, --driver2, etc.) can only be used with --loss drivers-flat".to_string());
         }
     }

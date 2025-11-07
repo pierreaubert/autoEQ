@@ -63,6 +63,61 @@ fn exit_app(window: tauri::Window) {
     window.close().unwrap();
 }
 
+#[tauri::command]
+fn resolve_demo_track_path(relative_path: String) -> Result<String, String> {
+    // relative_path is like "/demo-audio/classical.flac"
+    // Remove leading slash if present
+    let path = relative_path.trim_start_matches('/');
+
+    #[cfg(debug_assertions)]
+    {
+        // In dev mode, construct absolute path from current working directory
+        // When running with cargo/tauri dev, CWD is already in src-tauri/
+        let cwd = std::env::current_dir()
+            .map_err(|e| format!("Failed to get current directory: {}", e))?;
+
+        println!("[TAURI] Current working directory: {:?}", cwd);
+
+        // Check if we're already in src-tauri/ directory
+        let demo_path = if cwd.ends_with("src-tauri") {
+            // Already in src-tauri/, so just use public/
+            cwd.join("public").join(path)
+        } else {
+            // At project root, need to go into src-tauri/public/
+            cwd.join("src-tauri").join("public").join(path)
+        };
+
+        println!("[TAURI] Looking for demo track at: {:?}", demo_path);
+
+        // Check if file exists
+        if !demo_path.exists() {
+            return Err(format!("Demo track not found at: {:?}", demo_path));
+        }
+
+        Ok(demo_path.to_string_lossy().to_string())
+    }
+
+    #[cfg(not(debug_assertions))]
+    {
+        // In production, demo files should be bundled as resources
+        // For now, try the same approach as dev mode
+        let cwd = std::env::current_dir()
+            .map_err(|e| format!("Failed to get current directory: {}", e))?;
+
+        let demo_path = if cwd.ends_with("src-tauri") {
+            cwd.join("public").join(path)
+        } else {
+            cwd.join("src-tauri").join("public").join(path)
+        };
+
+        if !demo_path.exists() {
+            return Err(format!("Demo track not found at: {:?}", demo_path));
+        }
+
+        Ok(demo_path.to_string_lossy().to_string())
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Find CamillaDSP binary
@@ -155,6 +210,7 @@ pub fn run() {
             generate_plot_spin_details,
             generate_plot_spin_tonal,
             exit_app,
+            resolve_demo_track_path,
             get_audio_devices,
             set_audio_device,
             get_audio_config,

@@ -231,19 +231,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
 }
 
 /// Run multi-driver crossover optimization
-async fn run_multi_driver_optimization(
-    args: &autoeq::cli::Args,
-) -> Result<(), Box<dyn Error>> {
+async fn run_multi_driver_optimization(args: &autoeq::cli::Args) -> Result<(), Box<dyn Error>> {
     qa_println!(args, "🎵 Multi-driver crossover optimization mode");
     qa_println!(args, "");
 
     // Load multi-driver data
     let drivers_data = load::load_drivers_data(args).await?;
 
-    qa_println!(
-        args,
-        "📊 Drivers sorted by frequency (lowest to highest):"
-    );
+    qa_println!(args, "📊 Drivers sorted by frequency (lowest to highest):");
     for (i, driver) in drivers_data.drivers.iter().enumerate() {
         let (min_f, max_f) = driver.freq_range();
         qa_println!(
@@ -261,10 +256,8 @@ async fn run_multi_driver_optimization(
     let objective_data = autoeq::workflow::setup_drivers_objective_data(args, drivers_data);
 
     // Get bounds
-    let bounds = autoeq::workflow::setup_drivers_bounds(
-        args,
-        objective_data.drivers_data.as_ref().unwrap(),
-    );
+    let bounds =
+        autoeq::workflow::setup_drivers_bounds(args, objective_data.drivers_data.as_ref().unwrap());
 
     qa_println!(args, "🎯 Optimization parameters:");
     qa_println!(
@@ -274,7 +267,12 @@ async fn run_multi_driver_optimization(
         objective_data.drivers_data.as_ref().unwrap().drivers.len() - 1,
         bounds.0.len()
     );
-    qa_println!(args, "   Gain bounds: [{:.1}, {:.1}] dB", -args.max_db, args.max_db);
+    qa_println!(
+        args,
+        "   Gain bounds: [{:.1}, {:.1}] dB",
+        -args.max_db,
+        args.max_db
+    );
     qa_println!(args, "");
 
     // Optimize
@@ -285,7 +283,10 @@ async fn run_multi_driver_optimization(
     let n_drivers = objective_data.drivers_data.as_ref().unwrap().drivers.len();
     let gains = &opt_result.params[0..n_drivers];
     let xover_freqs_log10 = &opt_result.params[n_drivers..];
-    let xover_freqs: Vec<f64> = xover_freqs_log10.iter().map(|f| 10.0_f64.powf(*f)).collect();
+    let xover_freqs: Vec<f64> = xover_freqs_log10
+        .iter()
+        .map(|f| 10.0_f64.powf(*f))
+        .collect();
 
     // Display results
     qa_println!(args, "");
@@ -312,17 +313,12 @@ async fn run_multi_driver_optimization(
     qa_println!(
         args,
         "Crossover Type: {:?}",
-        objective_data
-            .drivers_data
-            .as_ref()
-            .unwrap()
-            .crossover_type
+        objective_data.drivers_data.as_ref().unwrap().crossover_type
     );
     qa_println!(args, "");
 
     // Compute pre and post objective values
-    if let (Some(pre_obj), Some(post_obj)) = (opt_result.pre_objective, opt_result.post_objective)
-    {
+    if let (Some(pre_obj), Some(post_obj)) = (opt_result.pre_objective, opt_result.post_objective) {
         qa_println!(args, "Loss (RMS deviation from flat):");
         qa_println!(args, "   Before optimization: {:.6} dB", pre_obj);
         qa_println!(args, "   After optimization:  {:.6} dB", post_obj);
@@ -357,7 +353,11 @@ async fn run_multi_driver_optimization(
 
     // QA mode output
     if let Some(_qa_threshold) = args.qa {
-        let converge_str = if opt_result.converged { "true" } else { "false" };
+        let converge_str = if opt_result.converged {
+            "true"
+        } else {
+            "false"
+        };
         let pre_obj = opt_result.pre_objective.unwrap_or(f64::NAN);
         let post_obj = opt_result.post_objective.unwrap_or(f64::NAN);
 

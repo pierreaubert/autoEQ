@@ -5551,7 +5551,7 @@ dependencies = [
 
 [[package]]
 name = "sotf_audio"
-version = "0.2.465"
+version = "0.2.466"
 dependencies = [
  "autoeq-env",
  "chrono",

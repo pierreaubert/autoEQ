@@ -97,15 +97,10 @@ pub(super) async fn load_drivers_data(
     args: &autoeq::cli::Args,
 ) -> Result<DriversLossData, Box<dyn std::error::Error>> {
     // Collect driver file paths
-    let driver_paths: Vec<_> = [
-        &args.driver1,
-        &args.driver2,
-        &args.driver3,
-        &args.driver4,
-    ]
-    .iter()
-    .filter_map(|p| p.as_ref())
-    .collect();
+    let driver_paths: Vec<_> = [&args.driver1, &args.driver2, &args.driver3, &args.driver4]
+        .iter()
+        .filter_map(|p| p.as_ref())
+        .collect();
 
     if driver_paths.len() < 2 {
         return Err("At least 2 driver files are required for multi-driver optimization".into());
@@ -148,9 +143,11 @@ pub(super) async fn load_drivers_data(
     // Create DriversLossData (this will sort drivers and create freq grid)
     let drivers_data = DriversLossData::new(drivers, crossover_type);
 
-    eprintln!("✓ Initialized {} drivers with {:?} crossover",
-              drivers_data.drivers.len(),
-              drivers_data.crossover_type);
+    eprintln!(
+        "✓ Initialized {} drivers with {:?} crossover",
+        drivers_data.drivers.len(),
+        drivers_data.crossover_type
+    );
 
     Ok(drivers_data)
 }

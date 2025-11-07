@@ -371,7 +371,10 @@ pub fn compute_base_fitness(x: &[f64], data: &ObjectiveData) -> f64 {
                 let xover_freqs_log10 = &x[n_drivers..];
 
                 // Convert crossover frequencies from log10 to Hz
-                let xover_freqs: Vec<f64> = xover_freqs_log10.iter().map(|f| 10.0_f64.powf(*f)).collect();
+                let xover_freqs: Vec<f64> = xover_freqs_log10
+                    .iter()
+                    .map(|f| 10.0_f64.powf(*f))
+                    .collect();
 
                 drivers_flat_loss(
                     drivers_data,

@@ -2,7 +2,7 @@ use plotly::common::Mode;
 use plotly::layout::{Axis, AxisType};
 use plotly::{Layout, Plot, Scatter};
 
-use crate::loss::{compute_drivers_combined_response, DriversLossData};
+use crate::loss::{DriversLossData, compute_drivers_combined_response};
 
 /// Create a plot showing individual driver responses and the combined response
 ///
@@ -41,11 +41,11 @@ pub fn plot_drivers(
         );
 
         let color = match i {
-            0 => "rgb(31, 119, 180)",    // Blue (woofer)
-            1 => "rgb(255, 127, 14)",    // Orange (tweeter)
-            2 => "rgb(44, 160, 44)",     // Green (midrange)
-            3 => "rgb(214, 39, 40)",     // Red (super tweeter)
-            _ => "rgb(128, 128, 128)",   // Gray (fallback)
+            0 => "rgb(31, 119, 180)",  // Blue (woofer)
+            1 => "rgb(255, 127, 14)",  // Orange (tweeter)
+            2 => "rgb(44, 160, 44)",   // Green (midrange)
+            3 => "rgb(214, 39, 40)",   // Red (super tweeter)
+            _ => "rgb(128, 128, 128)", // Gray (fallback)
         };
 
         let trace = Scatter::new(freq_grid.to_vec(), interpolated.spl.to_vec())
@@ -89,7 +89,8 @@ pub fn plot_drivers(
                     crate::iir::peq_linkwitzriley_highpass(4, xover_freq, sample_rate)
                 }
             };
-            let hp_response = crate::iir::compute_peq_response(driver_freq_grid, &hp_filter, sample_rate);
+            let hp_response =
+                crate::iir::compute_peq_response(driver_freq_grid, &hp_filter, sample_rate);
             response = response + hp_response;
         }
 
@@ -107,7 +108,8 @@ pub fn plot_drivers(
                     crate::iir::peq_linkwitzriley_lowpass(4, xover_freq, sample_rate)
                 }
             };
-            let lp_response = crate::iir::compute_peq_response(driver_freq_grid, &lp_filter, sample_rate);
+            let lp_response =
+                crate::iir::compute_peq_response(driver_freq_grid, &lp_filter, sample_rate);
             response = response + lp_response;
         }
 
@@ -115,20 +117,16 @@ pub fn plot_drivers(
         // The response is already centered around the gain value
 
         let color = match i {
-            0 => "rgb(31, 119, 180)",    // Blue (woofer)
-            1 => "rgb(255, 127, 14)",    // Orange (tweeter)
-            2 => "rgb(44, 160, 44)",     // Green (midrange)
-            3 => "rgb(214, 39, 40)",     // Red (super tweeter)
-            _ => "rgb(128, 128, 128)",   // Gray (fallback)
+            0 => "rgb(31, 119, 180)",  // Blue (woofer)
+            1 => "rgb(255, 127, 14)",  // Orange (tweeter)
+            2 => "rgb(44, 160, 44)",   // Green (midrange)
+            3 => "rgb(214, 39, 40)",   // Red (super tweeter)
+            _ => "rgb(128, 128, 128)", // Gray (fallback)
         };
 
         let trace = Scatter::new(driver_freq_grid.to_vec(), response.to_vec())
             .mode(Mode::Lines)
-            .name(format!(
-                "Driver {} ({:+.1} dB)",
-                i + 1,
-                gains[i]
-            ))
+            .name(format!("Driver {} ({:+.1} dB)", i + 1, gains[i]))
             .line(plotly::common::Line::new().color(color).width(2.0));
 
         plot.add_trace(trace);
@@ -140,11 +138,7 @@ pub fn plot_drivers(
     let trace_combined = Scatter::new(freq_grid.to_vec(), combined_response_normalized.to_vec())
         .mode(Mode::Lines)
         .name("Combined Response")
-        .line(
-            plotly::common::Line::new()
-                .color("rgb(0, 0, 0)")
-                .width(3.0),
-        );
+        .line(plotly::common::Line::new().color("rgb(0, 0, 0)").width(3.0));
 
     plot.add_trace(trace_combined);
 
@@ -176,7 +170,11 @@ pub fn plot_drivers(
             .y_ref("paper")
             .text(format!("Crossover {}: {:.0} Hz", i + 1, xover_freq))
             .show_arrow(false)
-            .font(plotly::common::Font::new().size(10).color("rgb(100, 100, 100)"))
+            .font(
+                plotly::common::Font::new()
+                    .size(10)
+                    .color("rgb(100, 100, 100)"),
+            )
             .x_anchor(plotly::common::Anchor::Center)
             .y_anchor(plotly::common::Anchor::Bottom);
         annotations.push(annotation);

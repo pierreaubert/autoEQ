@@ -434,10 +434,13 @@ pub fn compute_drivers_combined_response(
     // Interpolate each driver's response to the common frequency grid
     let mut driver_responses = Vec::new();
     for driver in &data.drivers {
-        let interpolated = crate::read::normalize_and_interpolate_response(&data.freq_grid, &Curve {
-            freq: driver.freq.clone(),
-            spl: driver.spl.clone(),
-        });
+        let interpolated = crate::read::normalize_and_interpolate_response(
+            &data.freq_grid,
+            &Curve {
+                freq: driver.freq.clone(),
+                spl: driver.spl.clone(),
+            },
+        );
         driver_responses.push(interpolated.spl);
     }
 
@@ -452,9 +455,7 @@ pub fn compute_drivers_combined_response(
             // Apply highpass from crossover with previous driver
             let xover_freq = crossover_freqs[i - 1];
             let hp_filter = match data.crossover_type {
-                CrossoverType::Butterworth2 => {
-                    peq_butterworth_highpass(2, xover_freq, sample_rate)
-                }
+                CrossoverType::Butterworth2 => peq_butterworth_highpass(2, xover_freq, sample_rate),
                 CrossoverType::LinkwitzRiley2 => {
                     peq_linkwitzriley_highpass(2, xover_freq, sample_rate)
                 }
@@ -470,9 +471,7 @@ pub fn compute_drivers_combined_response(
             // Apply lowpass from crossover with next driver
             let xover_freq = crossover_freqs[i];
             let lp_filter = match data.crossover_type {
-                CrossoverType::Butterworth2 => {
-                    peq_butterworth_lowpass(2, xover_freq, sample_rate)
-                }
+                CrossoverType::Butterworth2 => peq_butterworth_lowpass(2, xover_freq, sample_rate),
                 CrossoverType::LinkwitzRiley2 => {
                     peq_linkwitzriley_lowpass(2, xover_freq, sample_rate)
                 }
@@ -520,7 +519,8 @@ pub fn drivers_flat_loss(
     max_freq: f64,
 ) -> f64 {
     // Compute combined response
-    let combined_response = compute_drivers_combined_response(data, gains, crossover_freqs, sample_rate);
+    let combined_response =
+        compute_drivers_combined_response(data, gains, crossover_freqs, sample_rate);
 
     // Normalize the response (subtract the mean in the evaluation range)
     let mut sum = 0.0;

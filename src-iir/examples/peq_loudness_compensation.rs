@@ -22,9 +22,18 @@ fn main() {
     let loudness_k = peq_loudness_gain(&peq1, "k");
     let loudness_a = peq_loudness_gain(&peq1, "a");
 
-    println!("  Anti-clipping gain:     {:.2} dB (prevents clipping only)", clip_gain);
-    println!("  K-weighted compensation: {:.2} dB (maintains EBU R128-like loudness)", loudness_k);
-    println!("  A-weighted compensation: {:.2} dB (maintains A-weighted loudness)", loudness_a);
+    println!(
+        "  Anti-clipping gain:     {:.2} dB (prevents clipping only)",
+        clip_gain
+    );
+    println!(
+        "  K-weighted compensation: {:.2} dB (maintains EBU R128-like loudness)",
+        loudness_k
+    );
+    println!(
+        "  A-weighted compensation: {:.2} dB (maintains A-weighted loudness)",
+        loudness_a
+    );
     println!();
 
     // Example 2: Bass boost
@@ -72,7 +81,8 @@ fn main() {
     println!();
 
     println!("=== Usage in Your Audio Pipeline ===");
-    println!("
+    println!(
+        "
 When applying PEQ to audio, use both gains:
 1. peq_preamp_gain()    -> Prevents clipping
 2. peq_loudness_gain()  -> Maintains perceived loudness
@@ -85,5 +95,6 @@ This is orders of magnitude faster than Replay Gain because:
 - No audio file decoding required
 - No sample-by-sample processing
 - Just evaluates transfer functions (microseconds vs seconds)
-");
+"
+    );
 }

@@ -76,7 +76,9 @@ mod tests {
         let sample_rate = 48000.0;
         let frequencies = vec![100.0, 1000.0, 10000.0];
 
-        let result = compute_eq_response(filters, sample_rate, frequencies).await.unwrap();
+        let result = compute_eq_response(filters, sample_rate, frequencies)
+            .await
+            .unwrap();
 
         assert_eq!(result.frequencies.len(), 3);
         assert_eq!(result.individual_responses.len(), 1);
@@ -99,7 +101,9 @@ mod tests {
         let sample_rate = 48000.0;
         let frequencies = vec![1000.0];
 
-        let result = compute_eq_response(filters, sample_rate, frequencies).await.unwrap();
+        let result = compute_eq_response(filters, sample_rate, frequencies)
+            .await
+            .unwrap();
 
         // Disabled filter should contribute 0 dB
         assert_eq!(result.combined_response[0], 0.0);

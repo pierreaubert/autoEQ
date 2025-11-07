@@ -22,7 +22,8 @@ pub(super) fn perform_optimization_with_bounds(
     objective_data: &ObjectiveData,
     bounds: Option<(Vec<f64>, Vec<f64>)>,
 ) -> Result<OptimizationResult, Box<dyn Error>> {
-    let (lower_bounds, upper_bounds) = bounds.unwrap_or_else(|| autoeq::workflow::setup_bounds(args));
+    let (lower_bounds, upper_bounds) =
+        bounds.unwrap_or_else(|| autoeq::workflow::setup_bounds(args));
 
     // Generate initial guess based on loss type
     let mut x = if objective_data.loss_type == autoeq::LossType::DriversFlat {
