@@ -26,20 +26,31 @@ fn parse_list_u16(var: &str) -> Option<Vec<u16>> {
     })
 }
 
-fn python_exe() -> String {
-    if cfg!(windows) {
-        "python".to_string()
+fn generator_binary() -> PathBuf {
+    // Find the generate_audio_tests binary in workspace target directory
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let binary_name = if cfg!(windows) {
+        "generate_audio_tests.exe"
     } else {
-        "python3".to_string()
-    }
-}
+        "generate_audio_tests"
+    };
 
-fn script_path() -> PathBuf {
-    // Crate root -> ../scripts/generate_audio_tests.py
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("..")
-        .join("scripts")
-        .join("generate_audio_tests.py")
+    // Workspace target is at ../target relative to src-audio
+    let workspace_root = manifest_dir.parent().expect("Failed to get workspace root");
+
+    // Try release first, then debug
+    let release_path = workspace_root.join("target").join("release").join(binary_name);
+    if release_path.exists() {
+        return release_path;
+    }
+
+    let debug_path = workspace_root.join("target").join("debug").join(binary_name);
+    if debug_path.exists() {
+        return debug_path;
+    }
+
+    // If neither exists, return release path and let the caller handle the error
+    release_path
 }
 
 fn out_dir() -> PathBuf {
@@ -130,33 +141,29 @@ async fn e2e_loopback_id_and_thd() {
         .and_then(|v| v.parse().ok())
         .unwrap_or(3);
 
-    // Generate files with Python script
-    // let script = script_path();
-    // assert!(
-    //     script.exists(),
-    //     "generator script not found at {:?}",
-    //     script
-    // );
-    // let status = Command::new(python_exe())
-    //     .arg(&script)
-    //     .arg("--out-dir")
-    //     .arg(out_dir())
-    //     .arg("--formats")
-    //     .arg("wav")
-    //     .arg("--channels")
-    //     .arg(ch.to_string())
-    //     .arg("--sample-rates")
-    //     .arg(sr.to_string())
-    //     .arg("--bits")
-    //     .arg(bits.to_string())
-    //     .arg("--signals")
-    //     .arg("id")
-    //     .arg("thd1k")
-    //     .arg("--duration")
-    //     .arg(duration.to_string())
-    //     .status()
-    //     .expect("failed to run python");
-    // assert!(status.success(), "generator failed");
+    // Generate files with Rust binary
+    let generator = generator_binary();
+    assert!(
+        generator.exists(),
+        "generator binary not found at {:?}. Run 'cargo build --release --bin generate_audio_tests' first.",
+        generator
+    );
+    let status = Command::new(&generator)
+        .arg("--out-dir")
+        .arg(out_dir())
+        .arg("--channels")
+        .arg(ch.to_string())
+        .arg("--sample-rates")
+        .arg(sr.to_string())
+        .arg("--bits")
+        .arg(bits.to_string())
+        .arg("--signals")
+        .arg("id,thd1k")
+        .arg("--duration")
+        .arg(duration.to_string())
+        .status()
+        .expect("failed to run generator");
+    assert!(status.success(), "generator failed");
 
     let id_file = generated_id_path(ch, sr, bits);
     let thd_file = generated_thd1k_path(ch, sr, bits);
