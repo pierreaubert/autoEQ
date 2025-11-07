@@ -32,6 +32,9 @@ export default defineConfig(async () => ({
   // as the base for all its operations, including finding index.html
   root: path.resolve(__dirname, "./src-ui-frontend"),
 
+  // Point publicDir to Tauri's public directory so static assets are served correctly
+  publicDir: path.resolve(__dirname, "./src-tauri/public"),
+
   build: {
     // 'outDir' is relative to the new 'root' (i.e., 'frontend')
     // We use a relative path '../dist' to put the final build
