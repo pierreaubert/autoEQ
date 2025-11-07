@@ -1449,6 +1449,29 @@ input[type="checkbox"] {
   padding: var(--spacing-lg);
 }
 
+/* Capture Panel for inline use (not in modal) */
+.capture-panel {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.capture-panel-container {
+  width: 100%;
+  min-height: 600px;
+  display: flex;
+  flex-direction: column;
+}
+
+.capture-panel-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+  padding: 0;
+  width: 100%;
+}
+
 /* Control blocks with titles */
 .capture-controls-block {
   display: flex;

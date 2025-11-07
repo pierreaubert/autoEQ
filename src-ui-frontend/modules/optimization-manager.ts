@@ -209,12 +209,36 @@ export class OptimizationManager {
     this.optimizationStages = [];
     this.progressData = [];
 
+    console.log("[OPTIMIZATION] 🚀 Starting optimization with params:", {
+      num_filters: params.num_filters,
+      algo: params.algo,
+      loss: params.loss,
+      has_target_frequencies: !!params.target_frequencies,
+      target_frequencies_length: params.target_frequencies?.length,
+      has_target_magnitudes: !!params.target_magnitudes,
+      target_magnitudes_length: params.target_magnitudes?.length,
+      has_curve_path: !!params.curve_path,
+      curve_path: params.curve_path,
+    });
+
     try {
+      console.log("[OPTIMIZATION] 📞 Invoking backend run_optimization...");
       const result = (await invoke("run_optimization", {
         params,
       })) as OptimizationResult;
+      console.log("[OPTIMIZATION] 📥 Backend returned result");
 
       if (result.success) {
+        console.log("[OPTIMIZATION] ✅ Backend returned success, processing result...");
+        console.log("[OPTIMIZATION] Result data:", {
+          has_filter_params: !!result.filter_params,
+          has_scores: !!(result.preference_score_before !== undefined && result.preference_score_after !== undefined && result.preference_score_before !== null && result.preference_score_after !== null),
+          has_filter_response: !!result.filter_response,
+          has_spin_details: !!result.spin_details,
+          has_filter_plots: !!result.filter_plots,
+          callback_registered: !!this.onOptimizationComplete,
+        });
+
         // Store the optimization results for later use (e.g., APO export)
         if (result.filter_params) {
           this.lastFilterParams = result.filter_params;
@@ -225,7 +249,11 @@ export class OptimizationManager {
         }
 
         if (this.onOptimizationComplete) {
+          console.log("[OPTIMIZATION] 🔔 Invoking onOptimizationComplete callback...");
           this.onOptimizationComplete(result);
+          console.log("[OPTIMIZATION] ✅ Callback invoked successfully");
+        } else {
+          console.error("[OPTIMIZATION] ❌ No onOptimizationComplete callback registered!");
         }
       } else {
         const error = result.error_message || "Unknown optimization error";
@@ -236,7 +264,13 @@ export class OptimizationManager {
 
       return result;
     } catch (error) {
-      console.error("Optimization failed:", error);
+      console.error("[OPTIMIZATION] ❌ Optimization failed with error:", error);
+      console.error("[OPTIMIZATION] Error details:", {
+        type: typeof error,
+        isError: error instanceof Error,
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";
 
@@ -369,8 +403,15 @@ export class OptimizationManager {
 
       // Load target curve data from CSV file
       if (headphoneTarget) {
+        console.log("[OPTIMIZATION] Loading headphone target:", headphoneTarget);
         const targetData = await this.loadHeadphoneTarget(headphoneTarget);
         if (targetData) {
+          console.log("[OPTIMIZATION] Target data loaded:", {
+            frequencies: targetData.frequencies.length,
+            magnitudes: targetData.magnitudes.length,
+            firstFreq: targetData.frequencies[0],
+            lastFreq: targetData.frequencies[targetData.frequencies.length - 1],
+          });
           baseParams.target_frequencies = targetData.frequencies;
           baseParams.target_magnitudes = targetData.magnitudes;
         } else {
@@ -435,10 +476,18 @@ export class OptimizationManager {
     targetName: string,
   ): Promise<{ frequencies: number[]; magnitudes: number[] } | null> {
     try {
-      // Fetch the CSV file from the public directory
-      const response = await fetch(
-        `/public/headphone-targets/${targetName}.csv`,
-      );
+      const targetPath = `/headphone-targets/${targetName}.csv`;
+      console.log("[OPTIMIZATION] Fetching target from:", targetPath);
+
+      // Fetch the CSV file from the public directory (files in public/ are served at root)
+      const response = await fetch(targetPath);
+
+      console.log("[OPTIMIZATION] Fetch response:", {
+        ok: response.ok,
+        status: response.status,
+        statusText: response.statusText,
+      });
+
       if (!response.ok) {
         console.error(
           `[OPTIMIZATION] Failed to fetch target file: ${response.statusText}`,
@@ -447,7 +496,9 @@ export class OptimizationManager {
       }
 
       const csvText = await response.text();
+      console.log("[OPTIMIZATION] CSV text length:", csvText.length);
       const lines = csvText.trim().split("\n");
+      console.log("[OPTIMIZATION] CSV lines:", lines.length);
 
       const frequencies: number[] = [];
       const magnitudes: number[] = [];
@@ -461,7 +512,8 @@ export class OptimizationManager {
         if (
           i === 0 &&
           (line.toLowerCase().includes("freq") ||
-            line.toLowerCase().includes("hz"))
+            line.toLowerCase().includes("hz") ||
+            line.toLowerCase().includes("spl"))
         ) {
           continue; // Skip header
         }
@@ -477,6 +529,11 @@ export class OptimizationManager {
           }
         }
       }
+
+      console.log("[OPTIMIZATION] Parsed target data points:", {
+        frequencies: frequencies.length,
+        magnitudes: magnitudes.length,
+      });
 
       return { frequencies, magnitudes };
     } catch (error) {

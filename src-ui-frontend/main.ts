@@ -1,5 +1,8 @@
 // Refactored main application - step-based workflow
 
+// Import web components first so they're registered
+import "./modules/audio-capture/capture-panel";
+
 import {
   UIManager,
   PlotComposer,
@@ -179,27 +182,16 @@ class AutoEQApplication {
 
           <!-- Step 4: Listening & Testing -->
           <div data-step="4" id="step4-container">
-            <div class="step-content-wrapper">
-              <div class="step-header-section">
-                <h2 class="step-title">Listening & Testing</h2>
-                <p class="step-description">
-                  Test your optimized EQ with the audio player. Toggle EQ on/off to hear the difference.
-                </p>
-              </div>
-              <div class="results-content">
-                <!-- Audio Player for Step 4 -->
-                <div class="audio-player-section">
-                  <div class="audio-controls" id="step4-audio-controls"></div>
-                </div>
-              </div>
-              <div class="step-actions">
-                <button type="button" id="continue_to_save_btn" class="btn btn-primary btn-large">
-                  Continue to Save & Export
-                </button>
-                <button type="button" id="reoptimize_btn" class="btn btn-outline">
-                  Re-run Optimization
-                </button>
-              </div>
+            <h2 class="step-title">Listening & Testing</h2>
+            <p class="step-description">
+              Test your optimized EQ with the audio player. Toggle EQ on/off to hear the difference.
+            </p>
+            <!-- Audio Player for Step 4 -->
+            <div id="step4-audio-controls"></div>
+            <div class="step-actions" style="margin-top: 24px;">
+              <button type="button" id="continue_to_save_btn" class="btn btn-primary btn-large">
+                Continue to Save & Export
+              </button>
             </div>
           </div>
 
@@ -376,13 +368,6 @@ class AutoEQApplication {
       });
     }
 
-    const reoptimizeBtn = document.getElementById("reoptimize_btn");
-    if (reoptimizeBtn) {
-      reoptimizeBtn.addEventListener("click", () => {
-        this.stepNavigator.goToStep(3);
-      });
-    }
-
     // Setup Step 5 button handlers
     const startNewBtn = document.getElementById("start_new_btn");
     if (startNewBtn) {
@@ -434,7 +419,7 @@ class AutoEQApplication {
       // Load a default demo track to start CamillaDSP
       // This ensures CamillaDSP is running and ready to receive EQ parameters
       try {
-        await this.audioPlayer.loadDemoTrack("demo1.flac");
+        await this.audioPlayer.loadDemoTrack("classical");
         console.log("[Main] Default demo track loaded - CamillaDSP is now running and ready for EQ updates");
       } catch (error) {
         console.warn("[Main] Could not load default demo track (this is OK if no demo files exist):", error);
@@ -508,6 +493,14 @@ class AutoEQApplication {
         if (captureInputs) {
           captureInputs.style.display = "block";
           captureInputs.classList.add("active");
+
+          // Render the capture panel web component if not already rendered
+          const container = captureInputs.querySelector('#capture_panel_container');
+          if (container && !container.querySelector('capture-panel')) {
+            const capturePanel = document.createElement('capture-panel');
+            container.appendChild(capturePanel);
+            console.log('[Main] Capture panel web component rendered');
+          }
         }
         if (description) {
           description.textContent = "Capture live audio measurements using your microphone and test signal.";
@@ -738,12 +731,33 @@ class AutoEQApplication {
   private async handleOptimizationSuccess(
     result: OptimizationResult,
   ): Promise<void> {
+    console.log("[MAIN] 🎯 handleOptimizationSuccess() called!");
+    console.log("[MAIN] Result data:", {
+      success: result.success,
+      has_filter_params: !!result.filter_params,
+      filter_params_length: result.filter_params?.length,
+      has_scores: !!(result.preference_score_before !== undefined && result.preference_score_after !== undefined && result.preference_score_before !== null && result.preference_score_after !== null),
+      score_before: result.preference_score_before,
+      score_after: result.preference_score_after,
+      has_filter_response: !!result.filter_response,
+      has_spin_details: !!result.spin_details,
+      has_filter_plots: !!result.filter_plots,
+      error_message: result.error_message,
+    });
+
     try {
-      // Update scores if available
+      // Update scores if available (check for both undefined and null)
+      // Note: Headphone optimization doesn't calculate preference scores, so they come back as null
       if (
         result.preference_score_before !== undefined &&
-        result.preference_score_after !== undefined
+        result.preference_score_after !== undefined &&
+        result.preference_score_before !== null &&
+        result.preference_score_after !== null
       ) {
+        console.log("[MAIN] 📊 Updating scores:", {
+          before: result.preference_score_before,
+          after: result.preference_score_after,
+        });
         // Update scores in Step 3
         this.updateStep3Scores(
           result.preference_score_before,
@@ -755,6 +769,8 @@ class AutoEQApplication {
           result.preference_score_before,
           result.preference_score_after,
         );
+      } else {
+        console.log("[MAIN] ℹ️  Skipping score update (scores not available for this optimization type)");
       }
 
       // Update audio player with new filter parameters
@@ -776,7 +792,9 @@ class AutoEQApplication {
       }
 
       // Generate plots using Tauri backend
+      console.log("[MAIN] 📊 Generating optimization plots...");
       await this.generateOptimizationPlots(result);
+      console.log("[MAIN] ✅ Plots generated successfully");
 
       // Show close button instead of cancel button
       this.uiManager.showCloseButton();
@@ -805,7 +823,9 @@ class AutoEQApplication {
       }
 
       // Enable Step 4 for when user is ready to test with audio
+      console.log("[MAIN] 🎵 Enabling Step 4 (Listening & Testing)...");
       this.stepNavigator.setStepEnabled(4, true);
+      console.log("[MAIN] ✅ Step 4 enabled successfully");
     } catch (error) {
       console.error("Error processing optimization results:", error);
       this.uiManager.showError("Error processing results: " + error);

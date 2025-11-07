@@ -82,8 +82,22 @@ export class SpectrumAnalyzerComponent {
     const dpr = window.devicePixelRatio || 1;
     const rect = this.canvas.getBoundingClientRect();
 
-    this.canvas.width = rect.width * dpr;
-    this.canvas.height = rect.height * dpr;
+    // Use getBoundingClientRect if available, otherwise fall back to canvas attributes
+    const width = rect.width > 0 ? rect.width : this.canvas.width;
+    const height = rect.height > 0 ? rect.height : this.canvas.height;
+
+    console.log("[Spectrum] Setting up canvas:", {
+      rectWidth: rect.width,
+      rectHeight: rect.height,
+      attrWidth: this.canvas.width,
+      attrHeight: this.canvas.height,
+      finalWidth: width,
+      finalHeight: height,
+      dpr
+    });
+
+    this.canvas.width = width * dpr;
+    this.canvas.height = height * dpr;
 
     // Reset context after changing canvas size
     this.ctx = this.canvas.getContext("2d");
@@ -212,6 +226,11 @@ export class SpectrumAnalyzerComponent {
     const width = this.canvas.width / dpr;
     const height = this.canvas.height / dpr;
 
+    if (width === 0 || height === 0) {
+      console.warn("[Spectrum] Canvas has zero size, skipping render", { width, height, canvasWidth: this.canvas.width, canvasHeight: this.canvas.height });
+      return;
+    }
+
     // Get background color from CSS variables
     const bgColor = this.getComputedCSSVariable("--bg-secondary");
 
@@ -315,7 +334,6 @@ export class SpectrumAnalyzerComponent {
     if (!this.ctx || !this.currentSpectrum) return;
 
     const spectrum = this.currentSpectrum;
-    const padding = 40;
 
     for (let i = 0; i < spectrum.frequencies.length; i++) {
       if (!this.ctx) return;
@@ -327,23 +345,38 @@ export class SpectrumAnalyzerComponent {
         continue;
       }
 
-      const x = this.freqToX(freq, width);
+      // Calculate bin edges (geometric mean boundaries between bins)
+      let leftEdge: number, rightEdge: number;
 
-      // Calculate bar width based on logarithmic spacing
-      let nextFreq = this.config.maxFreq;
-      if (i < spectrum.frequencies.length - 1) {
-        nextFreq = spectrum.frequencies[i + 1];
+      if (i === 0) {
+        // First bin: left edge at minFreq
+        leftEdge = this.config.minFreq;
+        rightEdge = Math.sqrt(freq * spectrum.frequencies[i + 1]);
+      } else if (i === spectrum.frequencies.length - 1) {
+        // Last bin: right edge at maxFreq
+        leftEdge = Math.sqrt(spectrum.frequencies[i - 1] * freq);
+        rightEdge = this.config.maxFreq;
+      } else {
+        // Middle bins: edges at geometric mean with neighbors
+        leftEdge = Math.sqrt(spectrum.frequencies[i - 1] * freq);
+        rightEdge = Math.sqrt(freq * spectrum.frequencies[i + 1]);
       }
-      const nextX = this.freqToX(nextFreq, width);
-      const barWidth = Math.max(1, nextX - x - 1);
+
+      // Convert edges to screen coordinates
+      const xLeft = this.freqToX(leftEdge, width);
+      const xRight = this.freqToX(rightEdge, width);
+
+      // Bar width is the distance between edges (minus small gap for visual separation)
+      const barWidth = Math.max(1, xRight - xLeft - 0.5);
 
       const barHeight = this.dbToHeight(magnitude, height);
 
       // Color based on magnitude
       const color = this.getMagnitudeColor(magnitude);
       this.ctx.fillStyle = color;
-      // Draw bars from bottom, leaving 10px for labels
-      this.ctx.fillRect(x, height - 20 - barHeight, barWidth, barHeight);
+      // Draw bars from bottom, leaving 20px for labels
+      // Position bar at left edge
+      this.ctx.fillRect(xLeft, height - 20 - barHeight, barWidth, barHeight);
     }
   }
 
@@ -433,14 +466,21 @@ export class SpectrumAnalyzerComponent {
 
   /**
    * Convert dB magnitude to height
+   * @param magnitude - dB value (typically 0 to -60)
+   * @param height - Total canvas height
+   * @returns Bar height in pixels (accounting for label space at bottom)
    */
   private dbToHeight(magnitude: number, height: number): number {
     if (!isFinite(magnitude)) {
       return 0.0;
     }
+    // Clamp magnitude to dbRange (default -60dB to 0dB)
     const clamped = Math.max(-this.config.dbRange, Math.min(0, magnitude));
+    // Normalize to 0-1 range (0dB = 1.0, -60dB = 0.0)
     const normalized = (clamped + this.config.dbRange) / this.config.dbRange;
-    return normalized * height;
+    // Scale to available height (leaving 20px for labels at bottom)
+    const availableHeight = height - 20;
+    return normalized * availableHeight;
   }
 
   /**

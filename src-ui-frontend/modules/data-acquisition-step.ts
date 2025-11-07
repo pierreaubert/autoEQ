@@ -1,6 +1,8 @@
 // Data Acquisition Step Component
 // Wraps the existing data acquisition UI for use in the step-by-step workflow
 
+import "@audio-capture/capture-panel";
+
 export type DataSource = "file" | "speaker" | "headphone" | "capture";
 
 export interface DataAcquisitionConfig {
@@ -156,24 +158,8 @@ export class DataAcquisitionStep {
 
             <!-- Capture Tab Content -->
             <div id="capture_inputs" class="tab-content">
-              <div class="capture-controls">
-                <div class="capture-main-control">
-                  <button type="button" id="capture_btn" class="capture-button-main">
-                    🎤 Open Audio Capture Modal
-                  </button>
-                  <p class="capture-description">
-                    Configure microphone settings and capture audio response measurements using test signals
-                  </p>
-                </div>
-
-                <!-- Status area for showing captured data -->
-                <div id="capture_result" class="capture-result" style="display: none">
-                  <div class="capture-result-info">
-                    <span id="capture_status_text">✅ Captured response ready</span>
-                    <button type="button" id="capture_clear" class="capture-clear-btn">Clear</button>
-                  </div>
-                  <div id="capture_plot" class="capture-plot"></div>
-                </div>
+              <div id="capture_panel_container" class="capture-panel-container">
+                <!-- Full capture interface will be rendered here -->
               </div>
             </div>
           </div>
@@ -217,6 +203,14 @@ export class DataAcquisitionStep {
         this.switchTab(tab);
       });
     });
+
+    // Also check if capture tab is initially active and render it
+    setTimeout(() => {
+      const captureInputs = this.container.querySelector('#capture_inputs');
+      if (captureInputs && captureInputs.classList.contains('active')) {
+        this.renderCapturePanel();
+      }
+    }, 100);
   }
 
   /**
@@ -245,6 +239,11 @@ export class DataAcquisitionStep {
       activeContent.classList.add('active');
     }
 
+    // If switching to capture tab, render the capture panel
+    if (source === 'capture') {
+      this.renderCapturePanel();
+    }
+
     // Update info cards
     const infoCards = this.container.querySelectorAll('.info-card');
     infoCards.forEach((card) => {
@@ -258,6 +257,18 @@ export class DataAcquisitionStep {
     // Call callback
     if (this.config.onSourceChange) {
       this.config.onSourceChange(source);
+    }
+  }
+
+  /**
+   * Render the capture panel into the container
+   */
+  private renderCapturePanel(): void {
+    const container = this.container.querySelector('#capture_panel_container');
+    if (container && !container.querySelector('capture-panel')) {
+      // Only render if not already rendered
+      const capturePanel = document.createElement('capture-panel');
+      container.appendChild(capturePanel);
     }
   }
 

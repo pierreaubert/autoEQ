@@ -2,7 +2,6 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
-import { resolveResource } from "@tauri-apps/api/path";
 import { StreamingManager, type AudioFileInfo } from "./audio-manager";
 import { SpectrumAnalyzerComponent } from "./spectrum-analyzer";
 import {
@@ -153,13 +152,13 @@ export class AudioPlayer {
       showFrequencyLabels: true,
       compactMode: false,
       demoTracks: {
-        classical: "public/demo-audio/classical.flac",
-        country: "public/demo-audio/country.flac",
-        edm: "public/demo-audio/edm.flac",
-        female_vocal: "public/demo-audio/female_vocal.flac",
-        jazz: "public/demo-audio/jazz.flac",
-        piano: "public/demo-audio/piano.flac",
-        rock: "public/demo-audio/rock.flac",
+        classical: "/demo-audio/classical.flac",
+        country: "/demo-audio/country.flac",
+        edm: "/demo-audio/edm.flac",
+        female_vocal: "/demo-audio/female_vocal.flac",
+        jazz: "/demo-audio/jazz.flac",
+        piano: "/demo-audio/piano.flac",
+        rock: "/demo-audio/rock.flac",
       },
       ...config,
     };
@@ -233,6 +232,13 @@ export class AudioPlayer {
     if (state === "playing") {
       this.isAudioPlaying = true;
       this.isAudioPaused = false;
+
+      // Restart spectrum analyzer if it's not already running
+      if (this.spectrumAnalyzer && !this.spectrumAnalyzer.isActive()) {
+        this.spectrumAnalyzer.start().catch((err) => {
+          console.error("[AudioPlayer] Failed to start spectrum analyzer:", err);
+        });
+      }
     } else if (state === "paused") {
       this.isAudioPlaying = false;
       this.isAudioPaused = true;
@@ -303,17 +309,20 @@ export class AudioPlayer {
 
   <!-- Section: Filter Configuration -->
   ${this.config.enableEQ ? `
-  <div class="filter-config-section-inline">
-    <h4>Filter Configuration</h4>
-    <div class="eq-table-container"></div>
+  <div class="filter-config-section-inline" style="margin: 16px 0; border: 1px solid var(--border-color, #ddd); border-radius: 8px; overflow: hidden;">
+    <h4 class="filter-config-header" style="margin: 0; padding: 12px; background: var(--bg-secondary, #f5f5f5); cursor: pointer; user-select: none; display: flex; align-items: center; justify-content: space-between;">
+      <span>Filter Configuration</span>
+      <span class="filter-config-toggle" style="font-size: 1.2em; transition: transform 0.2s;">▼</span>
+    </h4>
+    <div class="eq-table-container" style="display: none; padding: 12px;"></div>
   </div>
   ` : ''}
 
   <!-- Section: Spectrum Analyzer -->
-  <div class="spectrum-section-inline">
-    <h4>Spectrum Analyzer</h4>
-    <div class="frequency-analyzer">
-      <canvas class="spectrum-canvas" width="800" height="80"></canvas>
+  <div class="spectrum-section-inline" style="margin: 16px 0; padding: 12px; background: var(--bg-secondary, #f5f5f5); border-radius: 8px;">
+    <h4 style="margin: 0 0 8px 0;">Spectrum Analyzer</h4>
+    <div class="frequency-analyzer" style="width: 100%; min-height: 120px;">
+      <canvas class="spectrum-canvas" width="800" height="120" style="display: block; width: 100%; height: 120px;"></canvas>
     </div>
   </div>
 
@@ -441,6 +450,11 @@ export class AudioPlayer {
     );
     this.peakDisplay = this.container.querySelector("#metrics-peak");
 
+    console.log("[AudioPlayer] Cached ReplayGain elements:", {
+      replayGainDisplay: !!this.replayGainDisplay,
+      peakDisplay: !!this.peakDisplay,
+    });
+
     if (this.spectrumCanvas) {
       this.spectrumCtx = this.spectrumCanvas.getContext("2d");
       // Initialize spectrum analyzer component
@@ -552,6 +566,27 @@ export class AudioPlayer {
         this.callbacks.onEQToggle?.(false);
       });
     }
+
+    // Filter configuration collapsible toggle
+    const filterConfigHeader = this.container.querySelector(".filter-config-header");
+    const filterConfigToggle = this.container.querySelector(".filter-config-toggle");
+    const eqTableContainer = this.container.querySelector(".eq-table-container");
+
+    if (filterConfigHeader && filterConfigToggle && eqTableContainer) {
+      filterConfigHeader.addEventListener("click", () => {
+        const isCollapsed = (eqTableContainer as HTMLElement).style.display === "none";
+
+        if (isCollapsed) {
+          // Expand
+          (eqTableContainer as HTMLElement).style.display = "block";
+          (filterConfigToggle as HTMLElement).style.transform = "rotate(180deg)";
+        } else {
+          // Collapse
+          (eqTableContainer as HTMLElement).style.display = "none";
+          (filterConfigToggle as HTMLElement).style.transform = "rotate(0deg)";
+        }
+      });
+    }
   }
 
   // ===== AUDIO LOADING METHODS =====
@@ -563,12 +598,18 @@ export class AudioPlayer {
     }
 
     try {
-      // Resolve the resource path
-      const resolvedPath = await resolveResource(trackPath);
+      // Use backend command to resolve demo track path
+      // This works in both dev and production modes
+      console.log(`[AudioPlayer] Resolving demo track path: ${trackPath}`);
+      const resolvedPath = await invoke<string>("resolve_demo_track_path", {
+        relativePath: trackPath,
+      });
+      console.log(`[AudioPlayer] Resolved demo track path: ${resolvedPath}`);
+
       await this.loadAudioFilePath(resolvedPath);
     } catch (error) {
       console.error(`Failed to load demo track "${trackName}":`, error);
-      this.callbacks.onError?.(`Failed to load demo track: ${error}`);
+      throw error; // Re-throw so caller knows it failed
     }
   }
 
@@ -908,15 +949,25 @@ export class AudioPlayer {
     // Note: Peak display is handled by ReplayGain analysis and should not be overwritten
     // The loudnessInfo.peak is the real-time peak, but we want to show the ReplayGain peak
 
-    // Display stored ReplayGain if available (keep it displayed during playback)
-    if (this.currentReplayGain && this.replayGainDisplay) {
-      this.replayGainDisplay.textContent = `${this.currentReplayGain.gain >= 0 ? "+" : ""}${this.currentReplayGain.gain.toFixed(2)} dB`;
+    // Display stored ReplayGain and Peak if available (keep them displayed during playback)
+    if (this.currentReplayGain) {
+      if (this.replayGainDisplay) {
+        this.replayGainDisplay.textContent = `${this.currentReplayGain.gain >= 0 ? "+" : ""}${this.currentReplayGain.gain.toFixed(2)} dB`;
+      }
+      if (this.peakDisplay) {
+        this.peakDisplay.textContent = this.currentReplayGain.peak.toFixed(2);
+      }
     }
   }
 
   private async analyzeReplayGain(filePath: string): Promise<void> {
     try {
       console.log("[AudioPlayer] Analyzing ReplayGain for:", filePath);
+      console.log("[AudioPlayer] ReplayGain display elements:", {
+        replayGainDisplay: !!this.replayGainDisplay,
+        peakDisplay: !!this.peakDisplay,
+      });
+
       const result = await invoke<ReplayGainInfo>("analyze_replaygain", {
         filePath,
       });
@@ -926,12 +977,20 @@ export class AudioPlayer {
 
       // Update ReplayGain display
       if (this.replayGainDisplay) {
-        this.replayGainDisplay.textContent = `${result.gain >= 0 ? "+" : ""}${result.gain.toFixed(2)} dB`;
+        const gainText = `${result.gain >= 0 ? "+" : ""}${result.gain.toFixed(2)} dB`;
+        this.replayGainDisplay.textContent = gainText;
+        console.log("[AudioPlayer] Set ReplayGain display to:", gainText);
+      } else {
+        console.warn("[AudioPlayer] ReplayGain display element not found!");
       }
 
       // Update Peak display
       if (this.peakDisplay) {
-        this.peakDisplay.textContent = result.peak.toFixed(2);
+        const peakText = result.peak.toFixed(2);
+        this.peakDisplay.textContent = peakText;
+        console.log("[AudioPlayer] Set Peak display to:", peakText);
+      } else {
+        console.warn("[AudioPlayer] Peak display element not found!");
       }
     } catch (error) {
       console.error("[AudioPlayer] Failed to analyze ReplayGain:", error);

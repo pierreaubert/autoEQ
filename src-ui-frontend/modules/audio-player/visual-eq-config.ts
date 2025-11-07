@@ -477,14 +477,21 @@ export class VisualEQConfig {
     // Select this filter in the graph
     this.selectedFilterIndex = index;
 
-    // Request graph update
+    // Apply filters to audio backend immediately
+    this.setupEQFilters();
+
+    // Request graph update (debounced for backend computation)
     this.requestEQResponseUpdate();
 
-    // Redraw graph
+    // Redraw graphs immediately for responsive UI
     this.drawEQGraph();
+    this.drawMiniEQ();
 
-    // Update filter parameters - this will also update the display
-    this.updateFilterParams(this.currentFilterParams);
+    // Notify callback of parameter change
+    this.callbacks.onFilterParamsChange?.(this.currentFilterParams);
+
+    // Note: We don't call renderEQTable() here because it would disrupt user input
+    // The table values are already updated via the input event
   }
 
   // ===== FILTER PARAMETER MANAGEMENT =====
@@ -541,6 +548,9 @@ export class VisualEQConfig {
 
     // Recalculate and apply filters
     this.setupEQFilters();
+
+    // Re-render the table to show updated values
+    this.renderEQTable();
 
     // Update graphs (including mini EQ)
     this.requestEQResponseUpdate();
@@ -1172,6 +1182,7 @@ export class VisualEQConfig {
 
     this.requestEQResponseUpdate();
     this.drawEQGraph();
+    this.drawMiniEQ(); // Update mini EQ immediately while dragging
     this.updateTableInputs();
   }
 

@@ -48,8 +48,8 @@ export interface CaptureData {
 }
 
 export class CaptureModalManager {
-  // Modal elements
-  private captureModal: HTMLElement | null = null;
+  // Panel elements (formerly modal elements)
+  private capturePanel: HTMLElement | null = null;
   private captureModalGraph: HTMLCanvasElement | null = null;
   private captureModalPlaceholder: HTMLElement | null = null;
   private captureModalProgress: HTMLElement | null = null;
@@ -58,8 +58,6 @@ export class CaptureModalManager {
   private captureModalStart: HTMLButtonElement | null = null;
   private captureModalStop: HTMLButtonElement | null = null;
   private captureModalExport: HTMLButtonElement | null = null;
-  private captureModalCancel: HTMLButtonElement | null = null;
-  private captureModalClose: HTMLButtonElement | null = null;
 
   // Control elements
   private modalCaptureDevice: HTMLSelectElement | null = null;
@@ -130,8 +128,8 @@ export class CaptureModalManager {
   }
 
   private initializeElements(): void {
-    // Modal container
-    this.captureModal = document.getElementById("capture_modal");
+    // Panel container (can be either capture_panel or capture_modal for backward compatibility)
+    this.capturePanel = document.getElementById("capture_panel") || document.getElementById("capture_modal");
     this.captureModalGraph = document.getElementById(
       "capture_modal_graph",
     ) as HTMLCanvasElement;
@@ -155,12 +153,6 @@ export class CaptureModalManager {
     ) as HTMLButtonElement;
     this.captureModalExport = document.getElementById(
       "capture_modal_export",
-    ) as HTMLButtonElement;
-    this.captureModalCancel = document.getElementById(
-      "capture_modal_cancel",
-    ) as HTMLButtonElement;
-    this.captureModalClose = document.getElementById(
-      "capture_modal_close",
     ) as HTMLButtonElement;
 
     // Device controls
@@ -258,15 +250,6 @@ export class CaptureModalManager {
   }
 
   private setupEventListeners(): void {
-    // Modal close handlers
-    this.captureModalClose?.addEventListener("click", () => {
-      this.closeModal();
-    });
-
-    this.captureModalCancel?.addEventListener("click", () => {
-      this.closeModal();
-    });
-
     // Capture control buttons
     this.captureModalStart?.addEventListener("click", async () => {
       await this.startCapture();
@@ -319,20 +302,6 @@ export class CaptureModalManager {
 
     this.modalOutputVolume?.addEventListener("input", () => {
       this.onOutputVolumeChange();
-    });
-
-    // Close modal when clicking outside
-    this.captureModal?.addEventListener("click", (e) => {
-      if (e.target === this.captureModal) {
-        this.closeModal();
-      }
-    });
-
-    // ESC key to close modal
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && this.captureModal?.style.display === "flex") {
-        this.closeModal();
-      }
     });
 
     // Phase toggle handler
@@ -391,33 +360,37 @@ export class CaptureModalManager {
   }
 
   // Public API
-  public async openModal(): Promise<void> {
-    console.log("Opening capture modal...");
+  public async initialize(): Promise<void> {
+    console.log("Initializing capture panel...");
 
-    if (!this.captureModal) {
-      console.error("Capture modal not found");
+    if (!this.capturePanel) {
+      console.error("Capture panel not found");
       return;
     }
 
-    this.captureModal.style.display = "flex";
-    document.body.style.overflow = "hidden";
-
-    await this.initializeModal();
+    await this.initializePanel();
   }
 
-  public closeModal(): void {
-    console.log("Closing capture modal...");
+  public cleanup(): void {
+    console.log("Cleaning up capture panel...");
 
-    if (!this.captureModal) return;
+    if (!this.capturePanel) return;
 
     this.stopCapture();
-    this.captureModal.style.display = "none";
-    document.body.style.overflow = "auto";
 
     if (this.captureGraphRenderer) {
       this.captureGraphRenderer.destroy();
       this.captureGraphRenderer = null;
     }
+  }
+
+  // Backward compatibility - keep these methods but they just call initialize/cleanup
+  public async openModal(): Promise<void> {
+    await this.initialize();
+  }
+
+  public closeModal(): void {
+    this.cleanup();
   }
 
   public setCaptureCompleteCallback(
@@ -439,8 +412,8 @@ export class CaptureModalManager {
   }
 
   // Private methods
-  private async initializeModal(): Promise<void> {
-    console.log("Initializing capture modal...");
+  private async initializePanel(): Promise<void> {
+    console.log("Initializing capture panel...");
 
     // Initialize device status to neutral
     if (this.deviceStatusCallback) {

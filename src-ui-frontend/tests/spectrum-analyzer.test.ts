@@ -212,4 +212,172 @@ describe("SpectrumAnalyzerComponent", () => {
       component["render"]();
     }).not.toThrow();
   });
+
+  describe("Frequency and Magnitude Range", () => {
+    it("should correctly map 20 Hz to left edge", () => {
+      const width = 800;
+      const x = component["freqToX"](20, width);
+
+      // Left padding is 30px
+      expect(x).toBeCloseTo(30, 1);
+    });
+
+    it("should correctly map 20 kHz to right edge", () => {
+      const width = 800;
+      const x = component["freqToX"](20000, width);
+
+      // Right edge is width - 5px padding = 795px
+      expect(x).toBeCloseTo(width - 5, 1);
+    });
+
+    it("should correctly map frequencies in logarithmic scale", () => {
+      const width = 800;
+
+      // 1 kHz should be roughly in the middle (log scale)
+      const x1k = component["freqToX"](1000, width);
+      const xMid = (30 + (width - 5)) / 2;
+
+      // Should be close to middle (within 15% tolerance due to logarithmic spacing)
+      // 1kHz is not exactly at the geometric center due to 20Hz-20kHz range
+      expect(Math.abs(x1k - xMid) / xMid).toBeLessThan(0.15);
+    });
+
+    it("should correctly map 0 dB to full height", () => {
+      const height = 120; // Compact canvas height
+      const barHeight = component["dbToHeight"](0, height);
+
+      // 0 dB should use full available height (height - 20px for labels)
+      expect(barHeight).toBeCloseTo(height - 20, 1);
+    });
+
+    it("should correctly map -60 dB to zero height", () => {
+      const height = 120;
+      const barHeight = component["dbToHeight"](-60, height);
+
+      // -60 dB should have zero height
+      expect(barHeight).toBeCloseTo(0, 1);
+    });
+
+    it("should correctly map -30 dB to half height", () => {
+      const height = 120;
+      const barHeight = component["dbToHeight"](-30, height);
+
+      // -30 dB should be half of available height
+      const expectedHeight = (height - 20) / 2;
+      expect(barHeight).toBeCloseTo(expectedHeight, 1);
+    });
+
+    it("should clamp values above 0 dB", () => {
+      const height = 120;
+      const barHeight = component["dbToHeight"](10, height);
+
+      // Should clamp to 0 dB (full height)
+      expect(barHeight).toBeCloseTo(height - 20, 1);
+    });
+
+    it("should clamp values below -60 dB", () => {
+      const height = 120;
+      const barHeight = component["dbToHeight"](-100, height);
+
+      // Should clamp to -60 dB (zero height)
+      expect(barHeight).toBeCloseTo(0, 1);
+    });
+  });
+
+  describe("Bar Scaling with Canvas Size", () => {
+    it("should scale bars proportionally with canvas width", () => {
+      const widthSmall = 400;
+      const widthLarge = 1200;
+
+      const x1Small = component["freqToX"](1000, widthSmall);
+      const x2Small = component["freqToX"](2000, widthSmall);
+      const widthRatioSmall = x2Small / x1Small;
+
+      const x1Large = component["freqToX"](1000, widthLarge);
+      const x2Large = component["freqToX"](2000, widthLarge);
+      const widthRatioLarge = x2Large / x1Large;
+
+      // Ratio should be close regardless of canvas width (within 2%)
+      // Small differences due to fixed padding at different canvas sizes
+      expect(Math.abs(widthRatioSmall - widthRatioLarge) / widthRatioLarge).toBeLessThan(0.02);
+    });
+
+    it("should scale bars proportionally with canvas height", () => {
+      const heightSmall = 60;
+      const heightLarge = 240;
+
+      const barSmall = component["dbToHeight"](-30, heightSmall);
+      const barLarge = component["dbToHeight"](-30, heightLarge);
+
+      // Bar height should scale with canvas height
+      // (heightSmall - 20) / (heightLarge - 20) should equal barSmall / barLarge
+      const expectedRatio = (heightSmall - 20) / (heightLarge - 20);
+      const actualRatio = barSmall / barLarge;
+
+      expect(actualRatio).toBeCloseTo(expectedRatio, 2);
+    });
+
+    it("should handle very small canvas sizes", () => {
+      const height = 40; // Very small height
+
+      // Should still work and not return negative values
+      const barHeight = component["dbToHeight"](-20, height);
+      expect(barHeight).toBeGreaterThanOrEqual(0);
+      expect(barHeight).toBeLessThanOrEqual(height - 20);
+    });
+
+    it("should handle very large canvas sizes", () => {
+      const width = 3840; // 4K width
+      const height = 2160; // 4K height
+
+      // Should not throw and return valid values
+      const x = component["freqToX"](1000, width);
+      const barHeight = component["dbToHeight"](-30, height);
+
+      expect(x).toBeGreaterThan(0);
+      expect(x).toBeLessThan(width);
+      expect(barHeight).toBeGreaterThan(0);
+      expect(barHeight).toBeLessThan(height);
+    });
+  });
+
+  describe("Full Spectrum Data Rendering", () => {
+    it("should correctly render spectrum covering full frequency range", async () => {
+      // Create mock spectrum data covering 20 Hz to 20 kHz
+      const frequencies: number[] = [];
+      const magnitudes: number[] = [];
+
+      // Generate logarithmically spaced frequencies
+      for (let i = 0; i < 100; i++) {
+        const logFreq = Math.log10(20) + (Math.log10(20000) - Math.log10(20)) * (i / 99);
+        frequencies.push(Math.pow(10, logFreq));
+        // Simulate varying magnitudes
+        magnitudes.push(-60 + (60 * i / 99));
+      }
+
+      const mockSpectrum: SpectrumInfo = {
+        frequencies,
+        magnitudes,
+        peak_magnitude: 0,
+      };
+
+      const mockInvoke = vi.mocked(invoke);
+      mockInvoke.mockResolvedValue(mockSpectrum);
+
+      await component.start();
+      await new Promise((resolve) => setTimeout(resolve, 150));
+
+      const spectrum = component.getSpectrum();
+      expect(spectrum).toBeDefined();
+      expect(spectrum?.frequencies[0]).toBeCloseTo(20, 0);
+      expect(spectrum?.frequencies[spectrum.frequencies.length - 1]).toBeCloseTo(20000, 0);
+      expect(spectrum?.magnitudes[0]).toBeCloseTo(-60, 0);
+      expect(spectrum?.magnitudes[spectrum.magnitudes.length - 1]).toBeCloseTo(0, 0);
+
+      // Should render without throwing
+      expect(() => {
+        component["render"]();
+      }).not.toThrow();
+    });
+  });
 });

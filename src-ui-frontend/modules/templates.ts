@@ -171,24 +171,8 @@ export function generateDataAcquisition(): string {
     </div>
 
     <div id="capture_inputs" class="tab-content">
-      <div class="capture-controls">
-        <div class="capture-main-control">
-          <button type="button" id="capture_btn" class="capture-button-main">
-            🎤 Open Audio Capture Modal
-          </button>
-          <p class="capture-description">
-            Configure microphone settings and capture audio response measurements
-          </p>
-        </div>
-
-        <!-- Status area for showing captured data -->
-        <div id="capture_result" class="capture-result" style="display: none">
-          <div class="capture-result-info">
-            <span id="capture_status_text">✅ Captured response ready</span>
-            <button type="button" id="capture_clear" class="capture-clear-btn">Clear</button>
-          </div>
-          <div id="capture_plot" class="capture-plot"></div>
-        </div>
+      <div id="capture_panel_container" class="capture-panel-container">
+        <!-- Full capture interface will be rendered here by the capture-panel web component -->
       </div>
     </div>
 </div>`;
@@ -562,6 +546,7 @@ export function generateBottomRow(): string {
 }
 
 // Generate Capture Modal
+// Generate Capture Modal (deprecated - kept for backward compatibility, will be removed)
 export function generateCaptureModal(): string {
   return `<div id="capture_modal" class="modal capture-modal" style="display: none">
     <div class="modal-content capture-modal-content">
@@ -572,6 +557,18 @@ export function generateCaptureModal(): string {
           </button>
         </div>
         <div class="modal-body capture-modal-body">
+          <capture-panel></capture-panel>
+        </div>
+    </div>
+</div>`;
+}
+
+// OLD generateCapturePanel - now replaced by capture-panel web component
+// Keeping this comment for reference but removing the function
+/*
+export function generateCapturePanel(): string {
+  return `<div id="capture_panel" class="capture-panel">
+        <div class="capture-panel-body">
           <!-- Capture Controls -->
           <div class="capture-controls-block">
             <div class="capture-controls-row">
@@ -738,9 +735,8 @@ export function generateCaptureModal(): string {
           </div>
         </div>
 
-        <div class="modal-footer">
-          <!-- Bottom Controls Bar -->
-          <div class="capture-bottom-controls">
+        <!-- Bottom Controls Bar -->
+        <div class="capture-bottom-controls">
             <div class="capture-bottom-left">
               <!-- Phase and Smoothing Controls -->
               <label class="capture-phase-toggle">
@@ -783,15 +779,7 @@ export function generateCaptureModal(): string {
               <button id="capture_modal_export" class="btn btn-secondary capture-export-btn" style="display: none">
                 💾 Export CSV
               </button>
-              <button id="capture_modal_cancel" class="btn btn-outline">
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-    </div>
-</div>`;
-}
+*/
 
 // Generate Optimization Modal
 export function generateOptimizationModal(): string {

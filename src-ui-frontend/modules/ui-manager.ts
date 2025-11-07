@@ -249,9 +249,10 @@ export class UIManager {
       this.resetToDefaults();
     });
 
-    // Capture button (opens modal)
+    // Capture button is now deprecated - capture panel is inline in data acquisition step
+    // Keep this for backward compatibility but it does nothing
     this.captureBtn?.addEventListener("click", () => {
-      this.openCaptureModal();
+      console.log('[UIManager] Capture button clicked - panel is now inline in data acquisition step');
     });
 
     // Clear capture button
@@ -1070,18 +1071,35 @@ export class UIManager {
         }
       },
     );
+
+    // Listen for the capture panel being rendered and initialize it
+    // Use a flag to ensure we only initialize once
+    let isInitialized = false;
+
+    document.addEventListener('capturePanelRendered', async (event) => {
+      if (isInitialized) {
+        console.log('[UIManager] Capture panel already initialized, skipping...');
+        return;
+      }
+
+      console.log('[UIManager] Capture panel rendered, initializing...');
+      if (this.captureModalManager) {
+        await this.captureModalManager.initialize();
+        isInitialized = true;
+        console.log('[UIManager] Capture panel initialization complete');
+      }
+    });
   }
 
   private async openCaptureModal(): Promise<void> {
-    if (this.captureModalManager) {
-      await this.captureModalManager.openModal();
-    }
+    // This is now deprecated - the panel is rendered inline
+    // Just switch to the capture tab instead
+    console.log('[UIManager] openCaptureModal called - panel is now inline');
   }
 
   private closeCaptureModal(): void {
-    if (this.captureModalManager) {
-      this.captureModalManager.closeModal();
-    }
+    // This is now deprecated - the panel stays inline
+    console.log('[UIManager] closeCaptureModal called - panel is now inline');
   }
 
   setOutputDeviceChangeCallback(callback: (deviceId: string) => void): void {
