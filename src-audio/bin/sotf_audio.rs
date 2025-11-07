@@ -122,6 +122,26 @@ enum Commands {
         /// Loudness compensation: 2 or 3 floats: REF LOW [HIGH] (dB; REF -100..20, boosts 0..20)
         #[arg(long = "loudness-compensation", value_name = "REF,LOW[,HIGH]", value_parser = clap::value_parser!(f64), value_delimiter = ',')]
         loudness_compensation: Option<Vec<f64>>,
+
+        /// Enable stereo-to-5.0 upmixer (converts 2ch to 5ch surround)
+        #[arg(long = "upmixer", default_value_t = false)]
+        upmixer: bool,
+
+        /// Upmixer FFT size (must be power of 2: 1024, 2048, 4096)
+        #[arg(long = "upmixer-fft-size", default_value = "2048")]
+        upmixer_fft_size: usize,
+
+        /// Upmixer front direct gain (0.0-2.0)
+        #[arg(long = "upmixer-gain-front-direct", default_value = "1.0")]
+        upmixer_gain_front_direct: f32,
+
+        /// Upmixer front ambient gain (0.0-2.0)
+        #[arg(long = "upmixer-gain-front-ambient", default_value = "0.5")]
+        upmixer_gain_front_ambient: f32,
+
+        /// Upmixer rear ambient gain (0.0-2.0)
+        #[arg(long = "upmixer-gain-rear-ambient", default_value = "1.0")]
+        upmixer_gain_rear_ambient: f32,
     },
 
     /// Generate and record test signals with analysis
@@ -258,6 +278,11 @@ async fn main() {
             buffer_chunks,
             lufs,
             loudness_compensation,
+            upmixer,
+            upmixer_fft_size,
+            upmixer_gain_front_direct,
+            upmixer_gain_front_ambient,
+            upmixer_gain_rear_ambient,
         } => {
             // Parse filters
             let filter_params = match parse_filters(&filters) {
@@ -295,6 +320,11 @@ async fn main() {
                 buffer_chunks,
                 lufs,
                 loudness,
+                upmixer,
+                upmixer_fft_size,
+                upmixer_gain_front_direct,
+                upmixer_gain_front_ambient,
+                upmixer_gain_rear_ambient,
             )
             .await
             {
@@ -445,6 +475,11 @@ async fn play_stream(
     buffer_chunks: usize,
     lufs: bool,
     loudness: Option<LoudnessCompensation>,
+    upmixer: bool,
+    upmixer_fft_size: usize,
+    upmixer_gain_front_direct: f32,
+    upmixer_gain_front_ambient: f32,
+    upmixer_gain_rear_ambient: f32,
 ) -> Result<(), String> {
     println!("Starting streaming playback...");
     println!("  File: {:?}", file);
@@ -517,6 +552,52 @@ async fn play_stream(
             .enable_loudness_monitoring()
             .map_err(|e| format!("Failed to enable loudness monitoring: {}", e))?;
         println!("Real-time LUFS monitoring enabled\n");
+    }
+
+    // Enable upmixer plugin if requested
+    if upmixer {
+        // Validate FFT size
+        if !upmixer_fft_size.is_power_of_two() {
+            return Err(format!(
+                "Upmixer FFT size must be power of 2, got {}",
+                upmixer_fft_size
+            ));
+        }
+
+        // Check that input is stereo
+        if audio_info.spec.channels != 2 {
+            return Err(format!(
+                "Upmixer requires stereo input, got {} channels",
+                audio_info.spec.channels
+            ));
+        }
+
+        println!("Enabling stereo-to-5.0 upmixer plugin:");
+        println!("  FFT size: {}", upmixer_fft_size);
+        println!("  Front direct gain: {:.2}", upmixer_gain_front_direct);
+        println!("  Front ambient gain: {:.2}", upmixer_gain_front_ambient);
+        println!("  Rear ambient gain: {:.2}", upmixer_gain_rear_ambient);
+        println!("  Output: 5.0 surround (FL, FR, C, RL, RR)\n");
+
+        streaming_manager
+            .enable_plugin_host()
+            .map_err(|e| format!("Failed to enable plugin host: {}", e))?;
+
+        streaming_manager
+            .with_plugin_host(|host| {
+                use sotf_audio::UpmixerPlugin;
+                let upmixer_plugin = UpmixerPlugin::new(
+                    upmixer_fft_size,
+                    upmixer_gain_front_direct,
+                    upmixer_gain_front_ambient,
+                    upmixer_gain_rear_ambient,
+                );
+                host.add_plugin(Box::new(upmixer_plugin))
+            })
+            .map_err(|e| format!("Failed to add upmixer plugin: {}", e))?
+            .map_err(|e| format!("Upmixer error: {}", e))?;
+
+        println!("✓ Upmixer plugin enabled\n");
     }
 
     // Start playback with cancellation support

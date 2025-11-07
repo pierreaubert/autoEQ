@@ -16,6 +16,7 @@ use crate::camilla::{AudioManager, ChannelMapMode};
 use crate::filters::FilterParams;
 use crate::loudness_compensation::LoudnessCompensation;
 use crate::loudness_monitor::{LoudnessInfo, LoudnessMonitor};
+use crate::plugins::PluginHost;
 use crate::spectrum_analyzer::{SpectrumAnalyzer, SpectrumConfig, SpectrumInfo};
 use crate::{
     AudioDecoderError, AudioDecoderResult, AudioFormat, AudioSpec, create_decoder, probe_file,
@@ -44,6 +45,8 @@ pub struct AudioStreamingManager {
     loudness_monitor: Option<Arc<Mutex<LoudnessMonitor>>>,
     /// Real-time spectrum analyzer (optional)
     spectrum_monitor: Option<Arc<Mutex<SpectrumAnalyzer>>>,
+    /// Plugin host for audio processing (optional)
+    plugin_host: Option<Arc<Mutex<PluginHost>>>,
 }
 
 /// Commands for controlling the streaming decoder
@@ -107,6 +110,7 @@ impl AudioStreamingManager {
             underrun_count: Arc::new(Mutex::new(0)),
             loudness_monitor: None,
             spectrum_monitor: None,
+            plugin_host: None,
         }
     }
 
@@ -180,10 +184,30 @@ impl AudioStreamingManager {
 
         println!("[AudioStreamingManager] Starting playback");
 
+        // Determine the channel count that will be sent to CamillaDSP
+        // If plugin host is enabled, use its output channel count, otherwise use file's channel count
+        let mut spec_for_camilla = audio_info.spec.clone();
+        if let Some(ref plugin_host) = self.plugin_host {
+            let output_channels = plugin_host
+                .lock()
+                .map_err(|e| {
+                    AudioDecoderError::ConfigError(format!("Failed to lock plugin host: {}", e))
+                })?
+                .output_channels();
+
+            if output_channels != audio_info.spec.channels as usize {
+                println!(
+                    "[AudioStreamingManager] Plugin host changes channel count: {} → {}",
+                    audio_info.spec.channels, output_channels
+                );
+                spec_for_camilla.channels = output_channels as u16;
+            }
+        }
+
         // Start CamillaDSP with streaming configuration
         self.audio_manager
             .start_streaming_playback(
-                audio_info.spec.clone(),
+                spec_for_camilla,
                 output_device,
                 filters,
                 channel_map_mode,
@@ -371,6 +395,49 @@ impl AudioStreamingManager {
         self.spectrum_monitor.is_some()
     }
 
+    /// Enable plugin host for custom audio processing
+    /// The plugin host is inserted in the audio pipeline before CamillaDSP
+    pub fn enable_plugin_host(&mut self) -> Result<(), String> {
+        let audio_info = self
+            .current_audio_info
+            .as_ref()
+            .ok_or_else(|| "No audio file loaded".to_string())?;
+
+        let host = PluginHost::new(
+            audio_info.spec.channels as usize,
+            audio_info.spec.sample_rate,
+        );
+        self.plugin_host = Some(Arc::new(Mutex::new(host)));
+        Ok(())
+    }
+
+    /// Disable plugin host
+    pub fn disable_plugin_host(&mut self) {
+        self.plugin_host = None;
+    }
+
+    /// Check if plugin host is enabled
+    pub fn is_plugin_host_enabled(&self) -> bool {
+        self.plugin_host.is_some()
+    }
+
+    /// Get mutable access to the plugin host
+    /// Use this to add/remove plugins and configure parameters
+    pub fn with_plugin_host<F, R>(&self, f: F) -> Result<R, String>
+    where
+        F: FnOnce(&mut PluginHost) -> R,
+    {
+        let host = self
+            .plugin_host
+            .as_ref()
+            .ok_or_else(|| "Plugin host not enabled".to_string())?;
+
+        let mut host_lock = host
+            .lock()
+            .map_err(|e| format!("Failed to lock host: {}", e))?;
+        Ok(f(&mut host_lock))
+    }
+
     /// Try to receive the next event from the decoder thread (non-blocking)
     pub fn try_recv_event(&self) -> Option<StreamingEvent> {
         self.event_rx
@@ -406,9 +473,10 @@ impl AudioStreamingManager {
             AudioDecoderError::ConfigError("CamillaDSP stdin not available".to_string())
         })?;
 
-        // Clone loudness monitor and spectrum analyzer for decoder thread
+        // Clone loudness monitor, spectrum analyzer, and plugin host for decoder thread
         let loudness_monitor = self.loudness_monitor.clone();
         let spectrum_monitor = self.spectrum_monitor.clone();
+        let plugin_host = self.plugin_host.clone();
 
         // Spawn decoder thread
         let handle = thread::spawn(move || {
@@ -422,6 +490,7 @@ impl AudioStreamingManager {
                 underrun_count,
                 loudness_monitor,
                 spectrum_monitor,
+                plugin_host,
             ) {
                 eprintln!("[AudioStreamingManager] Decoder thread error: {:?}", e);
             }
@@ -443,21 +512,57 @@ impl AudioStreamingManager {
         underrun_count: Arc<Mutex<usize>>,
         loudness_monitor: Option<Arc<Mutex<LoudnessMonitor>>>,
         spectrum_monitor: Option<Arc<Mutex<SpectrumAnalyzer>>>,
+        plugin_host: Option<Arc<Mutex<PluginHost>>>,
     ) -> AudioDecoderResult<()> {
         log_info!("Decoder thread starting for: {:?}", path);
         log_debug!("Buffer size: {} chunks (1024 frames each)", buffer_chunks);
 
+        // Helper function to process audio through plugins
+        let process_through_plugins =
+            |samples: &[f32], plugin_host: &Option<Arc<Mutex<PluginHost>>>| -> Vec<f32> {
+                if let Some(host) = plugin_host {
+                    if let Ok(mut host_lock) = host.lock() {
+                        let num_frames = samples.len() / host_lock.input_channels();
+                        let output_size = num_frames * host_lock.output_channels();
+                        let mut output = vec![0.0; output_size];
+
+                        if let Err(e) = host_lock.process(samples, &mut output) {
+                            log_warn!("Plugin processing error: {}", e);
+                            // On error, return original samples
+                            return samples.to_vec();
+                        }
+                        return output;
+                    }
+                }
+                // No plugin host or lock failed - pass through
+                samples.to_vec()
+            };
+
         // Create decoder
         let mut decoder = create_decoder(&path)?;
         let spec = decoder.spec().clone();
+
+        // Determine actual output channel count (may differ from input if plugin host changes it)
+        let output_channels = if let Some(ref host) = plugin_host {
+            host.lock().unwrap().output_channels()
+        } else {
+            spec.channels as usize
+        };
+
+        log_info!(
+            "Audio pipeline: file {}ch → output {}ch",
+            spec.channels,
+            output_channels
+        );
 
         // Calculate buffer target in frames (1 chunk = 1024 frames)
         let mut target_buffer_frames = buffer_chunks * FRAMES_PER_CHUNK;
         let mut last_underrun_check = std::time::Instant::now();
 
         // Buffer for decoded audio data (stores raw PCM bytes)
+        // Use output_channels for buffer capacity since that's what will be written
         let mut audio_buffer: VecDeque<u8> =
-            VecDeque::with_capacity(target_buffer_frames * spec.channels as usize * 4);
+            VecDeque::with_capacity(target_buffer_frames * output_channels * 4);
         let mut buffered_frames: usize = 0;
         let mut playing = false;
         let mut pre_buffered = false;
@@ -554,8 +659,17 @@ impl AudioStreamingManager {
                             }
                         }
 
-                        let pcm_bytes = decoded_audio.to_bytes_f32_le();
-                        let frames_in_packet = pcm_bytes.len() / (spec.channels as usize * 4);
+                        // Process through plugin host if enabled
+                        let processed_samples =
+                            process_through_plugins(&decoded_audio.samples, &plugin_host);
+
+                        // Convert to bytes (F32LE format)
+                        let pcm_bytes: Vec<u8> = processed_samples
+                            .iter()
+                            .flat_map(|&sample| sample.to_le_bytes())
+                            .collect();
+
+                        let frames_in_packet = pcm_bytes.len() / (output_channels * 4);
 
                         // Only accumulate in buffer during pre-buffering, don't write yet
                         audio_buffer.extend(pcm_bytes.iter());
@@ -575,7 +689,7 @@ impl AudioStreamingManager {
                             let write_size = audio_buffer.len() / 2;
                             let prebuffer_data: Vec<u8> =
                                 audio_buffer.drain(..write_size).collect();
-                            let frames_to_write = write_size / (spec.channels as usize * 4);
+                            let frames_to_write = write_size / (output_channels * 4);
 
                             log_debug!(
                                 "Writing half of pre-buffer ({} frames, {:.2}s) to CamillaDSP, keeping {} frames in buffer",
@@ -698,7 +812,8 @@ impl AudioStreamingManager {
                             let _ = event_tx.send(StreamingEvent::Error(
                                 "Streaming stalled: buffer empty for too long".to_string(),
                             ));
-                            let _ = event_tx.send(StreamingEvent::StateChanged(StreamingState::Error));
+                            let _ =
+                                event_tx.send(StreamingEvent::StateChanged(StreamingState::Error));
                             break;
                         }
                     }
@@ -744,7 +859,7 @@ impl AudioStreamingManager {
                         break;
                     }
 
-                    let frames_written = write_size / (spec.channels as usize * 4);
+                    let frames_written = write_size / (output_channels * 4);
                     buffered_frames = buffered_frames.saturating_sub(frames_written);
                 }
 
@@ -777,8 +892,17 @@ impl AudioStreamingManager {
                                 }
                             }
 
-                            let pcm_bytes = decoded_audio.to_bytes_f32_le();
-                            let frames_in_packet = pcm_bytes.len() / (spec.channels as usize * 4);
+                            // Process through plugin host if enabled
+                            let processed_samples =
+                                process_through_plugins(&decoded_audio.samples, &plugin_host);
+
+                            // Convert to bytes (F32LE format)
+                            let pcm_bytes: Vec<u8> = processed_samples
+                                .iter()
+                                .flat_map(|&sample| sample.to_le_bytes())
+                                .collect();
+
+                            let frames_in_packet = pcm_bytes.len() / (output_channels * 4);
 
                             audio_buffer.extend(pcm_bytes.iter());
                             buffered_frames += frames_in_packet;

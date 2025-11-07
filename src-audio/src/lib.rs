@@ -38,5 +38,11 @@ pub use spectrum_analyzer::{SpectrumAnalyzer, SpectrumConfig, SpectrumInfo};
 
 pub mod analysis;
 
+pub mod plugins;
+pub use plugins::{
+    GainPlugin, InPlacePlugin, InPlacePluginAdapter, Parameter, ParameterId, ParameterValue,
+    Plugin, PluginHost, PluginInfo, ProcessContext, SharedPluginHost, UpmixerPlugin,
+};
+
 // pub mod audio_playback;
 // pub use audio_playback::{PlaybackRecorder, PlaybackRecordingConfig, AudioPlaybackError};
