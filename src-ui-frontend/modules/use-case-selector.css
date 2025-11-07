@@ -1,0 +1,326 @@
+/* Use Case Selector Component Styles */
+
+.use-case-selector {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  min-height: 500px;
+  padding: var(--spacing-xl);
+  box-sizing: border-box;
+}
+
+.use-case-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 1200px;
+  width: 100%;
+}
+
+/* Header */
+.use-case-header {
+  text-align: center;
+  margin-bottom: var(--spacing-xl);
+}
+
+.use-case-title {
+  margin: 0 0 var(--spacing-md) 0;
+  color: var(--text-primary);
+  font-size: 2.5rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.use-case-subtitle {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 1.1rem;
+  line-height: 1.5;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+/* Grid Layout */
+.use-case-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: var(--spacing-xl);
+  width: 100%;
+  margin: var(--spacing-xl) 0;
+}
+
+/* Card Styles */
+.use-case-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-xl);
+  background: var(--bg-secondary);
+  border: 3px solid var(--border-color);
+  border-radius: calc(var(--radius) * 2);
+  cursor: pointer;
+  transition: all 0.3s ease;
+  min-height: 280px;
+  text-align: center;
+}
+
+.use-case-card:hover {
+  border-color: var(--button-primary);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-4px);
+}
+
+.use-case-card:active {
+  transform: translateY(-2px);
+}
+
+.use-case-card.selected {
+  border-color: var(--button-primary);
+  background: linear-gradient(
+    135deg,
+    var(--bg-secondary) 0%,
+    var(--bg-accent) 100%
+  );
+  box-shadow: 0 4px 12px rgba(0, 123, 255, 0.25);
+}
+
+/* Card Icon */
+.use-case-card-icon {
+  width: 96px;
+  height: 96px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: var(--spacing-lg);
+  padding: var(--spacing-lg);
+  background: var(--bg-accent);
+  border-radius: 50%;
+  transition: all 0.3s ease;
+}
+
+.use-case-card:hover .use-case-card-icon {
+  background: var(--button-primary);
+  transform: scale(1.1);
+}
+
+.use-case-card.selected .use-case-card-icon {
+  background: var(--button-primary);
+}
+
+.use-case-card-icon svg {
+  width: 48px;
+  height: 48px;
+  color: var(--text-primary);
+  transition: color 0.3s ease;
+}
+
+.use-case-card:hover .use-case-card-icon svg,
+.use-case-card.selected .use-case-card-icon svg {
+  color: white;
+}
+
+/* Card Title */
+.use-case-card-title {
+  margin: 0 0 var(--spacing-sm) 0;
+  color: var(--text-primary);
+  font-size: 1.4rem;
+  font-weight: 600;
+}
+
+/* Card Description */
+.use-case-card-description {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+/* Selected Badge */
+.use-case-card-badge {
+  position: absolute;
+  top: var(--spacing-md);
+  right: var(--spacing-md);
+  padding: var(--spacing-xs) var(--spacing-md);
+  background: var(--success-color);
+  color: white;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Info Section */
+.use-case-info {
+  margin-top: var(--spacing-xl);
+  padding: var(--spacing-lg);
+  background: var(--bg-accent);
+  border-radius: var(--radius);
+  text-align: center;
+  max-width: 700px;
+}
+
+.use-case-info p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+
+.use-case-info strong {
+  color: var(--text-primary);
+}
+
+/* Responsive Design */
+
+/* Large tablets and below */
+@media (max-width: 1024px) {
+  .use-case-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* Tablets */
+@media (max-width: 768px) {
+  .use-case-selector {
+    padding: var(--spacing-lg);
+  }
+
+  .use-case-title {
+    font-size: 2rem;
+  }
+
+  .use-case-subtitle {
+    font-size: 1rem;
+  }
+
+  .use-case-grid {
+    gap: var(--spacing-lg);
+  }
+
+  .use-case-card {
+    padding: var(--spacing-lg);
+    min-height: 240px;
+  }
+
+  .use-case-card-icon {
+    width: 80px;
+    height: 80px;
+    padding: var(--spacing-md);
+  }
+
+  .use-case-card-icon svg {
+    width: 40px;
+    height: 40px;
+  }
+
+  .use-case-card-title {
+    font-size: 1.2rem;
+  }
+
+  .use-case-card-description {
+    font-size: 0.9rem;
+  }
+}
+
+/* Mobile */
+@media (max-width: 480px) {
+  .use-case-selector {
+    padding: var(--spacing-md);
+    min-height: 400px;
+  }
+
+  .use-case-title {
+    font-size: 1.6rem;
+  }
+
+  .use-case-subtitle {
+    font-size: 0.9rem;
+  }
+
+  .use-case-grid {
+    grid-template-columns: 1fr;
+    gap: var(--spacing-md);
+  }
+
+  .use-case-card {
+    padding: var(--spacing-md);
+    min-height: 200px;
+  }
+
+  .use-case-card-icon {
+    width: 64px;
+    height: 64px;
+    padding: var(--spacing-sm);
+  }
+
+  .use-case-card-icon svg {
+    width: 32px;
+    height: 32px;
+  }
+
+  .use-case-card-title {
+    font-size: 1.1rem;
+  }
+
+  .use-case-card-description {
+    font-size: 0.85rem;
+  }
+
+  .use-case-card-badge {
+    top: var(--spacing-sm);
+    right: var(--spacing-sm);
+    padding: 2px var(--spacing-sm);
+    font-size: 0.7rem;
+  }
+
+  .use-case-info {
+    padding: var(--spacing-md);
+    font-size: 0.85rem;
+  }
+}
+
+/* Accessibility - Keyboard focus */
+.use-case-card:focus {
+  outline: 3px solid var(--button-primary);
+  outline-offset: 2px;
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .use-case-card,
+  .use-case-card-icon,
+  .use-case-card-icon svg {
+    transition: none;
+  }
+
+  .use-case-card:hover {
+    transform: none;
+  }
+
+  .use-case-card:hover .use-case-card-icon {
+    transform: none;
+  }
+}
+
+/* Print */
+@media print {
+  .use-case-selector {
+    page-break-after: always;
+  }
+
+  .use-case-card {
+    border: 2px solid black;
+    page-break-inside: avoid;
+  }
+
+  .use-case-card-badge {
+    display: none;
+  }
+}

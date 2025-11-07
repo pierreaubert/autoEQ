@@ -104,8 +104,12 @@ export class VisualEQConfig {
       this.eqMiniCtx = this.eqMiniCanvas.getContext("2d");
     }
 
-    this.createEQModal();
+    this.setupInlineContainers();
     this.setupEventListeners();
+
+    // Render content immediately
+    this.renderPlaybackOptions();
+    this.renderEQTable();
 
     // Compute initial EQ response to populate graphs
     // Use setTimeout to ensure canvas is fully laid out
@@ -114,236 +118,73 @@ export class VisualEQConfig {
     }, 0);
   }
 
-  // ===== MODAL CREATION AND MANAGEMENT =====
+  // ===== INLINE CONTAINERS SETUP =====
 
-  private createEQModal(): void {
-    console.log("[EQ Debug] Creating modal element");
+  private setupInlineContainers(): void {
+    console.log("[EQ Debug] Setting up inline containers");
 
-    // Check if modal already exists
-    const existingModal = document.getElementById(
-      this.instanceId + "-eq-modal",
+    // Find the inline containers in the audio player
+    this.playbackOptionsContainer = this.container.querySelector(
+      ".playback-options-container",
     );
-    if (existingModal) {
-      console.log("[EQ Debug] Modal already exists:", existingModal);
-      return;
-    }
+    this.eqTableContainer = this.container.querySelector(".eq-table-container");
 
-    // Create backdrop
-    const backdrop = document.createElement("div");
-    backdrop.id = this.instanceId + "-eq-backdrop";
-    backdrop.className = "eq-modal-backdrop";
-
-    // Create modal
-    const modal = document.createElement("div");
-    modal.id = this.instanceId + "-eq-modal";
-    modal.className = "eq-modal";
-    console.log("[EQ Debug] Modal element created:", modal);
-    console.log("[EQ Debug] Modal ID:", modal.id);
-
-    modal.innerHTML = `
-      <div class="eq-modal-content">
-        <div class="eq-modal-header">
-          <h3>EQ Configuration</h3>
-          <button type="button" class="eq-modal-close-btn">&times;</button>
-        </div>
-        <div class="eq-modal-body">
-          <div class="playback-options-container"></div>
-          <div class="eq-table-container"></div>
-        </div>
-      </div>
-    `;
-
-    // Add to DOM
-    document.body.appendChild(backdrop);
-    document.body.appendChild(modal);
-
-    console.log("[EQ Debug] Modal and backdrop inserted into body");
-    console.log("[EQ Debug] Modal in DOM:", document.contains(modal));
-    const foundModal = document.getElementById(this.instanceId + "-eq-modal");
-    console.log("[EQ Debug] Can find modal after insertion:", !!foundModal);
+    console.log("[EQ Debug] Playback options container:", this.playbackOptionsContainer);
+    console.log("[EQ Debug] EQ table container:", this.eqTableContainer);
   }
 
   private setupEventListeners(): void {
-    // Cache modal elements
-    this.eqModal = document.getElementById(this.instanceId + "-eq-modal");
-    this.eqBackdrop = document.getElementById(this.instanceId + "-eq-backdrop");
-
-    console.log(
-      "[EQ Debug] Modal element lookup ID:",
-      this.instanceId + "-eq-modal",
-    );
-    console.log("[EQ Debug] Modal element found:", this.eqModal);
-    console.log("[EQ Debug] Backdrop element found:", this.eqBackdrop);
-
-    if (this.eqModal) {
-      this.eqModalCloseBtn = this.eqModal.querySelector(".eq-modal-close-btn");
-      this.playbackOptionsContainer = this.eqModal.querySelector(
-        ".playback-options-container",
-      );
-      this.eqTableContainer = this.eqModal.querySelector(".eq-table-container");
-
-      // Cache EQ graph canvas
-      this.eqGraphCanvas = this.eqModal.querySelector(".eq-graph-canvas");
-      if (this.eqGraphCanvas) {
-        this.eqGraphCtx = this.eqGraphCanvas.getContext("2d");
-        this.setupGraphInteractions();
-        this.resizeEQGraphCanvas();
-      }
-    }
-
-    // Modal close events
-    this.eqModalCloseBtn?.addEventListener("click", () => this.closeEQModal());
-    this.eqBackdrop?.addEventListener("click", () => this.closeEQModal());
-
-    // Prevent clicks inside modal from propagating
-    this.eqModal?.addEventListener("click", (event: MouseEvent) => {
-      event.stopPropagation();
-    });
-
-    // Close modal when clicking outside
-    document.addEventListener("click", (event: MouseEvent) => {
-      if (
-        this.eqModal &&
-        this.eqModal.classList.contains("visible") &&
-        !this.eqModal.contains(event.target as Node) &&
-        !this.eqConfigBtn?.contains(event.target as Node)
-      ) {
-        this.closeEQModal();
-      }
-    });
+    // No modal-specific event listeners needed for inline display
+    // Table and playback option events are set up when those elements are rendered
   }
 
-  openEQModal(eqConfigBtn: HTMLElement): void {
-    console.log("[EQ Debug] Attempting to show modal");
-    console.log("[EQ Debug] Current modal state:", {
-      exists: !!this.eqModal,
-      display: this.eqModal?.style.display,
-      backdropExists: !!this.eqBackdrop,
-      backdropDisplay: this.eqBackdrop?.style.display,
-      parentElement: this.eqModal?.parentElement?.tagName,
-    });
+  // Modal methods removed - now using inline display
 
-    // Store button reference for click-outside handling
-    this.eqConfigBtn = eqConfigBtn;
+  // ===== PLAYBACK OPTIONS RENDERING =====
 
-    if (this.eqModal && this.eqBackdrop && eqConfigBtn) {
-      this.renderEQTable();
+  private renderPlaybackOptions(): void {
+    console.log("[EQ Debug] Rendering playback options");
 
-      // Position modal near the button
-      const buttonRect = eqConfigBtn.getBoundingClientRect();
-      const modalRect = this.eqModal.getBoundingClientRect();
-      const viewportWidth = window.innerWidth;
-      const viewportHeight = window.innerHeight;
-
-      // Calculate position
-      let left = buttonRect.left + buttonRect.width / 2 - modalRect.width / 2;
-      let top = buttonRect.bottom + 10;
-
-      // Ensure modal stays within viewport
-      const maxWidth = Math.min(800, viewportWidth - 40);
-      const maxHeight = Math.min(600, viewportHeight - 40);
-
-      if (left < 20) left = 20;
-      if (left + maxWidth > viewportWidth - 20) {
-        left = viewportWidth - maxWidth - 20;
-      }
-      if (top + maxHeight > viewportHeight - 20) {
-        top = buttonRect.top - maxHeight - 10;
-      }
-
-      this.eqModal.style.left = `${left}px`;
-      this.eqModal.style.top = `${top}px`;
-      this.eqModal.style.width = `${maxWidth}px`;
-      this.eqModal.style.height = `${maxHeight}px`;
-
-      console.log("[EQ Debug] Modal positioned at:", {
-        left,
-        top,
-        width: maxWidth,
-        height: maxHeight,
-      });
-
-      this.eqBackdrop.classList.add("visible");
-      this.eqModal.classList.add("visible");
-
-      console.log("[EQ Debug] Modal classes after show:", {
-        modal: this.eqModal.className,
-        backdrop: this.eqBackdrop.className,
-      });
-
-      // Compute and draw EQ graph
-      this.computeEQResponse();
-    } else {
-      console.error(
-        "[EQ Debug] Modal, backdrop, or gear button element is null or undefined",
-      );
-    }
-  }
-
-  closeEQModal(): void {
-    if (this.eqModal) {
-      this.eqModal.classList.remove("visible");
-    }
-    if (this.eqBackdrop) {
-      this.eqBackdrop.classList.remove("visible");
-    }
-  }
-
-  // ===== EQ TABLE RENDERING =====
-
-  private renderEQTable(): void {
-    console.log("[EQ Debug] Rendering playback configuration");
-
-    console.log(
-      "[EQ Debug] Playback options container:",
-      this.playbackOptionsContainer,
-    );
-    console.log("[EQ Debug] EQ table container:", this.eqTableContainer);
-    console.log("[EQ Debug] Current filter params:", this.currentFilterParams);
-
-    if (!this.playbackOptionsContainer || !this.eqTableContainer) {
-      console.error("[EQ Debug] Container not found");
+    if (!this.playbackOptionsContainer) {
+      console.error("[EQ Debug] Playback options container not found");
       return;
     }
 
     // Clear existing content
     this.playbackOptionsContainer.innerHTML = "";
-    this.eqTableContainer.innerHTML = "";
 
-    // Render playback options
+    // Get current values
     const autoGain = this.callbacks.getAutoGain?.() ?? true;
     const loudnessComp = this.callbacks.getLoudnessCompensation?.() ?? false;
     const splAmplitude = this.callbacks.getSplAmplitude?.() ?? -20;
 
     this.playbackOptionsContainer.innerHTML = `
-      <div class="playback-options-section">
-        <div class="option-row">
-          <label class="option-label">
-            <input type="checkbox" class="auto-gain-toggle" ${autoGain ? "checked" : ""}>
-            Auto Gain
-          </label>
-          <span class="option-help">Automatically adjust volume to prevent clipping</span>
-        </div>
-        <div class="option-row">
-          <label class="option-label">
-            <input type="checkbox" class="loudness-compensation-toggle" ${loudnessComp ? "checked" : ""}>
-            Loudness Compensation
-          </label>
-          <span class="option-help">Apply equal-loudness curve adjustment</span>
-        </div>
-        <div class="option-row spl-amplitude-row" style="display: ${loudnessComp ? "flex" : "none"}; padding-left: 24px;">
-          <label class="option-label" style="flex-direction: column; align-items: flex-start; gap: 4px;">
-            <span>SPL Amplitude: <span class="spl-value">${splAmplitude}</span> dB</span>
-            <div style="display: flex; align-items: center; gap: 8px; width: 100%;">
-              <span style="font-size: 0.85em; color: var(--text-secondary);">-30</span>
-              <input type="range" class="spl-amplitude-slider"
-                     min="-30" max="0" step="1" value="${splAmplitude}"
-                     style="flex: 1;">
-              <span style="font-size: 0.85em; color: var(--text-secondary);">0</span>
-            </div>
-          </label>
-          <span class="option-help">Reference SPL for loudness compensation curve</span>
-        </div>
+      <div class="option-row">
+        <label class="option-label">
+          <input type="checkbox" class="auto-gain-toggle" ${autoGain ? "checked" : ""}>
+          Auto Gain
+        </label>
+        <span class="option-help">Automatically adjust volume to prevent clipping</span>
+      </div>
+      <div class="option-row">
+        <label class="option-label">
+          <input type="checkbox" class="loudness-compensation-toggle" ${loudnessComp ? "checked" : ""}>
+          Loudness Compensation
+        </label>
+        <span class="option-help">Apply equal-loudness curve adjustment</span>
+      </div>
+      <div class="option-row spl-amplitude-row" style="display: ${loudnessComp ? "flex" : "none"}; padding-left: 24px;">
+        <label class="option-label" style="flex-direction: column; align-items: flex-start; gap: 4px;">
+          <span>SPL Amplitude: <span class="spl-value">${splAmplitude}</span> dB</span>
+          <div style="display: flex; align-items: center; gap: 8px; width: 100%;">
+            <span style="font-size: 0.85em; color: var(--text-secondary);">-30</span>
+            <input type="range" class="spl-amplitude-slider"
+                   min="-30" max="0" step="1" value="${splAmplitude}"
+                   style="flex: 1;">
+            <span style="font-size: 0.85em; color: var(--text-secondary);">0</span>
+          </div>
+        </label>
+        <span class="option-help">Reference SPL for loudness compensation curve</span>
       </div>
     `;
 
@@ -383,6 +224,20 @@ export class VisualEQConfig {
       }
       this.callbacks.onSplAmplitudeChange?.(value);
     });
+  }
+
+  // ===== EQ TABLE RENDERING =====
+
+  private renderEQTable(): void {
+    console.log("[EQ Debug] Rendering EQ table");
+
+    if (!this.eqTableContainer) {
+      console.error("[EQ Debug] EQ table container not found");
+      return;
+    }
+
+    // Clear existing content
+    this.eqTableContainer.innerHTML = "";
 
     // Render EQ table section
     const eqSection = document.createElement("div");
@@ -736,6 +591,15 @@ export class VisualEQConfig {
   }
 
   setEQEnabled(enabled: boolean): void {
+    // Skip filter update if already in the desired state to avoid duplicate calls
+    const alreadyInDesiredState = this.eqEnabled === enabled;
+
+    if (alreadyInDesiredState) {
+      // Still notify callbacks even if state hasn't changed
+      this.callbacks.onEQToggle?.(enabled);
+      return;
+    }
+
     this.eqEnabled = enabled;
 
     // Apply EQ changes in real-time if playing
@@ -1442,23 +1306,18 @@ export class VisualEQConfig {
   // ===== CLEANUP =====
 
   destroy(): void {
-    // Close modal if open
-    this.closeEQModal();
-
-    // Remove DOM elements
-    if (this.eqModal) {
-      this.eqModal.remove();
-      this.eqModal = null;
-    }
-    if (this.eqBackdrop) {
-      this.eqBackdrop.remove();
-      this.eqBackdrop = null;
-    }
-
     // Clear timers
     if (this.eqResponseDebounceTimer) {
       clearTimeout(this.eqResponseDebounceTimer);
       this.eqResponseDebounceTimer = null;
+    }
+
+    // Clear containers
+    if (this.playbackOptionsContainer) {
+      this.playbackOptionsContainer.innerHTML = "";
+    }
+    if (this.eqTableContainer) {
+      this.eqTableContainer.innerHTML = "";
     }
   }
 }

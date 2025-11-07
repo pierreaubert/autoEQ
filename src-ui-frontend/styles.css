@@ -1,5 +1,12 @@
 @import "@audio-player/audio-player.css";
 @import "@audio-player/spectrum-analyzer.css";
+@import "./modules/step-navigator.css";
+@import "./modules/step-container.css";
+@import "./modules/use-case-selector.css";
+@import "./modules/data-acquisition-step.css";
+@import "./modules/optimization-step.css";
+@import "./modules/listening-step.css";
+@import "./modules/saving-step.css";
 
 :root {
   --bg-primary: #f8f9fa;
@@ -2633,4 +2640,360 @@ input[type="checkbox"] {
   color: #000;
   border-color: #d39e00;
   transform: translateY(-1px);
+}
+
+/* ============================================================================
+   Step-Based Workflow Styles
+   ============================================================================ */
+
+/* Step Content Wrapper */
+.step-content-wrapper {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: var(--spacing-xl);
+  box-sizing: border-box;
+  overflow-y: auto;
+}
+
+/* Step Header Section */
+.step-header-section {
+  margin-bottom: var(--spacing-xl);
+}
+
+.step-title {
+  margin: 0 0 var(--spacing-md) 0;
+  color: var(--text-primary);
+  font-size: 2rem;
+  font-weight: 600;
+}
+
+.step-description {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+/* Step Actions */
+.step-actions {
+  display: flex;
+  gap: var(--spacing-md);
+  margin-top: var(--spacing-xl);
+  padding-top: var(--spacing-xl);
+  border-top: 2px solid var(--border-color);
+}
+
+.step-actions button {
+  padding: var(--spacing-lg) var(--spacing-xl);
+}
+
+.btn-large {
+  padding: var(--spacing-lg) calc(var(--spacing-xl) * 2);
+  font-size: 1.1rem;
+}
+
+/* Results Content */
+.results-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xl);
+  flex: 1;
+}
+
+.optimization-results-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  padding: var(--spacing-xl);
+  box-shadow: var(--shadow-sm);
+}
+
+.optimization-results-card h3 {
+  margin: 0 0 var(--spacing-lg) 0;
+  color: var(--text-primary);
+  font-size: 1.3rem;
+  font-weight: 600;
+}
+
+.score-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--spacing-lg);
+}
+
+.score-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--spacing-lg);
+  background: var(--bg-accent);
+  border-radius: var(--radius);
+  text-align: center;
+}
+
+.score-item label {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  font-weight: 500;
+  margin-bottom: var(--spacing-sm);
+}
+
+.score-item span {
+  color: var(--text-primary);
+  font-size: 1.8rem;
+  font-weight: 700;
+}
+
+.score-item.improvement span {
+  color: var(--success-color);
+}
+
+/* Export Section */
+.export-section {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  padding: var(--spacing-xl);
+  box-shadow: var(--shadow-sm);
+}
+
+.export-format-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.export-format-section label {
+  color: var(--text-primary);
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.export-format-select {
+  padding: var(--spacing-md);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 1rem;
+}
+
+/* Main Content Layout for Step-Based Workflow */
+#content-container.main-content {
+  flex: 1;
+  min-height: 0;
+  background: var(--bg-primary);
+  overflow: hidden;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .step-content-wrapper {
+    padding: var(--spacing-lg);
+  }
+
+  .step-title {
+    font-size: 1.5rem;
+  }
+
+  .step-actions {
+    flex-direction: column;
+  }
+
+  .step-actions button {
+    width: 100%;
+  }
+
+  .score-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .step-content-wrapper {
+    padding: var(--spacing-md);
+  }
+
+  .step-title {
+    font-size: 1.3rem;
+  }
+
+  .optimization-results-card,
+  .export-section {
+    padding: var(--spacing-md);
+  }
+}
+
+/* Step 2 - Data Acquisition specific styles */
+#step2-container .step-actions {
+  justify-content: flex-end;
+}
+
+#step2-container .input-source-tabs {
+  margin-bottom: var(--spacing-lg);
+}
+
+/* Hide tab content sections by default when controlled by use case */
+#step2-container .tab-content {
+  margin-top: var(--spacing-lg);
+}
+
+/* Step 4 - Audio Player Section */
+.audio-player-section {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  padding: var(--spacing-xl);
+  box-shadow: var(--shadow-sm);
+  margin-top: var(--spacing-xl);
+}
+
+.audio-player-section h3 {
+  margin: 0 0 var(--spacing-lg) 0;
+  color: var(--text-primary);
+  font-size: 1.3rem;
+  font-weight: 600;
+}
+
+.audio-player-section .audio-controls {
+  /* Remove fixed positioning for audio controls in Step 4 */
+  position: relative;
+  bottom: auto;
+  left: auto;
+  right: auto;
+  width: 100%;
+  box-shadow: none;
+  border-radius: var(--radius);
+}
+
+/* Ensure audio player works well in the step context */
+#step4-audio-controls {
+  background: var(--bg-primary);
+  border-radius: var(--radius);
+}
+
+/* Step 3 - Two Column Layout */
+.step3-two-column-layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--spacing-xl);
+  margin-bottom: var(--spacing-xl);
+}
+
+.step3-two-column-layout form {
+  display: contents; /* Make form transparent to grid */
+}
+
+.step3-column {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+}
+
+/* Two columns on larger screens */
+@media (min-width: 1024px) {
+  .step3-two-column-layout {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* Step 3 Actions - Align to right */
+.step3-actions {
+  justify-content: flex-end;
+}
+
+/* Responsive: Stack buttons on small screens */
+@media (max-width: 768px) {
+  .step3-two-column-layout {
+    grid-template-columns: 1fr;
+  }
+  
+  .step3-actions {
+    flex-direction: column;
+    justify-content: stretch;
+  }
+  
+  .step3-actions button {
+    width: 100%;
+  }
+}
+
+/* Step 3 - Results Section */
+.step3-results {
+  margin-top: calc(var(--spacing-xl) * 2);
+  padding-top: calc(var(--spacing-xl) * 2);
+  border-top: 3px solid var(--border-color);
+}
+
+.step3-results-header {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  padding: var(--spacing-xl);
+  box-shadow: var(--shadow-sm);
+  margin-bottom: var(--spacing-xl);
+}
+
+.step3-results-header h3 {
+  margin: 0 0 var(--spacing-lg) 0;
+  color: var(--text-primary);
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.step3-score-row {
+  display: flex;
+  gap: var(--spacing-xl);
+  align-items: center;
+}
+
+.step3-score-item {
+  display: flex;
+  align-items: baseline;
+  gap: var(--spacing-sm);
+}
+
+.step3-score-item label {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+
+.step3-score-item span {
+  color: var(--text-primary);
+  font-size: 1.3rem;
+  font-weight: 700;
+}
+
+.step3-score-item.improvement span {
+  color: var(--success-color);
+  font-size: 1.4rem;
+}
+
+.step3-results-actions {
+  display: flex;
+  gap: var(--spacing-md);
+  justify-content: flex-end;
+  margin-top: var(--spacing-xl);
+  padding-top: var(--spacing-xl);
+  border-top: 2px solid var(--border-color);
+}
+
+/* Responsive adjustments for Step 3 results */
+@media (max-width: 768px) {
+  .step3-score-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--spacing-md);
+  }
+
+  .step3-results-actions {
+    flex-direction: column;
+  }
+
+  .step3-results-actions button {
+    width: 100%;
+  }
 }

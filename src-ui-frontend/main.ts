@@ -1,4 +1,4 @@
-// Refactored main application - streamlined and modular
+// Refactored main application - step-based workflow
 
 import {
   UIManager,
@@ -8,7 +8,16 @@ import {
   AudioPlayer,
   AudioPlayerFilterParam as FilterParam,
   PlotManager,
-  generateAppHTML,
+  StepNavigator,
+  StepContainer,
+  UseCaseSelector,
+  generateDataAcquisition,
+  generateEQDesign,
+  generateOptimizationFineTuning,
+  generatePlotsPanel,
+  generateBottomRow,
+  generateOptimizationModal,
+  generateCaptureModal,
 } from "./modules";
 import { OptimizationResult } from "./types";
 import { AutoEQPlotAPI, PlotFiltersParams, PlotSpinParams } from "./types";
@@ -20,42 +29,27 @@ class AutoEQApplication {
   private apiManager: APIManager;
   private audioPlayer: AudioPlayer | undefined;
   private plotManager: PlotManager;
+  private stepNavigator!: StepNavigator;
+  private stepContainer!: StepContainer;
+  private useCaseSelector!: UseCaseSelector;
 
   constructor() {
     // Generate and inject HTML content FIRST, before initializing managers
-    this.injectHTML();
+    this.injectStepWorkflowHTML();
+
+    // Initialize step navigation
+    this.initializeStepNavigation();
 
     // Initialize managers
     this.uiManager = new UIManager();
     this.apiManager = new APIManager();
 
-    // Initialize AudioPlayer
-    const audioControlsContainer = document.querySelector(
-      ".audio-controls",
-    ) as HTMLElement;
-    if (audioControlsContainer) {
-      // Clear the old controls and let the AudioPlayer component build its own UI
-      audioControlsContainer.innerHTML = "";
-      // Add the fixed positioning class
-      audioControlsContainer.classList.add("audio-bar-fixed");
-
-      this.audioPlayer = new AudioPlayer(
-        audioControlsContainer,
-        {
-          enableEQ: true,
-          enableSpectrum: true,
-          showProgress: true,
-          showFrequencyLabels: true,
-          maxFilters: 11,
-        },
-        {
-          onEQToggle: (enabled) => this.setEQEnabled(enabled),
-          onError: (error) => this.uiManager.showError(error),
-        },
-      );
-    } else {
-      console.error("Audio controls container (.audio-controls) not found!");
-    }
+    // Initialize AudioPlayer early so CamillaDSP is running and ready for EQ updates
+    // This is needed because optimization in Step 3 needs to upload EQ parameters
+    // Run async initialization in background (don't await to avoid blocking constructor)
+    this.initializeAudioPlayer().catch((error) => {
+      console.error("[Main] Failed to initialize AudioPlayer:", error);
+    });
 
     // Initialize plot manager with DOM elements
     const progressGraphElement = document.getElementById(
@@ -87,12 +81,459 @@ class AutoEQApplication {
     this.initialize();
   }
 
-  private injectHTML(): void {
+  private injectStepWorkflowHTML(): void {
     const appElement = document.getElementById("app");
     if (!appElement) {
       throw new Error("Application container element not found");
     }
-    appElement.innerHTML = generateAppHTML();
+
+    // Generate step-based HTML structure
+    appElement.innerHTML = `
+      <div class="app">
+        <div id="nav-container"></div>
+        <div id="content-container" class="main-content">
+          <!-- Step 1: Use Case Selector -->
+          <div data-step="1" id="step1-container"></div>
+
+          <!-- Step 2: Data Acquisition -->
+          <div data-step="2" id="step2-container">
+            <div class="step-content-wrapper">
+              <div class="step-header-section">
+                <h2 class="step-title">Data Acquisition</h2>
+                <p class="step-description" id="step2-description">
+                  Select your data source: load from files, choose a speaker/headphone, or capture live measurements.
+                </p>
+              </div>
+              <form id="autoeq_form" class="parameter-form">
+                ${generateDataAcquisition()}
+              </form>
+              <div class="step-actions">
+                <button type="button" id="step2_next_btn" class="btn btn-primary btn-large" style="margin-left: auto;">
+                  Next: Configure EQ
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Step 3: EQ Design & Optimization -->
+          <div data-step="3" id="step3-container">
+            <div class="step-content-wrapper">
+              <div class="step-header-section">
+                <h2 class="step-title">EQ Design & Optimization</h2>
+                <p class="step-description">
+                  Configure your EQ parameters and optimization algorithm settings.
+                </p>
+              </div>
+              <div class="step3-two-column-layout">
+                <form id="eq_form" class="parameter-form">
+                  <div class="step3-column">
+                    ${generateEQDesign()}
+                  </div>
+                  <div class="step3-column">
+                    ${generateOptimizationFineTuning()}
+                  </div>
+                </form>
+              </div>
+              <div class="step-actions step3-actions">
+                <button type="submit" id="optimize_btn" class="btn btn-primary btn-large">
+                  Run Optimization
+                </button>
+                <button type="button" id="reset_btn" class="btn btn-outline">
+                  Reset to Defaults
+                </button>
+              </div>
+
+              <!-- Results Section - Shown after optimization -->
+              <div id="step3-results" class="step3-results" style="display: none;">
+                <div class="step3-results-header">
+                  <h3>Optimization Results</h3>
+                  <div class="step3-score-row">
+                    <div class="step3-score-item">
+                      <label>Before:</label>
+                      <span id="step3_score_before">-</span>
+                    </div>
+                    <div class="step3-score-item">
+                      <label>After:</label>
+                      <span id="step3_score_after">-</span>
+                    </div>
+                    <div class="step3-score-item improvement">
+                      <label>Improvement:</label>
+                      <span id="step3_score_improvement">-</span>
+                    </div>
+                  </div>
+                </div>
+
+                ${generatePlotsPanel()}
+
+                <div class="step3-results-actions">
+                  <button type="button" id="step3_continue_btn" class="btn btn-primary btn-large">
+                    Continue to Listening & Testing
+                  </button>
+                  <button type="button" id="step3_reoptimize_btn" class="btn btn-outline">
+                    Tweak & Re-optimize
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Step 4: Listening & Testing -->
+          <div data-step="4" id="step4-container">
+            <div class="step-content-wrapper">
+              <div class="step-header-section">
+                <h2 class="step-title">Listening & Testing</h2>
+                <p class="step-description">
+                  Test your optimized EQ with the audio player. Toggle EQ on/off to hear the difference.
+                </p>
+              </div>
+              <div class="results-content">
+                <!-- Audio Player for Step 4 -->
+                <div class="audio-player-section">
+                  <div class="audio-controls" id="step4-audio-controls"></div>
+                </div>
+              </div>
+              <div class="step-actions">
+                <button type="button" id="continue_to_save_btn" class="btn btn-primary btn-large">
+                  Continue to Save & Export
+                </button>
+                <button type="button" id="reoptimize_btn" class="btn btn-outline">
+                  Re-run Optimization
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Step 5: Save & Export -->
+          <div data-step="5" id="step5-container">
+            <div class="step-content-wrapper">
+              <div class="step-header-section">
+                <h2 class="step-title">Save & Export</h2>
+                <p class="step-description">
+                  Export your optimized EQ settings to use with your favorite audio software or hardware.
+                </p>
+              </div>
+              <div class="export-section">
+                <div class="export-format-section">
+                  <label for="export_format_select">Export Format:</label>
+                  <select id="export_format_select" class="export-format-select">
+                    <option value="apo">APO - Equalizer APO (Windows)</option>
+                    <option value="aupreset">AUpreset - macOS Audio Units</option>
+                    <option value="rme">RME Channel - RME TotalMix FX</option>
+                    <option value="rme-room">RME Room - RME Room Correction</option>
+                  </select>
+                  <button type="button" id="download_apo_btn" class="btn btn-primary btn-large" disabled>
+                    💾 Download EQ File
+                  </button>
+                </div>
+              </div>
+              <div class="step-actions">
+                <button type="button" id="start_new_btn" class="btn btn-secondary btn-large">
+                  Start New Optimization
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modals -->
+      ${generateOptimizationModal()}
+      ${generateCaptureModal()}
+    `;
+  }
+
+  private initializeStepNavigation(): void {
+    // Define steps
+    const steps = [
+      { id: 1, label: "Choose Use Case", shortLabel: "Use Case", enabled: true },
+      { id: 2, label: "Data Acquisition", shortLabel: "Data", enabled: false },
+      { id: 3, label: "EQ Design & Optimization", shortLabel: "Optimize", enabled: false },
+      { id: 4, label: "Results & Listening", shortLabel: "Results", enabled: false },
+      { id: 5, label: "Save & Export", shortLabel: "Export", enabled: false },
+    ];
+
+    // Initialize Navigator
+    const navContainer = document.getElementById("nav-container")!;
+    this.stepNavigator = new StepNavigator(navContainer, {
+      steps,
+      currentStep: 1,
+      onStepChange: (stepId) => {
+        console.log("✨ Step changed to:", stepId);
+        this.stepContainer.goToStep(stepId);
+      },
+      onPrevious: () => {
+        const currentStep = this.stepNavigator.getCurrentStep();
+        if (currentStep > 1) {
+          this.stepNavigator.goToStep(currentStep - 1);
+        }
+      },
+      onNext: () => {
+        const currentStep = this.stepNavigator.getCurrentStep();
+        if (currentStep < 5 && steps[currentStep].enabled) {
+          this.stepNavigator.goToStep(currentStep + 1);
+        }
+      },
+    });
+
+    // Initialize Container
+    const contentContainer = document.getElementById("content-container")!;
+    this.stepContainer = new StepContainer(contentContainer, {
+      currentStep: 1,
+      animationDuration: 300,
+      onBeforeStepChange: (fromStep, toStep) => {
+        console.log(`🔄 Transitioning from step ${fromStep} to ${toStep}`);
+        return true;
+      },
+      onAfterStepChange: (stepId) => {
+        console.log(`✅ Now on step ${stepId}`);
+        this.stepNavigator.goToStep(stepId);
+      },
+    });
+
+    // Initialize Use Case Selector (Step 1)
+    const step1Container = document.getElementById("step1-container")!;
+    this.useCaseSelector = new UseCaseSelector(step1Container, {
+      onSelect: (useCase) => {
+        console.log("📱 Selected use case:", useCase);
+
+        // Special handling for "Play Music" - skip directly to step 4
+        if (useCase === "play-music") {
+          // Enable step 4 only
+          this.stepNavigator.setStepEnabled(4, true);
+
+          // Jump directly to audio player
+          setTimeout(() => {
+            this.stepNavigator.goToStep(4);
+          }, 500);
+          return;
+        }
+
+        // Regular flow for other use cases
+        // Enable steps 2 and 3 after selection
+        this.stepNavigator.setStepEnabled(2, true);
+        this.stepNavigator.setStepEnabled(3, true);
+
+        // Configure Step 2 based on use case
+        this.configureDataAcquisitionStep(useCase);
+
+        // Auto-advance to step 2
+        setTimeout(() => {
+          this.stepNavigator.goToStep(2);
+        }, 500);
+      },
+    });
+
+    // Setup Step 2 Next button
+    const step2NextBtn = document.getElementById("step2_next_btn");
+    if (step2NextBtn) {
+      step2NextBtn.addEventListener("click", () => {
+        this.stepNavigator.goToStep(3);
+      });
+    }
+
+    // Setup Step 3 button handlers
+    const optimizeBtn = document.getElementById("optimize_btn");
+    if (optimizeBtn) {
+      optimizeBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        this.runOptimization();
+      });
+    }
+
+    const resetBtn = document.getElementById("reset_btn");
+    if (resetBtn) {
+      resetBtn.addEventListener("click", () => {
+        this.uiManager.resetToDefaults();
+      });
+    }
+
+    // Step 3 results buttons
+    const step3ContinueBtn = document.getElementById("step3_continue_btn");
+    if (step3ContinueBtn) {
+      step3ContinueBtn.addEventListener("click", () => {
+        this.stepNavigator.setStepEnabled(4, true);
+        this.stepNavigator.goToStep(4);
+      });
+    }
+
+    const step3ReoptimizeBtn = document.getElementById("step3_reoptimize_btn");
+    if (step3ReoptimizeBtn) {
+      step3ReoptimizeBtn.addEventListener("click", () => {
+        // Scroll back to top of step 3 to see the parameters
+        const step3Container = document.getElementById("step3-container");
+        if (step3Container) {
+          step3Container.scrollTo({ top: 0, behavior: "smooth" });
+        }
+      });
+    }
+
+    // Setup Step 4 button handlers
+    const continueToSaveBtn = document.getElementById("continue_to_save_btn");
+    if (continueToSaveBtn) {
+      continueToSaveBtn.addEventListener("click", () => {
+        this.stepNavigator.setStepEnabled(5, true);
+        this.stepNavigator.goToStep(5);
+      });
+    }
+
+    const reoptimizeBtn = document.getElementById("reoptimize_btn");
+    if (reoptimizeBtn) {
+      reoptimizeBtn.addEventListener("click", () => {
+        this.stepNavigator.goToStep(3);
+      });
+    }
+
+    // Setup Step 5 button handlers
+    const startNewBtn = document.getElementById("start_new_btn");
+    if (startNewBtn) {
+      startNewBtn.addEventListener("click", () => {
+        if (confirm("Start a new optimization?\n\nThis will reset the current workflow.")) {
+          // Reset all steps except Step 1
+          for (let i = 2; i <= 5; i++) {
+            this.stepNavigator.setStepEnabled(i, false);
+          }
+
+          // Clear selection and navigate to Step 1
+          this.useCaseSelector.clearSelection();
+          this.stepNavigator.goToStep(1);
+
+          // Reset UI state
+          this.uiManager.clearResults();
+          this.plotComposer.clearAllPlots();
+        }
+      });
+    }
+  }
+
+  /**
+   * Initialize AudioPlayer early so CamillaDSP is running and ready for EQ updates
+   */
+  private async initializeAudioPlayer(): Promise<void> {
+    const audioControlsContainer = document.getElementById("step4-audio-controls") as HTMLElement;
+    if (audioControlsContainer) {
+      // Clear the old controls and let the AudioPlayer component build its own UI
+      audioControlsContainer.innerHTML = "";
+
+      this.audioPlayer = new AudioPlayer(
+        audioControlsContainer,
+        {
+          enableEQ: true,
+          enableSpectrum: true,
+          showProgress: true,
+          showFrequencyLabels: true,
+          maxFilters: 11,
+        },
+        {
+          onEQToggle: (enabled) => this.setEQEnabled(enabled),
+          onError: (error) => this.uiManager.showError(error),
+        },
+      );
+
+      console.log("[Main] AudioPlayer initialized");
+
+      // Load a default demo track to start CamillaDSP
+      // This ensures CamillaDSP is running and ready to receive EQ parameters
+      try {
+        await this.audioPlayer.loadDemoTrack("demo1.flac");
+        console.log("[Main] Default demo track loaded - CamillaDSP is now running and ready for EQ updates");
+      } catch (error) {
+        console.warn("[Main] Could not load default demo track (this is OK if no demo files exist):", error);
+        // This is not critical - CamillaDSP will start when user loads audio in Step 4
+      }
+    } else {
+      console.error("Audio controls container (#step4-audio-controls) not found!");
+    }
+  }
+
+  /**
+   * Configure Data Acquisition step to show only relevant fields for the selected use case
+   */
+  private configureDataAcquisitionStep(useCase: "speaker" | "headphone" | "capture" | "file" | "play-music"): void {
+    // Hide the tab interface since we're showing the section directly
+    const tabsContainer = document.querySelector(".input-source-tabs") as HTMLElement;
+    if (tabsContainer) {
+      tabsContainer.style.display = "none";
+    }
+
+    // Get all tab content sections
+    const fileInputs = document.getElementById("file_inputs");
+    const speakerInputs = document.getElementById("speaker_inputs");
+    const headphoneInputs = document.getElementById("headphone_inputs");
+    const captureInputs = document.getElementById("capture_inputs");
+
+    // Hide all sections first
+    [fileInputs, speakerInputs, headphoneInputs, captureInputs].forEach((el) => {
+      if (el) {
+        el.style.display = "none";
+        el.classList.remove("active");
+      }
+    });
+
+    // Update description and show relevant section
+    const description = document.getElementById("step2-description");
+
+    switch (useCase) {
+      case "speaker":
+        if (speakerInputs) {
+          speakerInputs.style.display = "block";
+          speakerInputs.classList.add("active");
+        }
+        if (description) {
+          description.textContent = "Search for your speaker in our database or select from recent measurements.";
+        }
+        // Trigger the radio button selection for proper UI state
+        const speakerRadio = document.querySelector<HTMLInputElement>('input[name="input_source"][value="speaker"]');
+        if (speakerRadio) {
+          speakerRadio.checked = true;
+          speakerRadio.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+        break;
+
+      case "headphone":
+        if (headphoneInputs) {
+          headphoneInputs.style.display = "block";
+          headphoneInputs.classList.add("active");
+        }
+        if (description) {
+          description.textContent = "Load your headphone measurement file and select the target curve.";
+        }
+        const headphoneRadio = document.querySelector<HTMLInputElement>('input[name="input_source"][value="headphone"]');
+        if (headphoneRadio) {
+          headphoneRadio.checked = true;
+          headphoneRadio.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+        break;
+
+      case "capture":
+        if (captureInputs) {
+          captureInputs.style.display = "block";
+          captureInputs.classList.add("active");
+        }
+        if (description) {
+          description.textContent = "Capture live audio measurements using your microphone and test signal.";
+        }
+        const captureRadio = document.querySelector<HTMLInputElement>('input[name="input_source"][value="capture"]');
+        if (captureRadio) {
+          captureRadio.checked = true;
+          captureRadio.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+        break;
+
+      case "file":
+        if (fileInputs) {
+          fileInputs.style.display = "block";
+          fileInputs.classList.add("active");
+        }
+        if (description) {
+          description.textContent = "Load CSV files containing your input curve and optionally a target curve.";
+        }
+        const fileRadio = document.querySelector<HTMLInputElement>('input[name="input_source"][value="file"]');
+        if (fileRadio) {
+          fileRadio.checked = true;
+          fileRadio.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+        break;
+    }
   }
 
   private setupManagerConnections(): void {
@@ -161,22 +602,8 @@ class AutoEQApplication {
   }
 
   private overrideUIEventHandlers(): void {
-    // Override the UI manager's event handlers to connect to our logic
-    const form = this.uiManager.getForm();
-    const optimizeBtn = this.uiManager.getOptimizeBtn();
+    // Cancel button handler for optimization modal
     const cancelBtn = this.uiManager.getCancelOptimizationBtn();
-
-    // Add event listeners directly
-    form.addEventListener("submit", (e) => {
-      e.preventDefault();
-      this.runOptimization();
-    });
-
-    optimizeBtn.addEventListener("click", (e) => {
-      e.preventDefault();
-      this.runOptimization();
-    });
-
     if (cancelBtn) {
       cancelBtn.addEventListener("click", () => this.cancelOptimization());
     }
@@ -266,6 +693,12 @@ class AutoEQApplication {
       this.uiManager.clearResults();
       this.plotComposer.clearAllPlots();
 
+      // Hide Step 3 results section when starting new optimization
+      const step3Results = document.getElementById("step3-results");
+      if (step3Results) {
+        step3Results.style.display = "none";
+      }
+
       // Get form data
       const formData = new FormData(this.uiManager.getForm());
 
@@ -311,6 +744,13 @@ class AutoEQApplication {
         result.preference_score_before !== undefined &&
         result.preference_score_after !== undefined
       ) {
+        // Update scores in Step 3
+        this.updateStep3Scores(
+          result.preference_score_before,
+          result.preference_score_after,
+        );
+
+        // Also update scores in the old location (for Step 4)
         this.uiManager.updateScores(
           result.preference_score_before,
           result.preference_score_after,
@@ -352,9 +792,47 @@ class AutoEQApplication {
 
       // Force layout recalculation after plots are updated
       this.plotManager.forceRecalculate();
+
+      // Show results section in Step 3
+      const step3Results = document.getElementById("step3-results");
+      if (step3Results) {
+        step3Results.style.display = "block";
+
+        // Scroll to results section
+        setTimeout(() => {
+          step3Results.scrollIntoView({ behavior: "smooth", block: "start" });
+        }, 300);
+      }
+
+      // Enable Step 4 for when user is ready to test with audio
+      this.stepNavigator.setStepEnabled(4, true);
     } catch (error) {
       console.error("Error processing optimization results:", error);
       this.uiManager.showError("Error processing results: " + error);
+    }
+  }
+
+  /**
+   * Update scores displayed in Step 3
+   */
+  private updateStep3Scores(scoreBefore: number, scoreAfter: number): void {
+    const beforeEl = document.getElementById("step3_score_before");
+    const afterEl = document.getElementById("step3_score_after");
+    const improvementEl = document.getElementById("step3_score_improvement");
+
+    if (beforeEl) {
+      beforeEl.textContent = scoreBefore.toFixed(2);
+    }
+
+    if (afterEl) {
+      afterEl.textContent = scoreAfter.toFixed(2);
+    }
+
+    if (improvementEl) {
+      const improvement = scoreAfter - scoreBefore;
+      const improvementPercent = ((improvement / Math.abs(scoreBefore)) * 100);
+      const sign = improvement >= 0 ? "+" : "";
+      improvementEl.textContent = `${sign}${improvement.toFixed(2)} (${sign}${improvementPercent.toFixed(1)}%)`;
     }
   }
 

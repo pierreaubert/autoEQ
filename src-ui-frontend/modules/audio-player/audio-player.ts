@@ -292,10 +292,37 @@ export class AudioPlayer {
 
     const html = `
 <div class="audio-player">
-  <div class="audio-control-row">
 
-    <!-- Block: Track Selection (compact) -->
-    <div class="demo-track-container">
+  <!-- Section: Playback Options -->
+  ${this.config.enableEQ ? `
+  <div class="playback-options-section-inline">
+    <h4>Playback Options</h4>
+    <div class="playback-options-container"></div>
+  </div>
+  ` : ''}
+
+  <!-- Section: Filter Configuration -->
+  ${this.config.enableEQ ? `
+  <div class="filter-config-section-inline">
+    <h4>Filter Configuration</h4>
+    <div class="eq-table-container"></div>
+  </div>
+  ` : ''}
+
+  <!-- Section: Spectrum Analyzer -->
+  <div class="spectrum-section-inline">
+    <h4>Spectrum Analyzer</h4>
+    <div class="frequency-analyzer">
+      <canvas class="spectrum-canvas" width="800" height="80"></canvas>
+    </div>
+  </div>
+
+  <!-- Section: Bottom Control Row -->
+  <div class="audio-control-row-inline" style="display: flex; gap: 16px; align-items: flex-start;">
+
+    <!-- Block: Track Selection -->
+    <div class="demo-track-container" style="display: flex; flex-direction: column; gap: 4px; flex-shrink: 0;">
+      <label style="font-weight: 500; font-size: 0.9em;">Load Track</label>
       <div class="demo-track-select-row">
         <select id="${selectId}" class="demo-audio-select">
           <option value="">Pick a track...</option>
@@ -306,15 +333,16 @@ export class AudioPlayer {
             )
             .join("")}
         </select>
-        <button type="button" class="file-upload-btn">Load a file: 📁</button>
+        <button type="button" class="file-upload-btn">📁</button>
       </div>
     </div>
 
-    <!-- Block: Playback Controls (vertical) -->
-    <div class="audio-playback-controls">
+    <!-- Block: Playback Controls -->
+    <div class="audio-playback-controls" style="display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 250px;">
+      <label style="font-weight: 500; font-size: 0.9em;">Play</label>
       <div class="audio-status-display">
         <div class="status-display-row">
-          <div class="audio-status-text">No audio selected</div>
+          <div class="audio-status-text">No audio</div>
           <div class="audio-time-display">
             <span class="audio-position">--:--</span> / <span class="audio-duration">--:--</span>
           </div>
@@ -332,16 +360,10 @@ export class AudioPlayer {
       </div>
     </div>
 
-    <!-- Block: Frequency Analyzer -->
-    <div class="frequency-analyzer">
-      <canvas class="spectrum-canvas" width="520" height="72"></canvas>
-    </div>
-
-    <!-- Block: EQ Controls -->
-    <div class="audio-eq-controls">
-      ${
-        this.config.enableEQ
-          ? `
+    <!-- Block: Mini EQ -->
+    ${this.config.enableEQ ? `
+    <div class="audio-eq-controls" style="display: flex; flex-direction: column; gap: 4px; flex-shrink: 0;">
+      <label style="font-weight: 500; font-size: 0.9em;">EQ</label>
       <div class="eq-control-section">
         <div class="eq-mini-graph">
           <canvas class="eq-mini-canvas" width="160" height="50"></canvas>
@@ -354,17 +376,15 @@ export class AudioPlayer {
           <div class="eq-toggle-buttons" tabindex="0">
             <button type="button" class="eq-toggle-btn eq-on-btn active">On</button>
             <button type="button" class="eq-toggle-btn eq-off-btn">Off</button>
-            <button type="button" class="eq-toggle-btn eq-config-btn">⚙️</button>
           </div>
         </div>
       </div>
-    `
-          : ""
-      }
     </div>
+    ` : ''}
 
-    <!-- Block: Audio Metrics (vertical) -->
-    <div class="audio-metrics-block">
+    <!-- Block: Audio Metrics -->
+    <div class="audio-metrics-block" style="display: flex; flex-direction: column; gap: 4px; flex-shrink: 0;">
+      <label style="font-weight: 500; font-size: 0.9em;">Loudness</label>
       <div class="metrics-display">
         <div class="metric-section">
           <div class="metric-label">LUFS M/S</div>
@@ -403,7 +423,6 @@ export class AudioPlayer {
     this.stopBtn = this.container.querySelector(".stop-button");
     this.eqOnBtn = this.container.querySelector(".eq-on-btn");
     this.eqOffBtn = this.container.querySelector(".eq-off-btn");
-    this.eqConfigBtn = this.container.querySelector(".eq-config-btn");
     this.eqMiniCanvas = this.container.querySelector(".eq-mini-canvas");
 
     this.statusText = this.container.querySelector(".audio-status-text");
@@ -531,12 +550,6 @@ export class AudioPlayer {
         this.visualEQConfig!.setEQEnabled(false);
         this.updateEQButtonStates(false);
         this.callbacks.onEQToggle?.(false);
-      });
-    }
-
-    if (this.eqConfigBtn && this.visualEQConfig) {
-      this.eqConfigBtn.addEventListener("click", () => {
-        this.visualEQConfig!.openEQModal(this.eqConfigBtn!);
       });
     }
   }
