@@ -49,6 +49,8 @@ pub fn gen_tone(freq: f32, amp: f32, sample_rate: u32, duration: f32) -> Vec<f32
 /// Generate a two-tone signal (sum of two sine waves)
 ///
 /// Used for intermodulation distortion (IMD) testing.
+/// If a1 + a2 > 1.0, the signals are automatically normalized to prevent clipping
+/// while preserving the amplitude ratio.
 ///
 /// # Arguments
 /// * `f1` - First frequency in Hz
@@ -72,8 +74,16 @@ pub fn gen_two_tone(
     let mut phase1: f32 = 0.0;
     let mut phase2: f32 = 0.0;
 
+    // Auto-normalize if the sum of amplitudes exceeds 1.0 to prevent clipping
+    let sum_amp = a1 + a2;
+    let (norm_a1, norm_a2) = if sum_amp > 1.0 {
+        (a1 / sum_amp, a2 / sum_amp)
+    } else {
+        (a1, a2)
+    };
+
     for _ in 0..n_frames {
-        let sample = a1 * phase1.sin() + a2 * phase2.sin();
+        let sample = norm_a1 * phase1.sin() + norm_a2 * phase2.sin();
         signal.push(clip(sample));
         phase1 += dphi1;
         phase2 += dphi2;
@@ -141,7 +151,9 @@ pub fn gen_white_noise(amp: f32, sample_rate: u32, duration: f32) -> Vec<f32> {
         // LCG constants from Numerical Recipes
         seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
         // Convert to [-1, 1] range
-        let random = (seed as f32 / u32::MAX as f32) * 2.0 - 1.0;
+        // Mask to 32 bits to get proper range [0, u32::MAX]
+        let random_u32 = (seed & 0xFFFFFFFF) as u32;
+        let random = (random_u32 as f32 / u32::MAX as f32) * 2.0 - 1.0;
         signal.push(clip(amp * random));
     }
 
@@ -175,7 +187,9 @@ pub fn gen_pink_noise(amp: f32, sample_rate: u32, duration: f32) -> Vec<f32> {
     for _ in 0..n_frames {
         // Generate white noise
         seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
-        let white = (seed as f32 / u32::MAX as f32) * 2.0 - 1.0;
+        // Mask to 32 bits to get proper range [0, u32::MAX]
+        let random_u32 = (seed & 0xFFFFFFFF) as u32;
+        let white = (random_u32 as f32 / u32::MAX as f32) * 2.0 - 1.0;
 
         // Update pink noise state at different rates
         b0 = 0.99886 * b0 + white * 0.0555179;
@@ -217,7 +231,9 @@ pub fn gen_m_noise(amp: f32, sample_rate: u32, duration: f32) -> Vec<f32> {
 
     for _ in 0..n_frames {
         seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
-        let white = (seed as f32 / u32::MAX as f32) * 2.0 - 1.0;
+        // Mask to 32 bits to get proper range [0, u32::MAX]
+        let random_u32 = (seed & 0xFFFFFFFF) as u32;
+        let white = (random_u32 as f32 / u32::MAX as f32) * 2.0 - 1.0;
         noise_buffer.push(white);
     }
 
@@ -226,7 +242,7 @@ pub fn gen_m_noise(amp: f32, sample_rate: u32, duration: f32) -> Vec<f32> {
     let mut hp_state = 0.0f32;
 
     // High-pass filter coefficient (cutoff around 30 Hz)
-    let hp_coeff = 1.0 - (2.0 * PI * 30.0 / sample_rate as f32).exp();
+    let hp_coeff = (-2.0 * PI * 30.0 / sample_rate as f32).exp();
 
     // Peak filter coefficients (peak around 6300 Hz)
     let peak_freq = 6300.0;
