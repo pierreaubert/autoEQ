@@ -463,6 +463,10 @@ impl AudioStreamingManager {
         let mut pre_buffered = false;
         let mut packet_count = 0usize;
 
+        // Track when buffer becomes empty for too long
+        let mut buffer_empty_since: Option<std::time::Instant> = None;
+        const BUFFER_EMPTY_TIMEOUT: Duration = Duration::from_secs(3);
+
         log_info!(
             "Pre-buffering {} frames ({:.2}s at {}Hz)...",
             target_buffer_frames,
@@ -478,6 +482,8 @@ impl AudioStreamingManager {
                 match command {
                     StreamingCommand::Start | StreamingCommand::Resume => {
                         playing = true;
+                        // Reset empty buffer timer when starting/resuming
+                        buffer_empty_since = None;
                         if pre_buffered {
                             let mut state_lock = state.lock().unwrap();
                             *state_lock = StreamingState::Playing;
@@ -487,6 +493,8 @@ impl AudioStreamingManager {
                     }
                     StreamingCommand::Pause => {
                         playing = false;
+                        // Reset empty buffer timer when pausing
+                        buffer_empty_since = None;
                         let mut state_lock = state.lock().unwrap();
                         *state_lock = StreamingState::Paused;
                         let _ = event_tx.send(StreamingEvent::StateChanged(StreamingState::Paused));
@@ -672,6 +680,36 @@ impl AudioStreamingManager {
 
             // Playback phase: write buffered data and decode ahead
             if playing && pre_buffered {
+                // Check if buffer has been empty for too long (stalled stream)
+                if buffered_frames == 0 {
+                    if buffer_empty_since.is_none() {
+                        // Buffer just became empty, start timer
+                        buffer_empty_since = Some(std::time::Instant::now());
+                        log_warn!("Buffer is empty, starting timeout timer");
+                    } else if let Some(empty_start) = buffer_empty_since {
+                        // Check if buffer has been empty for too long
+                        if empty_start.elapsed() > BUFFER_EMPTY_TIMEOUT {
+                            log_error!(
+                                "Buffer has been empty for more than {:?}, stopping streaming",
+                                BUFFER_EMPTY_TIMEOUT
+                            );
+                            let mut state_lock = state.lock().unwrap();
+                            *state_lock = StreamingState::Error;
+                            let _ = event_tx.send(StreamingEvent::Error(
+                                "Streaming stalled: buffer empty for too long".to_string(),
+                            ));
+                            let _ = event_tx.send(StreamingEvent::StateChanged(StreamingState::Error));
+                            break;
+                        }
+                    }
+                } else {
+                    // Buffer has data, reset empty timer
+                    if buffer_empty_since.is_some() {
+                        log_info!("Buffer recovered, has {} frames", buffered_frames);
+                    }
+                    buffer_empty_since = None;
+                }
+
                 // Write from buffer to stdin if we have data
                 if !audio_buffer.is_empty() {
                     // Write in chunks for better performance
