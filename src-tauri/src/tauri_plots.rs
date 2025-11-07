@@ -254,6 +254,11 @@ pub async fn generate_plot_filters(params: PlotFiltersParams) -> Result<serde_js
         parallel_threads: 0,
         seed: None, // Random seed for deterministic optimization (None = random)
         qa: None,   // Quality assurance mode disabled for UI (None = disabled)
+        driver1: None,
+        driver2: None,
+        driver3: None,
+        driver4: None,
+        crossover_type: "linkwitzriley4".to_string(),
     };
 
     // Generate the plot

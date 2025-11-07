@@ -46,7 +46,7 @@ export interface OptimizationParams {
   spacing_weight: number;
   smooth: boolean;
   smooth_n: number;
-  loss: string;
+  loss: string; // "flat", "score", "mixed", "drivers-flat", etc.
   peq_model?: PeqModel; // New PEQ model system
   iir_hp_pk: boolean; // Deprecated, kept for backward compatibility
   // DE-specific parameters
@@ -64,6 +64,12 @@ export interface OptimizationParams {
   // Target curve data (for headphones)
   target_frequencies?: number[];
   target_magnitudes?: number[];
+  // Multi-driver crossover optimization parameters
+  driver1_path?: string;
+  driver2_path?: string;
+  driver3_path?: string;
+  driver4_path?: string;
+  crossover_type?: string; // "butterworth2", "linkwitzriley2", "linkwitzriley4"
 }
 
 export interface PlotData {

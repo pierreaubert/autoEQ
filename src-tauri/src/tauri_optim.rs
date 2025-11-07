@@ -71,7 +71,7 @@ pub struct OptimizationParams {
     pub spacing_weight: f64,
     pub smooth: bool,
     pub smooth_n: usize,
-    pub loss: String,              // "flat", "score", or "mixed"
+    pub loss: String,              // "flat", "score", "mixed", or "drivers-flat"
     pub peq_model: Option<String>, // New PEQ model system: "pk", "hp-pk", "hp-pk-lp", etc.
     // DE-specific parameters
     pub strategy: Option<String>,
@@ -87,6 +87,12 @@ pub struct OptimizationParams {
     pub captured_magnitudes: Option<Vec<f64>>,
     pub target_frequencies: Option<Vec<f64>>,
     pub target_magnitudes: Option<Vec<f64>>,
+    // Multi-driver crossover optimization parameters
+    pub driver1_path: Option<String>,
+    pub driver2_path: Option<String>,
+    pub driver3_path: Option<String>,
+    pub driver4_path: Option<String>,
+    pub crossover_type: Option<String>, // "butterworth2", "linkwitzriley2", "linkwitzriley4"
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -263,6 +269,57 @@ pub fn validate_params(
         return Err(format!("Adaptive weight CR must be between 0 and 1 (got: {})", w).into());
     }
 
+    // Validate multi-driver parameters
+    if params.loss == "drivers-flat" {
+        // Check that at least driver1 and driver2 are provided
+        if params.driver1_path.is_none() || params.driver2_path.is_none() {
+            return Err("Multi-driver optimization requires at least driver1_path and driver2_path when using loss='drivers-flat'".into());
+        }
+
+        // Check crossover type
+        if let Some(ref crossover_type) = params.crossover_type {
+            let valid_types = ["butterworth2", "linkwitzriley2", "linkwitzriley4"];
+            if !valid_types.contains(&crossover_type.as_str()) {
+                return Err(format!(
+                    "Invalid crossover type '{}'. Valid types: {}",
+                    crossover_type,
+                    valid_types.join(", ")
+                )
+                .into());
+            }
+        }
+
+        // Count number of drivers
+        let n_drivers = [
+            &params.driver1_path,
+            &params.driver2_path,
+            &params.driver3_path,
+            &params.driver4_path,
+        ]
+        .iter()
+        .filter(|d| d.is_some())
+        .count();
+
+        if n_drivers < 2 || n_drivers > 4 {
+            return Err(format!(
+                "Multi-driver optimization requires 2-4 drivers, got {}",
+                n_drivers
+            )
+            .into());
+        }
+    } else {
+        // If not using drivers-flat loss, driver arguments should not be provided
+        if params.driver1_path.is_some()
+            || params.driver2_path.is_some()
+            || params.driver3_path.is_some()
+            || params.driver4_path.is_some()
+        {
+            return Err(
+                "Driver paths can only be provided when using loss='drivers-flat'".into(),
+            );
+        }
+    }
+
     Ok(())
 }
 
@@ -406,6 +463,7 @@ pub async fn run_optimization_internal<P: ProgressCallback + 'static>(
             "speaker-score" => LossType::SpeakerScore,
             "headphone-flat" => LossType::HeadphoneFlat,
             "headphone-score" => LossType::HeadphoneScore,
+            "drivers-flat" => LossType::DriversFlat,
             _ => LossType::SpeakerFlat,
         },
         peq_model: match params.peq_model.as_deref() {
@@ -431,6 +489,14 @@ pub async fn run_optimization_internal<P: ProgressCallback + 'static>(
         parallel_threads: 0,
         seed: None, // Random seed for deterministic optimization (None = random)
         qa: None,   // Quality assurance mode disabled for UI (None = disabled)
+        // Multi-driver crossover optimization parameters
+        driver1: params.driver1_path.map(PathBuf::from),
+        driver2: params.driver2_path.map(PathBuf::from),
+        driver3: params.driver3_path.map(PathBuf::from),
+        driver4: params.driver4_path.map(PathBuf::from),
+        crossover_type: params
+            .crossover_type
+            .unwrap_or_else(|| "linkwitzriley4".to_string()),
     };
 
     // Load input data (following autoeq.rs pattern)
@@ -720,7 +786,7 @@ pub async fn run_optimization_internal<P: ProgressCallback + 'static>(
 #[cfg(test)]
 #[allow(dead_code)]
 pub mod mocks {
-    use crate::OptimizationParams;
+    use crate::tauri_optim::OptimizationParams;
     use std::collections::HashMap;
 
     // Mock HTTP client for testing API calls
@@ -823,6 +889,11 @@ pub mod mocks {
             captured_magnitudes: None,
             target_frequencies: None,
             target_magnitudes: None,
+            driver1_path: None,
+            driver2_path: None,
+            driver3_path: None,
+            driver4_path: None,
+            crossover_type: None,
         }
     }
 
@@ -1145,13 +1216,9 @@ pub mod mocks {
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        CurveData, OptimizationParams, OptimizationResult, PlotData, ProgressUpdate,
-        curve_data_to_curve, validate_params,
-    };
+    use crate::tauri_optim::{OptimizationParams, OptimizationResult, ProgressUpdate, validate_params};
+    use crate::tauri_plots::{CurveData, PlotData, curve_data_to_curve};
     use std::collections::HashMap;
-
-    use crate::test_mocks;
 
     // Helper function to create test curve data
     fn create_test_curve_data() -> CurveData {
@@ -1200,6 +1267,11 @@ mod tests {
             captured_magnitudes: None,
             target_frequencies: None,
             target_magnitudes: None,
+            driver1_path: None,
+            driver2_path: None,
+            driver3_path: None,
+            driver4_path: None,
+            crossover_type: None,
         }
     }
 
@@ -1396,7 +1468,7 @@ mod tests {
     #[test]
     fn test_validate_params_comprehensive() {
         // Test all valid edge cases
-        let edge_cases = test_mocks::mocks::create_edge_case_params();
+        let edge_cases = super::mocks::create_edge_case_params();
         for (name, params) in edge_cases {
             let result = validate_params(&params);
             assert!(
@@ -1411,7 +1483,7 @@ mod tests {
     #[test]
     fn test_validate_params_comprehensive_invalid() {
         // Test all invalid cases
-        let invalid_cases = test_mocks::mocks::create_invalid_params();
+        let invalid_cases = super::mocks::create_invalid_params();
         for (name, params, expected_error) in invalid_cases {
             let result = validate_params(&params);
             assert!(
@@ -1551,7 +1623,7 @@ mod tests {
         println!("[TEST] 🧪 Testing optimization progress event structure");
 
         // Test that we can create and serialize progress updates
-        use crate::ProgressUpdate;
+        use super::ProgressUpdate;
 
         let progress = ProgressUpdate {
             iteration: 10,
@@ -1588,7 +1660,7 @@ mod tests {
     #[test]
     fn test_optimization_progress_event_structure() {
         // Test that ProgressUpdate can be serialized correctly for events
-        use crate::ProgressUpdate;
+        use super::ProgressUpdate;
 
         let progress = ProgressUpdate {
             iteration: 42,

@@ -285,10 +285,9 @@ install-ubuntu-arm64-driver :
 		# where is the geckodriver ?
 
 install-ubuntu-node:
-		# node
-		sudo npm cache clean -f
-		sudo npm install -f n
-		sudo n stable
+		# use nvm
+		curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
+		NVM_DIR=$HOME/.nvm && nvm install stable
 
 install-ubuntu-x86: install-ubuntu-common install-ubuntu-x86-driver install-ubuntu-node
 

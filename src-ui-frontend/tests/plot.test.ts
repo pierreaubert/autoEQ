@@ -17,7 +17,7 @@ import {
   displayTonalBalancePlots,
   createSampleCurveData,
   displayOptimizationResults,
-} from "../modules/plot-examples";
+} from "../examples/plot-examples";
 
 // Mock Plotly module
 vi.mock("plotly.js-basic-dist-min", () => ({

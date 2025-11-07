@@ -15,6 +15,9 @@ describe("SpectrumAnalyzerComponent", () => {
   let component: SpectrumAnalyzerComponent;
 
   beforeEach(() => {
+    // Clear all mocks before each test
+    vi.clearAllMocks();
+
     // Create a canvas element
     canvas = document.createElement("canvas");
     canvas.width = 800;

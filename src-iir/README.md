@@ -297,7 +297,7 @@ From the test output:
 
 ### Option 1: Combine with Anti-Clipping
 
-```rust
+```rust,ignore
 // Safest: prevent clipping AND maintain loudness
 let total_gain = peq_preamp_gain(&peq) + peq_loudness_gain(&peq, "k");
 
@@ -306,7 +306,7 @@ let total_gain = peq_preamp_gain(&peq) + peq_loudness_gain(&peq, "k");
 
 ### Option 2: Loudness Compensation Only
 
-```rust
+```rust,ignore
 // If you know your PEQ won't clip (e.g., cuts only)
 let total_gain = peq_loudness_gain(&peq, "k");
 

@@ -67,6 +67,77 @@ Object.defineProperty(window, "performance", {
   },
 });
 
+// Mock HTMLCanvasElement.getContext for canvas tests
+const mockCanvasContext = {
+  fillStyle: "",
+  strokeStyle: "",
+  lineWidth: 1,
+  font: "10px sans-serif",
+  textAlign: "left" as CanvasTextAlign,
+  textBaseline: "alphabetic" as CanvasTextBaseline,
+  fillRect: vi.fn(),
+  strokeRect: vi.fn(),
+  clearRect: vi.fn(),
+  fillText: vi.fn(),
+  strokeText: vi.fn(),
+  measureText: vi.fn(() => ({ width: 0 })),
+  beginPath: vi.fn(),
+  closePath: vi.fn(),
+  moveTo: vi.fn(),
+  lineTo: vi.fn(),
+  arc: vi.fn(),
+  arcTo: vi.fn(),
+  rect: vi.fn(),
+  stroke: vi.fn(),
+  fill: vi.fn(),
+  save: vi.fn(),
+  restore: vi.fn(),
+  scale: vi.fn(),
+  rotate: vi.fn(),
+  translate: vi.fn(),
+  transform: vi.fn(),
+  setTransform: vi.fn(),
+  resetTransform: vi.fn(),
+  drawImage: vi.fn(),
+  createImageData: vi.fn(),
+  getImageData: vi.fn(),
+  putImageData: vi.fn(),
+  createLinearGradient: vi.fn(),
+  createRadialGradient: vi.fn(),
+  createPattern: vi.fn(),
+  setLineDash: vi.fn(),
+  getLineDash: vi.fn(() => []),
+  canvas: null as any,
+};
+
+HTMLCanvasElement.prototype.getContext = vi.fn(function (
+  this: HTMLCanvasElement,
+  contextType: string
+) {
+  if (contextType === "2d") {
+    mockCanvasContext.canvas = this;
+    return mockCanvasContext as any;
+  }
+  return null;
+}) as any;
+
+// Mock getBoundingClientRect for canvas elements
+HTMLCanvasElement.prototype.getBoundingClientRect = vi.fn(function (
+  this: HTMLCanvasElement
+) {
+  return {
+    width: this.width || 800,
+    height: this.height || 600,
+    top: 0,
+    left: 0,
+    right: this.width || 800,
+    bottom: this.height || 600,
+    x: 0,
+    y: 0,
+    toJSON: () => ({}),
+  } as DOMRect;
+}) as any;
+
 // Global test utilities
 (globalThis as any).createMockElement = () => ({
   innerHTML: "",

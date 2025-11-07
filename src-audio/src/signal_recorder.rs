@@ -357,7 +357,7 @@ pub async fn record_and_analyze(
     Ok(())
 }
 
-/// Parse comma-separated channel list (1-based indices)
+/// Parse comma-separated channel list (0-based indices)
 pub fn parse_channel_list(s: &str) -> Result<Vec<u16>, String> {
     let mut channels = Vec::new();
 
@@ -502,11 +502,12 @@ mod tests {
 
     #[test]
     fn test_parse_channel_list() {
+        assert_eq!(parse_channel_list("0").unwrap(), vec![0]); // Channel 0 is valid (0-based indexing)
         assert_eq!(parse_channel_list("1").unwrap(), vec![1]);
         assert_eq!(parse_channel_list("1,2,3").unwrap(), vec![1, 2, 3]);
         assert_eq!(parse_channel_list(" 1 , 2 , 3 ").unwrap(), vec![1, 2, 3]);
+        assert_eq!(parse_channel_list("0,1,2").unwrap(), vec![0, 1, 2]); // 0-based channels
 
-        assert!(parse_channel_list("0").is_err()); // Channel 0 invalid
         assert!(parse_channel_list("1,1").is_err()); // Duplicate
         assert!(parse_channel_list("").is_err()); // Empty
         assert!(parse_channel_list("abc").is_err()); // Non-numeric

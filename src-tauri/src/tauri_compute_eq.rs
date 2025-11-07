@@ -63,8 +63,8 @@ mod tests {
         assert!(parse_filter_type("invalid").is_none());
     }
 
-    #[test]
-    fn test_compute_eq_response() {
+    #[tokio::test]
+    async fn test_compute_eq_response() {
         let filters = vec![FilterParam {
             filter_type: "Peak".to_string(),
             frequency: 1000.0,
@@ -76,7 +76,7 @@ mod tests {
         let sample_rate = 48000.0;
         let frequencies = vec![100.0, 1000.0, 10000.0];
 
-        let result = compute_eq_response(filters, sample_rate, frequencies).unwrap();
+        let result = compute_eq_response(filters, sample_rate, frequencies).await.unwrap();
 
         assert_eq!(result.frequencies.len(), 3);
         assert_eq!(result.individual_responses.len(), 1);
@@ -86,8 +86,8 @@ mod tests {
         assert!((result.combined_response[1] - 3.0).abs() < 0.1);
     }
 
-    #[test]
-    fn test_disabled_filter() {
+    #[tokio::test]
+    async fn test_disabled_filter() {
         let filters = vec![FilterParam {
             filter_type: "Peak".to_string(),
             frequency: 1000.0,
@@ -99,7 +99,7 @@ mod tests {
         let sample_rate = 48000.0;
         let frequencies = vec![1000.0];
 
-        let result = compute_eq_response(filters, sample_rate, frequencies).unwrap();
+        let result = compute_eq_response(filters, sample_rate, frequencies).await.unwrap();
 
         // Disabled filter should contribute 0 dB
         assert_eq!(result.combined_response[0], 0.0);
