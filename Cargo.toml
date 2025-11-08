@@ -86,6 +86,7 @@ symphonia-format-ogg = "0.5"
 symphonia-format-isomp4 = "0.5"
 ebur128 = "0.1.10"
 hound = "3.5"
+rubato = "0.16.2"
 
 # tauri
 tauri = { version="2.9", features = [] }

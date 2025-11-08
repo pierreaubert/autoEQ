@@ -19,20 +19,32 @@
 // host.process(&mut audio_buffer);
 // ```
 
+mod analyzer;
 mod compressor;
+mod eq;
 mod gain;
 mod gate;
 mod host;
 mod limiter;
+mod loudness_compensation;
+mod loudness_monitor_plugin;
 mod parameters;
 mod plugin;
+mod resampler;
+mod spectrum_analyzer_plugin;
 mod upmixer;
 
+pub use analyzer::{AnalyzerData, AnalyzerPlugin, LoudnessData, SpectrumData};
 pub use compressor::CompressorPlugin;
+pub use eq::EqPlugin;
 pub use gain::GainPlugin;
 pub use gate::GatePlugin;
 pub use host::{PluginHost, SharedPluginHost};
 pub use limiter::LimiterPlugin;
+pub use loudness_compensation::LoudnessCompensationPlugin;
+pub use loudness_monitor_plugin::LoudnessMonitorPlugin;
 pub use parameters::{Parameter, ParameterId, ParameterValue};
 pub use plugin::{InPlacePlugin, InPlacePluginAdapter, Plugin, PluginInfo, ProcessContext};
+pub use resampler::ResamplerPlugin;
+pub use spectrum_analyzer_plugin::SpectrumAnalyzerPlugin;
 pub use upmixer::UpmixerPlugin;

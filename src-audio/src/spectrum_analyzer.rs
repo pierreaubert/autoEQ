@@ -50,7 +50,7 @@ impl Default for SpectrumConfig {
 /// Real-time spectrum analyzer using FFT
 pub struct SpectrumAnalyzer {
     /// Configuration
-    config: SpectrumConfig,
+    pub config: SpectrumConfig,
     /// Sample rate in Hz
     sample_rate: u32,
     /// Number of channels
