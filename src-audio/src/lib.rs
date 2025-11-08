@@ -40,8 +40,9 @@ pub mod analysis;
 
 pub mod plugins;
 pub use plugins::{
-    GainPlugin, InPlacePlugin, InPlacePluginAdapter, Parameter, ParameterId, ParameterValue,
-    Plugin, PluginHost, PluginInfo, ProcessContext, SharedPluginHost, UpmixerPlugin,
+    CompressorPlugin, GainPlugin, GatePlugin, InPlacePlugin, InPlacePluginAdapter, LimiterPlugin,
+    Parameter, ParameterId, ParameterValue, Plugin, PluginHost, PluginInfo, ProcessContext,
+    SharedPluginHost, UpmixerPlugin,
 };
 
 // pub mod audio_playback;

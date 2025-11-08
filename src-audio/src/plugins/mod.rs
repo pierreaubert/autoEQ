@@ -19,14 +19,20 @@
 // host.process(&mut audio_buffer);
 // ```
 
+mod compressor;
 mod gain;
+mod gate;
 mod host;
+mod limiter;
 mod parameters;
 mod plugin;
 mod upmixer;
 
+pub use compressor::CompressorPlugin;
 pub use gain::GainPlugin;
+pub use gate::GatePlugin;
 pub use host::{PluginHost, SharedPluginHost};
+pub use limiter::LimiterPlugin;
 pub use parameters::{Parameter, ParameterId, ParameterValue};
 pub use plugin::{InPlacePlugin, InPlacePluginAdapter, Plugin, PluginInfo, ProcessContext};
 pub use upmixer::UpmixerPlugin;
