@@ -1040,6 +1040,12 @@ pub async fn record_signal(
         .await?;
 
         println!("  ✓ Recording complete");
+
+        // Add pause between channel recordings if there are more to process
+        if idx + 1 < total_recordings {
+            println!("  Waiting 500ms before next recording...");
+            tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+        }
     }
 
     println!("\n{}", "=".repeat(60));

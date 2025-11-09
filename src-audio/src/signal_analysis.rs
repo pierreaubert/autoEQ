@@ -363,6 +363,12 @@ fn compute_fft_padded(signal: &[f32], fft_size: usize) -> Result<Vec<Complex<f32
     let fft = planner.plan_fft_forward(fft_size);
     fft.process(&mut buffer);
 
+    // Normalize by FFT size (standard FFT normalization)
+    let norm_factor = 1.0 / fft_size as f32;
+    for val in buffer.iter_mut() {
+        *val *= norm_factor;
+    }
+
     Ok(buffer)
 }
 

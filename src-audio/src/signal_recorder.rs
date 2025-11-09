@@ -309,54 +309,52 @@ pub async fn record_and_analyze(
     manager.load_file(temp_wav_path).await
         .map_err(|e| format!("Failed to load file: {}", e))?;
 
-    // TODO: Channel routing not yet implemented via plugin system
-    // For now, playback will go to all channels
-    let plugins = vec![];  // No plugins needed for simple playback
-    let output_channels = 2;  // Assume stereo output
-    manager.start_playback(None, plugins, output_channels).await
+    // Create matrix plugin config to route mono signal to specific output channel
+    // Matrix is 1 input channel to N output channels (where N = output_channel + 1)
+    let input_channels = 1;
+    let num_output_channels = (output_channel as usize) + 1;
+
+    // Create matrix: all zeros except 1.0 at the target output channel
+    // Matrix layout is row-major: matrix[out_ch * input_channels + in_ch]
+    // Since input_channels=1, this simplifies to: matrix[out_ch]
+    let mut matrix = vec![0.0; num_output_channels];
+    matrix[output_channel as usize] = 1.0;
+
+    // Create PluginConfig for matrix plugin
+    let matrix_params = serde_json::json!({
+        "input_channels": input_channels,
+        "output_channels": num_output_channels,
+        "matrix": matrix,
+    });
+
+    use crate::engine::PluginConfig;
+    let plugins = vec![PluginConfig::new("matrix", matrix_params)];
+    manager.start_playback(None, plugins, num_output_channels).await
         .map_err(|e| format!("Failed to start playback: {}", e))?;
 
     eprintln!("[record_and_analyze] Playback started");
 
     // Wait for playback to complete
+    // NOTE: Currently waits for full timeout (duration * 1.5 + 1s) because position tracking
+    // doesn't stop when decoder finishes. This is a known limitation that will be fixed
+    // when proper end-of-stream detection is implemented in AudioStreamingManager.
     let total_wait = Duration::from_secs_f64(expected_duration * 1.5 + 1.0);
     let check_interval = Duration::from_millis(100);
     let mut elapsed = Duration::ZERO;
-    let mut last_position = 0.0;
-    let mut position_stuck_count = 0;
 
     while elapsed < total_wait {
         sleep(check_interval).await;
         elapsed += check_interval;
 
-        // Check for events to update internal state
-        let event = manager.try_recv_event();
-        if let Some(ev) = event {
-            eprintln!("[record_and_analyze] Event: {:?}", ev);
-        }
-
+        // Check for events (currently not working - state doesn't transition to Idle)
+        manager.try_recv_event();
         let state = manager.get_state();
-        let position = manager.get_position();
-
-        // Detect completion: position hasn't changed for multiple checks
-        if (position - last_position).abs() < 0.001 && elapsed.as_secs_f64() > 0.5 {
-            position_stuck_count += 1;
-            if position_stuck_count >= 5 {  // 500ms of no movement
-                eprintln!("[record_and_analyze] Playback completed (position stuck at {:.2}s)", position);
-                break;
-            }
-        } else {
-            position_stuck_count = 0;
-        }
-        last_position = position;
 
         if state == crate::StreamingState::Idle {
-            eprintln!("[record_and_analyze] Playback completed (state: Idle)");
+            eprintln!("[record_and_analyze] Playback completed");
             break;
         }
     }
-
-    eprintln!("[record_and_analyze] Wait loop finished after {:.2}s", elapsed.as_secs_f64());
 
     // Stop playback
     manager.stop().await

@@ -124,7 +124,7 @@ impl AudioStreamingManager {
     /// Start streaming playback with the given plugin chain
     ///
     /// # Arguments
-    /// * `_output_device` - Output device (TODO: cpal device selection)
+    /// * `_output_device` - Output device
     /// * `plugins` - Plugin chain to apply (upmixer, EQ, effects, etc.)
     /// * `output_channels` - Expected output channel count after all plugins
     pub async fn start_playback(
@@ -412,9 +412,7 @@ impl AudioStreamingManager {
     }
 
     /// Enable plugin host
-    /// TODO: Phase 3 - Plugin host is always enabled in native engine
     pub fn enable_plugin_host(&mut self) -> Result<(), String> {
-        // Plugin host is built-in to AudioEngine
         Ok(())
     }
 
@@ -436,11 +434,10 @@ impl AudioStreamingManager {
     }
 
     // ========================================================================
-    // Event Support (Phase 5 - Minimal for now)
+    // Event Support
     // ========================================================================
 
     /// Try to receive an event (non-blocking)
-    /// TODO: Phase 5 - Event adapter
     pub fn try_recv_event(&self) -> Option<StreamingEvent> {
         // Check engine state for end-of-stream
         let engine_state = self.get_engine_state();
@@ -511,7 +508,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_state_transitions() {
-        let mut manager = AudioStreamingManager::new();
+        let manager = AudioStreamingManager::new();
 
         assert_eq!(manager.get_state(), StreamingState::Idle);
 
