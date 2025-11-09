@@ -135,7 +135,7 @@ pub fn write_temp_wav(
     channels: u16,
 ) -> Result<NamedTempFile, String> {
     let temp_file =
-        NamedTempFile::new().map_err(|e| format!("Failed to create temp file: {}", e))?;
+        NamedTempFile::with_suffix(".wav").map_err(|e| format!("Failed to create temp file: {}", e))?;
 
     write_wav_file(temp_file.path(), signal, sample_rate, channels)?;
 
@@ -322,17 +322,41 @@ pub async fn record_and_analyze(
     let total_wait = Duration::from_secs_f64(expected_duration * 1.5 + 1.0);
     let check_interval = Duration::from_millis(100);
     let mut elapsed = Duration::ZERO;
+    let mut last_position = 0.0;
+    let mut position_stuck_count = 0;
 
     while elapsed < total_wait {
         sleep(check_interval).await;
         elapsed += check_interval;
 
+        // Check for events to update internal state
+        let event = manager.try_recv_event();
+        if let Some(ev) = event {
+            eprintln!("[record_and_analyze] Event: {:?}", ev);
+        }
+
         let state = manager.get_state();
+        let position = manager.get_position();
+
+        // Detect completion: position hasn't changed for multiple checks
+        if (position - last_position).abs() < 0.001 && elapsed.as_secs_f64() > 0.5 {
+            position_stuck_count += 1;
+            if position_stuck_count >= 5 {  // 500ms of no movement
+                eprintln!("[record_and_analyze] Playback completed (position stuck at {:.2}s)", position);
+                break;
+            }
+        } else {
+            position_stuck_count = 0;
+        }
+        last_position = position;
+
         if state == crate::StreamingState::Idle {
-            eprintln!("[record_and_analyze] Playback completed");
+            eprintln!("[record_and_analyze] Playback completed (state: Idle)");
             break;
         }
     }
+
+    eprintln!("[record_and_analyze] Wait loop finished after {:.2}s", elapsed.as_secs_f64());
 
     // Stop playback
     manager.stop().await
