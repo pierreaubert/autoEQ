@@ -68,7 +68,7 @@ impl EngineConfig {
     /// Calculate queue capacity in frames
     pub fn queue_capacity_frames(&self) -> usize {
         let total_frames = (self.output_sample_rate as u64 * self.buffer_ms as u64) / 1000;
-        (total_frames as usize + self.frame_size - 1) / self.frame_size
+        (total_frames as usize).div_ceil(self.frame_size)
     }
 
     /// Calculate total buffer size in frames

@@ -11,6 +11,7 @@ use crate::signal_analysis::{analyze_recording, write_analysis_csv};
 use crate::signals::*;
 use hound::{SampleFormat, WavSpec, WavWriter};
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use tempfile::NamedTempFile;
 
 /// Signal type for recording
@@ -35,8 +36,12 @@ impl SignalType {
             Self::MNoise => "m-noise",
         }
     }
+}
 
-    pub fn from_str(s: &str) -> Result<Self, String> {
+impl FromStr for SignalType {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
             "tone" => Ok(Self::Tone),
             "two-tone" | "twotone" => Ok(Self::TwoTone),
@@ -279,7 +284,7 @@ pub fn record_and_analyze(
 
     // Configure input stream
     let input_config = cpal::StreamConfig {
-        channels: (input_channel + 1).max(2) as u16, // Need at least input_channel+1 channels
+        channels: (input_channel + 1).max(2), // Need at least input_channel+1 channels
         sample_rate: cpal::SampleRate(sample_rate),
         buffer_size: cpal::BufferSize::Default,
     };

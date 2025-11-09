@@ -73,9 +73,9 @@ pub trait Plugin: Send {
     ///
     /// # Arguments
     /// * `input` - Interleaved input samples [C0_F0, C1_F0, ..., C0_F1, C1_F1, ...]
-    ///             Length must be num_frames * input_channels()
+    ///   Length must be num_frames * input_channels()
     /// * `output` - Interleaved output samples (will be filled by plugin)
-    ///              Length must be num_frames * output_channels()
+    ///   Length must be num_frames * output_channels()
     /// * `context` - Processing context (sample rate, frame count, etc.)
     ///
     /// # Returns
@@ -132,7 +132,7 @@ pub trait InPlacePlugin: Send {
     ///
     /// # Arguments
     /// * `buffer` - Interleaved audio samples [C0_F0, C1_F0, ..., C0_F1, C1_F1, ...]
-    ///              Length is num_frames * channels()
+    ///   Length is num_frames * channels()
     /// * `context` - Processing context
     fn process_in_place(
         &mut self,

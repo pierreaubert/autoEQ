@@ -212,15 +212,15 @@ impl DecoderState {
                 eprintln!("[Decoder Thread] End of stream");
 
                 // Flush remaining resampler buffer
-                if let Some(_resampler) = &mut self.resampler {
-                    if !self.resampler_buffer.is_empty() {
-                        // Process remaining samples (pad if needed)
-                        eprintln!(
-                            "[Decoder Thread] Flushing {} remaining samples",
-                            self.resampler_buffer.len()
-                        );
-                        // TODO: Properly flush resampler
-                    }
+                if let Some(_resampler) = &mut self.resampler
+                    && !self.resampler_buffer.is_empty()
+                {
+                    // Process remaining samples (pad if needed)
+                    eprintln!(
+                        "[Decoder Thread] Flushing {} remaining samples",
+                        self.resampler_buffer.len()
+                    );
+                    // TODO: Properly flush resampler
                 }
 
                 message_tx

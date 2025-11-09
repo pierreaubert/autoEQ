@@ -10,7 +10,7 @@ use symphonia::core::io::MediaSourceStream;
 use symphonia::core::meta::MetadataOptions;
 use symphonia::core::probe::{Hint, Probe};
 
-use crate::decoder::decoder::{AudioDecoder, AudioSpec, DecodedAudio};
+use crate::decoder::core::{AudioDecoder, AudioSpec, DecodedAudio};
 
 /// Create a custom probe with all supported format readers registered
 fn create_probe() -> Probe {

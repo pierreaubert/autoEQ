@@ -153,7 +153,7 @@ impl PluginHost {
         }
 
         // Verify input size
-        if input.len() % self.input_channels != 0 {
+        if !input.len().is_multiple_of(self.input_channels) {
             return Err(format!(
                 "Input size {} is not a multiple of input channels {}",
                 input.len(),

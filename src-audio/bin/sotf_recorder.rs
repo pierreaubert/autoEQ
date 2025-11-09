@@ -1,4 +1,5 @@
 use clap::Parser;
+use std::str::FromStr;
 
 /// Audio recorder for test signals with analysis
 #[derive(Parser)]

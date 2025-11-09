@@ -210,18 +210,18 @@ fn run_manager_thread(
         }
 
         // Check for config watcher events (non-blocking)
-        if let Some(ref watcher) = config_watcher {
-            if let Some(config_event) = watcher.try_recv() {
-                match handle_config_event(config_event, &config, &mut processing_thread, &state) {
-                    Ok(should_exit) => {
-                        if should_exit {
-                            eprintln!("[Manager Thread] Shutdown requested via signal");
-                            break;
-                        }
+        if let Some(ref watcher) = config_watcher
+            && let Some(config_event) = watcher.try_recv()
+        {
+            match handle_config_event(config_event, &config, &mut processing_thread, &state) {
+                Ok(should_exit) => {
+                    if should_exit {
+                        eprintln!("[Manager Thread] Shutdown requested via signal");
+                        break;
                     }
-                    Err(e) => {
-                        eprintln!("[Manager Thread] Config event error: {}", e);
-                    }
+                }
+                Err(e) => {
+                    eprintln!("[Manager Thread] Config event error: {}", e);
                 }
             }
         }

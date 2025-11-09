@@ -51,7 +51,7 @@ pub fn analyze_recording(
 
     // Don't truncate yet - we need full signals for lag estimation
     let recorded = &recorded[..];
-    let reference = &reference_signal[..];
+    let reference = reference_signal;
 
     // Debug: Check signal statistics
     let ref_max = reference
@@ -137,10 +137,7 @@ pub fn analyze_recording(
             )
         } else {
             // We have enough samples - use full reference length
-            (
-                &reference[..],
-                &recorded[lag_usize..lag_usize + analysis_len],
-            )
+            (reference, &recorded[lag_usize..lag_usize + analysis_len])
         }
     } else {
         // Recorded leads reference - this shouldn't happen in normal loopback
@@ -328,13 +325,12 @@ fn estimate_lag(reference: &[f32], recorded: &[f32]) -> isize {
     }
 
     // Convert index to lag (handle wrap-around)
-    let lag = if max_idx <= fft_size / 2 {
+
+    if max_idx <= fft_size / 2 {
         max_idx as isize
     } else {
         max_idx as isize - fft_size as isize
-    };
-
-    lag
+    }
 }
 
 /// Compute FFT of a signal with Hann windowing

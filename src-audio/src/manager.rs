@@ -165,7 +165,7 @@ impl AudioStreamingManager {
 
         engine
             .play(&audio_info.path)
-            .map_err(|e| AudioDecoderError::IoError(e))?;
+            .map_err(AudioDecoderError::IoError)?;
 
         *self.engine.lock() = Some(engine);
         self.set_state(StreamingState::Playing);
@@ -180,7 +180,7 @@ impl AudioStreamingManager {
         eprintln!("[AudioStreamingManager] Pausing");
 
         if let Some(ref mut engine) = *self.engine.lock() {
-            engine.pause().map_err(|e| AudioDecoderError::IoError(e))?;
+            engine.pause().map_err(AudioDecoderError::IoError)?;
             self.set_state(StreamingState::Paused);
         }
 
@@ -192,7 +192,7 @@ impl AudioStreamingManager {
         eprintln!("[AudioStreamingManager] Resuming");
 
         if let Some(ref mut engine) = *self.engine.lock() {
-            engine.resume().map_err(|e| AudioDecoderError::IoError(e))?;
+            engine.resume().map_err(AudioDecoderError::IoError)?;
             self.set_state(StreamingState::Playing);
         }
 
@@ -204,10 +204,8 @@ impl AudioStreamingManager {
         eprintln!("[AudioStreamingManager] Stopping");
 
         if let Some(mut engine) = self.engine.lock().take() {
-            engine.stop().map_err(|e| AudioDecoderError::IoError(e))?;
-            engine
-                .shutdown()
-                .map_err(|e| AudioDecoderError::IoError(e))?;
+            engine.stop().map_err(AudioDecoderError::IoError)?;
+            engine.shutdown().map_err(AudioDecoderError::IoError)?;
         }
 
         self.set_state(StreamingState::Idle);
@@ -222,9 +220,7 @@ impl AudioStreamingManager {
         self.set_state(StreamingState::Seeking);
 
         if let Some(ref mut engine) = *self.engine.lock() {
-            engine
-                .seek(seconds)
-                .map_err(|e| AudioDecoderError::IoError(e))?;
+            engine.seek(seconds).map_err(AudioDecoderError::IoError)?;
         }
 
         // Restore previous state (playing or paused)
@@ -264,7 +260,7 @@ impl AudioStreamingManager {
         if let Some(ref mut engine) = *self.engine.lock() {
             engine
                 .set_volume(volume)
-                .map_err(|e| AudioDecoderError::IoError(e))?;
+                .map_err(AudioDecoderError::IoError)?;
         }
         Ok(())
     }
@@ -277,9 +273,7 @@ impl AudioStreamingManager {
     /// Set mute state
     pub fn set_mute(&self, muted: bool) -> AudioDecoderResult<()> {
         if let Some(ref mut engine) = *self.engine.lock() {
-            engine
-                .set_mute(muted)
-                .map_err(|e| AudioDecoderError::IoError(e))?;
+            engine.set_mute(muted).map_err(AudioDecoderError::IoError)?;
         }
         Ok(())
     }
@@ -328,16 +322,13 @@ impl AudioStreamingManager {
             match engine.get_analyzer_data("loudness".to_string()) {
                 Ok(data) => {
                     // Downcast Arc<dyn Any + Send + Sync> to LoudnessData
-                    if let Some(loudness_data) = data.downcast_ref::<LoudnessData>() {
-                        // Convert LoudnessData to LoudnessInfo
-                        Some(LoudnessInfo {
+                    // Convert LoudnessData to LoudnessInfo
+                    data.downcast_ref::<LoudnessData>()
+                        .map(|loudness_data| LoudnessInfo {
                             momentary_lufs: loudness_data.momentary_lufs,
                             shortterm_lufs: loudness_data.shortterm_lufs,
                             peak: loudness_data.peak,
                         })
-                    } else {
-                        None
-                    }
                 }
                 Err(_) => None,
             }
@@ -391,16 +382,13 @@ impl AudioStreamingManager {
             match engine.get_analyzer_data("spectrum".to_string()) {
                 Ok(data) => {
                     // Downcast Arc<dyn Any + Send + Sync> to SpectrumData
-                    if let Some(spectrum_data) = data.downcast_ref::<SpectrumData>() {
-                        // Convert SpectrumData to SpectrumInfo
-                        Some(SpectrumInfo {
+                    // Convert SpectrumData to SpectrumInfo
+                    data.downcast_ref::<SpectrumData>()
+                        .map(|spectrum_data| SpectrumInfo {
                             frequencies: spectrum_data.frequencies.clone(),
                             magnitudes: spectrum_data.magnitudes.clone(),
                             peak_magnitude: spectrum_data.peak_magnitude,
                         })
-                    } else {
-                        None
-                    }
                 }
                 Err(_) => None,
             }

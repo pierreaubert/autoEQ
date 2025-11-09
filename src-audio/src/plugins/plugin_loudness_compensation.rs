@@ -153,43 +153,40 @@ impl LoudnessCompensationPlugin {
 
         self.filters.clear();
         for _ in 0..self.num_channels {
-            let mut channel_filters = Vec::new();
-
-            // Low-shelf stage 1
-            channel_filters.push(Biquad::new(
-                BiquadFilterType::Lowshelf,
-                self.low_freq as f64,
-                self.sample_rate as f64,
-                q,
-                low_gain_per_stage as f64,
-            ));
-
-            // Low-shelf stage 2
-            channel_filters.push(Biquad::new(
-                BiquadFilterType::Lowshelf,
-                self.low_freq as f64,
-                self.sample_rate as f64,
-                q,
-                low_gain_per_stage as f64,
-            ));
-
-            // High-shelf stage 1
-            channel_filters.push(Biquad::new(
-                BiquadFilterType::Highshelf,
-                self.high_freq as f64,
-                self.sample_rate as f64,
-                q,
-                high_gain_per_stage as f64,
-            ));
-
-            // High-shelf stage 2
-            channel_filters.push(Biquad::new(
-                BiquadFilterType::Highshelf,
-                self.high_freq as f64,
-                self.sample_rate as f64,
-                q,
-                high_gain_per_stage as f64,
-            ));
+            let channel_filters = vec![
+                // Low-shelf stage 1
+                Biquad::new(
+                    BiquadFilterType::Lowshelf,
+                    self.low_freq as f64,
+                    self.sample_rate as f64,
+                    q,
+                    low_gain_per_stage as f64,
+                ),
+                // Low-shelf stage 2
+                Biquad::new(
+                    BiquadFilterType::Lowshelf,
+                    self.low_freq as f64,
+                    self.sample_rate as f64,
+                    q,
+                    low_gain_per_stage as f64,
+                ),
+                // High-shelf stage 1
+                Biquad::new(
+                    BiquadFilterType::Highshelf,
+                    self.high_freq as f64,
+                    self.sample_rate as f64,
+                    q,
+                    high_gain_per_stage as f64,
+                ),
+                // High-shelf stage 2
+                Biquad::new(
+                    BiquadFilterType::Highshelf,
+                    self.high_freq as f64,
+                    self.sample_rate as f64,
+                    q,
+                    high_gain_per_stage as f64,
+                ),
+            ];
 
             self.filters.push(channel_filters);
         }
@@ -267,10 +264,10 @@ impl Plugin for LoudnessCompensationPlugin {
     }
 
     fn set_parameter(&mut self, id: ParameterId, value: ParameterValue) -> PluginResult<()> {
-        if let Some(val) = value.as_float() {
-            if self.update_parameter(&id, val) {
-                return Ok(());
-            }
+        if let Some(val) = value.as_float()
+            && self.update_parameter(&id, val)
+        {
+            return Ok(());
         }
         Err(format!("Unknown parameter: {}", id))
     }

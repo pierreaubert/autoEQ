@@ -129,28 +129,28 @@ impl Parameter {
         // Check type matches
         match (&self.default_value, value) {
             (ParameterValue::Float(_), ParameterValue::Float(v)) => {
-                if let Some(ParameterValue::Float(min)) = self.min_value {
-                    if *v < min {
-                        return Err(format!("Value {} is below minimum {}", v, min));
-                    }
+                if let Some(ParameterValue::Float(min)) = self.min_value
+                    && *v < min
+                {
+                    return Err(format!("Value {} is below minimum {}", v, min));
                 }
-                if let Some(ParameterValue::Float(max)) = self.max_value {
-                    if *v > max {
-                        return Err(format!("Value {} is above maximum {}", v, max));
-                    }
+                if let Some(ParameterValue::Float(max)) = self.max_value
+                    && *v > max
+                {
+                    return Err(format!("Value {} is above maximum {}", v, max));
                 }
                 Ok(())
             }
             (ParameterValue::Int(_), ParameterValue::Int(v)) => {
-                if let Some(ParameterValue::Int(min)) = self.min_value {
-                    if *v < min {
-                        return Err(format!("Value {} is below minimum {}", v, min));
-                    }
+                if let Some(ParameterValue::Int(min)) = self.min_value
+                    && *v < min
+                {
+                    return Err(format!("Value {} is below minimum {}", v, min));
                 }
-                if let Some(ParameterValue::Int(max)) = self.max_value {
-                    if *v > max {
-                        return Err(format!("Value {} is above maximum {}", v, max));
-                    }
+                if let Some(ParameterValue::Int(max)) = self.max_value
+                    && *v > max
+                {
+                    return Err(format!("Value {} is above maximum {}", v, max));
                 }
                 Ok(())
             }

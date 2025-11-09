@@ -15,7 +15,6 @@
 use clap::{Parser, ValueEnum};
 use hound::{SampleFormat, WavSpec, WavWriter};
 use serde::{Deserialize, Serialize};
-use serde_json;
 use sotf_audio::signals::*;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -196,7 +195,7 @@ fn main() {
     // Generate all combinations
     for signal in &signals {
         for &channels in &cli.channels {
-            if channels < 1 || channels > 16 {
+            if !(1..=16).contains(&channels) {
                 eprintln!(
                     "Warning: Channel count {} out of range [1,16], skipping",
                     channels

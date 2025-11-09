@@ -7,7 +7,7 @@ pub use decoder::{
     StreamConfig, create_decoder, probe_file,
 };
 
-pub use decoder::decoder::AudioSpec;
+pub use decoder::core::AudioSpec;
 pub use decoder::stream::{StreamEvent, StreamPosition, StreamState};
 
 pub mod manager;

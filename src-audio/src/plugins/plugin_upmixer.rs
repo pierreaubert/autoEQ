@@ -337,11 +337,11 @@ impl Plugin for UpmixerPlugin {
                 self.gain_front_ambient = gain;
                 return Ok(());
             }
-        } else if id == self.param_gain_rear_ambient {
-            if let Some(gain) = value.as_float() {
-                self.gain_rear_ambient = gain;
-                return Ok(());
-            }
+        } else if id == self.param_gain_rear_ambient
+            && let Some(gain) = value.as_float()
+        {
+            self.gain_rear_ambient = gain;
+            return Ok(());
         }
         Err(format!("Unknown parameter: {}", id))
     }

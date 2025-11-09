@@ -125,7 +125,7 @@ impl InPlacePlugin for GainPlugin {
         _context: &ProcessContext,
     ) -> PluginResult<()> {
         // Verify buffer size matches channel count
-        if buffer.len() % self.channels != 0 {
+        if !buffer.len().is_multiple_of(self.channels) {
             return Err(format!(
                 "Buffer size {} is not a multiple of channel count {}",
                 buffer.len(),
