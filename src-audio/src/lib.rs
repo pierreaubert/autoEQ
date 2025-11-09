@@ -15,37 +15,23 @@ pub use manager::{
     AudioFileInfo, AudioStreamingManager, StreamingCommand, StreamingEvent, StreamingState,
 };
 
-pub mod filters;
-pub use filters::FilterParams;
-
-pub mod loudness_compensation;
-pub use loudness_compensation::LoudnessCompensation;
-
-pub mod camilla;
-pub use camilla::{
-    AudioManager, AudioState, AudioStreamState, CamillaError, CamillaResult, SharedAudioStreamState,
-};
-
 pub mod replaygain;
 pub mod signal_recorder;
 pub mod signals;
 
-pub mod loudness_monitor;
-pub use loudness_monitor::{LoudnessInfo, LoudnessMonitor};
-
-pub mod spectrum_analyzer;
-pub use spectrum_analyzer::{SpectrumAnalyzer, SpectrumConfig, SpectrumInfo};
-
-pub mod analysis;
+pub mod signal_analysis;
 
 pub mod plugins;
 pub use plugins::{
     AnalyzerData, AnalyzerPlugin, CompressorPlugin, EqPlugin, GainPlugin, GatePlugin,
-    InPlacePlugin, InPlacePluginAdapter, LimiterPlugin, LoudnessCompensationPlugin, LoudnessData,
-    LoudnessMonitorPlugin, Parameter, ParameterId, ParameterValue, Plugin, PluginHost, PluginInfo,
+    InPlacePlugin, InPlacePluginAdapter, LimiterPlugin, LoudnessCompensation, LoudnessCompensationPlugin, LoudnessData,
+    LoudnessInfo, LoudnessMonitorPlugin, Parameter, ParameterId, ParameterValue, Plugin, PluginHost, PluginInfo,
     ProcessContext, ResamplerPlugin, SharedPluginHost, SpectrumAnalyzerPlugin, SpectrumData,
-    UpmixerPlugin,
+    SpectrumInfo, UpmixerPlugin,
 };
+
+pub mod engine;
+pub use engine::{AudioEngine, EngineConfig, PlaybackState, AudioEngineState, PluginConfig};
 
 // pub mod audio_playback;
 // pub use audio_playback::{PlaybackRecorder, PlaybackRecordingConfig, AudioPlaybackError};

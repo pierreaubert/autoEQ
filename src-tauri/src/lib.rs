@@ -131,7 +131,8 @@ pub fn run() {
     let audio_manager = Mutex::new(AudioManager::new(camilla_binary.clone()));
 
     // Create AudioStreamingManager for all audio format playback (WAV, FLAC, MP3, etc.)
-    let streaming_manager = Mutex::new(AudioStreamingManager::new(camilla_binary));
+    // NOTE: No longer requires CamillaDSP - uses native AudioEngine instead
+    let streaming_manager = Mutex::new(AudioStreamingManager::new());
 
     let mut builder = tauri::Builder::default();
 

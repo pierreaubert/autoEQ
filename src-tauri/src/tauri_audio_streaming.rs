@@ -3,9 +3,8 @@
 // ============================================================================
 
 use crate::tauri_audio_recording::AudioError;
-use sotf_audio::camilla::ChannelMapMode;
-use sotf_audio::loudness_compensation::LoudnessCompensation;
-use sotf_audio::{AudioFileInfo, AudioStreamingManager, FilterParams, StreamingState};
+use sotf_audio::{AudioFileInfo, AudioStreamingManager, LoudnessCompensation, PluginConfig, StreamingState};
+use autoeq_iir::Biquad;
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::Mutex;
 
@@ -62,24 +61,69 @@ pub async fn stream_load_file(
     }
 }
 
+/// Helper to create EQ plugin config from biquad filters
+fn create_eq_plugin_config(filters: &[Biquad]) -> Result<PluginConfig, String> {
+    use autoeq_iir::BiquadFilterType;
+
+    let filter_configs: Result<Vec<_>, String> = filters
+        .iter()
+        .map(|f| {
+            // Use long_name() from BiquadFilterType
+            let filter_type = match f.filter_type {
+                BiquadFilterType::HighpassVariableQ => "highpass".to_string(),
+                _ => f.filter_type.long_name().to_lowercase(),
+            };
+
+            Ok(serde_json::json!({
+                "filter_type": filter_type,
+                "freq": f.freq,
+                "q": f.q,
+                "db_gain": f.db_gain,
+            }))
+        })
+        .collect();
+
+    let filter_configs = filter_configs?;
+
+    let parameters = serde_json::json!({
+        "filters": filter_configs,
+    });
+
+    Ok(PluginConfig {
+        plugin_type: "eq".to_string(),
+        parameters,
+    })
+}
+
 #[tauri::command]
 pub async fn stream_start_playback(
     output_device: Option<String>,
-    filters: Vec<FilterParams>,
+    filters: Vec<Biquad>,
     streaming_manager: State<'_, Mutex<AudioStreamingManager>>,
     app_handle: AppHandle,
 ) -> Result<(), String> {
     println!("[TAURI] Starting playback with {} filters", filters.len());
 
+    // Build plugin chain
+    let mut plugins = Vec::new();
+
+    // Add EQ plugin if filters are present
+    if !filters.is_empty() {
+        plugins.push(create_eq_plugin_config(&filters)?);
+    }
+
+    // Get audio info to determine output channels
+    let manager = streaming_manager.lock().await;
+    let audio_info = manager
+        .get_audio_info()
+        .ok_or_else(|| "No audio file loaded".to_string())?;
+    let output_channels = audio_info.spec.channels as usize;
+    drop(manager);
+
+    // Start playback
     let mut manager = streaming_manager.lock().await;
     match manager
-        .start_playback(
-            output_device.clone(),
-            filters,
-            ChannelMapMode::Normal,
-            None,
-            None,
-        )
+        .start_playback(output_device.clone(), plugins, output_channels)
         .await
     {
         Ok(_) => {
@@ -221,28 +265,40 @@ pub async fn stream_get_file_info(
 ) -> Result<Option<AudioFileInfoPayload>, String> {
     let manager = streaming_manager.lock().await;
     match manager.get_audio_info() {
-        Some(info) => Ok(Some(convert_audio_file_info(info))),
+        Some(info) => Ok(Some(convert_audio_file_info(&info))),
         None => Ok(None),
     }
 }
 
 #[tauri::command]
 pub async fn stream_update_filters(
-    filters: Vec<FilterParams>,
-    loudness: Option<LoudnessCompensation>,
-    streaming_manager: State<'_, Mutex<AudioStreamingManager>>,
+    _filters: Vec<Biquad>,
+    _loudness: Option<LoudnessCompensation>,
+    _streaming_manager: State<'_, Mutex<AudioStreamingManager>>,
     app_handle: AppHandle,
 ) -> Result<(), String> {
-    println!(
-        "[TAURI] Updating filters: {} filters{}",
-        filters.len(),
-        if loudness.is_some() {
-            " with loudness"
-        } else {
-            ""
-        }
-    );
+    // println!(
+    //     "[TAURI] Updating filters: {} filters{}",
+    //     _filters.len(),
+    //     if _loudness.is_some() {
+    //         " with loudness"
+    //     } else {
+    //         ""
+    //     }
+    // );
 
+    // TODO: Phase 3 - Convert filters to plugins and update plugin chain
+    // For now, return an error indicating this feature is not yet implemented
+    let error_msg = "Filter updates not yet implemented in native engine (coming in Phase 3)".to_string();
+    let _ = app_handle.emit(
+        "stream:error",
+        AudioError {
+            error: error_msg.clone(),
+        },
+    );
+    return Err(error_msg);
+
+    /*
     let manager = streaming_manager.lock().await;
     match manager.update_filters(filters, loudness).await {
         Ok(_) => {
@@ -266,4 +322,5 @@ pub async fn stream_update_filters(
             Err(error_msg)
         }
     }
+    */
 }

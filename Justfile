@@ -10,7 +10,10 @@ default:
 # TEST
 # ----------------------------------------------------------------------
 
-test-generate: prod-generate-audio-tests
+download-once:
+	cargo run --bin download
+
+test-generate-audio-tests: prod-generate-audio-tests
 	cargo run --bin prod-generate-audio-tests --release
 
 test-rust:
@@ -102,9 +105,6 @@ dev:
 	cargo build --bin plot_autoeq_de
 	cargo build --bin run_autoeq_de
 	cargo build --bin sotf_audio_test
-
-download-once:
-	cargo run --bin download
 
 # ----------------------------------------------------------------------
 # UPDATE

@@ -1,9 +1,8 @@
 use clap::{Parser, Subcommand};
-use sotf_audio::loudness_compensation::LoudnessCompensation;
-use sotf_audio::{AudioStreamingManager, CamillaError, FilterParams, StreamingState};
+use autoeq_iir::{Biquad, BiquadFilterType};
+use sotf_audio::LoudnessCompensation;
+use sotf_audio::{AudioStreamingManager, StreamingState, PluginConfig};
 use std::path::PathBuf;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::time::{Duration, sleep};
 
 fn parse_loudness_compensation(vals: &Vec<f64>) -> Result<Option<LoudnessCompensation>, String> {
@@ -17,43 +16,100 @@ fn parse_loudness_compensation(vals: &Vec<f64>) -> Result<Option<LoudnessCompens
         .map_err(|e| e.to_string())
 }
 
-#[cfg(unix)]
-fn install_shutdown_handler(running: Arc<AtomicBool>) -> Result<(), String> {
-    // Handle SIGINT/SIGTERM via signal-hook-tokio (async-friendly)
-    use futures_util::StreamExt;
-    let signals = signal_hook_tokio::Signals::new([libc::SIGINT, libc::SIGTERM])
-        .map_err(|e| format!("Failed to set signal handler: {}", e))?;
-    tokio::spawn(async move {
-        let mut signals = signals;
-        if signals.next().await.is_some() {
-            println!("\n\nReceived termination signal, stopping playback...");
-            running.store(false, Ordering::SeqCst);
-        }
+/// Create upmixer PluginConfig from parameters
+fn create_upmixer_plugin_config(
+    fft_size: usize,
+    gain_front_direct: f32,
+    gain_front_ambient: f32,
+    gain_rear_ambient: f32,
+) -> Result<PluginConfig, String> {
+    use serde_json::json;
+
+    // Validate FFT size
+    if !fft_size.is_power_of_two() {
+        return Err(format!("Upmixer FFT size must be power of 2, got {}", fft_size));
+    }
+
+    let parameters = json!({
+        "fft_size": fft_size,
+        "gain_front_direct": gain_front_direct,
+        "gain_front_ambient": gain_front_ambient,
+        "gain_rear_ambient": gain_rear_ambient,
     });
-    Ok(())
+
+    Ok(PluginConfig {
+        plugin_type: "upmixer".to_string(),
+        parameters,
+    })
 }
 
-#[cfg(windows)]
-fn install_shutdown_handler(running: Arc<AtomicBool>) -> Result<(), String> {
-    // Handle Ctrl+C/Ctrl+Break via ctrlc
-    ctrlc::set_handler(move || {
-        println!("\n\nReceived Ctrl+C, stopping playback...");
-        running.store(false, Ordering::SeqCst);
+/// Convert loudness compensation to PluginConfig
+fn create_loudness_compensation_plugin_config(
+    lc: &LoudnessCompensation
+) -> Result<PluginConfig, String> {
+    use serde_json::json;
+
+    // Map from LoudnessCompensation fields to plugin parameters
+    // reference_level and attenuate_mid are not used by the plugin
+    // The plugin uses fixed frequencies (100Hz low, 10kHz high)
+    let parameters = json!({
+        "low_freq": 100.0,  // Fixed low-shelf frequency
+        "low_gain": lc.low_boost,
+        "high_freq": 10000.0,  // Fixed high-shelf frequency
+        "high_gain": lc.high_boost,
+    });
+
+    Ok(PluginConfig {
+        plugin_type: "loudness_compensation".to_string(),
+        parameters,
     })
-    .map_err(|e| format!("Failed to set Ctrl+C handler: {}", e))?;
-    Ok(())
 }
+
+/// Convert Biquad filters to PluginConfig for EQ plugin
+fn create_eq_plugin_config(filters: &[Biquad]) -> Result<PluginConfig, String> {
+    use serde_json::json;
+
+    // Convert Biquad to BiquadFilterConfig format
+    let filter_configs: Result<Vec<_>, String> = filters
+        .iter()
+        .map(|f| {
+            // Use long_name() from BiquadFilterType
+            let filter_type = match f.filter_type {
+                BiquadFilterType::HighpassVariableQ => "highpass".to_string(),
+                _ => f.filter_type.long_name().to_lowercase(),
+            };
+
+            Ok(json!({
+                "filter_type": filter_type,
+                "freq": f.freq,
+                "q": f.q,
+                "db_gain": f.db_gain,
+            }))
+        })
+        .collect();
+
+    let filter_configs = filter_configs?;
+
+    let parameters = json!({
+        "filters": filter_configs,
+    });
+
+    Ok(PluginConfig {
+        plugin_type: "eq".to_string(),
+        parameters,
+    })
+}
+
+// Signal handling is now done by the AudioStreamingManager's engine
+// No need for separate CLI signal handler
 
 #[derive(Parser)]
 #[command(name = "sotf_audio")]
-#[command(about = "CamillaDSP audio tool (streaming-only playback)", long_about = None)]
+#[command(about = "Audio player and recorder", long_about = None)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
 
-    /// Path to CamillaDSP binary (optional, will search PATH)
-    #[arg(short, long)]
-    binary: Option<PathBuf>,
 }
 
 #[derive(Subcommand)]
@@ -70,10 +126,6 @@ enum Commands {
     },
 
     /// Play an audio file using the streaming decoder (supports seeking and LUFS)
-    ///
-    /// Notes:
-    /// - This subcommand always uses the streaming backend.
-    /// - Sample rate and channels from the file are used automatically.
     Play {
         /// Path to audio file (supports WAV, FLAC, MP3, AAC/M4A, Vorbis/OGG, AIFF)
         #[arg(value_name = "FILE")]
@@ -83,25 +135,24 @@ enum Commands {
         #[arg(short, long)]
         device: Option<String>,
 
-        /// Sample rate in Hz (ignored; always streamed)
-        #[arg(short = 'r', long, default_value = "48000")]
-        sample_rate: u32,
-
-        /// Number of channels (ignored; always streamed)
-        #[arg(short, long, default_value = "2")]
-        channels: u16,
-
-        /// EQ filters in format "freq:q:gain" (e.g., "1000:1.5:3.0")
-        #[arg(short, long = "filter", value_name = "FREQ:Q:GAIN")]
+        /// EQ filters: "freq:q:gain" (Peak) or "type:freq:q:gain"
+        ///
+        /// Filter types: PK/PEAK, LS/LOWSHELF, HS/HIGHSHELF, LP/LOWPASS, HP/HIGHPASS, NO/NOTCH, BP/BANDPASS
+        ///
+        /// Examples: "1000:1.5:3.0" (Peak +3dB), "LS:100:0.7:-2.0" (Lowshelf -2dB), "HP:80:0.707:0"
+        #[arg(short, long = "filter", value_name = "FILTER")]
         filters: Vec<String>,
 
-        /// Hardware output channel map (comma-separated indices)
-        #[arg(long = "hwaudio-play", value_delimiter = ',')]
-        hwaudio_play: Option<Vec<u16>>,
-
-        /// Swap left and right channels
-        #[arg(long = "swap-channels", default_value_t = false)]
-        swap_channels: bool,
+        /// Hardware output channel mapping: "input_channels->output_channels"
+        ///
+        /// Maps input channels to specific hardware output channels. Use "_" for gaps.
+        ///
+        /// Examples:
+        ///   "1,2->9,10"                 - Route stereo to hardware channels 9,10
+        ///   "1,2,3,4,5->1,2,3,_,5,6"    - Route 5ch with gap (skip channel 4 position)
+        ///   "1,2,3,4,5,6->13,14,15,16,17,18"  - Route 5.1 to channels 13-18
+        #[arg(long = "hwaudio-play")]
+        hwaudio_play: Option<String>,
 
         /// Duration to play in seconds (0 = play until stopped)
         #[arg(short = 't', long, default_value = "0")]
@@ -174,14 +225,6 @@ enum Commands {
         #[arg(long)]
         name: Option<String>,
 
-        /// Output device name (optional, uses default)
-        #[arg(long = "output-device")]
-        output_device: Option<String>,
-
-        /// Input device name (optional, uses default)
-        #[arg(long = "input-device")]
-        input_device: Option<String>,
-
         // Signal-specific parameters
         /// Tone frequency in Hz (for tone signal)
         #[arg(long)]
@@ -224,28 +267,6 @@ enum Commands {
 async fn main() {
     let cli = Cli::parse();
 
-    // Find CamillaDSP binary
-    let binary_path = match cli.binary {
-        Some(path) => {
-            if !path.exists() {
-                eprintln!("Error: Binary not found at {:?}", path);
-                std::process::exit(1);
-            }
-            path
-        }
-        None => match sotf_audio::camilla::find_camilladsp_binary() {
-            Ok(path) => {
-                println!("Found CamillaDSP binary at: {:?}", path);
-                path
-            }
-            Err(e) => {
-                eprintln!("Error: {}", e);
-                eprintln!("\nPlease install CamillaDSP or specify the binary path with --binary");
-                std::process::exit(1);
-            }
-        },
-    };
-
     match cli.command {
         Commands::Devices => {
             if let Err(e) = list_devices().await {
@@ -268,11 +289,8 @@ async fn main() {
         Commands::Play {
             file,
             device,
-            sample_rate: _,
-            channels: _,
             filters,
             hwaudio_play,
-            swap_channels,
             duration,
             start_time,
             buffer_chunks,
@@ -293,12 +311,6 @@ async fn main() {
                 }
             };
 
-            let map_mode = if swap_channels {
-                sotf_audio::camilla::ChannelMapMode::Swap
-            } else {
-                sotf_audio::camilla::ChannelMapMode::Normal
-            };
-
             // Parse loudness compensation
             let loudness: Option<LoudnessCompensation> = match loudness_compensation {
                 Some(ref vals) => parse_loudness_compensation(vals).unwrap_or_else(|e| {
@@ -309,13 +321,11 @@ async fn main() {
             };
 
             if let Err(e) = play_stream(
-                binary_path,
                 file,
                 device,
                 filter_params,
                 duration,
                 start_time,
-                map_mode,
                 hwaudio_play,
                 buffer_chunks,
                 lufs,
@@ -340,8 +350,6 @@ async fn main() {
             hwaudio_send_to,
             hwaudio_record_from,
             name,
-            output_device,
-            input_device,
             freq,
             freq1,
             freq2,
@@ -352,7 +360,6 @@ async fn main() {
             amp2,
         } => {
             if let Err(e) = record_signal(
-                binary_path,
                 signal,
                 duration,
                 sample_rate,
@@ -360,8 +367,6 @@ async fn main() {
                 hwaudio_send_to,
                 hwaudio_record_from,
                 name,
-                output_device,
-                input_device,
                 freq,
                 freq1,
                 freq2,
@@ -430,48 +435,207 @@ async fn list_devices() -> Result<(), String> {
     Ok(())
 }
 
-fn parse_filters(filter_strings: &[String]) -> Result<Vec<FilterParams>, CamillaError> {
-    let mut filters = Vec::new();
+fn parse_filter_type(type_str: &str) -> Result<BiquadFilterType, String> {
+    match type_str.to_uppercase().as_str() {
+        "PK" | "PEAK" => Ok(BiquadFilterType::Peak),
+        "LS" | "LOWSHELF" => Ok(BiquadFilterType::Lowshelf),
+        "HS" | "HIGHSHELF" => Ok(BiquadFilterType::Highshelf),
+        "LP" | "LOWPASS" => Ok(BiquadFilterType::Lowpass),
+        "HP" | "HIGHPASS" => Ok(BiquadFilterType::Highpass),
+        "NO" | "NOTCH" => Ok(BiquadFilterType::Notch),
+        "BP" | "BANDPASS" => Ok(BiquadFilterType::Bandpass),
+        _ => Err(format!(
+            "Unknown filter type '{}'. Valid types: PK/PEAK, LS/LOWSHELF, HS/HIGHSHELF, LP/LOWPASS, HP/HIGHPASS, NO/NOTCH, BP/BANDPASS",
+            type_str
+        )),
+    }
+}
 
-    for filter_str in filter_strings {
-        let parts: Vec<&str> = filter_str.split(':').collect();
-        if parts.len() != 3 {
-            return Err(CamillaError::InvalidConfiguration(format!(
-                "Invalid filter format '{}'. Expected 'freq:q:gain'",
-                filter_str
-            )));
-        }
+fn parse_filters(filter_strings: &[String]) -> Result<Vec<Biquad>, String> {
+    filter_strings
+        .iter()
+        .map(|filter_str| {
+            let parts: Vec<&str> = filter_str.split(':').collect();
 
-        let frequency = parts[0].parse::<f64>().map_err(|_| {
-            CamillaError::InvalidConfiguration(format!("Invalid frequency: {}", parts[0]))
-        })?;
+            // Support both formats:
+            // - 3 parts: freq:q:gain (defaults to Peak)
+            // - 4 parts: type:freq:q:gain
+            let (filter_type, frequency, q, gain) = match parts.len() {
+                3 => {
+                    // Format: freq:q:gain (default to Peak)
+                    let frequency = parts[0]
+                        .parse::<f64>()
+                        .map_err(|_| format!("Invalid frequency: {}", parts[0]))?;
+                    let q = parts[1]
+                        .parse::<f64>()
+                        .map_err(|_| format!("Invalid Q: {}", parts[1]))?;
+                    let gain = parts[2]
+                        .parse::<f64>()
+                        .map_err(|_| format!("Invalid gain: {}", parts[2]))?;
+                    (BiquadFilterType::Peak, frequency, q, gain)
+                }
+                4 => {
+                    // Format: type:freq:q:gain
+                    let filter_type = parse_filter_type(parts[0])?;
+                    let frequency = parts[1]
+                        .parse::<f64>()
+                        .map_err(|_| format!("Invalid frequency: {}", parts[1]))?;
+                    let q = parts[2]
+                        .parse::<f64>()
+                        .map_err(|_| format!("Invalid Q: {}", parts[2]))?;
+                    let gain = parts[3]
+                        .parse::<f64>()
+                        .map_err(|_| format!("Invalid gain: {}", parts[3]))?;
+                    (filter_type, frequency, q, gain)
+                }
+                _ => {
+                    return Err(format!(
+                        "Invalid filter format '{}'. Expected 'freq:q:gain' or 'type:freq:q:gain'",
+                        filter_str
+                    ));
+                }
+            };
 
-        let q = parts[1]
-            .parse::<f64>()
-            .map_err(|_| CamillaError::InvalidConfiguration(format!("Invalid Q: {}", parts[1])))?;
+            // Validate ranges
+            if !(20.0..=20000.0).contains(&frequency) {
+                return Err(format!(
+                    "Frequency must be between 20 and 20000 Hz, got {}",
+                    frequency
+                ));
+            }
+            if q <= 0.0 || q > 100.0 {
+                return Err(format!("Q must be between 0 and 100, got {}", q));
+            }
+            if gain.abs() > 30.0 {
+                return Err(format!(
+                    "Gain must be between -30 and +30 dB, got {}",
+                    gain
+                ));
+            }
 
-        let gain = parts[2].parse::<f64>().map_err(|_| {
-            CamillaError::InvalidConfiguration(format!("Invalid gain: {}", parts[2]))
-        })?;
+            // Use placeholder sample rate - will be updated by EqPlugin::initialize()
+            Ok(Biquad::new(filter_type, frequency, 48000.0, q, gain))
+        })
+        .collect()
+}
 
-        let filter = FilterParams::new(frequency, q, gain);
-        filter.validate()?;
-        filters.push(filter);
+/// Parse channel mapping specification and create matrix plugin config
+///
+/// Format: "in1,in2,...->out1,out2,..." where channels are 1-indexed
+/// Use "_" in output to skip a channel position
+///
+/// Examples:
+///   "1,2->9,10"                 - Route stereo to HW channels 9,10
+///   "1,2,3,4,5->1,2,3,_,5,6"    - Route 5ch with gap (skip position 4)
+///   "1,2,3,4,5,6->13,14,15,16,17,18"  - Route 5.1 to channels 13-18
+///
+/// Returns: (input_channels, output_channels, matrix, max_hw_channel)
+fn parse_channel_mapping(mapping_str: &str) -> Result<(usize, usize, Vec<f32>, usize), String> {
+    let parts: Vec<&str> = mapping_str.split("->").collect();
+    if parts.len() != 2 {
+        return Err(format!(
+            "Invalid mapping format '{}'. Expected 'in1,in2,...->out1,out2,...'",
+            mapping_str
+        ));
     }
 
-    Ok(filters)
+    // Parse input channels (1-indexed)
+    let input_channels: Result<Vec<usize>, _> = parts[0]
+        .split(',')
+        .map(|s| {
+            s.trim()
+                .parse::<usize>()
+                .map_err(|_| format!("Invalid input channel: '{}'", s))
+        })
+        .collect();
+    let input_channels = input_channels?;
+
+    if input_channels.is_empty() {
+        return Err("No input channels specified".to_string());
+    }
+
+    // Parse output channel mapping (1-indexed, with "_" for gaps)
+    let output_spec: Vec<&str> = parts[1].split(',').map(|s| s.trim()).collect();
+    if output_spec.is_empty() {
+        return Err("No output channels specified".to_string());
+    }
+
+    // Build mapping: input_ch_idx -> output_hw_ch (0-indexed internally, but 1-indexed in spec)
+    let mut channel_map: Vec<Option<usize>> = Vec::new();
+    let mut max_hw_channel = 0;
+
+    for spec in output_spec.iter() {
+        if *spec == "_" {
+            channel_map.push(None); // Gap/skip
+        } else {
+            let hw_ch = spec
+                .parse::<usize>()
+                .map_err(|_| format!("Invalid output channel: '{}'", spec))?;
+            if hw_ch == 0 {
+                return Err("Channel indices must be >= 1 (1-indexed)".to_string());
+            }
+            channel_map.push(Some(hw_ch - 1)); // Convert to 0-indexed
+            max_hw_channel = max_hw_channel.max(hw_ch);
+        }
+    }
+
+    // Check that we have enough output specs for input channels
+    let non_gap_outputs: Vec<_> = channel_map.iter().filter_map(|&x| x).collect();
+    if non_gap_outputs.len() != input_channels.len() {
+        return Err(format!(
+            "Mismatch: {} input channels but {} non-gap output positions",
+            input_channels.len(),
+            non_gap_outputs.len()
+        ));
+    }
+
+    // Build matrix: input_channels x max_hw_channel
+    // Matrix is row-major: matrix[out_ch * input_channels + in_ch]
+    let input_count = input_channels.len();
+    let output_count = max_hw_channel;
+    let mut matrix = vec![0.0f32; output_count * input_count];
+
+    // Map each input channel to its output position
+    let mut input_idx = 0;
+    for &output_hw_ch_opt in channel_map.iter() {
+        if let Some(output_hw_ch) = output_hw_ch_opt {
+            // Set gain from input_idx to output_hw_ch
+            matrix[output_hw_ch * input_count + input_idx] = 1.0;
+            input_idx += 1;
+        }
+    }
+
+    Ok((input_count, output_count, matrix, max_hw_channel))
+}
+
+/// Create matrix plugin config from parsed mapping
+fn create_matrix_plugin_config(
+    input_channels: usize,
+    output_channels: usize,
+    matrix: Vec<f32>,
+) -> Result<PluginConfig, String> {
+    use serde_json::json;
+
+    let parameters = json!({
+        "input_channels": input_channels,
+        "output_channels": output_channels,
+        "matrix": matrix,
+    });
+
+    Ok(PluginConfig {
+        plugin_type: "matrix".to_string(),
+        parameters,
+    })
 }
 
 #[allow(clippy::too_many_arguments)]
 async fn play_stream(
-    binary_path: PathBuf,
     file: PathBuf,
     device: Option<String>,
-    filters: Vec<FilterParams>,
+    filters: Vec<Biquad>,
     duration: u64,
     start_time: f64,
-    map_mode: sotf_audio::camilla::ChannelMapMode,
-    hwaudio_play: Option<Vec<u16>>,
+    hwaudio_play: Option<String>,
     buffer_chunks: usize,
     lufs: bool,
     loudness: Option<LoudnessCompensation>,
@@ -495,46 +659,20 @@ async fn play_stream(
             println!(
                 "  [{}] {} Hz, Q={:.2}, Gain={:.1} dB",
                 idx + 1,
-                filter.frequency,
+                filter.freq,
                 filter.q,
-                filter.gain
+                filter.db_gain
             );
         }
     }
     println!();
 
-    // Create streaming manager
-    let mut streaming_manager = AudioStreamingManager::new(binary_path);
-
-    // Configure buffer size
-    let clamped_chunks = buffer_chunks.clamp(32, 1024);
-    streaming_manager.set_buffer_chunks(clamped_chunks);
-    println!(
-        "  Buffer: {} chunks ({} frames, ~{:.1}ms latency)",
-        clamped_chunks,
-        clamped_chunks * 1024,
-        (clamped_chunks * 1024) as f64 / 48000.0 * 1000.0
-    );
-
-    // Set up shutdown handler (Ctrl+C / SIGTERM)
-    let running = Arc::new(AtomicBool::new(true));
-    install_shutdown_handler(running.clone())?;
+    // Create streaming manager with signal watching enabled (manager handles Ctrl+C)
+    let mut streaming_manager = AudioStreamingManager::with_signal_watching(true);
 
     // Load the audio file
-    let r_check = running.clone();
-    let audio_info = tokio::select! {
-        result = streaming_manager.load_file(&file) => {
-            result.map_err(|e| format!("Failed to load audio file: {}", e))?
-        }
-        _ = async {
-            while r_check.load(Ordering::SeqCst) {
-                sleep(Duration::from_millis(100)).await;
-            }
-        } => {
-            println!("Loading cancelled");
-            return Ok(());
-        }
-    };
+    let audio_info = streaming_manager.load_file(&file).await
+        .map_err(|e| format!("Failed to load audio file: {}", e))?;
 
     println!("Loaded audio file:");
     println!("  Format: {}", audio_info.format);
@@ -546,23 +684,11 @@ async fn play_stream(
     }
     println!();
 
-    // Enable loudness monitoring if requested
-    if lufs {
-        streaming_manager
-            .enable_loudness_monitoring()
-            .map_err(|e| format!("Failed to enable loudness monitoring: {}", e))?;
-        println!("Real-time LUFS monitoring enabled\n");
-    }
+    // Build plugin chain
+    let mut plugins = Vec::new();
 
-    // Enable upmixer plugin if requested
-    if upmixer {
-        // Validate FFT size
-        if !upmixer_fft_size.is_power_of_two() {
-            return Err(format!(
-                "Upmixer FFT size must be power of 2, got {}",
-                upmixer_fft_size
-            ));
-        }
+    // Upmixer (if enabled)
+    let output_channels = if upmixer {
 
         // Check that input is stereo
         if audio_info.spec.channels != 2 {
@@ -579,41 +705,69 @@ async fn play_stream(
         println!("  Rear ambient gain: {:.2}", upmixer_gain_rear_ambient);
         println!("  Output: 5.0 surround (FL, FR, C, RL, RR)\n");
 
-        streaming_manager
-            .enable_plugin_host()
-            .map_err(|e| format!("Failed to enable plugin host: {}", e))?;
+        let upmixer_plugin = create_upmixer_plugin_config(
+            upmixer_fft_size,
+            upmixer_gain_front_direct,
+            upmixer_gain_front_ambient,
+            upmixer_gain_rear_ambient,
+        )?;
+        plugins.push(upmixer_plugin);
+        eprintln!("Added upmixer plugin: 2ch -> 5ch");
+        5 // Upmixer outputs 5.0 surround
+    } else {
+        audio_info.spec.channels as usize
+    };
 
-        streaming_manager
-            .with_plugin_host(|host| {
-                use sotf_audio::UpmixerPlugin;
-                let upmixer_plugin = UpmixerPlugin::new(
-                    upmixer_fft_size,
-                    upmixer_gain_front_direct,
-                    upmixer_gain_front_ambient,
-                    upmixer_gain_rear_ambient,
-                );
-                host.add_plugin(Box::new(upmixer_plugin))
-            })
-            .map_err(|e| format!("Failed to add upmixer plugin: {}", e))?
-            .map_err(|e| format!("Upmixer error: {}", e))?;
-
-        println!("✓ Upmixer plugin enabled\n");
+    // Loudness compensation (before channel mapping)
+    if let Some(ref lc) = loudness {
+        let lc_plugin = create_loudness_compensation_plugin_config(lc)?;
+        plugins.push(lc_plugin);
+        eprintln!("Added loudness compensation plugin");
     }
 
-    // Start playback with cancellation support
-    let r_check = running.clone();
-    tokio::select! {
-        result = streaming_manager.start_playback(device, filters, map_mode, hwaudio_play, loudness) => {
-            result.map_err(|e| format!("Failed to start streaming playback: {}", e))?;
+    // EQ filters (assuming it is room eq)
+    if !filters.is_empty() {
+        let eq_plugin = create_eq_plugin_config(&filters)?;
+        plugins.push(eq_plugin);
+        eprintln!("Added EQ plugin with {} filters", filters.len());
+    }
+
+    // 4. Channel mapping to hardware (last plugin before output)
+    let output_channels = if let Some(ref mapping_str) = hwaudio_play {
+        let (map_input_ch, map_output_ch, matrix, max_hw_ch) = parse_channel_mapping(mapping_str)?;
+
+        // Verify that mapping input matches current output channels
+        if map_input_ch != output_channels {
+            return Err(format!(
+                "Channel mapping input mismatch: mapping expects {} channels but plugin chain outputs {}",
+                map_input_ch, output_channels
+            ));
         }
-        _ = async {
-            while r_check.load(Ordering::SeqCst) {
-                sleep(Duration::from_millis(100)).await;
-            }
-        } => {
-            println!("Playback start cancelled");
-            return Ok(());
-        }
+
+        println!("\nChannel mapping enabled:");
+        println!("  Mapping: {}", mapping_str);
+        println!("  Input channels: {}", map_input_ch);
+        println!("  Output hardware channels: {} (max channel {})", map_output_ch, max_hw_ch);
+
+        let matrix_plugin = create_matrix_plugin_config(map_input_ch, map_output_ch, matrix)?;
+        plugins.push(matrix_plugin);
+        eprintln!("Added matrix plugin: {}ch -> {}ch", map_input_ch, map_output_ch);
+
+        max_hw_ch  // Hardware will need this many channels
+    } else {
+        output_channels  // No mapping, use current channel count
+    };
+
+    // Start playback (signal handling is done by the manager)
+    streaming_manager.start_playback(device, plugins, output_channels).await
+        .map_err(|e| format!("Failed to start streaming playback: {}", e))?;
+
+    // Enable loudness monitoring if requested (must be after playback starts)
+    if lufs {
+        streaming_manager
+            .enable_loudness_monitoring()
+            .map_err(|e| format!("Failed to enable loudness monitoring: {}", e))?;
+        println!("Real-time LUFS monitoring enabled");
     }
 
     // Seek to start time if specified
@@ -633,7 +787,10 @@ async fn play_stream(
     let mut last_state = StreamingState::Idle;
     let mut last_shortterm: Option<f64> = None;
 
-    while running.load(Ordering::SeqCst) {
+    loop {
+        // Check for events (this updates internal state based on engine state)
+        streaming_manager.try_recv_event();
+
         let current_state = streaming_manager.get_state();
 
         // Print state changes
@@ -699,22 +856,15 @@ async fn play_stream(
         sleep(Duration::from_millis(100)).await;
     }
 
-    // Stop playback with timeout
-    println!("\nStopping streaming playback...");
-    match tokio::time::timeout(Duration::from_secs(3), streaming_manager.stop()).await {
-        Ok(result) => result.map_err(|e| format!("Failed to stop streaming: {}", e))?,
-        Err(_) => {
-            println!("Stop streaming timed out, forcing exit");
-        }
-    }
-
+    // Manager handles its own cleanup via Drop
+    // If stopped by signal, threads are already shut down
+    // If stopped naturally (end of stream/duration), cleanup happens on drop
     println!("Streaming playback stopped successfully");
     Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]
 pub async fn record_signal(
-    _binary_path: PathBuf,
     signal: String,
     duration: f32,
     sample_rate: u32,
@@ -722,8 +872,6 @@ pub async fn record_signal(
     hwaudio_send_to: String,
     hwaudio_record_from: String,
     name: Option<String>,
-    _output_device: Option<String>,
-    _input_device: Option<String>,
     freq: Option<f32>,
     freq1: Option<f32>,
     freq2: Option<f32>,

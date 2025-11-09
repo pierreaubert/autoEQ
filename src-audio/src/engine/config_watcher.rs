@@ -1,0 +1,275 @@
+// ============================================================================
+// Config Watcher - File Watching and Signal Handling
+// ============================================================================
+//
+// Watches for config file changes and Unix signals, notifying manager thread.
+//
+// Features:
+// - File watching (cross-platform via notify crate)
+// - Unix signals: SIGHUP (reload), SIGTERM/SIGINT (shutdown)
+// - Windows: File watching only (no signal support)
+
+use std::path::PathBuf;
+use std::sync::mpsc::{channel, Receiver, Sender};
+use std::thread;
+use std::time::Duration;
+
+/// Config watcher events
+#[derive(Debug, Clone)]
+pub enum ConfigEvent {
+    /// Config file changed - reload requested
+    ConfigChanged(PathBuf),
+    /// Shutdown signal received (SIGTERM, SIGINT, Ctrl-C)
+    Shutdown,
+    /// Reload signal received (SIGHUP on Unix)
+    Reload,
+}
+
+/// Config watcher handle
+pub struct ConfigWatcher {
+    event_rx: Receiver<ConfigEvent>,
+    shutdown_tx: Option<Sender<()>>,
+    thread_handle: Option<thread::JoinHandle<()>>,
+}
+
+impl ConfigWatcher {
+    /// Create and start a config watcher
+    ///
+    /// # Arguments
+    /// - `config_path`: Optional path to config file to watch
+    /// - `watch_signals`: Whether to watch Unix signals (SIGHUP, SIGTERM, SIGINT)
+    pub fn new(config_path: Option<PathBuf>, watch_signals: bool) -> Result<Self, String> {
+        let (event_tx, event_rx) = channel();
+        let (shutdown_tx, shutdown_rx) = channel();
+        let shutdown_tx_thread = shutdown_tx.clone();
+
+        let thread_handle = thread::Builder::new()
+            .name("config-watcher".to_string())
+            .spawn(move || {
+                if let Err(e) = run_config_watcher(config_path, watch_signals, event_tx, shutdown_tx_thread, shutdown_rx) {
+                    eprintln!("[Config Watcher] Error: {}", e);
+                }
+            })
+            .map_err(|e| format!("Failed to spawn config watcher thread: {}", e))?;
+
+        Ok(Self {
+            event_rx,
+            shutdown_tx: Some(shutdown_tx),
+            thread_handle: Some(thread_handle),
+        })
+    }
+
+    /// Try to receive a config event (non-blocking)
+    pub fn try_recv(&self) -> Option<ConfigEvent> {
+        self.event_rx.try_recv().ok()
+    }
+
+    /// Shutdown the watcher
+    pub fn shutdown(&mut self) {
+        // Signal the thread to exit
+        if let Some(tx) = self.shutdown_tx.take() {
+            tx.send(()).ok();
+        }
+
+        // Wait for thread to exit
+        if let Some(handle) = self.thread_handle.take() {
+            handle.join().ok();
+        }
+    }
+}
+
+impl Drop for ConfigWatcher {
+    fn drop(&mut self) {
+        self.shutdown();
+    }
+}
+
+/// Main config watcher thread function
+fn run_config_watcher(
+    config_path: Option<PathBuf>,
+    watch_signals: bool,
+    event_tx: Sender<ConfigEvent>,
+    shutdown_tx: Sender<()>,
+    shutdown_rx: Receiver<()>,
+) -> Result<(), String> {
+    eprintln!("[Config Watcher] Starting");
+    eprintln!("[Config Watcher]   Config file: {:?}", config_path);
+    eprintln!("[Config Watcher]   Watch signals: {}", watch_signals);
+
+    // Setup file watcher if config path provided
+    let _file_watcher = if let Some(ref path) = config_path {
+        Some(setup_file_watcher(path.clone(), event_tx.clone())?)
+    } else {
+        None
+    };
+
+    // Setup signal handler if requested (Unix only)
+    #[cfg(unix)]
+    let _signal_handler = if watch_signals {
+        Some(setup_signal_handler(event_tx.clone(), shutdown_tx)?)
+    } else {
+        None
+    };
+
+    #[cfg(not(unix))]
+    if watch_signals {
+        eprintln!("[Config Watcher] Warning: Signal watching not supported on this platform");
+    }
+
+    eprintln!("[Config Watcher] Ready");
+
+    // Wait for shutdown signal or disconnect
+    loop {
+        match shutdown_rx.recv_timeout(Duration::from_secs(60)) {
+            Ok(_) | Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                eprintln!("[Config Watcher] Shutting down");
+                break;
+            }
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                // Continue waiting
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Setup file watcher using notify crate
+fn setup_file_watcher(
+    config_path: PathBuf,
+    event_tx: Sender<ConfigEvent>,
+) -> Result<notify::RecommendedWatcher, String> {
+    use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
+
+    eprintln!("[Config Watcher] Watching file: {:?}", config_path);
+
+    let config_path_clone = config_path.clone();
+    let mut watcher = RecommendedWatcher::new(
+        move |res: Result<Event, notify::Error>| {
+            match res {
+                Ok(event) => {
+                    // Only trigger on modify/write events
+                    match event.kind {
+                        EventKind::Modify(_) | EventKind::Create(_) => {
+                            eprintln!("[Config Watcher] File changed: {:?}", config_path_clone);
+                            event_tx
+                                .send(ConfigEvent::ConfigChanged(config_path_clone.clone()))
+                                .ok();
+                        }
+                        _ => {
+                            // Ignore other events (access, etc.)
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!("[Config Watcher] Watch error: {}", e);
+                }
+            }
+        },
+        Config::default(),
+    )
+    .map_err(|e| format!("Failed to create file watcher: {}", e))?;
+
+    // Watch the file (or its parent directory if file doesn't exist yet)
+    let watch_path = if config_path.exists() {
+        config_path.clone()
+    } else if let Some(parent) = config_path.parent() {
+        eprintln!(
+            "[Config Watcher] File doesn't exist, watching parent directory: {:?}",
+            parent
+        );
+        parent.to_path_buf()
+    } else {
+        return Err("Invalid config path".to_string());
+    };
+
+    watcher
+        .watch(&watch_path, RecursiveMode::NonRecursive)
+        .map_err(|e| format!("Failed to watch path: {}", e))?;
+
+    Ok(watcher)
+}
+
+/// Setup Unix signal handler
+#[cfg(unix)]
+fn setup_signal_handler(
+    event_tx: Sender<ConfigEvent>,
+    shutdown_tx: Sender<()>,
+) -> Result<signal_hook::iterator::Handle, String> {
+    use signal_hook::consts::signal::*;
+    use signal_hook::iterator::Signals;
+
+    eprintln!("[Config Watcher] Setting up signal handlers (SIGHUP, SIGTERM, SIGINT)");
+
+    let mut signals = Signals::new([SIGHUP, SIGTERM, SIGINT])
+        .map_err(|e| format!("Failed to setup signal handler: {}", e))?;
+
+    let handle = signals.handle();
+
+    // Spawn signal handling thread
+    thread::spawn(move || {
+        for sig in signals.forever() {
+            match sig {
+                SIGHUP => {
+                    eprintln!("[Config Watcher] Received SIGHUP - reload requested");
+                    event_tx.send(ConfigEvent::Shutdown).ok();
+                }
+                SIGTERM | SIGINT => {
+                    eprintln!("[Config Watcher] Received shutdown signal");
+                    event_tx.send(ConfigEvent::Shutdown).ok();
+                    // Signal the config watcher thread to exit
+                    shutdown_tx.send(()).ok();
+                    break;
+                }
+                _ => {}
+            }
+        }
+    });
+
+    Ok(handle)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::io::Write;
+
+    #[test]
+    fn test_file_watcher_basic() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let config_path = temp_dir.path().join("test_config.yaml");
+
+        // Create initial file
+        fs::write(&config_path, "initial: value").unwrap();
+
+        // Start watcher
+        let watcher = ConfigWatcher::new(Some(config_path.clone()), false).unwrap();
+
+        // Give watcher time to initialize
+        thread::sleep(Duration::from_millis(100));
+
+        // Modify file
+        let mut file = fs::OpenOptions::new()
+            .write(true)
+            .truncate(true)
+            .open(&config_path)
+            .unwrap();
+        file.write_all(b"updated: value").unwrap();
+        file.sync_all().unwrap();
+        drop(file);
+
+        // Give watcher time to detect change
+        thread::sleep(Duration::from_millis(500));
+
+        // Check for event
+        let event = watcher.try_recv();
+        assert!(event.is_some());
+        match event.unwrap() {
+            ConfigEvent::ConfigChanged(path) => {
+                assert_eq!(path, config_path);
+            }
+            _ => panic!("Expected ConfigChanged event"),
+        }
+    }
+}

@@ -2,7 +2,6 @@
 // Plugin Parameter System
 // ============================================================================
 
-use std::collections::HashMap;
 use std::fmt;
 
 /// Unique identifier for a parameter
@@ -161,48 +160,3 @@ impl Parameter {
     }
 }
 
-/// Parameter store for managing plugin parameters
-#[derive(Debug, Clone)]
-pub struct ParameterStore {
-    values: HashMap<ParameterId, ParameterValue>,
-}
-
-impl ParameterStore {
-    /// Create a new empty parameter store
-    pub fn new() -> Self {
-        Self {
-            values: HashMap::new(),
-        }
-    }
-
-    /// Set a parameter value
-    pub fn set(&mut self, id: ParameterId, value: ParameterValue) {
-        self.values.insert(id, value);
-    }
-
-    /// Get a parameter value
-    pub fn get(&self, id: &ParameterId) -> Option<&ParameterValue> {
-        self.values.get(id)
-    }
-
-    /// Get a parameter value as float
-    pub fn get_float(&self, id: &ParameterId) -> Option<f32> {
-        self.get(id).and_then(|v| v.as_float())
-    }
-
-    /// Get a parameter value as int
-    pub fn get_int(&self, id: &ParameterId) -> Option<i32> {
-        self.get(id).and_then(|v| v.as_int())
-    }
-
-    /// Get a parameter value as bool
-    pub fn get_bool(&self, id: &ParameterId) -> Option<bool> {
-        self.get(id).and_then(|v| v.as_bool())
-    }
-}
-
-impl Default for ParameterStore {
-    fn default() -> Self {
-        Self::new()
-    }
-}

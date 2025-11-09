@@ -2,8 +2,7 @@
 // Real-time Loudness Monitoring Commands
 // ============================================================================
 
-use sotf_audio::AudioStreamingManager;
-use sotf_audio::loudness_monitor::LoudnessInfo;
+use sotf_audio::{AudioStreamingManager, LoudnessInfo};
 use tauri::State;
 use tokio::sync::Mutex;
 

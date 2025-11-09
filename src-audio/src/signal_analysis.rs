@@ -10,8 +10,6 @@ use rustfft::{FftPlanner, num_complex::Complex};
 use std::f32::consts::PI;
 use std::path::Path;
 
-const HANN_COHERENT_GAIN: f32 = 0.5; // Coherent gain for Hann window
-
 /// Result of FFT analysis
 #[derive(Debug, Clone)]
 pub struct AnalysisResult {

@@ -12,10 +12,6 @@ name = "sotf_audio"
 path = "bin/sotf_audio.rs"
 
 [[bin]]
-name = "sotf_audio_decoder_test"
-path = "bin/audio_decoder_test.rs"
-
-[[bin]]
 name = "generate_audio_tests"
 path = "bin/generate_audio_tests.rs"
 
@@ -36,6 +32,7 @@ ctrlc = { workspace = true }
 reqwest = { workspace = true }
 chrono = { workspace = true }
 libc = { workspace = true }
+parking_lot = { workspace = true }
 rustfft = { workspace = true }
 autoeq-env = { path = "../src-env" }
 autoeq-iir = { path = "../src-iir" }
@@ -55,6 +52,10 @@ symphonia-format-isomp4 ={ workspace = true }
 ebur128 = { workspace = true }
 hound = { workspace = true }
 rubato = { workspace = true }
+notify = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+signal-hook = { workspace = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 signal-hook-tokio = { workspace = true }

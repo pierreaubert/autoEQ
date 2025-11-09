@@ -1,0 +1,851 @@
+// ============================================================================
+// Processing Thread - Plugin Chain Execution
+// ============================================================================
+//
+// Processes audio through the plugin chain with seamless hot-reload support.
+
+use super::{DecoderMessage, PluginConfig, ProcessingCommand, ProcessingMessage, ProcessingResponse, ThreadEvent};
+use crate::plugins::{AnalyzerPlugin, Plugin, PluginHost, ProcessContext};
+use std::collections::HashMap;
+use std::sync::{mpsc::{Receiver, Sender, SyncSender}, Arc};
+use serde::{Deserialize, Serialize};
+
+/// Processing thread handle
+pub struct ProcessingThread {
+    command_tx: Sender<ProcessingCommand>,
+    response_rx: Receiver<ProcessingResponse>,
+    thread_handle: Option<std::thread::JoinHandle<()>>,
+}
+
+impl ProcessingThread {
+    /// Create and start the processing thread
+    pub fn new(
+        decoder_rx: Receiver<DecoderMessage>,
+        message_tx: SyncSender<ProcessingMessage>,
+        event_tx: Sender<ThreadEvent>,
+        sample_rate: u32,
+        channels: usize,
+    ) -> Result<Self, String> {
+        let (command_tx, command_rx) = std::sync::mpsc::channel();
+        let (response_tx, response_rx) = std::sync::mpsc::channel();
+
+        let thread_handle = std::thread::Builder::new()
+            .name("processing".to_string())
+            .spawn(move || {
+                if let Err(e) = run_processing_thread(
+                    decoder_rx,
+                    message_tx,
+                    command_rx,
+                    response_tx,
+                    event_tx,
+                    sample_rate,
+                    channels,
+                ) {
+                    eprintln!("[Processing Thread] Error: {}", e);
+                }
+            })
+            .map_err(|e| format!("Failed to spawn processing thread: {}", e))?;
+
+        Ok(Self {
+            command_tx,
+            response_rx,
+            thread_handle: Some(thread_handle),
+        })
+    }
+
+    /// Send a command to the processing thread
+    pub fn send_command(&self, command: ProcessingCommand) -> Result<(), String> {
+        self.command_tx
+            .send(command)
+            .map_err(|e| format!("Failed to send command: {}", e))
+    }
+
+    /// Receive a response (non-blocking)
+    pub fn try_recv_response(&self) -> Option<ProcessingResponse> {
+        self.response_rx.try_recv().ok()
+    }
+
+    /// Shutdown the processing thread
+    pub fn shutdown(&mut self) {
+        self.send_command(ProcessingCommand::Shutdown).ok();
+        if let Some(handle) = self.thread_handle.take() {
+            handle.join().ok();
+        }
+    }
+}
+
+impl Drop for ProcessingThread {
+    fn drop(&mut self) {
+        self.shutdown();
+    }
+}
+
+/// Processing state
+struct ProcessingState {
+    /// Current plugin host
+    host: PluginHost,
+    /// Next plugin host (for hot-reload)
+    next_host: Option<PluginHost>,
+    /// Analyzer plugins (by ID)
+    analyzers: HashMap<String, Box<dyn AnalyzerPlugin>>,
+    /// Sample rate
+    sample_rate: u32,
+    /// Number of channels
+    channels: usize,
+    /// Bypass flag
+    bypassed: bool,
+    /// Crossfade position (0.0 = current, 1.0 = next)
+    crossfade_pos: f32,
+    /// Crossfade duration in frames
+    crossfade_frames: usize,
+    /// Current crossfade frame
+    crossfade_current: usize,
+}
+
+impl ProcessingState {
+    fn new(sample_rate: u32, channels: usize) -> Self {
+        Self {
+            host: PluginHost::new(channels, sample_rate),
+            next_host: None,
+            analyzers: HashMap::new(),
+            sample_rate,
+            channels,
+            bypassed: false,
+            crossfade_pos: 0.0,
+            crossfade_frames: 4096, // ~85ms at 48kHz
+            crossfade_current: 0,
+        }
+    }
+
+    /// Start plugin chain update (hot-reload)
+    fn start_reload(&mut self, new_host: PluginHost) {
+        self.next_host = Some(new_host);
+        self.crossfade_pos = 0.0;
+        self.crossfade_current = 0;
+        eprintln!("[Processing Thread] Starting plugin hot-reload (crossfade {} frames)", self.crossfade_frames);
+    }
+
+    /// Get the actual output channel count (accounting for pending hot-reload)
+    /// If a hot-reload is pending with different channel count, returns the new channel count
+    /// since the swap will happen immediately (no crossfade possible)
+    fn output_channels(&self) -> usize {
+        if let Some(next_host) = &self.next_host {
+            // If next_host has different channel count, it will be swapped immediately
+            if self.host.output_channels() != next_host.output_channels() {
+                return next_host.output_channels();
+            }
+        }
+        // Otherwise use current host's output or tracked channel count
+        self.host.output_channels()
+    }
+
+    /// Add an analyzer plugin
+    fn add_analyzer(&mut self, id: String, mut analyzer: Box<dyn AnalyzerPlugin>) -> Result<(), String> {
+        // Initialize the analyzer with current sample rate
+        analyzer.initialize(self.sample_rate)?;
+
+        eprintln!("[Processing Thread] Added analyzer: {}", id);
+        self.analyzers.insert(id, analyzer);
+        Ok(())
+    }
+
+    /// Remove an analyzer plugin
+    fn remove_analyzer(&mut self, id: &str) -> Option<Box<dyn AnalyzerPlugin>> {
+        eprintln!("[Processing Thread] Removed analyzer: {}", id);
+        self.analyzers.remove(id)
+    }
+
+    /// Get analyzer data
+    fn get_analyzer_data(&self, id: &str) -> Result<Arc<dyn std::any::Any + Send + Sync>, String> {
+        use crate::plugins::{LoudnessData, SpectrumData};
+
+        let analyzer = self.analyzers.get(id)
+            .ok_or_else(|| format!("Analyzer '{}' not found", id))?;
+
+        // Get data from the analyzer (returns Box<dyn Any + Send>)
+        let data = analyzer.get_data();
+
+        // Try downcasting to known types and re-wrapping in Arc
+        if let Some(loudness) = data.downcast_ref::<LoudnessData>() {
+            return Ok(Arc::new(loudness.clone()) as Arc<dyn std::any::Any + Send + Sync>);
+        }
+
+        if let Some(spectrum) = data.downcast_ref::<SpectrumData>() {
+            return Ok(Arc::new(spectrum.clone()) as Arc<dyn std::any::Any + Send + Sync>);
+        }
+
+        Err(format!("Unknown analyzer data type for '{}'", id))
+    }
+
+    /// Process a frame with seamless crossfade
+    fn process_frame(
+        &mut self,
+        input: &[f32],
+        output: &mut [f32],
+    ) -> Result<(), String> {
+        if self.bypassed {
+            // Bypass - just copy
+            output.copy_from_slice(input);
+            return Ok(());
+        }
+
+        if let Some(next_host) = &mut self.next_host {
+            // Check if channel counts differ - crossfade only works for same channel count
+            if self.host.output_channels() != next_host.output_channels() {
+                eprintln!(
+                    "[Processing Thread] Channel count change detected ({}→{}), immediate swap (no crossfade)",
+                    self.host.output_channels(),
+                    next_host.output_channels()
+                );
+
+                // Immediate swap - no crossfade possible when channel count changes
+                std::mem::swap(&mut self.host, next_host);
+                self.channels = self.host.output_channels();
+                self.next_host = None;
+                self.crossfade_pos = 0.0;
+                self.crossfade_current = 0;
+
+                eprintln!("[Processing Thread] Updated output channels: {}", self.channels);
+
+                // Process with new host
+                self.host.process(input, output)?;
+            } else {
+                // Crossfading between old and new plugin chains (same channel count)
+                let num_frames = input.len() / self.host.input_channels();
+                let output_samples = num_frames * self.host.output_channels();
+                let mut output_old = vec![0.0; output_samples];
+                let mut output_new = vec![0.0; output_samples];
+
+                // Process with both hosts
+                self.host.process(input, &mut output_old)?;
+                next_host.process(input, &mut output_new)?;
+
+                // Calculate crossfade coefficient
+                self.crossfade_current += num_frames;
+                self.crossfade_pos = (self.crossfade_current as f32 / self.crossfade_frames as f32).min(1.0);
+
+                // Apply crossfade
+                for i in 0..output.len() {
+                    output[i] = output_old[i] * (1.0 - self.crossfade_pos) + output_new[i] * self.crossfade_pos;
+                }
+
+                // Check if crossfade complete
+                if self.crossfade_pos >= 1.0 {
+                    eprintln!("[Processing Thread] Hot-reload complete");
+                    // Swap in the new host
+                    std::mem::swap(&mut self.host, next_host);
+                    self.next_host = None;
+                    self.crossfade_pos = 0.0;
+                    self.crossfade_current = 0;
+                }
+            }
+        } else {
+            // Normal processing
+            self.host.process(input, output)?;
+        }
+
+        // Feed audio to analyzer plugins
+        if !self.analyzers.is_empty() {
+            let num_frames = output.len() / self.channels;
+            let context = ProcessContext {
+                sample_rate: self.sample_rate,
+                num_frames,
+            };
+
+            for (id, analyzer) in self.analyzers.iter_mut() {
+                if let Err(e) = analyzer.process(output, &context) {
+                    eprintln!("[Processing Thread] Analyzer '{}' error: {}", id, e);
+                }
+            }
+        }
+
+        Ok(())
+    }
+}
+
+/// Main processing thread function
+fn run_processing_thread(
+    decoder_rx: Receiver<DecoderMessage>,
+    message_tx: SyncSender<ProcessingMessage>,
+    command_rx: Receiver<ProcessingCommand>,
+    response_tx: Sender<ProcessingResponse>,
+    event_tx: Sender<ThreadEvent>,
+    sample_rate: u32,
+    channels: usize,
+) -> Result<(), String> {
+    let mut state = ProcessingState::new(sample_rate, channels);
+
+    eprintln!("[Processing Thread] Started - {}Hz, {} channels", sample_rate, channels);
+
+    loop {
+        // Check for commands (non-blocking)
+        if let Ok(command) = command_rx.try_recv() {
+            match command {
+                ProcessingCommand::UpdatePlugins(configs) => {
+                    // Create new plugin host
+                    match build_plugin_host(&configs, sample_rate, channels) {
+                        Ok(new_host) => {
+                            let output_channels = new_host.output_channels();
+                            state.start_reload(new_host);
+                            response_tx.send(ProcessingResponse::PluginChainUpdated { output_channels }).ok();
+                        }
+                        Err(e) => {
+                            eprintln!("[Processing Thread] Failed to build plugin chain: {}", e);
+                            response_tx.send(ProcessingResponse::Error(e)).ok();
+                        }
+                    }
+                }
+                ProcessingCommand::SetParameter { plugin_index, param_id, value } => {
+                    // Update parameter on current host
+                    // TODO: Implement parameter setting
+                    eprintln!(
+                        "[Processing Thread] Set parameter: plugin {} param {} = {}",
+                        plugin_index, param_id, value
+                    );
+                    response_tx.send(ProcessingResponse::Ok).ok();
+                }
+                ProcessingCommand::Bypass(bypass) => {
+                    state.bypassed = bypass;
+                    eprintln!("[Processing Thread] Bypass: {}", bypass);
+                    response_tx.send(ProcessingResponse::Ok).ok();
+                }
+                ProcessingCommand::AddLoudnessAnalyzer { id, channels } => {
+                    use crate::plugins::LoudnessMonitorPlugin;
+                    match LoudnessMonitorPlugin::new(channels) {
+                        Ok(plugin) => {
+                            match state.add_analyzer(id.clone(), Box::new(plugin)) {
+                                Ok(_) => {
+                                    eprintln!("[Processing Thread] Added loudness analyzer: {}", id);
+                                    response_tx.send(ProcessingResponse::Ok).ok();
+                                }
+                                Err(e) => {
+                                    eprintln!("[Processing Thread] Failed to add loudness analyzer: {}", e);
+                                    response_tx.send(ProcessingResponse::Error(e)).ok();
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("[Processing Thread] Failed to create loudness analyzer: {}", e);
+                            response_tx.send(ProcessingResponse::Error(e)).ok();
+                        }
+                    }
+                }
+                ProcessingCommand::AddSpectrumAnalyzer { id, channels } => {
+                    use crate::plugins::SpectrumAnalyzerPlugin;
+                    match SpectrumAnalyzerPlugin::new(channels) {
+                        Ok(plugin) => {
+                            match state.add_analyzer(id.clone(), Box::new(plugin)) {
+                                Ok(_) => {
+                                    eprintln!("[Processing Thread] Added spectrum analyzer: {}", id);
+                                    response_tx.send(ProcessingResponse::Ok).ok();
+                                }
+                                Err(e) => {
+                                    eprintln!("[Processing Thread] Failed to add spectrum analyzer: {}", e);
+                                    response_tx.send(ProcessingResponse::Error(e)).ok();
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("[Processing Thread] Failed to create spectrum analyzer: {}", e);
+                            response_tx.send(ProcessingResponse::Error(e)).ok();
+                        }
+                    }
+                }
+                ProcessingCommand::RemoveAnalyzer(id) => {
+                    match state.remove_analyzer(&id) {
+                        Some(_) => {
+                            eprintln!("[Processing Thread] Removed analyzer: {}", id);
+                            response_tx.send(ProcessingResponse::Ok).ok();
+                        }
+                        None => {
+                            let err = format!("Analyzer '{}' not found", id);
+                            eprintln!("[Processing Thread] {}", err);
+                            response_tx.send(ProcessingResponse::Error(err)).ok();
+                        }
+                    }
+                }
+                ProcessingCommand::GetAnalyzerData(analyzer_id) => {
+                    eprintln!("[Processing Thread] Get analyzer data: {}", analyzer_id);
+                    match state.get_analyzer_data(&analyzer_id) {
+                        Ok(data) => {
+                            response_tx.send(ProcessingResponse::AnalyzerData(data)).ok();
+                        }
+                        Err(e) => {
+                            response_tx.send(ProcessingResponse::Error(e)).ok();
+                        }
+                    }
+                }
+                ProcessingCommand::Stop => {
+                    // Stop processing - just clear state
+                    eprintln!("[Processing Thread] Stopped");
+                }
+                ProcessingCommand::Shutdown => {
+                    eprintln!("[Processing Thread] Shutting down");
+                    break;
+                }
+            }
+        }
+
+        // Process audio from decoder
+        match decoder_rx.recv_timeout(std::time::Duration::from_millis(10)) {
+            Ok(DecoderMessage::Frame(frame)) => {
+                // Process frame
+                // IMPORTANT: Output buffer size must match plugin chain output channels, not input!
+                // Use output_channels() which accounts for pending hot-reload with channel changes
+                let output_channels = state.output_channels();
+                let output_samples = frame.num_frames * output_channels;
+                let mut output = vec![0.0; output_samples];
+
+                match state.process_frame(&frame.data, &mut output) {
+                    Ok(_) => {
+                        // Send processed frame with correct output channel count
+                        let processed_frame = super::AudioFrame::new(
+                            output,
+                            frame.num_frames,
+                            output_channels,
+                            frame.sample_rate,
+                        );
+                        message_tx.send(ProcessingMessage::Frame(processed_frame)).ok();
+                    }
+                    Err(e) => {
+                        eprintln!("[Processing Thread] Processing error: {}", e);
+                        event_tx.send(ThreadEvent::ProcessingError(e)).ok();
+                    }
+                }
+            }
+            Ok(DecoderMessage::EndOfStream) => {
+                message_tx.send(ProcessingMessage::EndOfStream).ok();
+            }
+            Ok(DecoderMessage::Flush) => {
+                message_tx.send(ProcessingMessage::Flush).ok();
+            }
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                // No message, continue
+            }
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                eprintln!("[Processing Thread] Decoder queue disconnected");
+                break;
+            }
+        }
+    }
+
+    eprintln!("[Processing Thread] Stopped");
+    Ok(())
+}
+
+// ============================================================================
+// Plugin Configuration Parameters
+// ============================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct GainPluginParams {
+    #[serde(default = "default_gain_db")]
+    gain_db: f32,
+}
+
+fn default_gain_db() -> f32 {
+    0.0
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct UpmixerPluginParams {
+    #[serde(default = "default_fft_size")]
+    fft_size: usize,
+    #[serde(default = "default_gain_front_direct")]
+    gain_front_direct: f32,
+    #[serde(default = "default_gain_front_ambient")]
+    gain_front_ambient: f32,
+    #[serde(default = "default_gain_rear_ambient")]
+    gain_rear_ambient: f32,
+}
+
+fn default_fft_size() -> usize {
+    2048
+}
+
+fn default_gain_front_direct() -> f32 {
+    1.0
+}
+
+fn default_gain_front_ambient() -> f32 {
+    0.5
+}
+
+fn default_gain_rear_ambient() -> f32 {
+    1.0
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct EqPluginParams {
+    // EQ filter parameters (from autoeq-iir crate)
+    filters: Vec<BiquadFilterConfig>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct BiquadFilterConfig {
+    filter_type: String, // "peak", "lowshelf", "highshelf", "lowpass", "highpass", "notch", "bandpass"
+    freq: f64,
+    q: f64,
+    #[serde(default)]
+    db_gain: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct CompressorPluginParams {
+    #[serde(default = "default_threshold_db")]
+    threshold_db: f32,
+    #[serde(default = "default_ratio")]
+    ratio: f32,
+    #[serde(default = "default_attack_ms")]
+    attack_ms: f32,
+    #[serde(default = "default_release_ms")]
+    release_ms: f32,
+    #[serde(default = "default_knee_db")]
+    knee_db: f32,
+    #[serde(default = "default_makeup_gain_db")]
+    makeup_gain_db: f32,
+}
+
+fn default_threshold_db() -> f32 {
+    -20.0
+}
+
+fn default_ratio() -> f32 {
+    4.0
+}
+
+fn default_attack_ms() -> f32 {
+    10.0
+}
+
+fn default_release_ms() -> f32 {
+    100.0
+}
+
+fn default_knee_db() -> f32 {
+    0.0
+}
+
+fn default_makeup_gain_db() -> f32 {
+    0.0
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct LimiterPluginParams {
+    #[serde(default = "default_threshold_db_limiter")]
+    threshold_db: f32,
+    #[serde(default = "default_release_ms_limiter")]
+    release_ms: f32,
+    #[serde(default = "default_lookahead_ms")]
+    lookahead_ms: f32,
+    #[serde(default = "default_soft")]
+    soft: bool,
+}
+
+fn default_threshold_db_limiter() -> f32 {
+    -1.0
+}
+
+fn default_release_ms_limiter() -> f32 {
+    50.0
+}
+
+fn default_lookahead_ms() -> f32 {
+    5.0
+}
+
+fn default_soft() -> bool {
+    true
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct GatePluginParams {
+    #[serde(default = "default_threshold_db_gate")]
+    threshold_db: f32,
+    #[serde(default = "default_ratio_gate")]
+    ratio: f32,
+    #[serde(default = "default_attack_ms_gate")]
+    attack_ms: f32,
+    #[serde(default = "default_hold_ms")]
+    hold_ms: f32,
+    #[serde(default = "default_release_ms_gate")]
+    release_ms: f32,
+}
+
+fn default_threshold_db_gate() -> f32 {
+    -40.0
+}
+
+fn default_ratio_gate() -> f32 {
+    10.0
+}
+
+fn default_attack_ms_gate() -> f32 {
+    1.0
+}
+
+fn default_hold_ms() -> f32 {
+    10.0
+}
+
+fn default_release_ms_gate() -> f32 {
+    100.0
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct LoudnessCompensationPluginParams {
+    #[serde(default = "default_low_freq")]
+    low_freq: f32,
+    #[serde(default = "default_low_gain")]
+    low_gain: f32,
+    #[serde(default = "default_high_freq")]
+    high_freq: f32,
+    #[serde(default = "default_high_gain")]
+    high_gain: f32,
+}
+
+fn default_low_freq() -> f32 {
+    100.0
+}
+
+fn default_low_gain() -> f32 {
+    6.0
+}
+
+fn default_high_freq() -> f32 {
+    10000.0
+}
+
+fn default_high_gain() -> f32 {
+    6.0
+}
+
+// ============================================================================
+// Plugin Factory
+// ============================================================================
+
+/// Build a plugin host from configs
+fn build_plugin_host(
+    configs: &[PluginConfig],
+    sample_rate: u32,
+    channels: usize,
+) -> Result<PluginHost, String> {
+    let mut host = PluginHost::new(channels, sample_rate);
+    let mut current_channels = channels;
+
+    for (i, config) in configs.iter().enumerate() {
+        eprintln!("[Processing Thread] Loading plugin {}: {}", i, config.plugin_type);
+
+        match create_plugin(&config.plugin_type, &config.parameters, current_channels, sample_rate) {
+            Ok(plugin) => {
+                // Check channel compatibility
+                if plugin.input_channels() != current_channels {
+                    return Err(format!(
+                        "Plugin '{}' expects {} input channels, but chain provides {}",
+                        config.plugin_type,
+                        plugin.input_channels(),
+                        current_channels
+                    ));
+                }
+
+                // Update current channel count for next plugin
+                current_channels = plugin.output_channels();
+
+                eprintln!(
+                    "[Processing Thread] Plugin '{}' loaded: {}ch -> {}ch",
+                    config.plugin_type,
+                    plugin.input_channels(),
+                    plugin.output_channels()
+                );
+
+                host.add_plugin(plugin)?;
+            }
+            Err(e) => {
+                return Err(format!("Failed to create plugin '{}': {}", config.plugin_type, e));
+            }
+        }
+    }
+
+    eprintln!(
+        "[Processing Thread] Plugin chain loaded: {} plugins, {}ch -> {}ch",
+        configs.len(),
+        channels,
+        host.output_channels()
+    );
+
+    Ok(host)
+}
+
+/// Create a plugin from configuration
+fn create_plugin(
+    plugin_type: &str,
+    parameters: &serde_json::Value,
+    channels: usize,
+    sample_rate: u32,
+) -> Result<Box<dyn Plugin>, String> {
+    use crate::plugins::{
+        CompressorPlugin, EqPlugin, GainPlugin, GatePlugin, InPlacePluginAdapter, LimiterPlugin,
+        LoudnessCompensationPlugin, MatrixPlugin, UpmixerPlugin,
+    };
+
+    match plugin_type {
+        "gain" => {
+            let params: GainPluginParams = serde_json::from_value(parameters.clone())
+                .map_err(|e| format!("Failed to parse gain plugin parameters: {}", e))?;
+
+            let plugin = GainPlugin::new(channels, params.gain_db);
+            Ok(Box::new(InPlacePluginAdapter::new(plugin)))
+        }
+
+        "upmixer" => {
+            // Upmixer is always 2->5 channels
+            if channels != 2 {
+                return Err(format!(
+                    "Upmixer requires 2 input channels, got {}",
+                    channels
+                ));
+            }
+
+            let params: UpmixerPluginParams = serde_json::from_value(parameters.clone())
+                .map_err(|e| format!("Failed to parse upmixer plugin parameters: {}", e))?;
+
+            let plugin = UpmixerPlugin::new(
+                params.fft_size,
+                params.gain_front_direct,
+                params.gain_front_ambient,
+                params.gain_rear_ambient,
+            );
+            Ok(Box::new(plugin))
+        }
+
+        "eq" | "parametric_eq" => {
+            let params: EqPluginParams = serde_json::from_value(parameters.clone())
+                .map_err(|e| format!("Failed to parse EQ plugin parameters: {}", e))?;
+
+            // Convert filter configs to Biquad instances
+            use autoeq_iir::{Biquad, BiquadFilterType};
+
+            let filters: Result<Vec<Biquad>, String> = params
+                .filters
+                .iter()
+                .map(|f| {
+                    let filter_type = match f.filter_type.as_str() {
+                        "peak" => BiquadFilterType::Peak,
+                        "lowshelf" => BiquadFilterType::Lowshelf,
+                        "highshelf" => BiquadFilterType::Highshelf,
+                        "lowpass" => BiquadFilterType::Lowpass,
+                        "highpass" => BiquadFilterType::Highpass,
+                        "notch" => BiquadFilterType::Notch,
+                        "bandpass" => BiquadFilterType::Bandpass,
+                        other => return Err(format!("Unknown filter type: {}", other)),
+                    };
+
+                    Ok(Biquad::new(
+                        filter_type,
+                        f.freq,
+                        sample_rate as f64,
+                        f.q,
+                        f.db_gain,
+                    ))
+                })
+                .collect();
+
+            let filters = filters?;
+            let plugin = EqPlugin::new(channels, filters);
+            Ok(Box::new(plugin))
+        }
+
+        "compressor" => {
+            let params: CompressorPluginParams = serde_json::from_value(parameters.clone())
+                .map_err(|e| format!("Failed to parse compressor plugin parameters: {}", e))?;
+
+            let plugin = CompressorPlugin::new(
+                channels,
+                params.threshold_db,
+                params.ratio,
+                params.attack_ms,
+                params.release_ms,
+                params.knee_db,
+                params.makeup_gain_db,
+            );
+            Ok(Box::new(InPlacePluginAdapter::new(plugin)))
+        }
+
+        "limiter" => {
+            let params: LimiterPluginParams = serde_json::from_value(parameters.clone())
+                .map_err(|e| format!("Failed to parse limiter plugin parameters: {}", e))?;
+
+            let plugin = LimiterPlugin::new(
+                channels,
+                params.threshold_db,
+                params.release_ms,
+                params.lookahead_ms,
+                params.soft,
+            );
+            Ok(Box::new(InPlacePluginAdapter::new(plugin)))
+        }
+
+        "gate" => {
+            let params: GatePluginParams = serde_json::from_value(parameters.clone())
+                .map_err(|e| format!("Failed to parse gate plugin parameters: {}", e))?;
+
+            let plugin = GatePlugin::new(
+                channels,
+                params.threshold_db,
+                params.ratio,
+                params.attack_ms,
+                params.hold_ms,
+                params.release_ms,
+            );
+            Ok(Box::new(InPlacePluginAdapter::new(plugin)))
+        }
+
+        "loudness_compensation" => {
+            let params: LoudnessCompensationPluginParams = serde_json::from_value(parameters.clone())
+                .map_err(|e| format!("Failed to parse loudness compensation plugin parameters: {}", e))?;
+
+            let plugin = LoudnessCompensationPlugin::new(
+                channels,
+                params.low_freq,
+                params.low_gain,
+                params.high_freq,
+                params.high_gain,
+            );
+            Ok(Box::new(plugin))
+        }
+
+        "matrix" => {
+            #[derive(Debug, Clone, serde::Deserialize)]
+            struct MatrixPluginParams {
+                input_channels: usize,
+                output_channels: usize,
+                matrix: Vec<f32>,
+            }
+
+            let params: MatrixPluginParams = serde_json::from_value(parameters.clone())
+                .map_err(|e| format!("Failed to parse matrix plugin parameters: {}", e))?;
+
+            // Validate matrix size
+            let expected_size = params.output_channels * params.input_channels;
+            if params.matrix.len() != expected_size {
+                return Err(format!(
+                    "Matrix size mismatch: expected {} elements ({}x{}), got {}",
+                    expected_size,
+                    params.output_channels,
+                    params.input_channels,
+                    params.matrix.len()
+                ));
+            }
+
+            let plugin = MatrixPlugin::with_matrix(
+                params.input_channels,
+                params.output_channels,
+                params.matrix,
+            ).map_err(|e| format!("Failed to create matrix plugin: {}", e))?;
+
+            Ok(Box::new(plugin))
+        }
+
+        other => Err(format!("Unknown plugin type: {}", other)),
+    }
+}

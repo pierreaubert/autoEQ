@@ -31,7 +31,6 @@
       "public/headphone-targets/*.csv"
     ],
     "externalBin": [
-      "binaries/camilladsp"
     ],
     "icon": [
       "icons/32x32.png",

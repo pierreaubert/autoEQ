@@ -19,32 +19,42 @@
 // host.process(&mut audio_buffer);
 // ```
 
-mod analyzer;
-mod compressor;
-mod eq;
-mod gain;
-mod gate;
 mod host;
-mod limiter;
-mod loudness_compensation;
-mod loudness_monitor_plugin;
 mod parameters;
+mod analyzer;
+mod analyzer_loudness_monitor;
+mod analyzer_spectrum;
 mod plugin;
-mod resampler;
-mod spectrum_analyzer_plugin;
-mod upmixer;
+mod plugin_compressor;
+mod plugin_eq;
+mod plugin_gain;
+mod plugin_gate;
+mod plugin_limiter;
+mod plugin_loudness_compensation;
+mod plugin_matrix;
+mod plugin_upmixer;
+mod plugin_resampler;
 
-pub use analyzer::{AnalyzerData, AnalyzerPlugin, LoudnessData, SpectrumData};
-pub use compressor::CompressorPlugin;
-pub use eq::EqPlugin;
-pub use gain::GainPlugin;
-pub use gate::GatePlugin;
 pub use host::{PluginHost, SharedPluginHost};
-pub use limiter::LimiterPlugin;
-pub use loudness_compensation::LoudnessCompensationPlugin;
-pub use loudness_monitor_plugin::LoudnessMonitorPlugin;
+pub use analyzer::{AnalyzerData, AnalyzerPlugin, LoudnessData, SpectrumData};
 pub use parameters::{Parameter, ParameterId, ParameterValue};
 pub use plugin::{InPlacePlugin, InPlacePluginAdapter, Plugin, PluginInfo, ProcessContext};
-pub use resampler::ResamplerPlugin;
-pub use spectrum_analyzer_plugin::SpectrumAnalyzerPlugin;
-pub use upmixer::UpmixerPlugin;
+
+pub use plugin_resampler::ResamplerPlugin;
+pub use plugin_upmixer::UpmixerPlugin;
+pub use plugin_compressor::CompressorPlugin;
+pub use plugin_eq::EqPlugin;
+pub use plugin_gain::GainPlugin;
+pub use plugin_gate::GatePlugin;
+pub use plugin_limiter::LimiterPlugin;
+pub use plugin_loudness_compensation::LoudnessCompensationPlugin;
+pub use plugin_matrix::MatrixPlugin;
+
+pub use analyzer_loudness_monitor::{LoudnessInfo, LoudnessMonitorPlugin};
+#[allow(unused_imports)]
+pub(crate) use analyzer_loudness_monitor::LoudnessMonitor;
+pub use analyzer_spectrum::{SpectrumAnalyzerPlugin, SpectrumInfo};
+#[allow(unused_imports)]
+pub(crate) use analyzer_spectrum::{SpectrumAnalyzer, SpectrumConfig};
+pub use plugin_loudness_compensation::LoudnessCompensation;
+

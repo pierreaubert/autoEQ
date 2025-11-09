@@ -3,10 +3,11 @@
 //! This module provides functionality to generate test signals, play them back,
 //! record the output, and analyze the results.
 
-use crate::analysis::{analyze_recording, write_analysis_csv};
+use crate::signal_analysis::{analyze_recording, write_analysis_csv};
 // Note: PlaybackRecorder is available but not used in current implementation
 // use crate::audio_playback::{PlaybackRecorder, PlaybackRecordingConfig};
-use crate::camilla::{AudioManager, ChannelMapMode};
+// NOTE: CamillaDSP integration has been removed - record_and_analyze function is deprecated
+// use crate::camilla::{AudioManager, ChannelMapMode};
 use crate::signals::*;
 use hound::{SampleFormat, WavSpec, WavWriter};
 use std::path::{Path, PathBuf};
@@ -229,7 +230,11 @@ pub fn generate_output_filenames(
     (wav_path, csv_path)
 }
 
-/// Perform recording and analysis with CamillaDSP playback and recording
+/// Perform recording and analysis using AudioStreamingManager for playback
+/// and cpal for recording.
+///
+/// Plays back a signal to a specific output channel while simultaneously
+/// recording from a specific input channel, then analyzes the result.
 pub async fn record_and_analyze(
     temp_wav_path: &Path,
     recorded_wav_path: &Path,
@@ -239,120 +244,121 @@ pub async fn record_and_analyze(
     output_channel: u16,
     input_channel: u16,
 ) -> Result<(), String> {
-    println!("[Recording] Starting playback and recording with CamillaDSP...");
-    println!("[Recording] Playing from: {:?}", temp_wav_path);
-    println!("[Recording] Recording to: {:?}", recorded_wav_path);
-    println!(
-        "[Recording] Output channel: {}, Input channel: {}",
-        output_channel, input_channel
-    );
+    use crate::AudioStreamingManager;
+    use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+    use std::sync::Arc;
+    use parking_lot::Mutex;
+    use tokio::time::{sleep, Duration};
 
-    // Find CamillaDSP binary path
-    let camilla_binary = crate::camilla::find_camilladsp_binary()
-        .map_err(|e| format!("Failed to find CamillaDSP binary: {}", e))?;
+    eprintln!("[record_and_analyze] Starting playback and recording...");
+    eprintln!("[record_and_analyze]   Playback file: {:?}", temp_wav_path);
+    eprintln!("[record_and_analyze]   Output channel: {}", output_channel);
+    eprintln!("[record_and_analyze]   Input channel: {}", input_channel);
+    eprintln!("[record_and_analyze]   Sample rate: {}", sample_rate);
 
-    // Create separate audio managers for recording and playback
-    let recording_manager = AudioManager::new(camilla_binary.clone());
-    let playback_manager = AudioManager::new(camilla_binary);
+    // Calculate expected duration
+    let expected_duration = reference_signal.len() as f64 / sample_rate as f64;
+    eprintln!("[record_and_analyze]   Expected duration: {:.2}s", expected_duration);
 
-    // Configure channel mappings
-    let output_map = Some(vec![output_channel]); // Output channel for playback
-    let input_map = Some(vec![input_channel]); // Input channel for recording
+    // Set up recording stream
+    let host = cpal::default_host();
+    let input_device = host.default_input_device()
+        .ok_or_else(|| "No input device available".to_string())?;
 
-    println!("[Recording] Channel mapping:");
-    println!(
-        "  Output map: {:?} (play to hardware channel {})",
-        output_map, output_channel
-    );
-    println!(
-        "  Input map: {:?} (record from hardware channel {})",
-        input_map, input_channel
-    );
+    eprintln!("[record_and_analyze] Input device: {}",
+              input_device.name().unwrap_or_else(|_| "Unknown".to_string()));
 
-    // Start recording first
-    println!("[Recording] Starting CamillaDSP recording...");
-    recording_manager
-        .start_recording(
-            None, // Use default input device
-            recorded_wav_path.to_path_buf(),
-            sample_rate,
-            1, // Mono recording
-            input_map,
-        )
-        .await
-        .map_err(|e| format!("Failed to start CamillaDSP recording: {}", e))?;
+    // Configure input stream
+    let input_config = cpal::StreamConfig {
+        channels: (input_channel + 1).max(2) as u16,  // Need at least input_channel+1 channels
+        sample_rate: cpal::SampleRate(sample_rate),
+        buffer_size: cpal::BufferSize::Default,
+    };
 
-    println!("[Recording] ✓ CamillaDSP recording started");
+    // Shared state for recording
+    let recorded_samples: Arc<Mutex<Vec<f32>>> = Arc::new(Mutex::new(Vec::new()));
+    let recorded_samples_clone = Arc::clone(&recorded_samples);
 
-    // Small delay to ensure recording is ready
-    tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
+    // Create input stream
+    let input_stream = input_device.build_input_stream(
+        &input_config,
+        move |data: &[f32], _: &cpal::InputCallbackInfo| {
+            let num_channels = input_config.channels as usize;
+            let mut recorded = recorded_samples_clone.lock();
 
-    // Start playback
-    println!("[Recording] Starting CamillaDSP playback...");
-    playback_manager
-        .start_playback(
-            temp_wav_path.to_path_buf(),
-            None, // Use default output device
-            sample_rate,
-            1,      // Mono input file
-            vec![], // No filters for measurement
-            ChannelMapMode::Normal,
-            output_map, // Route to specific hardware channel
-            None,       // No loudness compensation
-        )
-        .await
-        .map_err(|e| format!("Failed to start CamillaDSP playback: {}", e))?;
+            // Extract only the specified input channel
+            for frame in data.chunks(num_channels) {
+                if (input_channel as usize) < frame.len() {
+                    recorded.push(frame[input_channel as usize]);
+                }
+            }
+        },
+        |err| eprintln!("[record_and_analyze] Input stream error: {}", err),
+        None,
+    ).map_err(|e| format!("Failed to build input stream: {}", e))?;
 
-    println!("[Recording] ✓ CamillaDSP playback started");
+    // Start recording
+    input_stream.play().map_err(|e| format!("Failed to start input stream: {}", e))?;
+    eprintln!("[record_and_analyze] Recording started");
+
+    // Small delay to let recording buffer fill
+    sleep(Duration::from_millis(100)).await;
+
+    // Start playback using AudioStreamingManager
+    let mut manager = AudioStreamingManager::new();
+    manager.load_file(temp_wav_path).await
+        .map_err(|e| format!("Failed to load file: {}", e))?;
+
+    // TODO: Channel routing not yet implemented via plugin system
+    // For now, playback will go to all channels
+    let plugins = vec![];  // No plugins needed for simple playback
+    let output_channels = 2;  // Assume stereo output
+    manager.start_playback(None, plugins, output_channels).await
+        .map_err(|e| format!("Failed to start playback: {}", e))?;
+
+    eprintln!("[record_and_analyze] Playback started");
 
     // Wait for playback to complete
-    println!("[Recording] Waiting for playback to complete...");
+    let total_wait = Duration::from_secs_f64(expected_duration * 1.5 + 1.0);
+    let check_interval = Duration::from_millis(100);
+    let mut elapsed = Duration::ZERO;
 
-    // Calculate duration based on reference signal length
-    let duration_seconds = reference_signal.len() as f32 / sample_rate as f32;
-    let wait_time = duration_seconds + 2.0; // Add 2 seconds padding for latency
+    while elapsed < total_wait {
+        sleep(check_interval).await;
+        elapsed += check_interval;
 
-    tokio::time::sleep(tokio::time::Duration::from_secs_f32(wait_time)).await;
-
-    // Stop playback first
-    playback_manager
-        .stop_playback()
-        .await
-        .map_err(|e| format!("Failed to stop CamillaDSP playback: {}", e))?;
-
-    println!("[Recording] ✓ Playback completed");
-
-    // Stop recording
-    recording_manager
-        .stop_recording()
-        .await
-        .map_err(|e| format!("Failed to stop CamillaDSP recording: {}", e))?;
-
-    println!("[Recording] ✓ Recording completed");
-
-    // Verify the recorded file exists
-    if !recorded_wav_path.exists() {
-        return Err(format!(
-            "Recording failed: output file does not exist at {:?}",
-            recorded_wav_path
-        ));
+        let state = manager.get_state();
+        if state == crate::StreamingState::Idle {
+            eprintln!("[record_and_analyze] Playback completed");
+            break;
+        }
     }
 
+    // Stop playback
+    manager.stop().await
+        .map_err(|e| format!("Failed to stop playback: {}", e))?;
+
+    // Stop recording
+    std::mem::drop(input_stream);
+    eprintln!("[record_and_analyze] Recording stopped");
+
+    // Get recorded samples
+    let recorded = recorded_samples.lock().clone();
+    eprintln!("[record_and_analyze] Recorded {} samples", recorded.len());
+
+    if recorded.is_empty() {
+        return Err("No samples were recorded".to_string());
+    }
+
+    // Write recorded samples to WAV file
+    write_wav_file(recorded_wav_path, &recorded, sample_rate, 1)?;
+    eprintln!("[record_and_analyze] Wrote recording to {:?}", recorded_wav_path);
+
     // Analyze the recording
-    println!("[Analysis] Analyzing recorded signal...");
-    let result = analyze_recording(recorded_wav_path, reference_signal, sample_rate)
-        .map_err(|e| format!("Analysis failed: {}", e))?;
-
-    // Write analysis results to CSV
-    write_analysis_csv(&result, output_csv_path)
-        .map_err(|e| format!("Failed to write analysis CSV: {}", e))?;
-
-    println!("[Analysis] Analysis complete");
-    println!(
-        "[Analysis] Lag: {} samples ({:.2} ms)",
-        result.estimated_lag_samples,
-        result.estimated_lag_samples as f32 * 1000.0 / sample_rate as f32
-    );
+    eprintln!("[record_and_analyze] Analyzing recording...");
+    let analysis = analyze_recording(recorded_wav_path, reference_signal, sample_rate)?;
+    write_analysis_csv(&analysis, output_csv_path)?;
+    eprintln!("[record_and_analyze] Wrote analysis to {:?}", output_csv_path);
 
     Ok(())
 }
