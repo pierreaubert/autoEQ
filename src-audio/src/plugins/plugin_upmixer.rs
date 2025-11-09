@@ -421,15 +421,22 @@ impl Plugin for UpmixerPlugin {
             ));
         }
 
-        eprintln!("[UPMIXER] process() called: input={} frames, output={} frames",
-            context.num_frames, context.num_frames);
-        eprintln!("[UPMIXER] Initial state: input_buffer_fill={}, output_accumulator_fill={}, next_add_pos={}",
-            self.input_buffer_fill, self.output_accumulator_fill, self.next_add_position);
+        eprintln!(
+            "[UPMIXER] process() called: input={} frames, output={} frames",
+            context.num_frames, context.num_frames
+        );
+        eprintln!(
+            "[UPMIXER] Initial state: input_buffer_fill={}, output_accumulator_fill={}, next_add_pos={}",
+            self.input_buffer_fill, self.output_accumulator_fill, self.next_add_position
+        );
 
         // Sanity check for threading issues
         if self.next_add_position > self.fft_size * 3 {
-            eprintln!("[UPMIXER] WARNING: Corrupted state detected! next_add_pos={} exceeds buffer size {}",
-                self.next_add_position, self.fft_size * 3);
+            eprintln!(
+                "[UPMIXER] WARNING: Corrupted state detected! next_add_pos={} exceeds buffer size {}",
+                self.next_add_position,
+                self.fft_size * 3
+            );
             eprintln!("[UPMIXER] This could indicate a threading issue. Resetting state.");
             self.reset();
         }
@@ -446,10 +453,17 @@ impl Plugin for UpmixerPlugin {
             iteration += 1;
             if iteration > 1000 {
                 eprintln!("[UPMIXER] ERROR: Infinite loop detected after 1000 iterations!");
-                eprintln!("[UPMIXER] State: input_pos={}/{}, output_pos={}/{}",
-                    input_pos/2, input.len()/2, output_pos/5, output.len()/5);
-                eprintln!("[UPMIXER] input_buffer_fill={}, output_accumulator_fill={}, next_add_pos={}",
-                    self.input_buffer_fill, self.output_accumulator_fill, self.next_add_position);
+                eprintln!(
+                    "[UPMIXER] State: input_pos={}/{}, output_pos={}/{}",
+                    input_pos / 2,
+                    input.len() / 2,
+                    output_pos / 5,
+                    output.len() / 5
+                );
+                eprintln!(
+                    "[UPMIXER] input_buffer_fill={}, output_accumulator_fill={}, next_add_pos={}",
+                    self.input_buffer_fill, self.output_accumulator_fill, self.next_add_position
+                );
                 break;
             }
             // Step 1: Drain output accumulator if we have data and space
@@ -457,8 +471,10 @@ impl Plugin for UpmixerPlugin {
             let frames_to_drain = self.output_accumulator_fill.min(frames_available);
 
             if frames_to_drain > 0 {
-                eprintln!("[UPMIXER] Iter {}: DRAIN {} frames (accum_fill={}, frames_avail={})",
-                    iteration, frames_to_drain, self.output_accumulator_fill, frames_available);
+                eprintln!(
+                    "[UPMIXER] Iter {}: DRAIN {} frames (accum_fill={}, frames_avail={})",
+                    iteration, frames_to_drain, self.output_accumulator_fill, frames_available
+                );
 
                 // Copy samples to output
                 for i in 0..frames_to_drain {
@@ -489,8 +505,12 @@ impl Plugin for UpmixerPlugin {
                     self.next_add_position = 0;
                 }
 
-                eprintln!("[UPMIXER] After drain: accum_fill={}, next_add_pos={}, output_pos={}",
-                    self.output_accumulator_fill, self.next_add_position, output_pos/5);
+                eprintln!(
+                    "[UPMIXER] After drain: accum_fill={}, next_add_pos={}, output_pos={}",
+                    self.output_accumulator_fill,
+                    self.next_add_position,
+                    output_pos / 5
+                );
             }
 
             // Step 2: Process FFT block if we have input and accumulator space
@@ -499,8 +519,14 @@ impl Plugin for UpmixerPlugin {
             let can_process_space = self.next_add_position + self.fft_size <= self.fft_size * 3;
 
             if can_process_input && can_process_space {
-                eprintln!("[UPMIXER] Iter {}: PROCESS FFT (input_buf_fill={}/{}, next_add_pos={}, space_ok={})",
-                    iteration, self.input_buffer_fill/2, self.fft_size, self.next_add_position, can_process_space);
+                eprintln!(
+                    "[UPMIXER] Iter {}: PROCESS FFT (input_buf_fill={}/{}, next_add_pos={}, space_ok={})",
+                    iteration,
+                    self.input_buffer_fill / 2,
+                    self.fft_size,
+                    self.next_add_position,
+                    can_process_space
+                );
 
                 // Copy to temp buffer
                 self.temp_input_block[..self.fft_size * 2]
@@ -515,7 +541,8 @@ impl Plugin for UpmixerPlugin {
                 // Accumulate output (overlap-add) at next_add_position
                 for i in 0..self.fft_size {
                     for ch in 0..5 {
-                        self.output_accumulator[ch][self.next_add_position + i] += output_block[i * 5 + ch];
+                        self.output_accumulator[ch][self.next_add_position + i] +=
+                            output_block[i * 5 + ch];
                     }
                 }
 
@@ -538,13 +565,19 @@ impl Plugin for UpmixerPlugin {
                     .copy_within(shift_amount..self.fft_size * 2, 0);
                 self.input_buffer_fill -= shift_amount;
 
-                eprintln!("[UPMIXER] After FFT: accum_fill={}, next_add_pos={}, input_buf_fill={}",
-                    self.output_accumulator_fill, self.next_add_position, self.input_buffer_fill/2);
+                eprintln!(
+                    "[UPMIXER] After FFT: accum_fill={}, next_add_pos={}, input_buf_fill={}",
+                    self.output_accumulator_fill,
+                    self.next_add_position,
+                    self.input_buffer_fill / 2
+                );
 
                 continue; // Process more blocks if possible
             } else if !can_process_input || !can_process_space {
-                eprintln!("[UPMIXER] Iter {}: SKIP FFT (can_process_input={}, can_process_space={})",
-                    iteration, can_process_input, can_process_space);
+                eprintln!(
+                    "[UPMIXER] Iter {}: SKIP FFT (can_process_input={}, can_process_space={})",
+                    iteration, can_process_input, can_process_space
+                );
             }
 
             // Step 3: Fill input buffer if we have more input
@@ -552,8 +585,14 @@ impl Plugin for UpmixerPlugin {
                 let samples_to_copy =
                     (input.len() - input_pos).min(self.fft_size * 2 - self.input_buffer_fill);
 
-                eprintln!("[UPMIXER] Iter {}: FILL {} samples (input_pos={}/{}, input_buf_fill={})",
-                    iteration, samples_to_copy/2, input_pos/2, input.len()/2, self.input_buffer_fill/2);
+                eprintln!(
+                    "[UPMIXER] Iter {}: FILL {} samples (input_pos={}/{}, input_buf_fill={})",
+                    iteration,
+                    samples_to_copy / 2,
+                    input_pos / 2,
+                    input.len() / 2,
+                    self.input_buffer_fill / 2
+                );
 
                 self.input_buffer[self.input_buffer_fill..self.input_buffer_fill + samples_to_copy]
                     .copy_from_slice(&input[input_pos..input_pos + samples_to_copy]);
@@ -561,8 +600,11 @@ impl Plugin for UpmixerPlugin {
                 self.input_buffer_fill += samples_to_copy;
                 input_pos += samples_to_copy;
 
-                eprintln!("[UPMIXER] After fill: input_buf_fill={}, input_pos={}",
-                    self.input_buffer_fill/2, input_pos/2);
+                eprintln!(
+                    "[UPMIXER] After fill: input_buf_fill={}, input_pos={}",
+                    self.input_buffer_fill / 2,
+                    input_pos / 2
+                );
 
                 continue; // Try processing again
             }
@@ -574,8 +616,14 @@ impl Plugin for UpmixerPlugin {
             let no_data_to_drain = self.output_accumulator_fill == 0;
             let no_space_to_drain = (output.len() - output_pos) / 5 == 0;
 
-            eprintln!("[UPMIXER] Iter {}: CHECK EXIT - no_more_input={}, cant_process={}, no_data={}, no_space={}",
-                iteration, input_pos >= input.len(), cant_process, no_data_to_drain, no_space_to_drain);
+            eprintln!(
+                "[UPMIXER] Iter {}: CHECK EXIT - no_more_input={}, cant_process={}, no_data={}, no_space={}",
+                iteration,
+                input_pos >= input.len(),
+                cant_process,
+                no_data_to_drain,
+                no_space_to_drain
+            );
 
             // Exit if output buffer is full (most important - prevents deadlock)
             if no_space_to_drain {
@@ -591,16 +639,22 @@ impl Plugin for UpmixerPlugin {
         }
 
         eprintln!("[UPMIXER] Loop finished after {} iterations", iteration);
-        eprintln!("[UPMIXER] Final: output_pos={}/{}, accum_fill={}",
-            output_pos/5, output.len()/5, self.output_accumulator_fill);
+        eprintln!(
+            "[UPMIXER] Final: output_pos={}/{}, accum_fill={}",
+            output_pos / 5,
+            output.len() / 5,
+            self.output_accumulator_fill
+        );
 
         // Final drain of any remaining output
         let frames_available = (output.len() - output_pos) / 5;
         let frames_to_drain = self.output_accumulator_fill.min(frames_available);
 
         if frames_to_drain > 0 {
-            eprintln!("[UPMIXER] FINAL DRAIN: {} frames (accum_fill={}, frames_avail={})",
-                frames_to_drain, self.output_accumulator_fill, frames_available);
+            eprintln!(
+                "[UPMIXER] FINAL DRAIN: {} frames (accum_fill={}, frames_avail={})",
+                frames_to_drain, self.output_accumulator_fill, frames_available
+            );
 
             for i in 0..frames_to_drain {
                 for ch in 0..5 {
@@ -610,8 +664,11 @@ impl Plugin for UpmixerPlugin {
             output_pos += frames_to_drain * 5;
 
             for ch in 0..5 {
-                self.output_accumulator[ch].copy_within(frames_to_drain..self.output_accumulator_fill, 0);
-                for i in (self.output_accumulator_fill - frames_to_drain)..self.output_accumulator_fill {
+                self.output_accumulator[ch]
+                    .copy_within(frames_to_drain..self.output_accumulator_fill, 0);
+                for i in
+                    (self.output_accumulator_fill - frames_to_drain)..self.output_accumulator_fill
+                {
                     self.output_accumulator[ch][i] = 0.0;
                 }
             }
@@ -625,11 +682,18 @@ impl Plugin for UpmixerPlugin {
                 self.next_add_position = 0;
             }
 
-            eprintln!("[UPMIXER] After final drain: accum_fill={}, next_add_pos={}, total_output={}",
-                self.output_accumulator_fill, self.next_add_position, output_pos/5);
+            eprintln!(
+                "[UPMIXER] After final drain: accum_fill={}, next_add_pos={}, total_output={}",
+                self.output_accumulator_fill,
+                self.next_add_position,
+                output_pos / 5
+            );
         }
 
-        eprintln!("[UPMIXER] process() complete: returned {} frames\n", output_pos/5);
+        eprintln!(
+            "[UPMIXER] process() complete: returned {} frames\n",
+            output_pos / 5
+        );
 
         Ok(())
     }
@@ -777,11 +841,20 @@ mod tests {
         assert!(channel_energies[1] > 0.1, "Front right should have signal");
 
         // Center should have signal (direct component)
-        assert!(channel_energies[2] > 0.01, "Center should have direct component");
+        assert!(
+            channel_energies[2] > 0.01,
+            "Center should have direct component"
+        );
 
         // Rear channels should have signal (ambient with gain=1.0)
-        assert!(channel_energies[3] > 0.01, "Rear left should have ambient signal");
-        assert!(channel_energies[4] > 0.01, "Rear right should have ambient signal");
+        assert!(
+            channel_energies[3] > 0.01,
+            "Rear left should have ambient signal"
+        );
+        assert!(
+            channel_energies[4] > 0.01,
+            "Rear right should have ambient signal"
+        );
     }
 
     #[test]
@@ -803,7 +876,8 @@ mod tests {
                 let mut input = vec![0.0_f32; chunk_size * 2];
 
                 for i in 0..chunk_size {
-                    let phase = 2.0 * std::f32::consts::PI * 440.0 * (sample_offset + i) as f32 / 44100.0;
+                    let phase =
+                        2.0 * std::f32::consts::PI * 440.0 * (sample_offset + i) as f32 / 44100.0;
                     input[i * 2] = phase.sin() * 0.5;
                     input[i * 2 + 1] = phase.sin() * 0.5;
                 }
@@ -822,13 +896,17 @@ mod tests {
             // Check that we got significant output (accounting for latency)
             let total_output_samples = all_output.len() / 5;
             let non_zero_samples = all_output.iter().filter(|&&x| x.abs() > 1e-6).count();
-            println!("Buffer size {}: {} total frames, {} non-zero samples",
-                buffer_size, total_output_samples, non_zero_samples);
+            println!(
+                "Buffer size {}: {} total frames, {} non-zero samples",
+                buffer_size, total_output_samples, non_zero_samples
+            );
 
             assert!(
                 non_zero_samples > total_output_samples / 2,
                 "Buffer size {}: Too many zero samples, got {} non-zero out of {} total",
-                buffer_size, non_zero_samples, total_output_samples
+                buffer_size,
+                non_zero_samples,
+                total_output_samples
             );
         }
     }
@@ -847,7 +925,9 @@ mod tests {
         for iteration in 0..16 {
             let mut input = vec![0.0_f32; buffer_size * 2];
             for i in 0..buffer_size {
-                let phase = 2.0 * std::f32::consts::PI * 440.0 * (iteration * buffer_size + i) as f32 / 44100.0;
+                let phase =
+                    2.0 * std::f32::consts::PI * 440.0 * (iteration * buffer_size + i) as f32
+                        / 44100.0;
                 input[i * 2] = phase.sin() * 0.5;
                 input[i * 2 + 1] = phase.sin() * 0.5;
             }
@@ -870,8 +950,12 @@ mod tests {
             }
         }
 
-        println!("Input energy: {}, Output energy: {}, Ratio: {}",
-            total_input_energy, total_output_energy, total_output_energy / total_input_energy);
+        println!(
+            "Input energy: {}, Output energy: {}, Ratio: {}",
+            total_input_energy,
+            total_output_energy,
+            total_output_energy / total_input_energy
+        );
 
         // Hann window has mean ~0.5, so expect ~75% energy loss (0.5²)
         // With overlap-add we recover some but not all
@@ -879,7 +963,9 @@ mod tests {
         assert!(
             total_output_energy > total_input_energy * 0.15,
             "Energy loss too high: input={}, output={}, ratio={}",
-            total_input_energy, total_output_energy, total_output_energy / total_input_energy
+            total_input_energy,
+            total_output_energy,
+            total_output_energy / total_input_energy
         );
     }
 
@@ -895,7 +981,9 @@ mod tests {
         for iteration in 0..20 {
             let mut input = vec![0.0_f32; buffer_size * 2];
             for i in 0..buffer_size {
-                let phase = 2.0 * std::f32::consts::PI * 440.0 * (iteration * buffer_size + i) as f32 / 44100.0;
+                let phase =
+                    2.0 * std::f32::consts::PI * 440.0 * (iteration * buffer_size + i) as f32
+                        / 44100.0;
                 input[i * 2] = phase.sin() * 0.5;
                 input[i * 2 + 1] = phase.sin() * 0.5;
             }
@@ -916,6 +1004,10 @@ mod tests {
             }
         }
 
-        assert_eq!(gap_count, 0, "Found {} gaps in output after initial latency", gap_count);
+        assert_eq!(
+            gap_count, 0,
+            "Found {} gaps in output after initial latency",
+            gap_count
+        );
     }
 }

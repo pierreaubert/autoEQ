@@ -42,7 +42,8 @@ fn test_loudness_monitor_stereo() {
     println!("Loudness Monitor Results:");
     println!("  Momentary: {:.1} LUFS", loudness.momentary_lufs);
     println!("  Short-term: {:.1} LUFS", loudness.shortterm_lufs);
-    println!("  Peak: {:.3} ({:.1} dBFS)",
+    println!(
+        "  Peak: {:.3} ({:.1} dBFS)",
         loudness.peak,
         20.0 * loudness.peak.log10()
     );
@@ -88,7 +89,8 @@ fn test_spectrum_analyzer_stereo() {
 
     println!("\nSpectrum Analyzer Results:");
     println!("  Number of bins: {}", spectrum.frequencies.len());
-    println!("  Frequency range: {:.0}Hz - {:.0}Hz",
+    println!(
+        "  Frequency range: {:.0}Hz - {:.0}Hz",
         spectrum.frequencies.first().unwrap_or(&0.0),
         spectrum.frequencies.last().unwrap_or(&0.0)
     );
@@ -96,7 +98,12 @@ fn test_spectrum_analyzer_stereo() {
 
     // Print all bins
     println!("\n  Bins:");
-    for (i, (&freq, &mag)) in spectrum.frequencies.iter().zip(spectrum.magnitudes.iter()).enumerate() {
+    for (i, (&freq, &mag)) in spectrum
+        .frequencies
+        .iter()
+        .zip(spectrum.magnitudes.iter())
+        .enumerate()
+    {
         println!("    {:2}. {:6.0}Hz: {:6.1} dB", i, freq, mag);
     }
 
@@ -122,8 +129,8 @@ fn test_both_analyzers_together() {
         let mut sample = 0.0;
 
         // Mix of harmonics
-        sample += (2.0 * std::f32::consts::PI * 100.0 * t).sin() * 0.2;  // Bass
-        sample += (2.0 * std::f32::consts::PI * 440.0 * t).sin() * 0.3;  // A4
+        sample += (2.0 * std::f32::consts::PI * 100.0 * t).sin() * 0.2; // Bass
+        sample += (2.0 * std::f32::consts::PI * 440.0 * t).sin() * 0.3; // A4
         sample += (2.0 * std::f32::consts::PI * 1000.0 * t).sin() * 0.2; // Mid
         sample += (2.0 * std::f32::consts::PI * 5000.0 * t).sin() * 0.1; // Treble
 
@@ -148,9 +155,15 @@ fn test_both_analyzers_together() {
     let sd = spectrum_data.downcast_ref::<SpectrumData>().unwrap();
 
     println!("\nCombined Analysis Results:");
-    println!("  Loudness: {:.1} LUFS, Peak: {:.3}", ld.momentary_lufs, ld.peak);
-    println!("  Spectrum: {} bins, Peak: {:.1} dB",
-        sd.frequencies.len(), sd.peak_magnitude);
+    println!(
+        "  Loudness: {:.1} LUFS, Peak: {:.3}",
+        ld.momentary_lufs, ld.peak
+    );
+    println!(
+        "  Spectrum: {} bins, Peak: {:.1} dB",
+        sd.frequencies.len(),
+        sd.peak_magnitude
+    );
 
     // Both should have computed something
     assert!(ld.peak > 0.0);
@@ -199,9 +212,15 @@ fn test_analyzer_with_5ch_audio() {
     let sd = spectrum_data.downcast_ref::<SpectrumData>().unwrap();
 
     println!("\n5-Channel Analysis:");
-    println!("  Loudness: {:.1} LUFS, Peak: {:.3}", ld.momentary_lufs, ld.peak);
-    println!("  Spectrum: {} bins, Peak: {:.1} dB",
-        sd.frequencies.len(), sd.peak_magnitude);
+    println!(
+        "  Loudness: {:.1} LUFS, Peak: {:.3}",
+        ld.momentary_lufs, ld.peak
+    );
+    println!(
+        "  Spectrum: {} bins, Peak: {:.1} dB",
+        sd.frequencies.len(),
+        sd.peak_magnitude
+    );
 
     // Should have analyzed all channels
     assert!(ld.peak > 0.0);

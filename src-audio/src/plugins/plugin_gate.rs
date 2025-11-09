@@ -37,7 +37,7 @@ pub struct GatePlugin {
     release_ms: f32,
 
     // State per channel
-    envelope: Vec<f32>,  // Current gate envelope per channel
+    envelope: Vec<f32>,       // Current gate envelope per channel
     hold_counter: Vec<usize>, // Samples remaining in hold state
     attack_coeff: f32,
     release_coeff: f32,

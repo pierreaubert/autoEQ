@@ -5,8 +5,8 @@
 // High-quality audio resampling using the rubato library.
 // Supports arbitrary sample rate conversion with minimal artifacts.
 
-use super::plugin::{Plugin, PluginInfo, PluginResult, ProcessContext};
 use super::parameters::{Parameter, ParameterId, ParameterValue};
+use super::plugin::{Plugin, PluginInfo, PluginResult, ProcessContext};
 use rubato::{
     Resampler, SincFixedIn, SincInterpolationParameters, SincInterpolationType, WindowFunction,
 };
@@ -93,16 +93,16 @@ impl ResamplerPlugin {
     ) -> Result<SincFixedIn<f32>, String> {
         // Use high-quality sinc interpolation
         let params = SincInterpolationParameters {
-            sinc_len: 256,                             // Sinc filter length
-            f_cutoff: 0.95,                            // Cutoff frequency (0.95 = 95% of Nyquist)
+            sinc_len: 256,                                // Sinc filter length
+            f_cutoff: 0.95, // Cutoff frequency (0.95 = 95% of Nyquist)
             interpolation: SincInterpolationType::Linear, // Linear interpolation
-            oversampling_factor: 256,                  // Quality factor
-            window: WindowFunction::BlackmanHarris2,   // Window function
+            oversampling_factor: 256, // Quality factor
+            window: WindowFunction::BlackmanHarris2, // Window function
         };
 
         let resampler = SincFixedIn::<f32>::new(
             output_sample_rate as f64 / input_sample_rate as f64,
-            2.0,     // Maximum relative ratio deviation
+            2.0, // Maximum relative ratio deviation
             params,
             chunk_size,
             num_channels,
@@ -122,12 +122,7 @@ impl ResamplerPlugin {
     }
 
     /// Convert planar output to interleaved format
-    fn planar_to_interleaved(
-        &self,
-        planar: &[Vec<f32>],
-        output: &mut [f32],
-        num_frames: usize,
-    ) {
+    fn planar_to_interleaved(&self, planar: &[Vec<f32>], output: &mut [f32], num_frames: usize) {
         for frame in 0..num_frames {
             for ch in 0..self.num_channels {
                 output[frame * self.num_channels + ch] = planar[ch][frame];
@@ -315,8 +310,8 @@ mod tests {
         // We check the first portion of the output buffer
         let expected_frames = (num_frames as f64 * 48000.0 / 44100.0) as usize;
         let check_samples = expected_frames * 2;
-        let rms: f32 = output[..check_samples].iter().map(|x| x * x).sum::<f32>()
-            / check_samples as f32;
+        let rms: f32 =
+            output[..check_samples].iter().map(|x| x * x).sum::<f32>() / check_samples as f32;
         let rms = rms.sqrt();
         println!("Output RMS (first {} frames): {:.4}", expected_frames, rms);
         assert!(rms > 0.1, "Output should contain signal");
@@ -354,8 +349,8 @@ mod tests {
         // Check signal (actual frames may be less than max buffer)
         let expected_frames = (num_frames as f64 * 44100.0 / 48000.0) as usize;
         let check_samples = expected_frames * 2;
-        let rms: f32 = output[..check_samples].iter().map(|x| x * x).sum::<f32>()
-            / check_samples as f32;
+        let rms: f32 =
+            output[..check_samples].iter().map(|x| x * x).sum::<f32>() / check_samples as f32;
         let rms = rms.sqrt();
         println!("Output RMS (first {} frames): {:.4}", expected_frames, rms);
         assert!(rms > 0.1);
@@ -390,16 +385,18 @@ mod tests {
 
         resampler.process(&input, &mut output, &context).unwrap();
 
-        println!("5-channel resampling: {} input frames, {} max output frames",
-                 num_frames, max_output_frames);
+        println!(
+            "5-channel resampling: {} input frames, {} max output frames",
+            num_frames, max_output_frames
+        );
 
         // Check each channel has signal (check expected number of frames)
         let expected_frames = (num_frames as f64 * 48000.0 / 44100.0) as usize;
         for ch in 0..5 {
             let channel_samples: Vec<f32> =
                 (0..expected_frames).map(|i| output[i * 5 + ch]).collect();
-            let rms: f32 = channel_samples.iter().map(|x| x * x).sum::<f32>()
-                / channel_samples.len() as f32;
+            let rms: f32 =
+                channel_samples.iter().map(|x| x * x).sum::<f32>() / channel_samples.len() as f32;
             let rms = rms.sqrt();
             println!("Channel {} RMS: {:.4}", ch, rms);
             assert!(rms > 0.05, "Channel {} should have signal", ch);

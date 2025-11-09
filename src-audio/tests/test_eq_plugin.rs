@@ -11,7 +11,7 @@ use sotf_audio::plugins::{EqPlugin, Plugin, ProcessContext};
 fn test_eq_plugin_basic() {
     // Create a simple 2-band EQ: bass boost + treble boost
     let filters = vec![
-        Biquad::new(BiquadFilterType::Lowshelf, 100.0, 48000.0, 0.707, 6.0),   // +6dB bass
+        Biquad::new(BiquadFilterType::Lowshelf, 100.0, 48000.0, 0.707, 6.0), // +6dB bass
         Biquad::new(BiquadFilterType::Highshelf, 8000.0, 48000.0, 0.707, 6.0), // +6dB treble
     ];
 
@@ -24,7 +24,7 @@ fn test_eq_plugin_basic() {
     for i in 0..num_frames {
         let phase = 2.0 * std::f32::consts::PI * 1000.0 * i as f32 / 48000.0;
         let sample = phase.sin() * 0.5;
-        input[i * 2] = sample;     // Left
+        input[i * 2] = sample; // Left
         input[i * 2 + 1] = sample; // Right
     }
 
@@ -93,8 +93,12 @@ fn test_eq_plugin_parametric() {
     let input_energy: f32 = input.iter().map(|x| x * x).sum();
     let output_energy: f32 = output.iter().map(|x| x * x).sum();
 
-    println!("Parametric EQ: input energy = {:.2}, output energy = {:.2}, ratio = {:.2}",
-        input_energy, output_energy, output_energy / input_energy);
+    println!(
+        "Parametric EQ: input energy = {:.2}, output energy = {:.2}, ratio = {:.2}",
+        input_energy,
+        output_energy,
+        output_energy / input_energy
+    );
 
     // Energy should be modified by the EQ
     assert!(output_energy > 0.0, "Output should not be silent");
@@ -103,9 +107,13 @@ fn test_eq_plugin_parametric() {
 #[test]
 fn test_eq_plugin_filter_update() {
     // Test updating filters dynamically
-    let initial_filters = vec![
-        Biquad::new(BiquadFilterType::Peak, 1000.0, 48000.0, 1.0, 6.0),
-    ];
+    let initial_filters = vec![Biquad::new(
+        BiquadFilterType::Peak,
+        1000.0,
+        48000.0,
+        1.0,
+        6.0,
+    )];
 
     let mut plugin = EqPlugin::new(2, initial_filters);
     plugin.initialize(48000).unwrap();
@@ -123,9 +131,13 @@ fn test_eq_plugin_filter_update() {
     plugin.process(&input, &mut output1, &context).unwrap();
 
     // Update to different filter
-    let new_filters = vec![
-        Biquad::new(BiquadFilterType::Peak, 2000.0, 48000.0, 1.0, -6.0),
-    ];
+    let new_filters = vec![Biquad::new(
+        BiquadFilterType::Peak,
+        2000.0,
+        48000.0,
+        1.0,
+        -6.0,
+    )];
     plugin.set_filters(new_filters);
 
     // Process with new filter
@@ -133,20 +145,29 @@ fn test_eq_plugin_filter_update() {
     plugin.process(&input, &mut output2, &context).unwrap();
 
     // Outputs should be different
-    let diff: f32 = output1.iter().zip(output2.iter())
+    let diff: f32 = output1
+        .iter()
+        .zip(output2.iter())
         .map(|(a, b)| (a - b).abs())
         .sum();
 
     println!("Difference between filter sets: {}", diff);
-    assert!(diff > 0.1, "Changing filters should produce different output");
+    assert!(
+        diff > 0.1,
+        "Changing filters should produce different output"
+    );
 }
 
 #[test]
 fn test_eq_plugin_multi_channel() {
     // Test with 5 channels (e.g., after upmixer)
-    let filters = vec![
-        Biquad::new(BiquadFilterType::Peak, 1000.0, 48000.0, 1.0, 3.0),
-    ];
+    let filters = vec![Biquad::new(
+        BiquadFilterType::Peak,
+        1000.0,
+        48000.0,
+        1.0,
+        3.0,
+    )];
 
     let mut plugin = EqPlugin::new(5, filters); // 5.0 surround
     plugin.initialize(48000).unwrap();
@@ -175,9 +196,7 @@ fn test_eq_plugin_multi_channel() {
 
     // Verify all channels have output
     for ch in 0..5 {
-        let channel_energy: f32 = (0..num_frames)
-            .map(|i| output[i * 5 + ch].powi(2))
-            .sum();
+        let channel_energy: f32 = (0..num_frames).map(|i| output[i * 5 + ch].powi(2)).sum();
         assert!(channel_energy > 0.0, "Channel {} should have energy", ch);
     }
 

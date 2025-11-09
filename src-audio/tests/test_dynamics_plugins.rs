@@ -60,7 +60,10 @@ fn test_limiter_prevents_clipping() {
         "Limiter should prevent clipping: max = {}",
         max_output
     );
-    println!("Limiter: Max output = {:.4} (threshold = {:.4})", max_output, threshold_linear);
+    println!(
+        "Limiter: Max output = {:.4} (threshold = {:.4})",
+        max_output, threshold_linear
+    );
 }
 
 #[test]

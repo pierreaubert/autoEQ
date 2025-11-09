@@ -8,8 +8,12 @@ name = "sotf_audio"
 path = "src/lib.rs"
 
 [[bin]]
-name = "sotf_audio"
-path = "bin/sotf_audio.rs"
+name = "sotf_player"
+path = "bin/sotf_player.rs"
+
+[[bin]]
+name = "sotf_recorder"
+path = "bin/sotf_recorder.rs"
 
 [[bin]]
 name = "generate_audio_tests"
@@ -20,16 +24,11 @@ ndarray = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 cpal = { workspace = true }
-tokio = { workspace = true, features = ["rt-multi-thread", "tracing"] }
-tokio-tungstenite = { workspace = true }
-futures-util = { workspace = true }
-futures = { workspace = true }
 tempfile = { workspace = true }
 serde_yaml = { workspace = true }
 which = { workspace = true }
 clap = { workspace = true }
 ctrlc = { workspace = true }
-reqwest = { workspace = true }
 chrono = { workspace = true }
 libc = { workspace = true }
 parking_lot = { workspace = true }
@@ -57,20 +56,6 @@ notify = { workspace = true }
 [target.'cfg(unix)'.dependencies]
 signal-hook = { workspace = true }
 
-[target.'cfg(target_os = "macos")'.dependencies]
-signal-hook-tokio = { workspace = true }
-
-[target.'cfg(all(any(target_os = "ios", target_os="ios_sim"), target_arch = "aarch64"))'.dependencies]
-signal-hook-tokio = { workspace = true }
-
-[target.'cfg(all(target_os = "linux", target_arch="x86_64"))'.dependencies]
-signal-hook-tokio = { workspace = true }
-
-[target.'cfg(all(target_os = "linux", target_arch="aarch64"))'.dependencies]
-signal-hook-tokio = { workspace = true }
-
 [dev-dependencies]
-# Needed for async integration tests
-tokio = { workspace = true, features = ["rt-multi-thread", "tracing"] }
 rand = { workspace = true }
 

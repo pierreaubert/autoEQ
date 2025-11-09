@@ -195,9 +195,13 @@ mod tests {
 
     #[test]
     fn test_eq_creation() {
-        let filters = vec![
-            Biquad::new(BiquadFilterType::Peak, 1000.0, 48000.0, 1.0, 3.0),
-        ];
+        let filters = vec![Biquad::new(
+            BiquadFilterType::Peak,
+            1000.0,
+            48000.0,
+            1.0,
+            3.0,
+        )];
         let plugin = EqPlugin::new(2, filters);
         assert_eq!(plugin.input_channels(), 2);
         assert_eq!(plugin.output_channels(), 2);
@@ -233,9 +237,13 @@ mod tests {
     #[test]
     fn test_eq_processing() {
         // Create a simple high-shelf filter (+6dB above 1kHz)
-        let filters = vec![
-            Biquad::new(BiquadFilterType::Highshelf, 1000.0, 48000.0, 0.707, 6.0),
-        ];
+        let filters = vec![Biquad::new(
+            BiquadFilterType::Highshelf,
+            1000.0,
+            48000.0,
+            0.707,
+            6.0,
+        )];
         let mut plugin = EqPlugin::new(2, filters);
         plugin.initialize(48000).unwrap();
 
@@ -259,19 +267,26 @@ mod tests {
         let input_energy: f32 = input.iter().map(|x| x * x).sum();
         let output_energy: f32 = output.iter().map(|x| x * x).sum();
 
-        println!("Input energy: {}, Output energy: {}, Ratio: {}",
-            input_energy, output_energy, output_energy / input_energy);
+        println!(
+            "Input energy: {}, Output energy: {}, Ratio: {}",
+            input_energy,
+            output_energy,
+            output_energy / input_energy
+        );
 
         // High-shelf at 1kHz with +6dB should amplify (ratio > 1.0)
-        assert!(output_energy > input_energy * 1.5, "Expected amplification from high-shelf filter");
+        assert!(
+            output_energy > input_energy * 1.5,
+            "Expected amplification from high-shelf filter"
+        );
     }
 
     #[test]
     fn test_eq_multiple_filters() {
         // Create a multi-band EQ: bass boost + mid cut + treble boost
         let filters = vec![
-            Biquad::new(BiquadFilterType::Lowshelf, 100.0, 48000.0, 0.707, 3.0),  // +3dB bass
-            Biquad::new(BiquadFilterType::Peak, 1000.0, 48000.0, 1.0, -3.0),      // -3dB mid cut
+            Biquad::new(BiquadFilterType::Lowshelf, 100.0, 48000.0, 0.707, 3.0), // +3dB bass
+            Biquad::new(BiquadFilterType::Peak, 1000.0, 48000.0, 1.0, -3.0),     // -3dB mid cut
             Biquad::new(BiquadFilterType::Highshelf, 8000.0, 48000.0, 0.707, 3.0), // +3dB treble
         ];
         let mut plugin = EqPlugin::new(2, filters);

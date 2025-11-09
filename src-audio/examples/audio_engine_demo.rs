@@ -27,20 +27,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create engine with custom config
     let config = EngineConfig {
         frame_size: 1024,
-        buffer_ms: 200,          // 200ms latency
+        buffer_ms: 200, // 200ms latency
         output_sample_rate: 48000,
         output_channels: 2,
-        plugins: Vec::new(),     // No plugins for now
-        volume: 0.8,             // 80% volume
+        plugins: Vec::new(), // No plugins for now
+        volume: 0.8,         // 80% volume
         muted: false,
-        config_path: None,       // No config file watching
-        watch_config: false,     // Disable config watching for demo
+        config_path: None,   // No config file watching
+        watch_config: false, // Disable config watching for demo
     };
 
     println!("Creating audio engine...");
     println!("  Frame size: {} frames", config.frame_size);
     println!("  Buffer: {}ms", config.buffer_ms);
-    println!("  Output: {}Hz, {} channels", config.output_sample_rate, config.output_channels);
+    println!(
+        "  Output: {}Hz, {} channels",
+        config.output_sample_rate, config.output_channels
+    );
     println!();
 
     let mut engine = AudioEngine::new(config)?;
@@ -54,10 +57,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         thread::sleep(Duration::from_millis(100));
 
         let state = engine.get_state();
-        print!("\r[{:3}s] State: {:?}, Position: {:.2}s   ",
-               i / 10,
-               state.playback_state,
-               state.position);
+        print!(
+            "\r[{:3}s] State: {:?}, Position: {:.2}s   ",
+            i / 10,
+            state.playback_state,
+            state.position
+        );
         std::io::Write::flush(&mut std::io::stdout())?;
 
         // Test pause/resume at 3 seconds

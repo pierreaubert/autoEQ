@@ -10,9 +10,15 @@ use super::plugin::{Plugin, PluginInfo, PluginResult, ProcessContext};
 /// Each output channel is computed as a weighted sum of all input channels,
 /// where the weights are specified by an NxP gain matrix.
 ///
+/// Supports sparse channel mapping where input/output channels can be mapped
+/// to non-contiguous physical channel indices. For example:
+/// - Input channels [1, 2] means read from physical channels 1 and 2
+/// - Output channels [15, 16] means write to physical channels 15 and 16
+/// - Total buffer size is determined by max(channel indices) + 1
+///
 /// # Matrix Layout
 /// The matrix is stored in row-major order where:
-/// - matrix[out_ch * input_channels + in_ch] = gain from input in_ch to output out_ch
+/// - matrix[out_ch * num_inputs + in_ch] = gain from logical input in_ch to logical output out_ch
 ///
 /// # Examples
 ///
@@ -28,47 +34,52 @@ use super::plugin::{Plugin, PluginInfo, PluginResult, ProcessContext};
 ///  1.0, 0.0]   // Out1 = 1.0*In0 + 0.0*In1
 /// ```
 ///
-/// Duplicate to 4 channels (2x4):
+/// Sparse mapping (channels 1,2 -> 15,16):
 /// ```text
-/// [1.0, 0.0,   // Out0 = In0
-///  0.0, 1.0,   // Out1 = In1
-///  1.0, 0.0,   // Out2 = In0
-///  0.0, 1.0]   // Out3 = In1
-/// ```
-///
-/// Mix stereo to mono (2x1):
-/// ```text
-/// [0.5, 0.5]   // Out0 = 0.5*In0 + 0.5*In1
+/// input_channel_map = [1, 2]
+/// output_channel_map = [15, 16]
+/// matrix = [1.0, 0.0,   // PhysOut15 = PhysIn1
+///           0.0, 1.0]   // PhysOut16 = PhysIn2
 /// ```
 pub struct MatrixPlugin {
-    /// Number of input channels
-    input_channels: usize,
-    /// Number of output channels
-    output_channels: usize,
-    /// Gain matrix in row-major order (output_channels x input_channels)
-    /// matrix[out_ch * input_channels + in_ch] = gain from in_ch to out_ch
+    /// Mapping from logical input index to physical channel index
+    /// Empty vec means dense mapping [0, 1, 2, ..., n-1]
+    input_channel_map: Vec<usize>,
+    /// Mapping from logical output index to physical channel index
+    /// Empty vec means dense mapping [0, 1, 2, ..., p-1]
+    output_channel_map: Vec<usize>,
+    /// Gain matrix in row-major order (num_outputs x num_inputs)
+    /// matrix[out_ch * num_inputs + in_ch] = gain from logical input in_ch to logical output out_ch
     matrix: Vec<f32>,
+    /// Total number of physical input channels in the audio buffer
+    /// (max(input_channel_map) + 1, or input_channel_map.len() if empty)
+    physical_input_channels: usize,
+    /// Total number of physical output channels in the audio buffer
+    /// (max(output_channel_map) + 1, or output_channel_map.len() if empty)
+    physical_output_channels: usize,
 }
 
 impl MatrixPlugin {
-    /// Create a new matrix plugin with identity matrix
+    /// Create a new matrix plugin with identity matrix (dense mapping)
     ///
     /// # Arguments
-    /// * `input_channels` - Number of input channels
-    /// * `output_channels` - Number of output channels
+    /// * `input_channels` - Number of input channels (dense mapping: 0, 1, 2, ...)
+    /// * `output_channels` - Number of output channels (dense mapping: 0, 1, 2, ...)
     ///
     /// The matrix is initialized as identity (1.0 on diagonal, 0.0 elsewhere).
     /// For non-square matrices, only matching indices get 1.0.
     pub fn new(input_channels: usize, output_channels: usize) -> Self {
         let matrix = Self::create_identity_matrix(input_channels, output_channels);
         Self {
-            input_channels,
-            output_channels,
+            input_channel_map: Vec::new(),  // Empty = dense mapping
+            output_channel_map: Vec::new(), // Empty = dense mapping
             matrix,
+            physical_input_channels: input_channels,
+            physical_output_channels: output_channels,
         }
     }
 
-    /// Create a new matrix plugin with custom matrix
+    /// Create a new matrix plugin with custom matrix (dense mapping)
     ///
     /// # Arguments
     /// * `input_channels` - Number of input channels
@@ -104,9 +115,80 @@ impl MatrixPlugin {
         }
 
         Ok(Self {
-            input_channels,
-            output_channels,
+            input_channel_map: Vec::new(),  // Empty = dense mapping
+            output_channel_map: Vec::new(), // Empty = dense mapping
             matrix,
+            physical_input_channels: input_channels,
+            physical_output_channels: output_channels,
+        })
+    }
+
+    /// Create a new matrix plugin with sparse channel mapping
+    ///
+    /// # Arguments
+    /// * `input_channel_map` - Physical channel indices for inputs (e.g., [1, 2])
+    /// * `output_channel_map` - Physical channel indices for outputs (e.g., [15, 16])
+    /// * `matrix` - Gain matrix in row-major order (output_map.len() * input_map.len() elements)
+    ///
+    /// # Returns
+    /// `Ok(plugin)` if parameters are valid, `Err(message)` otherwise
+    ///
+    /// # Example
+    /// ```
+    /// // Map physical channels 1,2 to physical channels 15,16 with identity matrix
+    /// let plugin = MatrixPlugin::with_sparse_mapping(
+    ///     vec![1, 2],    // Read from physical channels 1, 2
+    ///     vec![15, 16],  // Write to physical channels 15, 16
+    ///     vec![1.0, 0.0, // PhysOut15 = PhysIn1
+    ///          0.0, 1.0] // PhysOut16 = PhysIn2
+    /// ).unwrap();
+    /// ```
+    pub fn with_sparse_mapping(
+        input_channel_map: Vec<usize>,
+        output_channel_map: Vec<usize>,
+        matrix: Vec<f32>,
+    ) -> Result<Self, String> {
+        if input_channel_map.is_empty() {
+            return Err("Input channel map cannot be empty".to_string());
+        }
+        if output_channel_map.is_empty() {
+            return Err("Output channel map cannot be empty".to_string());
+        }
+
+        let num_inputs = input_channel_map.len();
+        let num_outputs = output_channel_map.len();
+        let expected_size = num_outputs * num_inputs;
+
+        if matrix.len() != expected_size {
+            return Err(format!(
+                "Matrix size mismatch: expected {} elements ({}x{}), got {}",
+                expected_size,
+                num_outputs,
+                num_inputs,
+                matrix.len()
+            ));
+        }
+
+        // Validate gains are in valid range [0.0, 1.0]
+        for (idx, &gain) in matrix.iter().enumerate() {
+            if !(0.0..=1.0).contains(&gain) {
+                return Err(format!(
+                    "Matrix element {} has invalid gain {:.3} (must be 0.0-1.0)",
+                    idx, gain
+                ));
+            }
+        }
+
+        // Calculate physical channel counts
+        let physical_input_channels = input_channel_map.iter().max().map(|&v| v + 1).unwrap();
+        let physical_output_channels = output_channel_map.iter().max().map(|&v| v + 1).unwrap();
+
+        Ok(Self {
+            input_channel_map,
+            output_channel_map,
+            matrix,
+            physical_input_channels,
+            physical_output_channels,
         })
     }
 
@@ -120,41 +202,62 @@ impl MatrixPlugin {
         matrix
     }
 
-    /// Get the gain from input channel to output channel
-    pub fn get_gain(&self, input_ch: usize, output_ch: usize) -> Option<f32> {
-        if input_ch >= self.input_channels || output_ch >= self.output_channels {
-            return None;
+    /// Get the number of logical input channels (not physical channel count)
+    fn num_inputs(&self) -> usize {
+        if self.input_channel_map.is_empty() {
+            self.physical_input_channels
+        } else {
+            self.input_channel_map.len()
         }
-        Some(self.matrix[output_ch * self.input_channels + input_ch])
     }
 
-    /// Set the gain from input channel to output channel
+    /// Get the number of logical output channels (not physical channel count)
+    fn num_outputs(&self) -> usize {
+        if self.output_channel_map.is_empty() {
+            self.physical_output_channels
+        } else {
+            self.output_channel_map.len()
+        }
+    }
+
+    /// Get the gain from logical input channel to logical output channel
+    pub fn get_gain(&self, input_ch: usize, output_ch: usize) -> Option<f32> {
+        let num_inputs = self.num_inputs();
+        let num_outputs = self.num_outputs();
+
+        if input_ch >= num_inputs || output_ch >= num_outputs {
+            return None;
+        }
+        Some(self.matrix[output_ch * num_inputs + input_ch])
+    }
+
+    /// Set the gain from logical input channel to logical output channel
     ///
     /// # Returns
     /// `Ok(())` if successful, `Err(message)` if channels are out of range or gain is invalid
     pub fn set_gain(&mut self, input_ch: usize, output_ch: usize, gain: f32) -> Result<(), String> {
-        if input_ch >= self.input_channels {
+        let num_inputs = self.num_inputs();
+        let num_outputs = self.num_outputs();
+
+        if input_ch >= num_inputs {
             return Err(format!(
                 "Input channel {} out of range (max {})",
                 input_ch,
-                self.input_channels - 1
+                num_inputs - 1
             ));
         }
-        if output_ch >= self.output_channels {
+        if output_ch >= num_outputs {
             return Err(format!(
                 "Output channel {} out of range (max {})",
                 output_ch,
-                self.output_channels - 1
+                num_outputs - 1
             ));
         }
         if !(0.0..=1.0).contains(&gain) {
-            return Err(format!(
-                "Gain {:.3} out of range (must be 0.0-1.0)",
-                gain
-            ));
+            return Err(format!("Gain {:.3} out of range (must be 0.0-1.0)", gain));
         }
 
-        self.matrix[output_ch * self.input_channels + input_ch] = gain;
+        self.matrix[output_ch * num_inputs + input_ch] = gain;
         Ok(())
     }
 
@@ -166,7 +269,10 @@ impl MatrixPlugin {
     /// # Returns
     /// `Ok(())` if successful, `Err(message)` if matrix size is wrong or gains are invalid
     pub fn set_matrix(&mut self, matrix: Vec<f32>) -> Result<(), String> {
-        let expected_size = self.output_channels * self.input_channels;
+        let num_inputs = self.num_inputs();
+        let num_outputs = self.num_outputs();
+        let expected_size = num_outputs * num_inputs;
+
         if matrix.len() != expected_size {
             return Err(format!(
                 "Matrix size mismatch: expected {} elements, got {}",
@@ -196,44 +302,73 @@ impl MatrixPlugin {
 
     /// Reset to identity matrix
     pub fn reset_to_identity(&mut self) {
-        self.matrix = Self::create_identity_matrix(self.input_channels, self.output_channels);
+        let num_inputs = self.num_inputs();
+        let num_outputs = self.num_outputs();
+        self.matrix = Self::create_identity_matrix(num_inputs, num_outputs);
     }
 }
 
 impl Plugin for MatrixPlugin {
     fn info(&self) -> PluginInfo {
+        let num_inputs = self.num_inputs();
+        let num_outputs = self.num_outputs();
+
+        let description = if self.input_channel_map.is_empty() && self.output_channel_map.is_empty()
+        {
+            format!(
+                "Channel matrix mixer ({}x{} channels)",
+                num_inputs, num_outputs
+            )
+        } else {
+            let in_map_str = if self.input_channel_map.is_empty() {
+                format!("0..{}", num_inputs)
+            } else {
+                format!("{:?}", self.input_channel_map)
+            };
+            let out_map_str = if self.output_channel_map.is_empty() {
+                format!("0..{}", num_outputs)
+            } else {
+                format!("{:?}", self.output_channel_map)
+            };
+            format!(
+                "Channel matrix mixer: {} → {} ({}x{})",
+                in_map_str, out_map_str, num_inputs, num_outputs
+            )
+        };
+
         PluginInfo {
             name: "Matrix".to_string(),
             version: "1.0.0".to_string(),
             author: "AutoEQ".to_string(),
-            description: format!(
-                "Channel matrix mixer ({}x{} channels)",
-                self.input_channels, self.output_channels
-            ),
+            description,
         }
     }
 
     fn input_channels(&self) -> usize {
-        self.input_channels
+        self.physical_input_channels
     }
 
     fn output_channels(&self) -> usize {
-        self.output_channels
+        self.physical_output_channels
     }
 
     fn parameters(&self) -> Vec<Parameter> {
         // Create parameters for each matrix element
+        let num_inputs = self.num_inputs();
+        let num_outputs = self.num_outputs();
         let mut params = Vec::new();
-        for out_ch in 0..self.output_channels {
-            for in_ch in 0..self.input_channels {
+
+        for out_ch in 0..num_outputs {
+            for in_ch in 0..num_inputs {
                 let param_id = format!("gain_{}_{}", in_ch, out_ch);
                 let param_name = format!("In{} → Out{}", in_ch, out_ch);
                 params.push(
-                    Parameter::new_float(&param_id, &param_name, 0.0, 0.0, 1.0)
-                        .with_description(&format!(
+                    Parameter::new_float(&param_id, &param_name, 0.0, 0.0, 1.0).with_description(
+                        &format!(
                             "Gain from input channel {} to output channel {}",
                             in_ch, out_ch
-                        )),
+                        ),
+                    ),
                 );
             }
         }
@@ -281,8 +416,7 @@ impl Plugin for MatrixPlugin {
         let in_ch = parts[1].parse::<usize>().ok()?;
         let out_ch = parts[2].parse::<usize>().ok()?;
 
-        self.get_gain(in_ch, out_ch)
-            .map(ParameterValue::Float)
+        self.get_gain(in_ch, out_ch).map(ParameterValue::Float)
     }
 
     fn process(
@@ -294,42 +428,63 @@ impl Plugin for MatrixPlugin {
         let num_frames = context.num_frames;
 
         // Validate buffer sizes
-        if input.len() != num_frames * self.input_channels {
+        if input.len() != num_frames * self.physical_input_channels {
             return Err(format!(
-                "Input buffer size {} doesn't match expected {} (frames={}, channels={})",
+                "Input buffer size {} doesn't match expected {} (frames={}, physical_channels={})",
                 input.len(),
-                num_frames * self.input_channels,
+                num_frames * self.physical_input_channels,
                 num_frames,
-                self.input_channels
+                self.physical_input_channels
             ));
         }
-        if output.len() != num_frames * self.output_channels {
+        if output.len() != num_frames * self.physical_output_channels {
             return Err(format!(
-                "Output buffer size {} doesn't match expected {} (frames={}, channels={})",
+                "Output buffer size {} doesn't match expected {} (frames={}, physical_channels={})",
                 output.len(),
-                num_frames * self.output_channels,
+                num_frames * self.physical_output_channels,
                 num_frames,
-                self.output_channels
+                self.physical_output_channels
             ));
         }
+
+        let num_inputs = self.num_inputs();
+        let num_outputs = self.num_outputs();
+
+        // Zero output buffer first (needed for sparse mapping)
+        output.fill(0.0);
 
         // Process frame by frame
         for frame in 0..num_frames {
-            let in_frame_offset = frame * self.input_channels;
-            let out_frame_offset = frame * self.output_channels;
+            let in_frame_offset = frame * self.physical_input_channels;
+            let out_frame_offset = frame * self.physical_output_channels;
 
-            // Compute each output channel
-            for out_ch in 0..self.output_channels {
+            // Compute each logical output channel
+            for logical_out_ch in 0..num_outputs {
                 let mut sum = 0.0;
 
-                // Sum contributions from all input channels
-                for in_ch in 0..self.input_channels {
-                    let gain = self.matrix[out_ch * self.input_channels + in_ch];
-                    let input_sample = input[in_frame_offset + in_ch];
+                // Sum contributions from all logical input channels
+                for logical_in_ch in 0..num_inputs {
+                    let gain = self.matrix[logical_out_ch * num_inputs + logical_in_ch];
+
+                    // Map logical channel to physical channel
+                    let physical_in_ch = if self.input_channel_map.is_empty() {
+                        logical_in_ch
+                    } else {
+                        self.input_channel_map[logical_in_ch]
+                    };
+
+                    let input_sample = input[in_frame_offset + physical_in_ch];
                     sum += gain * input_sample;
                 }
 
-                output[out_frame_offset + out_ch] = sum;
+                // Map logical output to physical output
+                let physical_out_ch = if self.output_channel_map.is_empty() {
+                    logical_out_ch
+                } else {
+                    self.output_channel_map[logical_out_ch]
+                };
+
+                output[out_frame_offset + physical_out_ch] = sum;
             }
         }
 
@@ -453,6 +608,134 @@ mod tests {
     fn test_invalid_matrix_size() {
         let matrix = vec![1.0, 0.0, 0.0]; // Wrong size for 2x2
         let result = MatrixPlugin::with_matrix(2, 2, matrix);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_sparse_mapping_basic() {
+        // Map physical channels 1,2 to physical channels 15,16 with identity matrix
+        let mut plugin = MatrixPlugin::with_sparse_mapping(
+            vec![1, 2],   // Read from physical channels 1, 2
+            vec![15, 16], // Write to physical channels 15, 16
+            vec![
+                1.0, 0.0, // PhysOut15 = PhysIn1
+                0.0, 1.0, // PhysOut16 = PhysIn2
+            ],
+        )
+        .unwrap();
+
+        // Plugin should report physical channel counts
+        assert_eq!(plugin.input_channels(), 3); // max(1,2)+1 = 3
+        assert_eq!(plugin.output_channels(), 17); // max(15,16)+1 = 17
+
+        // Create input buffer with 3 physical channels
+        let mut input = vec![0.0; 3]; // 1 frame, 3 channels
+        input[1] = 10.0; // Physical channel 1
+        input[2] = 20.0; // Physical channel 2
+
+        let mut output = vec![0.0; 17]; // 1 frame, 17 channels
+        let context = ProcessContext {
+            sample_rate: 48000,
+            num_frames: 1,
+        };
+
+        plugin.process(&input, &mut output, &context).unwrap();
+
+        // Check that only channels 15 and 16 have values
+        for i in 0..17 {
+            if i == 15 {
+                assert_eq!(output[i], 10.0, "Channel 15 should be 10.0");
+            } else if i == 16 {
+                assert_eq!(output[i], 20.0, "Channel 16 should be 20.0");
+            } else {
+                assert_eq!(output[i], 0.0, "Channel {} should be 0.0", i);
+            }
+        }
+    }
+
+    #[test]
+    fn test_sparse_mapping_swap() {
+        // Map physical channels 1,2 to 15,16 but swap them
+        let mut plugin = MatrixPlugin::with_sparse_mapping(
+            vec![1, 2],
+            vec![15, 16],
+            vec![
+                0.0, 1.0, // PhysOut15 = PhysIn2
+                1.0, 0.0, // PhysOut16 = PhysIn1
+            ],
+        )
+        .unwrap();
+
+        let mut input = vec![0.0; 3]; // 3 physical input channels
+        input[1] = 100.0; // Physical channel 1
+        input[2] = 200.0; // Physical channel 2
+
+        let mut output = vec![0.0; 17]; // 17 physical output channels
+        let context = ProcessContext {
+            sample_rate: 48000,
+            num_frames: 1,
+        };
+
+        plugin.process(&input, &mut output, &context).unwrap();
+
+        assert_eq!(
+            output[15], 200.0,
+            "Channel 15 should get input from channel 2"
+        );
+        assert_eq!(
+            output[16], 100.0,
+            "Channel 16 should get input from channel 1"
+        );
+    }
+
+    #[test]
+    fn test_sparse_mapping_mix() {
+        // Mix two channels to one with sparse mapping
+        let mut plugin = MatrixPlugin::with_sparse_mapping(
+            vec![5, 6],     // Read from channels 5, 6
+            vec![10],       // Write to channel 10
+            vec![0.5, 0.5], // Out10 = 0.5*In5 + 0.5*In6
+        )
+        .unwrap();
+
+        assert_eq!(plugin.input_channels(), 7); // max(5,6)+1
+        assert_eq!(plugin.output_channels(), 11); // max(10)+1
+
+        let mut input = vec![0.0; 7]; // 7 physical input channels
+        input[5] = 10.0;
+        input[6] = 20.0;
+
+        let mut output = vec![0.0; 11]; // 11 physical output channels
+        let context = ProcessContext {
+            sample_rate: 48000,
+            num_frames: 1,
+        };
+
+        plugin.process(&input, &mut output, &context).unwrap();
+
+        assert_eq!(output[10], 15.0, "Channel 10 should be average of 5 and 6");
+        // All other channels should be zero
+        for i in 0..11 {
+            if i != 10 {
+                assert_eq!(output[i], 0.0, "Channel {} should be 0.0", i);
+            }
+        }
+    }
+
+    #[test]
+    fn test_sparse_mapping_invalid_empty_maps() {
+        let result = MatrixPlugin::with_sparse_mapping(
+            vec![], // Empty input map
+            vec![15],
+            vec![1.0],
+        );
+        assert!(result.is_err());
+
+        let result = MatrixPlugin::with_sparse_mapping(
+            vec![1],
+            vec![], // Empty output map
+            vec![1.0],
+        );
         assert!(result.is_err());
     }
 }

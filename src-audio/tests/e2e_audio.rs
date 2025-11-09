@@ -39,12 +39,18 @@ fn generator_binary() -> PathBuf {
     let workspace_root = manifest_dir.parent().expect("Failed to get workspace root");
 
     // Try release first, then debug
-    let release_path = workspace_root.join("target").join("release").join(binary_name);
+    let release_path = workspace_root
+        .join("target")
+        .join("release")
+        .join(binary_name);
     if release_path.exists() {
         return release_path;
     }
 
-    let debug_path = workspace_root.join("target").join("debug").join(binary_name);
+    let debug_path = workspace_root
+        .join("target")
+        .join("debug")
+        .join(binary_name);
     if debug_path.exists() {
         return debug_path;
     }

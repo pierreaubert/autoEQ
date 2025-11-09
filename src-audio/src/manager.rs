@@ -2,13 +2,13 @@
 // Audio Streaming Manager
 // ============================================================================
 
+use parking_lot::Mutex;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use parking_lot::Mutex;
 
 use crate::engine::{AudioEngine, AudioEngineState, EngineConfig, PlaybackState, PluginConfig};
-use crate::{AudioDecoderError, AudioDecoderResult, AudioFormat, AudioSpec, probe_file};
 use crate::plugins::{LoudnessInfo, SpectrumInfo};
+use crate::{AudioDecoderError, AudioDecoderResult, AudioFormat, AudioSpec, probe_file};
 
 /// High-level audio streaming manager using native AudioEngine
 pub struct AudioStreamingManager {
@@ -82,16 +82,13 @@ impl AudioStreamingManager {
     }
 
     /// Load an audio file and prepare for streaming
-    pub async fn load_file<P: AsRef<Path>>(
-        &mut self,
-        file_path: P,
-    ) -> AudioDecoderResult<AudioFileInfo> {
+    pub fn load_file<P: AsRef<Path>>(&mut self, file_path: P) -> AudioDecoderResult<AudioFileInfo> {
         let path = file_path.as_ref().to_path_buf();
 
         self.set_state(StreamingState::Loading);
 
         // Stop any current playback
-        self.stop().await?;
+        self.stop()?;
 
         eprintln!("[AudioStreamingManager] Loading file: {:?}", path);
 
@@ -127,7 +124,7 @@ impl AudioStreamingManager {
     /// * `_output_device` - Output device
     /// * `plugins` - Plugin chain to apply (upmixer, EQ, effects, etc.)
     /// * `output_channels` - Expected output channel count after all plugins
-    pub async fn start_playback(
+    pub fn start_playback(
         &mut self,
         output_device: Option<String>,
         plugins: Vec<PluginConfig>,
@@ -144,26 +141,30 @@ impl AudioStreamingManager {
         // Create engine config
         let config = EngineConfig {
             frame_size: 1024,
-            buffer_ms: 200,  // 200ms latency
+            buffer_ms: 200, // 200ms latency
             output_sample_rate: audio_info.spec.sample_rate,
-            input_channels: audio_info.spec.channels as usize,  // Input from audio file
-            output_channels,  // Output after plugins
-            output_device,  // User-specified device or None for default
+            input_channels: audio_info.spec.channels as usize, // Input from audio file
+            output_channels,                                   // Output after plugins
+            output_device, // User-specified device or None for default
             plugins,
             volume: 1.0,
             muted: false,
             config_path: None,
-            watch_config: self.watch_signals,  // Enable signal watching if requested
+            watch_config: self.watch_signals, // Enable signal watching if requested
         };
 
-        eprintln!("[AudioStreamingManager] Creating engine: {}Hz, {}ch",
-                  config.output_sample_rate, config.output_channels);
+        eprintln!(
+            "[AudioStreamingManager] Creating engine: {}Hz, {}ch",
+            config.output_sample_rate, config.output_channels
+        );
 
         // Create and start engine
-        let mut engine = AudioEngine::new(config)
-            .map_err(|e| AudioDecoderError::ConfigError(format!("Failed to create engine: {}", e)))?;
+        let mut engine = AudioEngine::new(config).map_err(|e| {
+            AudioDecoderError::ConfigError(format!("Failed to create engine: {}", e))
+        })?;
 
-        engine.play(&audio_info.path)
+        engine
+            .play(&audio_info.path)
             .map_err(|e| AudioDecoderError::IoError(e))?;
 
         *self.engine.lock() = Some(engine);
@@ -175,12 +176,11 @@ impl AudioStreamingManager {
     }
 
     /// Pause streaming
-    pub async fn pause(&self) -> AudioDecoderResult<()> {
+    pub fn pause(&self) -> AudioDecoderResult<()> {
         eprintln!("[AudioStreamingManager] Pausing");
 
         if let Some(ref mut engine) = *self.engine.lock() {
-            engine.pause()
-                .map_err(|e| AudioDecoderError::IoError(e))?;
+            engine.pause().map_err(|e| AudioDecoderError::IoError(e))?;
             self.set_state(StreamingState::Paused);
         }
 
@@ -188,12 +188,11 @@ impl AudioStreamingManager {
     }
 
     /// Resume streaming
-    pub async fn resume(&self) -> AudioDecoderResult<()> {
+    pub fn resume(&self) -> AudioDecoderResult<()> {
         eprintln!("[AudioStreamingManager] Resuming");
 
         if let Some(ref mut engine) = *self.engine.lock() {
-            engine.resume()
-                .map_err(|e| AudioDecoderError::IoError(e))?;
+            engine.resume().map_err(|e| AudioDecoderError::IoError(e))?;
             self.set_state(StreamingState::Playing);
         }
 
@@ -201,13 +200,13 @@ impl AudioStreamingManager {
     }
 
     /// Stop streaming and cleanup
-    pub async fn stop(&mut self) -> AudioDecoderResult<()> {
+    pub fn stop(&mut self) -> AudioDecoderResult<()> {
         eprintln!("[AudioStreamingManager] Stopping");
 
         if let Some(mut engine) = self.engine.lock().take() {
-            engine.stop()
-                .map_err(|e| AudioDecoderError::IoError(e))?;
-            engine.shutdown()
+            engine.stop().map_err(|e| AudioDecoderError::IoError(e))?;
+            engine
+                .shutdown()
                 .map_err(|e| AudioDecoderError::IoError(e))?;
         }
 
@@ -217,13 +216,14 @@ impl AudioStreamingManager {
     }
 
     /// Seek to position in seconds
-    pub async fn seek(&self, seconds: f64) -> AudioDecoderResult<()> {
+    pub fn seek(&self, seconds: f64) -> AudioDecoderResult<()> {
         eprintln!("[AudioStreamingManager] Seeking to {:.2}s", seconds);
 
         self.set_state(StreamingState::Seeking);
 
         if let Some(ref mut engine) = *self.engine.lock() {
-            engine.seek(seconds)
+            engine
+                .seek(seconds)
                 .map_err(|e| AudioDecoderError::IoError(e))?;
         }
 
@@ -260,9 +260,10 @@ impl AudioStreamingManager {
     }
 
     /// Set volume (0.0 = silence, 1.0 = unity gain)
-    pub async fn set_volume(&self, volume: f32) -> AudioDecoderResult<()> {
+    pub fn set_volume(&self, volume: f32) -> AudioDecoderResult<()> {
         if let Some(ref mut engine) = *self.engine.lock() {
-            engine.set_volume(volume)
+            engine
+                .set_volume(volume)
                 .map_err(|e| AudioDecoderError::IoError(e))?;
         }
         Ok(())
@@ -274,9 +275,10 @@ impl AudioStreamingManager {
     }
 
     /// Set mute state
-    pub async fn set_mute(&self, muted: bool) -> AudioDecoderResult<()> {
+    pub fn set_mute(&self, muted: bool) -> AudioDecoderResult<()> {
         if let Some(ref mut engine) = *self.engine.lock() {
-            engine.set_mute(muted)
+            engine
+                .set_mute(muted)
                 .map_err(|e| AudioDecoderError::IoError(e))?;
         }
         Ok(())
@@ -298,7 +300,10 @@ impl AudioStreamingManager {
         if let Some(ref mut engine) = *self.engine.lock() {
             // Use the engine's output channel count (after processing/plugins)
             let channels = engine.get_state().num_channels;
-            eprintln!("[AudioStreamingManager] Adding loudness analyzer for {} channels", channels);
+            eprintln!(
+                "[AudioStreamingManager] Adding loudness analyzer for {} channels",
+                channels
+            );
             engine.add_loudness_analyzer("loudness".to_string(), channels)?;
             eprintln!("[AudioStreamingManager] Loudness monitoring enabled");
             Ok(())
@@ -358,7 +363,10 @@ impl AudioStreamingManager {
         if let Some(ref mut engine) = *self.engine.lock() {
             // Use the engine's output channel count (after processing/plugins)
             let channels = engine.get_state().num_channels;
-            eprintln!("[AudioStreamingManager] Adding spectrum analyzer for {} channels", channels);
+            eprintln!(
+                "[AudioStreamingManager] Adding spectrum analyzer for {} channels",
+                channels
+            );
             engine.add_spectrum_analyzer("spectrum".to_string(), channels)?;
             eprintln!("[AudioStreamingManager] Spectrum monitoring enabled");
             Ok(())
@@ -423,12 +431,12 @@ impl AudioStreamingManager {
 
     /// Check if plugin host is enabled
     pub fn is_plugin_host_enabled(&self) -> bool {
-        true  // Always enabled in native engine
+        true // Always enabled in native engine
     }
 
     /// Update plugin chain
     /// TODO: Phase 3 - Implement plugin hot-reload
-    pub async fn update_plugin_chain(&self, _plugins: Vec<PluginConfig>) -> Result<(), String> {
+    pub fn update_plugin_chain(&self, _plugins: Vec<PluginConfig>) -> Result<(), String> {
         eprintln!("[AudioStreamingManager] Plugin chain update not yet implemented");
         Err("Plugin chain update not yet implemented".to_string())
     }
@@ -499,15 +507,15 @@ impl Drop for AudioStreamingManager {
 mod tests {
     use super::*;
 
-    #[tokio::test]
-    async fn test_manager_creation() {
+    #[test]
+    fn test_manager_creation() {
         let manager = AudioStreamingManager::new();
         assert_eq!(manager.get_state(), StreamingState::Idle);
         assert!(manager.get_audio_info().is_none());
     }
 
-    #[tokio::test]
-    async fn test_state_transitions() {
+    #[test]
+    fn test_state_transitions() {
         let manager = AudioStreamingManager::new();
 
         assert_eq!(manager.get_state(), StreamingState::Idle);

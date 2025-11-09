@@ -183,8 +183,14 @@ pub enum ManagerCommand {
     BypassProcessing(bool),
 
     // Analyzer control
-    AddLoudnessAnalyzer { id: String, channels: usize },
-    AddSpectrumAnalyzer { id: String, channels: usize },
+    AddLoudnessAnalyzer {
+        id: String,
+        channels: usize,
+    },
+    AddSpectrumAnalyzer {
+        id: String,
+        channels: usize,
+    },
     RemoveAnalyzer(String),
 
     // Queries

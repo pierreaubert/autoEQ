@@ -9,7 +9,7 @@ use super::{
     ManagerCommand, ManagerResponse, PlaybackCommand, PlaybackState, PlaybackThread,
     ProcessingCommand, ProcessingThread, ThreadEvent,
 };
-use std::sync::mpsc::{channel, sync_channel, Receiver, Sender};
+use std::sync::mpsc::{Receiver, Sender, channel, sync_channel};
 use std::sync::{Arc, Mutex};
 
 /// Manager thread handle
@@ -116,7 +116,7 @@ fn run_manager_thread(
         processing_tx,
         event_tx.clone(),
         config.output_sample_rate,
-        config.input_channels,  // Use input channels, not output
+        config.input_channels, // Use input channels, not output
     )?;
 
     // Determine actual output channel count by loading plugin chain first
@@ -130,8 +130,13 @@ fn run_manager_thread(
         while start.elapsed() < std::time::Duration::from_millis(500) {
             if let Some(response) = processing_thread.try_recv_response() {
                 match response {
-                    super::ProcessingResponse::PluginChainUpdated { output_channels: ch } => {
-                        eprintln!("[Manager Thread] Initial plugin chain loaded, output channels: {}", ch);
+                    super::ProcessingResponse::PluginChainUpdated {
+                        output_channels: ch,
+                    } => {
+                        eprintln!(
+                            "[Manager Thread] Initial plugin chain loaded, output channels: {}",
+                            ch
+                        );
                         output_channels = ch;
                         break;
                     }
@@ -140,7 +145,9 @@ fn run_manager_thread(
                         break;
                     }
                     _ => {
-                        eprintln!("[Manager Thread] Unexpected response during plugin initialization");
+                        eprintln!(
+                            "[Manager Thread] Unexpected response during plugin initialization"
+                        );
                         break;
                     }
                 }
@@ -159,7 +166,10 @@ fn run_manager_thread(
         config.output_channels
     };
 
-    eprintln!("[Manager Thread] Creating playback thread with {} channels", actual_output_channels);
+    eprintln!(
+        "[Manager Thread] Creating playback thread with {} channels",
+        actual_output_channels
+    );
 
     // Now create playback thread with the correct channel count
     let mut playback_thread = PlaybackThread::new(
@@ -328,8 +338,13 @@ fn handle_config_event(
                             // Wait for response to update channel count
                             if let Some(response) = processing.try_recv_response() {
                                 match response {
-                                    super::ProcessingResponse::PluginChainUpdated { output_channels } => {
-                                        eprintln!("[Manager] Plugin chain updated, output channels: {}", output_channels);
+                                    super::ProcessingResponse::PluginChainUpdated {
+                                        output_channels,
+                                    } => {
+                                        eprintln!(
+                                            "[Manager] Plugin chain updated, output channels: {}",
+                                            output_channels
+                                        );
 
                                         // Get old channel count before updating
                                         let old_channels = {
@@ -345,15 +360,19 @@ fn handle_config_event(
                                         // TODO: Update playback thread channel count
                                         // (requires playback thread reference in this function)
                                         if output_channels != old_channels {
-                                            eprintln!("[Manager] Channel count changed {}→{} (playback will need restart)",
-                                                      old_channels, output_channels);
+                                            eprintln!(
+                                                "[Manager] Channel count changed {}→{} (playback will need restart)",
+                                                old_channels, output_channels
+                                            );
                                         }
                                     }
                                     super::ProcessingResponse::Error(e) => {
                                         eprintln!("[Manager] Plugin update error: {}", e);
                                     }
                                     _ => {
-                                        eprintln!("[Manager] Unexpected response from processing thread");
+                                        eprintln!(
+                                            "[Manager] Unexpected response from processing thread"
+                                        );
                                     }
                                 }
                             }
@@ -389,8 +408,8 @@ fn load_config_file(path: &std::path::Path) -> Result<EngineConfig, String> {
     let contents =
         std::fs::read_to_string(path).map_err(|e| format!("Failed to read config: {}", e))?;
 
-    let config: EngineConfig = serde_yaml::from_str(&contents)
-        .map_err(|e| format!("Failed to parse config: {}", e))?;
+    let config: EngineConfig =
+        serde_yaml::from_str(&contents).map_err(|e| format!("Failed to parse config: {}", e))?;
 
     Ok(config)
 }
@@ -518,7 +537,10 @@ fn handle_command(
             if let Some(response) = processing.try_recv_response() {
                 match response {
                     super::ProcessingResponse::PluginChainUpdated { output_channels } => {
-                        eprintln!("[Manager] Plugin chain updated, output channels: {}", output_channels);
+                        eprintln!(
+                            "[Manager] Plugin chain updated, output channels: {}",
+                            output_channels
+                        );
 
                         // Get old channel count before updating
                         let old_channels = {
@@ -534,22 +556,35 @@ fn handle_command(
 
                         // If channel count changed, update playback thread
                         if output_channels != old_channels {
-                            eprintln!("[Manager] Channel count changed {}→{}, updating playback thread",
-                                      old_channels, output_channels);
-                            playback.send_command(PlaybackCommand::UpdateChannels(output_channels)).ok();
+                            eprintln!(
+                                "[Manager] Channel count changed {}→{}, updating playback thread",
+                                old_channels, output_channels
+                            );
+                            playback
+                                .send_command(PlaybackCommand::UpdateChannels(output_channels))
+                                .ok();
                         }
 
                         ManagerResponse::Ok
                     }
                     super::ProcessingResponse::Error(e) => ManagerResponse::Error(e),
-                    _ => ManagerResponse::Error("Unexpected response from processing thread".to_string()),
+                    _ => ManagerResponse::Error(
+                        "Unexpected response from processing thread".to_string(),
+                    ),
                 }
             } else {
                 ManagerResponse::Error("No response from processing thread".to_string())
             }
         }
-        ManagerCommand::SetPluginParameter { plugin_index, param_id, value } => {
-            eprintln!("[Manager] Set plugin {} parameter {} = {}", plugin_index, param_id, value);
+        ManagerCommand::SetPluginParameter {
+            plugin_index,
+            param_id,
+            value,
+        } => {
+            eprintln!(
+                "[Manager] Set plugin {} parameter {} = {}",
+                plugin_index, param_id, value
+            );
 
             if let Err(e) = processing.send_command(ProcessingCommand::SetParameter {
                 plugin_index,
@@ -576,9 +611,14 @@ fn handle_command(
             ManagerResponse::Ok
         }
         ManagerCommand::AddLoudnessAnalyzer { id, channels } => {
-            eprintln!("[Manager] Add loudness analyzer: {} ({} channels)", id, channels);
+            eprintln!(
+                "[Manager] Add loudness analyzer: {} ({} channels)",
+                id, channels
+            );
 
-            if let Err(e) = processing.send_command(ProcessingCommand::AddLoudnessAnalyzer { id, channels }) {
+            if let Err(e) =
+                processing.send_command(ProcessingCommand::AddLoudnessAnalyzer { id, channels })
+            {
                 return ManagerResponse::Error(e);
             }
 
@@ -594,9 +634,14 @@ fn handle_command(
             }
         }
         ManagerCommand::AddSpectrumAnalyzer { id, channels } => {
-            eprintln!("[Manager] Add spectrum analyzer: {} ({} channels)", id, channels);
+            eprintln!(
+                "[Manager] Add spectrum analyzer: {} ({} channels)",
+                id, channels
+            );
 
-            if let Err(e) = processing.send_command(ProcessingCommand::AddSpectrumAnalyzer { id, channels }) {
+            if let Err(e) =
+                processing.send_command(ProcessingCommand::AddSpectrumAnalyzer { id, channels })
+            {
                 return ManagerResponse::Error(e);
             }
 
@@ -640,14 +685,17 @@ fn handle_command(
         ManagerCommand::GetAnalyzerData(analyzer_id) => {
             eprintln!("[Manager] Get analyzer data: {}", analyzer_id);
 
-            if let Err(e) = processing.send_command(ProcessingCommand::GetAnalyzerData(analyzer_id)) {
+            if let Err(e) = processing.send_command(ProcessingCommand::GetAnalyzerData(analyzer_id))
+            {
                 return ManagerResponse::Error(e);
             }
 
             // Wait for response from processing thread
             if let Some(response) = processing.try_recv_response() {
                 match response {
-                    super::ProcessingResponse::AnalyzerData(data) => ManagerResponse::AnalyzerData(data),
+                    super::ProcessingResponse::AnalyzerData(data) => {
+                        ManagerResponse::AnalyzerData(data)
+                    }
                     super::ProcessingResponse::Error(e) => ManagerResponse::Error(e),
                     _ => ManagerResponse::Error("Unexpected response".to_string()),
                 }

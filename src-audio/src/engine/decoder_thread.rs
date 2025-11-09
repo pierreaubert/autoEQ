@@ -5,7 +5,7 @@
 // Decodes audio files using Symphonia and resamples if needed.
 
 use super::{AudioFrame, DecoderCommand, DecoderMessage, ThreadEvent};
-use crate::decoder::{create_decoder, AudioDecoder, AudioSpec};
+use crate::decoder::{AudioDecoder, AudioSpec, create_decoder};
 use crate::plugins::{Plugin, ProcessContext, ResamplerPlugin};
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, Sender, SyncSender};
@@ -92,10 +92,15 @@ impl DecoderState {
     }
 
     /// Start playing a new file
-    fn play(&mut self, path: PathBuf, target_sample_rate: u32, frame_size: usize) -> Result<(), String> {
+    fn play(
+        &mut self,
+        path: PathBuf,
+        target_sample_rate: u32,
+        frame_size: usize,
+    ) -> Result<(), String> {
         // Create decoder
-        let decoder = create_decoder(&path)
-            .map_err(|e| format!("Failed to create decoder: {:?}", e))?;
+        let decoder =
+            create_decoder(&path).map_err(|e| format!("Failed to create decoder: {:?}", e))?;
 
         // Get audio spec
         let spec = decoder.spec().clone();
@@ -113,8 +118,9 @@ impl DecoderState {
                 "[Decoder Thread] Resampling: {}Hz -> {}Hz",
                 source_sample_rate, target_sample_rate
             );
-            let rs = ResamplerPlugin::new(channels, source_sample_rate, target_sample_rate, frame_size)
-                .map_err(|e| format!("Failed to create resampler: {}", e))?;
+            let rs =
+                ResamplerPlugin::new(channels, source_sample_rate, target_sample_rate, frame_size)
+                    .map_err(|e| format!("Failed to create resampler: {}", e))?;
             Some(rs)
         } else {
             None
@@ -153,7 +159,10 @@ impl DecoderState {
 
                     // Process resampler buffer in frame_size chunks
                     while self.resampler_buffer.len() >= frame_size * channels {
-                        let chunk: Vec<f32> = self.resampler_buffer.drain(..frame_size * channels).collect();
+                        let chunk: Vec<f32> = self
+                            .resampler_buffer
+                            .drain(..frame_size * channels)
+                            .collect();
 
                         // Resample
                         let max_output_frames = resampler.output_frames_for_input(frame_size);
@@ -169,11 +178,13 @@ impl DecoderState {
                             .map_err(|e| format!("Resampling failed: {}", e))?;
 
                         // Calculate actual output frames
-                        let expected_frames = (frame_size as f64 * resampler.ratio()).ceil() as usize;
+                        let expected_frames =
+                            (frame_size as f64 * resampler.ratio()).ceil() as usize;
                         output.truncate(expected_frames * channels);
 
                         // Send resampled frame
-                        let frame = AudioFrame::new(output, expected_frames, channels, target_sample_rate);
+                        let frame =
+                            AudioFrame::new(output, expected_frames, channels, target_sample_rate);
                         message_tx
                             .send(DecoderMessage::Frame(frame))
                             .map_err(|_| "Failed to send frame")?;
@@ -181,7 +192,8 @@ impl DecoderState {
                 } else {
                     // No resampling - send decoded samples directly as frames
                     let num_frames = decoded.samples.len() / channels;
-                    let frame = AudioFrame::new(decoded.samples, num_frames, channels, source_sample_rate);
+                    let frame =
+                        AudioFrame::new(decoded.samples, num_frames, channels, source_sample_rate);
                     message_tx
                         .send(DecoderMessage::Frame(frame))
                         .map_err(|_| "Failed to send frame")?;
@@ -189,7 +201,9 @@ impl DecoderState {
 
                 // Update position
                 let position_sec = decoder.position() as f64 / source_sample_rate as f64;
-                event_tx.send(ThreadEvent::PositionUpdate(position_sec)).ok();
+                event_tx
+                    .send(ThreadEvent::PositionUpdate(position_sec))
+                    .ok();
 
                 Ok(true)
             }
@@ -201,7 +215,10 @@ impl DecoderState {
                 if let Some(_resampler) = &mut self.resampler {
                     if !self.resampler_buffer.is_empty() {
                         // Process remaining samples (pad if needed)
-                        eprintln!("[Decoder Thread] Flushing {} remaining samples", self.resampler_buffer.len());
+                        eprintln!(
+                            "[Decoder Thread] Flushing {} remaining samples",
+                            self.resampler_buffer.len()
+                        );
                         // TODO: Properly flush resampler
                     }
                 }
@@ -214,7 +231,9 @@ impl DecoderState {
             }
             Err(e) => {
                 let err_msg = format!("Decode error: {:?}", e);
-                event_tx.send(ThreadEvent::DecoderError(err_msg.clone())).ok();
+                event_tx
+                    .send(ThreadEvent::DecoderError(err_msg.clone()))
+                    .ok();
                 Err(err_msg)
             }
         }
@@ -236,7 +255,10 @@ impl DecoderState {
                 resampler.reset();
             }
 
-            eprintln!("[Decoder Thread] Seeked to {:.2}s (frame {})", position, frame_position);
+            eprintln!(
+                "[Decoder Thread] Seeked to {:.2}s (frame {})",
+                position, frame_position
+            );
             Ok(())
         } else {
             Err("No decoder".to_string())
@@ -263,7 +285,10 @@ fn run_decoder_thread(
 ) -> Result<(), String> {
     let mut state = DecoderState::new();
 
-    eprintln!("[Decoder Thread] Started - target {}Hz, frame size {}", target_sample_rate, frame_size);
+    eprintln!(
+        "[Decoder Thread] Started - target {}Hz, frame size {}",
+        target_sample_rate, frame_size
+    );
 
     loop {
         // Check for commands (non-blocking when playing, blocking when stopped)

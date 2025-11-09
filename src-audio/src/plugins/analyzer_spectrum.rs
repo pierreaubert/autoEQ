@@ -86,7 +86,11 @@ pub(crate) struct SpectrumAnalyzer {
 
 impl SpectrumAnalyzer {
     /// Create a new spectrum analyzer
-    pub(crate) fn new(channels: u32, sample_rate: u32, config: SpectrumConfig) -> Result<Self, String> {
+    pub(crate) fn new(
+        channels: u32,
+        sample_rate: u32,
+        config: SpectrumConfig,
+    ) -> Result<Self, String> {
         if config.num_bins < 2 {
             return Err("num_bins must be at least 2".to_string());
         }
@@ -450,9 +454,11 @@ mod tests {
         let spectrum_data = data.downcast_ref::<SpectrumData>().unwrap();
 
         println!("Number of bins: {}", spectrum_data.frequencies.len());
-        println!("Frequency range: {:.0}Hz - {:.0}Hz",
+        println!(
+            "Frequency range: {:.0}Hz - {:.0}Hz",
             spectrum_data.frequencies.first().unwrap_or(&0.0),
-            spectrum_data.frequencies.last().unwrap_or(&0.0));
+            spectrum_data.frequencies.last().unwrap_or(&0.0)
+        );
         println!("Peak magnitude: {:.1}dB", spectrum_data.peak_magnitude);
 
         // Should have some bins
@@ -505,8 +511,10 @@ mod tests {
             .unwrap();
 
         println!("1kHz test:");
-        println!("  Bin {} ({:.0}Hz): {:.1}dB",
-            bin_idx, spectrum_data.frequencies[bin_idx], spectrum_data.magnitudes[bin_idx]);
+        println!(
+            "  Bin {} ({:.0}Hz): {:.1}dB",
+            bin_idx, spectrum_data.frequencies[bin_idx], spectrum_data.magnitudes[bin_idx]
+        );
 
         // The 1kHz bin should have more energy than average
         // Note: With smoothing and circular buffer, it may take a few iterations
@@ -573,7 +581,10 @@ mod tests {
         let data = plugin.get_data();
         let spectrum_data = data.downcast_ref::<SpectrumData>().unwrap();
 
-        println!("5-channel spectrum: peak = {:.1}dB", spectrum_data.peak_magnitude);
+        println!(
+            "5-channel spectrum: peak = {:.1}dB",
+            spectrum_data.peak_magnitude
+        );
 
         // Should have computed spectrum
         assert!(spectrum_data.peak_magnitude > f32::NEG_INFINITY);

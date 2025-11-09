@@ -10,7 +10,7 @@
 // - Windows: File watching only (no signal support)
 
 use std::path::PathBuf;
-use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::mpsc::{Receiver, Sender, channel};
 use std::thread;
 use std::time::Duration;
 
@@ -46,7 +46,13 @@ impl ConfigWatcher {
         let thread_handle = thread::Builder::new()
             .name("config-watcher".to_string())
             .spawn(move || {
-                if let Err(e) = run_config_watcher(config_path, watch_signals, event_tx, shutdown_tx_thread, shutdown_rx) {
+                if let Err(e) = run_config_watcher(
+                    config_path,
+                    watch_signals,
+                    event_tx,
+                    shutdown_tx_thread,
+                    shutdown_rx,
+                ) {
                     eprintln!("[Config Watcher] Error: {}", e);
                 }
             })

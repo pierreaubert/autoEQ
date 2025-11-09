@@ -2,17 +2,19 @@
 // Loudness Compensation Plugin Integration Tests
 // ============================================================================
 
-use sotf_audio::plugins::{LoudnessCompensationPlugin, Plugin, ProcessContext, ParameterId, ParameterValue};
+use sotf_audio::plugins::{
+    LoudnessCompensationPlugin, ParameterId, ParameterValue, Plugin, ProcessContext,
+};
 
 #[test]
 fn test_loudness_comp_typical_usage() {
     // Typical use case: +6dB bass and treble boost for low-volume listening
     let mut plugin = LoudnessCompensationPlugin::new(
-        2,        // Stereo
-        100.0,    // Low-shelf at 100Hz
-        6.0,      // +6dB bass boost
-        10000.0,  // High-shelf at 10kHz
-        6.0,      // +6dB treble boost
+        2,       // Stereo
+        100.0,   // Low-shelf at 100Hz
+        6.0,     // +6dB bass boost
+        10000.0, // High-shelf at 10kHz
+        6.0,     // +6dB treble boost
     );
 
     plugin.initialize(48000).unwrap();
@@ -25,8 +27,8 @@ fn test_loudness_comp_typical_usage() {
     for i in 0..num_frames {
         let t = i as f32 / 48000.0;
         // Mix of frequencies
-        let bass = (2.0 * std::f32::consts::PI * 50.0 * t).sin() * 0.2;   // 50Hz
-        let mid = (2.0 * std::f32::consts::PI * 1000.0 * t).sin() * 0.2;  // 1kHz
+        let bass = (2.0 * std::f32::consts::PI * 50.0 * t).sin() * 0.2; // 50Hz
+        let mid = (2.0 * std::f32::consts::PI * 1000.0 * t).sin() * 0.2; // 1kHz
         let treble = (2.0 * std::f32::consts::PI * 12000.0 * t).sin() * 0.2; // 12kHz
 
         let sample = bass + mid + treble;
@@ -47,8 +49,10 @@ fn test_loudness_comp_typical_usage() {
     let input_energy: f32 = input.iter().map(|x| x * x).sum();
     let output_energy: f32 = output.iter().map(|x| x * x).sum();
 
-    println!("Loudness compensation: input energy = {:.3}, output energy = {:.3}",
-        input_energy, output_energy);
+    println!(
+        "Loudness compensation: input energy = {:.3}, output energy = {:.3}",
+        input_energy, output_energy
+    );
 
     assert!(output_energy > 0.0, "Output should not be silent");
 
@@ -77,19 +81,24 @@ fn test_loudness_comp_dynamic_adjustment() {
     let energy1: f32 = output1.iter().map(|x| x * x).sum();
 
     // Increase bass boost
-    plugin.set_parameter(
-        ParameterId::from("low_gain"),
-        ParameterValue::Float(12.0)
-    ).unwrap();
+    plugin
+        .set_parameter(ParameterId::from("low_gain"), ParameterValue::Float(12.0))
+        .unwrap();
 
     let mut output2 = vec![0.0_f32; num_frames * 2];
     plugin.process(&input, &mut output2, &context).unwrap();
     let energy2: f32 = output2.iter().map(|x| x * x).sum();
 
-    println!("Energy with 0dB: {:.3}, Energy with +12dB bass: {:.3}", energy1, energy2);
+    println!(
+        "Energy with 0dB: {:.3}, Energy with +12dB bass: {:.3}",
+        energy1, energy2
+    );
 
     // Different processing should produce different results
-    assert!((energy1 - energy2).abs() > 0.001, "Changing parameters should affect output");
+    assert!(
+        (energy1 - energy2).abs() > 0.001,
+        "Changing parameters should affect output"
+    );
 }
 
 #[test]
@@ -130,8 +139,12 @@ fn test_loudness_comp_with_music() {
         num_frames,
     };
 
-    plugin_high_vol.process(&input, &mut output_high, &context).unwrap();
-    plugin_low_vol.process(&input, &mut output_low, &context).unwrap();
+    plugin_high_vol
+        .process(&input, &mut output_high, &context)
+        .unwrap();
+    plugin_low_vol
+        .process(&input, &mut output_low, &context)
+        .unwrap();
 
     let energy_high: f32 = output_high.iter().map(|x| x * x).sum();
     let energy_low: f32 = output_low.iter().map(|x| x * x).sum();
@@ -141,7 +154,10 @@ fn test_loudness_comp_with_music() {
     println!("Difference: {:.3}", (energy_low - energy_high).abs());
 
     // Low volume mode should have different spectral balance
-    assert!((energy_low - energy_high).abs() > 0.01, "Different volume modes should produce different results");
+    assert!(
+        (energy_low - energy_high).abs() > 0.01,
+        "Different volume modes should produce different results"
+    );
 }
 
 #[test]
@@ -216,9 +232,7 @@ fn test_loudness_comp_stereo_to_5ch() {
 
     // Verify all channels are processed
     for ch in 0..5 {
-        let channel_energy: f32 = (0..num_frames)
-            .map(|i| output[i * 5 + ch].powi(2))
-            .sum();
+        let channel_energy: f32 = (0..num_frames).map(|i| output[i * 5 + ch].powi(2)).sum();
         assert!(channel_energy > 0.0, "Channel {} should have energy", ch);
     }
 

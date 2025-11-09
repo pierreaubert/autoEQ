@@ -320,8 +320,10 @@ mod tests {
         let loudness_data = data.downcast_ref::<LoudnessData>().unwrap();
 
         // After reset, values should be back to default (negative infinity for LUFS)
-        println!("After reset - Momentary: {:.1}, Peak: {:.3}",
-            loudness_data.momentary_lufs, loudness_data.peak);
+        println!(
+            "After reset - Momentary: {:.1}, Peak: {:.3}",
+            loudness_data.momentary_lufs, loudness_data.peak
+        );
     }
 
     #[test]
@@ -353,8 +355,10 @@ mod tests {
         let data = plugin.get_data();
         let loudness_data = data.downcast_ref::<LoudnessData>().unwrap();
 
-        println!("5-channel loudness: {:.1} LUFS, peak: {:.3}",
-            loudness_data.momentary_lufs, loudness_data.peak);
+        println!(
+            "5-channel loudness: {:.1} LUFS, peak: {:.3}",
+            loudness_data.momentary_lufs, loudness_data.peak
+        );
 
         assert!(loudness_data.peak > 0.0, "Peak should be non-zero");
     }

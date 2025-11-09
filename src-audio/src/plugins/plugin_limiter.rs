@@ -34,10 +34,10 @@ pub struct LimiterPlugin {
     soft: bool,
 
     // State
-    envelope: f32,           // Current gain reduction envelope
-    release_coeff: f32,      // Release coefficient
+    envelope: f32,                   // Current gain reduction envelope
+    release_coeff: f32,              // Release coefficient
     lookahead_buffer: VecDeque<f32>, // Circular buffer for lookahead (interleaved)
-    lookahead_samples: usize, // Lookahead buffer size in samples
+    lookahead_samples: usize,        // Lookahead buffer size in samples
 }
 
 impl LimiterPlugin {
@@ -49,7 +49,13 @@ impl LimiterPlugin {
     /// * `release_ms` - Release time in milliseconds (default: 50.0)
     /// * `lookahead_ms` - Lookahead time in milliseconds (default: 5.0)
     /// * `soft` - Enable soft limiting with saturation curve (default: false)
-    pub fn new(channels: usize, threshold_db: f32, release_ms: f32, lookahead_ms: f32, soft: bool) -> Self {
+    pub fn new(
+        channels: usize,
+        threshold_db: f32,
+        release_ms: f32,
+        lookahead_ms: f32,
+        soft: bool,
+    ) -> Self {
         Self {
             channels,
             sample_rate: 44100, // Updated in initialize()
@@ -87,8 +93,8 @@ impl LimiterPlugin {
         self.release_coeff = Self::time_to_coeff(self.release_ms, self.sample_rate);
 
         // Update lookahead buffer size
-        let new_lookahead_samples = ((self.lookahead_ms * 0.001 * self.sample_rate as f32) as usize)
-            .max(1) * self.channels;
+        let new_lookahead_samples =
+            ((self.lookahead_ms * 0.001 * self.sample_rate as f32) as usize).max(1) * self.channels;
 
         if new_lookahead_samples != self.lookahead_samples {
             self.lookahead_samples = new_lookahead_samples;
@@ -119,7 +125,8 @@ impl InPlacePlugin for LimiterPlugin {
             name: "Limiter".to_string(),
             version: "1.0.0".to_string(),
             author: "AutoEQ".to_string(),
-            description: "Brickwall limiter with lookahead for transparent peak control".to_string(),
+            description: "Brickwall limiter with lookahead for transparent peak control"
+                .to_string(),
         }
     }
 

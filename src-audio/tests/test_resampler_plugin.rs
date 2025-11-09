@@ -18,7 +18,7 @@ fn test_resampler_basic_usage() {
     for i in 0..num_frames {
         let t = i as f32 / 44100.0;
         let sample = (2.0 * std::f32::consts::PI * 440.0 * t).sin() * 0.5;
-        input[i * 2] = sample;     // Left
+        input[i * 2] = sample; // Left
         input[i * 2 + 1] = sample; // Right
     }
 
@@ -33,7 +33,10 @@ fn test_resampler_basic_usage() {
     };
     resampler.process(&input, &mut output, &context).unwrap();
 
-    println!("Resampled {} frames to max {} frames", num_frames, max_output_frames);
+    println!(
+        "Resampled {} frames to max {} frames",
+        num_frames, max_output_frames
+    );
     println!("Ratio: {:.4}", resampler.ratio());
 
     // Verify output has signal
@@ -72,7 +75,10 @@ fn test_resampler_downsampling() {
     };
     resampler.process(&input, &mut output, &context).unwrap();
 
-    println!("Downsampling: {} -> max {} frames", num_frames, max_output_frames);
+    println!(
+        "Downsampling: {} -> max {} frames",
+        num_frames, max_output_frames
+    );
 
     // Check output
     let expected_frames = (num_frames as f64 * resampler.ratio()) as usize;
@@ -113,14 +119,15 @@ fn test_resampler_surround_sound() {
     };
     resampler.process(&input, &mut output, &context).unwrap();
 
-    println!("5.1 Surround: {} -> max {} frames", num_frames, max_output_frames);
+    println!(
+        "5.1 Surround: {} -> max {} frames",
+        num_frames, max_output_frames
+    );
 
     // Verify each channel
     let expected_frames = (num_frames as f64 * resampler.ratio()) as usize;
     for ch in 0..6 {
-        let channel_samples: Vec<f32> = (0..expected_frames)
-            .map(|i| output[i * 6 + ch])
-            .collect();
+        let channel_samples: Vec<f32> = (0..expected_frames).map(|i| output[i * 6 + ch]).collect();
         let rms: f32 =
             channel_samples.iter().map(|x| x * x).sum::<f32>() / channel_samples.len() as f32;
         println!("Channel {} RMS: {:.4}", ch, rms.sqrt());

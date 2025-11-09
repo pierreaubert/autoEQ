@@ -8,9 +8,9 @@
 use super::{PlaybackCommand, ProcessingMessage, ThreadEvent};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{Device, Stream, StreamConfig};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{Receiver, Sender};
-use std::sync::Arc;
 
 /// Playback thread handle
 pub struct PlaybackThread {
@@ -32,7 +32,14 @@ impl PlaybackThread {
         let thread_handle = std::thread::Builder::new()
             .name("playback".to_string())
             .spawn(move || {
-                if let Err(e) = run_playback_thread(message_rx, command_rx, event_tx, sample_rate, channels, output_device) {
+                if let Err(e) = run_playback_thread(
+                    message_rx,
+                    command_rx,
+                    event_tx,
+                    sample_rate,
+                    channels,
+                    output_device,
+                ) {
                     eprintln!("[Playback Thread] Error: {}", e);
                 }
             })
@@ -195,7 +202,10 @@ fn run_playback_thread(
                 dev
             }
             None => {
-                eprintln!("[Playback Thread] Device '{}' not found, using default", device_name);
+                eprintln!(
+                    "[Playback Thread] Device '{}' not found, using default",
+                    device_name
+                );
                 host.default_output_device()
                     .ok_or("No default output device available")?
             }
@@ -228,7 +238,10 @@ fn run_playback_thread(
         .play()
         .map_err(|e| format!("Failed to start stream: {}", e))?;
 
-    eprintln!("[Playback Thread] Started - {}Hz, {} channels", sample_rate, channels);
+    eprintln!(
+        "[Playback Thread] Started - {}Hz, {} channels",
+        sample_rate, channels
+    );
 
     // Main loop: read from queue and write to ring buffer
     loop {
@@ -243,7 +256,10 @@ fn run_playback_thread(
                 }
                 PlaybackCommand::UpdateChannels(new_channels) => {
                     if new_channels != channels {
-                        eprintln!("[Playback Thread] Updating channel count: {} -> {}", channels, new_channels);
+                        eprintln!(
+                            "[Playback Thread] Updating channel count: {} -> {}",
+                            channels, new_channels
+                        );
 
                         // Update channel count
                         channels = new_channels;
@@ -255,14 +271,25 @@ fn run_playback_thread(
                         state = Arc::new(PlaybackState::new(buffer_frames, channels));
 
                         // Rebuild and start new stream
-                        match build_output_stream(&device, &config, Arc::clone(&state), event_tx.clone()) {
+                        match build_output_stream(
+                            &device,
+                            &config,
+                            Arc::clone(&state),
+                            event_tx.clone(),
+                        ) {
                             Ok(new_stream) => {
                                 if let Err(e) = new_stream.play() {
-                                    eprintln!("[Playback Thread] Failed to start new stream: {}", e);
+                                    eprintln!(
+                                        "[Playback Thread] Failed to start new stream: {}",
+                                        e
+                                    );
                                 } else {
                                     // Replace old stream with new one (old one drops automatically)
                                     stream = new_stream;
-                                    eprintln!("[Playback Thread] Stream rebuilt with {} channels", channels);
+                                    eprintln!(
+                                        "[Playback Thread] Stream rebuilt with {} channels",
+                                        channels
+                                    );
                                 }
                             }
                             Err(e) => {
@@ -352,7 +379,8 @@ fn build_output_stream(
 
                     // Detect underrun
                     if available < data.len() {
-                        let current_underruns = state_clone.underrun_count.fetch_add(1, Ordering::Relaxed);
+                        let current_underruns =
+                            state_clone.underrun_count.fetch_add(1, Ordering::Relaxed);
                         if current_underruns != last_underrun_count {
                             event_tx.send(ThreadEvent::PlaybackUnderrun).ok();
                             last_underrun_count = current_underruns;

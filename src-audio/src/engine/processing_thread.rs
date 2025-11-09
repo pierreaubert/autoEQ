@@ -4,11 +4,17 @@
 //
 // Processes audio through the plugin chain with seamless hot-reload support.
 
-use super::{DecoderMessage, PluginConfig, ProcessingCommand, ProcessingMessage, ProcessingResponse, ThreadEvent};
+use super::{
+    DecoderMessage, PluginConfig, ProcessingCommand, ProcessingMessage, ProcessingResponse,
+    ThreadEvent,
+};
 use crate::plugins::{AnalyzerPlugin, Plugin, PluginHost, ProcessContext};
-use std::collections::HashMap;
-use std::sync::{mpsc::{Receiver, Sender, SyncSender}, Arc};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::{
+    Arc,
+    mpsc::{Receiver, Sender, SyncSender},
+};
 
 /// Processing thread handle
 pub struct ProcessingThread {
@@ -122,7 +128,10 @@ impl ProcessingState {
         self.next_host = Some(new_host);
         self.crossfade_pos = 0.0;
         self.crossfade_current = 0;
-        eprintln!("[Processing Thread] Starting plugin hot-reload (crossfade {} frames)", self.crossfade_frames);
+        eprintln!(
+            "[Processing Thread] Starting plugin hot-reload (crossfade {} frames)",
+            self.crossfade_frames
+        );
     }
 
     /// Get the actual output channel count (accounting for pending hot-reload)
@@ -140,7 +149,11 @@ impl ProcessingState {
     }
 
     /// Add an analyzer plugin
-    fn add_analyzer(&mut self, id: String, mut analyzer: Box<dyn AnalyzerPlugin>) -> Result<(), String> {
+    fn add_analyzer(
+        &mut self,
+        id: String,
+        mut analyzer: Box<dyn AnalyzerPlugin>,
+    ) -> Result<(), String> {
         // Initialize the analyzer with current sample rate
         analyzer.initialize(self.sample_rate)?;
 
@@ -159,7 +172,9 @@ impl ProcessingState {
     fn get_analyzer_data(&self, id: &str) -> Result<Arc<dyn std::any::Any + Send + Sync>, String> {
         use crate::plugins::{LoudnessData, SpectrumData};
 
-        let analyzer = self.analyzers.get(id)
+        let analyzer = self
+            .analyzers
+            .get(id)
             .ok_or_else(|| format!("Analyzer '{}' not found", id))?;
 
         // Get data from the analyzer (returns Box<dyn Any + Send>)
@@ -178,11 +193,7 @@ impl ProcessingState {
     }
 
     /// Process a frame with seamless crossfade
-    fn process_frame(
-        &mut self,
-        input: &[f32],
-        output: &mut [f32],
-    ) -> Result<(), String> {
+    fn process_frame(&mut self, input: &[f32], output: &mut [f32]) -> Result<(), String> {
         if self.bypassed {
             // Bypass - just copy
             output.copy_from_slice(input);
@@ -205,7 +216,10 @@ impl ProcessingState {
                 self.crossfade_pos = 0.0;
                 self.crossfade_current = 0;
 
-                eprintln!("[Processing Thread] Updated output channels: {}", self.channels);
+                eprintln!(
+                    "[Processing Thread] Updated output channels: {}",
+                    self.channels
+                );
 
                 // Process with new host
                 self.host.process(input, output)?;
@@ -222,11 +236,13 @@ impl ProcessingState {
 
                 // Calculate crossfade coefficient
                 self.crossfade_current += num_frames;
-                self.crossfade_pos = (self.crossfade_current as f32 / self.crossfade_frames as f32).min(1.0);
+                self.crossfade_pos =
+                    (self.crossfade_current as f32 / self.crossfade_frames as f32).min(1.0);
 
                 // Apply crossfade
                 for i in 0..output.len() {
-                    output[i] = output_old[i] * (1.0 - self.crossfade_pos) + output_new[i] * self.crossfade_pos;
+                    output[i] = output_old[i] * (1.0 - self.crossfade_pos)
+                        + output_new[i] * self.crossfade_pos;
                 }
 
                 // Check if crossfade complete
@@ -275,7 +291,10 @@ fn run_processing_thread(
 ) -> Result<(), String> {
     let mut state = ProcessingState::new(sample_rate, channels);
 
-    eprintln!("[Processing Thread] Started - {}Hz, {} channels", sample_rate, channels);
+    eprintln!(
+        "[Processing Thread] Started - {}Hz, {} channels",
+        sample_rate, channels
+    );
 
     loop {
         // Check for commands (non-blocking)
@@ -287,7 +306,9 @@ fn run_processing_thread(
                         Ok(new_host) => {
                             let output_channels = new_host.output_channels();
                             state.start_reload(new_host);
-                            response_tx.send(ProcessingResponse::PluginChainUpdated { output_channels }).ok();
+                            response_tx
+                                .send(ProcessingResponse::PluginChainUpdated { output_channels })
+                                .ok();
                         }
                         Err(e) => {
                             eprintln!("[Processing Thread] Failed to build plugin chain: {}", e);
@@ -295,7 +316,11 @@ fn run_processing_thread(
                         }
                     }
                 }
-                ProcessingCommand::SetParameter { plugin_index, param_id, value } => {
+                ProcessingCommand::SetParameter {
+                    plugin_index,
+                    param_id,
+                    value,
+                } => {
                     // Update parameter on current host
                     // TODO: Implement parameter setting
                     eprintln!(
@@ -312,20 +337,24 @@ fn run_processing_thread(
                 ProcessingCommand::AddLoudnessAnalyzer { id, channels } => {
                     use crate::plugins::LoudnessMonitorPlugin;
                     match LoudnessMonitorPlugin::new(channels) {
-                        Ok(plugin) => {
-                            match state.add_analyzer(id.clone(), Box::new(plugin)) {
-                                Ok(_) => {
-                                    eprintln!("[Processing Thread] Added loudness analyzer: {}", id);
-                                    response_tx.send(ProcessingResponse::Ok).ok();
-                                }
-                                Err(e) => {
-                                    eprintln!("[Processing Thread] Failed to add loudness analyzer: {}", e);
-                                    response_tx.send(ProcessingResponse::Error(e)).ok();
-                                }
+                        Ok(plugin) => match state.add_analyzer(id.clone(), Box::new(plugin)) {
+                            Ok(_) => {
+                                eprintln!("[Processing Thread] Added loudness analyzer: {}", id);
+                                response_tx.send(ProcessingResponse::Ok).ok();
                             }
-                        }
+                            Err(e) => {
+                                eprintln!(
+                                    "[Processing Thread] Failed to add loudness analyzer: {}",
+                                    e
+                                );
+                                response_tx.send(ProcessingResponse::Error(e)).ok();
+                            }
+                        },
                         Err(e) => {
-                            eprintln!("[Processing Thread] Failed to create loudness analyzer: {}", e);
+                            eprintln!(
+                                "[Processing Thread] Failed to create loudness analyzer: {}",
+                                e
+                            );
                             response_tx.send(ProcessingResponse::Error(e)).ok();
                         }
                     }
@@ -333,42 +362,46 @@ fn run_processing_thread(
                 ProcessingCommand::AddSpectrumAnalyzer { id, channels } => {
                     use crate::plugins::SpectrumAnalyzerPlugin;
                     match SpectrumAnalyzerPlugin::new(channels) {
-                        Ok(plugin) => {
-                            match state.add_analyzer(id.clone(), Box::new(plugin)) {
-                                Ok(_) => {
-                                    eprintln!("[Processing Thread] Added spectrum analyzer: {}", id);
-                                    response_tx.send(ProcessingResponse::Ok).ok();
-                                }
-                                Err(e) => {
-                                    eprintln!("[Processing Thread] Failed to add spectrum analyzer: {}", e);
-                                    response_tx.send(ProcessingResponse::Error(e)).ok();
-                                }
+                        Ok(plugin) => match state.add_analyzer(id.clone(), Box::new(plugin)) {
+                            Ok(_) => {
+                                eprintln!("[Processing Thread] Added spectrum analyzer: {}", id);
+                                response_tx.send(ProcessingResponse::Ok).ok();
                             }
-                        }
+                            Err(e) => {
+                                eprintln!(
+                                    "[Processing Thread] Failed to add spectrum analyzer: {}",
+                                    e
+                                );
+                                response_tx.send(ProcessingResponse::Error(e)).ok();
+                            }
+                        },
                         Err(e) => {
-                            eprintln!("[Processing Thread] Failed to create spectrum analyzer: {}", e);
+                            eprintln!(
+                                "[Processing Thread] Failed to create spectrum analyzer: {}",
+                                e
+                            );
                             response_tx.send(ProcessingResponse::Error(e)).ok();
                         }
                     }
                 }
-                ProcessingCommand::RemoveAnalyzer(id) => {
-                    match state.remove_analyzer(&id) {
-                        Some(_) => {
-                            eprintln!("[Processing Thread] Removed analyzer: {}", id);
-                            response_tx.send(ProcessingResponse::Ok).ok();
-                        }
-                        None => {
-                            let err = format!("Analyzer '{}' not found", id);
-                            eprintln!("[Processing Thread] {}", err);
-                            response_tx.send(ProcessingResponse::Error(err)).ok();
-                        }
+                ProcessingCommand::RemoveAnalyzer(id) => match state.remove_analyzer(&id) {
+                    Some(_) => {
+                        eprintln!("[Processing Thread] Removed analyzer: {}", id);
+                        response_tx.send(ProcessingResponse::Ok).ok();
                     }
-                }
+                    None => {
+                        let err = format!("Analyzer '{}' not found", id);
+                        eprintln!("[Processing Thread] {}", err);
+                        response_tx.send(ProcessingResponse::Error(err)).ok();
+                    }
+                },
                 ProcessingCommand::GetAnalyzerData(analyzer_id) => {
                     eprintln!("[Processing Thread] Get analyzer data: {}", analyzer_id);
                     match state.get_analyzer_data(&analyzer_id) {
                         Ok(data) => {
-                            response_tx.send(ProcessingResponse::AnalyzerData(data)).ok();
+                            response_tx
+                                .send(ProcessingResponse::AnalyzerData(data))
+                                .ok();
                         }
                         Err(e) => {
                             response_tx.send(ProcessingResponse::Error(e)).ok();
@@ -405,7 +438,9 @@ fn run_processing_thread(
                             output_channels,
                             frame.sample_rate,
                         );
-                        message_tx.send(ProcessingMessage::Frame(processed_frame)).ok();
+                        message_tx
+                            .send(ProcessingMessage::Frame(processed_frame))
+                            .ok();
                     }
                     Err(e) => {
                         eprintln!("[Processing Thread] Processing error: {}", e);
@@ -634,9 +669,17 @@ fn build_plugin_host(
     let mut current_channels = channels;
 
     for (i, config) in configs.iter().enumerate() {
-        eprintln!("[Processing Thread] Loading plugin {}: {}", i, config.plugin_type);
+        eprintln!(
+            "[Processing Thread] Loading plugin {}: {}",
+            i, config.plugin_type
+        );
 
-        match create_plugin(&config.plugin_type, &config.parameters, current_channels, sample_rate) {
+        match create_plugin(
+            &config.plugin_type,
+            &config.parameters,
+            current_channels,
+            sample_rate,
+        ) {
             Ok(plugin) => {
                 // Check channel compatibility
                 if plugin.input_channels() != current_channels {
@@ -661,7 +704,10 @@ fn build_plugin_host(
                 host.add_plugin(plugin)?;
             }
             Err(e) => {
-                return Err(format!("Failed to create plugin '{}': {}", config.plugin_type, e));
+                return Err(format!(
+                    "Failed to create plugin '{}': {}",
+                    config.plugin_type, e
+                ));
             }
         }
     }
@@ -801,8 +847,13 @@ fn create_plugin(
         }
 
         "loudness_compensation" => {
-            let params: LoudnessCompensationPluginParams = serde_json::from_value(parameters.clone())
-                .map_err(|e| format!("Failed to parse loudness compensation plugin parameters: {}", e))?;
+            let params: LoudnessCompensationPluginParams =
+                serde_json::from_value(parameters.clone()).map_err(|e| {
+                    format!(
+                        "Failed to parse loudness compensation plugin parameters: {}",
+                        e
+                    )
+                })?;
 
             let plugin = LoudnessCompensationPlugin::new(
                 channels,
@@ -817,31 +868,43 @@ fn create_plugin(
         "matrix" => {
             #[derive(Debug, Clone, serde::Deserialize)]
             struct MatrixPluginParams {
-                input_channels: usize,
-                output_channels: usize,
+                // Dense mapping parameters (legacy)
+                #[serde(default)]
+                input_channels: Option<usize>,
+                #[serde(default)]
+                output_channels: Option<usize>,
+                // Sparse mapping parameters
+                #[serde(default)]
+                input_channel_map: Option<Vec<usize>>,
+                #[serde(default)]
+                output_channel_map: Option<Vec<usize>>,
+                // Matrix data
                 matrix: Vec<f32>,
             }
 
             let params: MatrixPluginParams = serde_json::from_value(parameters.clone())
                 .map_err(|e| format!("Failed to parse matrix plugin parameters: {}", e))?;
 
-            // Validate matrix size
-            let expected_size = params.output_channels * params.input_channels;
-            if params.matrix.len() != expected_size {
-                return Err(format!(
-                    "Matrix size mismatch: expected {} elements ({}x{}), got {}",
-                    expected_size,
-                    params.output_channels,
-                    params.input_channels,
-                    params.matrix.len()
-                ));
-            }
-
-            let plugin = MatrixPlugin::with_matrix(
-                params.input_channels,
-                params.output_channels,
-                params.matrix,
-            ).map_err(|e| format!("Failed to create matrix plugin: {}", e))?;
+            // Determine if using sparse or dense mapping
+            let plugin = if let (Some(in_map), Some(out_map)) =
+                (params.input_channel_map, params.output_channel_map)
+            {
+                // Sparse mapping
+                MatrixPlugin::with_sparse_mapping(in_map, out_map, params.matrix)
+                    .map_err(|e| format!("Failed to create sparse matrix plugin: {}", e))?
+            } else if let (Some(in_ch), Some(out_ch)) =
+                (params.input_channels, params.output_channels)
+            {
+                // Dense mapping (legacy)
+                MatrixPlugin::with_matrix(in_ch, out_ch, params.matrix)
+                    .map_err(|e| format!("Failed to create matrix plugin: {}", e))?
+            } else {
+                return Err(
+                    "Matrix plugin requires either (input_channels, output_channels) \
+                     or (input_channel_map, output_channel_map)"
+                        .to_string(),
+                );
+            };
 
             Ok(Box::new(plugin))
         }

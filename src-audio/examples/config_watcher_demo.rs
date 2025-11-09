@@ -27,7 +27,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         eprintln!();
         eprintln!("Controls:");
         eprintln!("  - Edit config.yaml to trigger hot-reload");
-        eprintln!("  - Send SIGHUP to reload: kill -HUP {}", std::process::id());
+        eprintln!(
+            "  - Send SIGHUP to reload: kill -HUP {}",
+            std::process::id()
+        );
         eprintln!("  - Send SIGTERM or Ctrl-C to shutdown");
         return Ok(());
     }
@@ -52,7 +55,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Initial config:");
     println!("  Frame size: {} frames", config.frame_size);
     println!("  Buffer: {}ms", config.buffer_ms);
-    println!("  Output: {}Hz, {} channels", config.output_sample_rate, config.output_channels);
+    println!(
+        "  Output: {}Hz, {} channels",
+        config.output_sample_rate, config.output_channels
+    );
     println!("  Plugins: {} configured", config.plugins.len());
     println!();
 
@@ -70,7 +76,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     engine.play(audio_file)?;
 
     // Monitor playback
-    for i in 0..600 {  // Run for up to 60 seconds
+    for i in 0..600 {
+        // Run for up to 60 seconds
         thread::sleep(Duration::from_millis(100));
 
         let state = engine.get_state();

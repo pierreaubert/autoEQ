@@ -227,7 +227,9 @@ impl Plugin for LoudnessCompensationPlugin {
             name: "Loudness Compensation".to_string(),
             version: "1.0.0".to_string(),
             author: "AutoEQ".to_string(),
-            description: "Bass and treble boost for low-volume listening (Fletcher-Munson compensation)".to_string(),
+            description:
+                "Bass and treble boost for low-volume listening (Fletcher-Munson compensation)"
+                    .to_string(),
         }
     }
 
@@ -241,12 +243,24 @@ impl Plugin for LoudnessCompensationPlugin {
 
     fn parameters(&self) -> Vec<Parameter> {
         vec![
-            Parameter::new_float("low_freq", "Low-shelf Frequency", self.low_freq, 20.0, 500.0)
-                .with_description("Frequency for bass boost (Hz)"),
+            Parameter::new_float(
+                "low_freq",
+                "Low-shelf Frequency",
+                self.low_freq,
+                20.0,
+                500.0,
+            )
+            .with_description("Frequency for bass boost (Hz)"),
             Parameter::new_float("low_gain", "Low-shelf Gain", self.low_gain, -20.0, 20.0)
                 .with_description("Bass boost amount (dB)"),
-            Parameter::new_float("high_freq", "High-shelf Frequency", self.high_freq, 2000.0, 20000.0)
-                .with_description("Frequency for treble boost (Hz)"),
+            Parameter::new_float(
+                "high_freq",
+                "High-shelf Frequency",
+                self.high_freq,
+                2000.0,
+                20000.0,
+            )
+            .with_description("Frequency for treble boost (Hz)"),
             Parameter::new_float("high_gain", "High-shelf Gain", self.high_gain, -20.0, 20.0)
                 .with_description("Treble boost amount (dB)"),
         ]
@@ -396,7 +410,10 @@ mod tests {
 
         println!("RMS ratio (1kHz): {:.3}", ratio);
         // At 1kHz (between 100Hz and 10kHz), should be relatively flat
-        assert!(ratio > 0.5 && ratio < 2.0, "Mid frequencies should be relatively unchanged");
+        assert!(
+            ratio > 0.5 && ratio < 2.0,
+            "Mid frequencies should be relatively unchanged"
+        );
     }
 
     #[test]
@@ -442,10 +459,7 @@ mod tests {
 
         // Update low-shelf gain
         plugin
-            .set_parameter(
-                ParameterId::from("low_gain"),
-                ParameterValue::Float(12.0),
-            )
+            .set_parameter(ParameterId::from("low_gain"), ParameterValue::Float(12.0))
             .unwrap();
 
         assert_eq!(plugin.low_gain, 12.0);
@@ -479,11 +493,16 @@ mod tests {
         plugin.process(&input, &mut output, &context).unwrap();
 
         // Should be approximately passthrough (may have tiny numerical differences)
-        let max_diff = input.iter().zip(output.iter())
+        let max_diff = input
+            .iter()
+            .zip(output.iter())
             .map(|(a, b)| (a - b).abs())
             .fold(0.0_f32, f32::max);
 
         println!("Max difference with zero gain: {}", max_diff);
-        assert!(max_diff < 0.01, "With zero gain should be nearly passthrough");
+        assert!(
+            max_diff < 0.01,
+            "With zero gain should be nearly passthrough"
+        );
     }
 }

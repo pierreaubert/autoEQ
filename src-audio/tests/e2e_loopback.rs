@@ -9,9 +9,9 @@
 //!   - AEQ_E2E_RECORD_CH: Hardware channel to record from (e.g., "15")
 //!   - AEQ_E2E_SR: Sample rate (default: 48000)
 
+use hound::{WavSpec, WavWriter};
 use sotf_audio::signal_recorder::record_and_analyze;
 use sotf_audio::signals::{gen_log_sweep, gen_pink_noise, gen_tone};
-use hound::{WavSpec, WavWriter};
 use std::env;
 use std::path::PathBuf;
 
@@ -60,15 +60,17 @@ fn write_wav_file(path: &PathBuf, samples: &[f32], sample_rate: u32) -> Result<(
         bits_per_sample: 32,
         sample_format: hound::SampleFormat::Float,
     };
-    let mut writer = WavWriter::create(path, spec)
-        .map_err(|e| format!("Failed to create WAV file: {}", e))?;
+    let mut writer =
+        WavWriter::create(path, spec).map_err(|e| format!("Failed to create WAV file: {}", e))?;
 
     for &sample in samples {
-        writer.write_sample(sample)
+        writer
+            .write_sample(sample)
             .map_err(|e| format!("Failed to write sample: {}", e))?;
     }
 
-    writer.finalize()
+    writer
+        .finalize()
         .map_err(|e| format!("Failed to finalize WAV file: {}", e))?;
 
     Ok(())
@@ -134,7 +136,10 @@ async fn test_loopback_tone() {
         "Recording contains mostly zeros ({:.1}% non-zero)",
         non_zero_percent
     );
-    println!("  ✓ Recording has content ({:.1}% non-zero)", non_zero_percent);
+    println!(
+        "  ✓ Recording has content ({:.1}% non-zero)",
+        non_zero_percent
+    );
 
     // Read and verify CSV
     let csv_lines: Vec<String> = std::fs::read_to_string(&csv_file)
@@ -175,7 +180,10 @@ async fn test_loopback_tone() {
         //     "Peak SPL at 1kHz ({:.2} dB) deviates too much from 0 dB for loopback",
         //     peak_spl
         // );
-        println!("  Note: SPL calculation needs fixing (got {:.2} dB, expected ~0 dB)", peak_spl);
+        println!(
+            "  Note: SPL calculation needs fixing (got {:.2} dB, expected ~0 dB)",
+            peak_spl
+        );
     }
 
     println!("✓ Test passed: Tone loopback works correctly\n");
@@ -278,8 +286,14 @@ async fn test_loopback_sweep_accuracy() {
     //     "SPL variation ({:.3} dB) is too high. Expected < 2 dB for clean loopback.",
     //     variation
     // );
-    println!("  Note: SPL calculation needs fixing (mean: {:.3} dB, expected ~0 dB)", mean_spl);
-    println!("  Note: SPL variation: {:.3} dB (expected < 2 dB)", variation);
+    println!(
+        "  Note: SPL calculation needs fixing (mean: {:.3} dB, expected ~0 dB)",
+        mean_spl
+    );
+    println!(
+        "  Note: SPL variation: {:.3} dB (expected < 2 dB)",
+        variation
+    );
 
     // Verify phase wrapping in CSV
     for line in csv_lines.iter().skip(1) {
@@ -352,7 +366,10 @@ async fn test_loopback_pink_noise() {
         "Pink noise recording contains too many zeros ({:.1}% non-zero)",
         non_zero_percent
     );
-    println!("  ✓ Pink noise has content ({:.1}% non-zero)", non_zero_percent);
+    println!(
+        "  ✓ Pink noise has content ({:.1}% non-zero)",
+        non_zero_percent
+    );
 
     println!("✓ Test passed: Pink noise recording works\n");
 }

@@ -25,7 +25,8 @@ impl AudioEngine {
 
     /// Play an audio file
     pub fn play<P: Into<std::path::PathBuf>>(&mut self, path: P) -> Result<(), String> {
-        self.manager.send_command(ManagerCommand::Play(path.into()))?;
+        self.manager
+            .send_command(ManagerCommand::Play(path.into()))?;
         self.manager.recv_response()?;
         Ok(())
     }
@@ -60,7 +61,8 @@ impl AudioEngine {
 
     /// Set volume (0.0 = silence, 1.0 = unity gain)
     pub fn set_volume(&mut self, volume: f32) -> Result<(), String> {
-        self.manager.send_command(ManagerCommand::SetVolume(volume))?;
+        self.manager
+            .send_command(ManagerCommand::SetVolume(volume))?;
         self.manager.recv_response()?;
         Ok(())
     }
@@ -74,7 +76,8 @@ impl AudioEngine {
 
     /// Update the plugin chain (hot-reload with crossfade)
     pub fn update_plugin_chain(&mut self, plugins: Vec<PluginConfig>) -> Result<(), String> {
-        self.manager.send_command(ManagerCommand::UpdatePluginChain(plugins))?;
+        self.manager
+            .send_command(ManagerCommand::UpdatePluginChain(plugins))?;
         self.manager.recv_response()?;
         Ok(())
     }
@@ -86,39 +89,44 @@ impl AudioEngine {
         param_id: String,
         value: f32,
     ) -> Result<(), String> {
-        self.manager.send_command(ManagerCommand::SetPluginParameter {
-            plugin_index,
-            param_id,
-            value,
-        })?;
+        self.manager
+            .send_command(ManagerCommand::SetPluginParameter {
+                plugin_index,
+                param_id,
+                value,
+            })?;
         self.manager.recv_response()?;
         Ok(())
     }
 
     /// Bypass all processing
     pub fn set_bypass(&mut self, bypass: bool) -> Result<(), String> {
-        self.manager.send_command(ManagerCommand::BypassProcessing(bypass))?;
+        self.manager
+            .send_command(ManagerCommand::BypassProcessing(bypass))?;
         self.manager.recv_response()?;
         Ok(())
     }
 
     /// Add a loudness analyzer
     pub fn add_loudness_analyzer(&mut self, id: String, channels: usize) -> Result<(), String> {
-        self.manager.send_command(ManagerCommand::AddLoudnessAnalyzer { id, channels })?;
+        self.manager
+            .send_command(ManagerCommand::AddLoudnessAnalyzer { id, channels })?;
         self.manager.recv_response()?;
         Ok(())
     }
 
     /// Add a spectrum analyzer
     pub fn add_spectrum_analyzer(&mut self, id: String, channels: usize) -> Result<(), String> {
-        self.manager.send_command(ManagerCommand::AddSpectrumAnalyzer { id, channels })?;
+        self.manager
+            .send_command(ManagerCommand::AddSpectrumAnalyzer { id, channels })?;
         self.manager.recv_response()?;
         Ok(())
     }
 
     /// Remove an analyzer
     pub fn remove_analyzer(&mut self, id: String) -> Result<(), String> {
-        self.manager.send_command(ManagerCommand::RemoveAnalyzer(id))?;
+        self.manager
+            .send_command(ManagerCommand::RemoveAnalyzer(id))?;
         self.manager.recv_response()?;
         Ok(())
     }
@@ -139,8 +147,12 @@ impl AudioEngine {
     }
 
     /// Get analyzer data
-    pub fn get_analyzer_data(&mut self, analyzer_id: String) -> Result<std::sync::Arc<dyn std::any::Any + Send + Sync>, String> {
-        self.manager.send_command(ManagerCommand::GetAnalyzerData(analyzer_id))?;
+    pub fn get_analyzer_data(
+        &mut self,
+        analyzer_id: String,
+    ) -> Result<std::sync::Arc<dyn std::any::Any + Send + Sync>, String> {
+        self.manager
+            .send_command(ManagerCommand::GetAnalyzerData(analyzer_id))?;
         match self.manager.recv_response()? {
             ManagerResponse::AnalyzerData(data) => Ok(data),
             ManagerResponse::Error(e) => Err(e),
