@@ -4,7 +4,7 @@
 
 use crate::tauri_audio_recording::AudioError;
 use sotf_audio::{AudioFileInfo, AudioStreamingManager, LoudnessCompensation, PluginConfig, StreamingState};
-use autoeq_iir::Biquad;
+use autoeq::iir::Biquad;
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::Mutex;
 
@@ -63,7 +63,7 @@ pub async fn stream_load_file(
 
 /// Helper to create EQ plugin config from biquad filters
 fn create_eq_plugin_config(filters: &[Biquad]) -> Result<PluginConfig, String> {
-    use autoeq_iir::BiquadFilterType;
+    use autoeq::iir::BiquadFilterType;
 
     let filter_configs: Result<Vec<_>, String> = filters
         .iter()

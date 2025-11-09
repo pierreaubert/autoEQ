@@ -2,14 +2,14 @@ use tauri::{Emitter, Manager};
 use tokio::sync::Mutex;
 
 // Import audio streaming types
-use sotf_audio::AudioManager;
+// use sotf_audio::AudioManager;  // LEGACY: AudioManager has been removed (part of CamillaDSP phase-out)
 use sotf_audio::AudioStreamingManager;
 use sotf_audio::SharedAudioState;
 
 // Declare modules
 mod tauri_audio_devices;
 mod tauri_audio_loudness;
-mod tauri_audio_recording;
+mod tauri_audio_recording;  // NOTE: Module kept for AudioError type, but commands disabled
 mod tauri_audio_replaygain;
 mod tauri_audio_spectrum;
 mod tauri_audio_streaming;
@@ -29,10 +29,6 @@ pub use tauri_plots::{
 
 pub use tauri_audio_devices::{
     get_audio_config, get_audio_devices, get_device_properties, set_audio_device,
-};
-
-pub use tauri_audio_recording::{
-    audio_get_recording_spl, audio_get_signal_peak, audio_start_recording, audio_stop_recording,
 };
 
 pub use sotf_audio::StreamingState;
@@ -120,15 +116,16 @@ fn resolve_demo_track_path(relative_path: String) -> Result<String, String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // Find CamillaDSP binary
-    let camilla_binary = sotf_audio::camilla::find_camilladsp_binary().unwrap_or_else(|e| {
-        eprintln!("[TAURI] Warning: CamillaDSP binary not found: {}", e);
-        eprintln!("[TAURI] Audio playback features will not be available.");
-        std::path::PathBuf::from("/usr/local/bin/camilladsp")
-    });
-
-    // Create AudioManager (wrapped in Mutex for Tauri state)
-    let audio_manager = Mutex::new(AudioManager::new(camilla_binary.clone()));
+    // LEGACY: CamillaDSP code commented out (AudioManager removed as part of phase-out)
+    // // Find CamillaDSP binary
+    // let camilla_binary = sotf_audio::camilla::find_camilladsp_binary().unwrap_or_else(|e| {
+    //     eprintln!("[TAURI] Warning: CamillaDSP binary not found: {}", e);
+    //     eprintln!("[TAURI] Audio playback features will not be available.");
+    //     std::path::PathBuf::from("/usr/local/bin/camilladsp")
+    // });
+    //
+    // // Create AudioManager (wrapped in Mutex for Tauri state)
+    // let audio_manager = Mutex::new(AudioManager::new(camilla_binary.clone()));
 
     // Create AudioStreamingManager for all audio format playback (WAV, FLAC, MP3, etc.)
     // NOTE: No longer requires CamillaDSP - uses native AudioEngine instead
@@ -146,7 +143,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(CancellationState::new())
         .manage(SharedAudioState::default())
-        .manage(audio_manager)
+        // .manage(audio_manager)  // LEGACY: AudioManager removed
         .manage(streaming_manager)
         .setup(|app| {
             // Spawn background task to monitor streaming events and forward them to frontend
@@ -216,11 +213,11 @@ pub fn run() {
             set_audio_device,
             get_audio_config,
             get_device_properties,
-            // Audio recording commands
-            audio_start_recording,
-            audio_stop_recording,
-            audio_get_signal_peak,
-            audio_get_recording_spl,
+            // LEGACY: Audio recording commands disabled (AudioManager removed)
+            // audio_start_recording,
+            // audio_stop_recording,
+            // audio_get_signal_peak,
+            // audio_get_recording_spl,
             // Streaming playback commands (supports all audio formats)
             stream_load_file,
             stream_start_playback,
