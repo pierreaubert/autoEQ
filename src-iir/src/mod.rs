@@ -33,7 +33,7 @@ pub const SRATE: f64 = 48000.0;
 pub type Peq = Vec<(f64, Biquad)>;
 
 /// Filter types for biquad filters
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum BiquadFilterType {
     /// Low-pass filter
     Lowpass,
@@ -84,7 +84,7 @@ impl BiquadFilterType {
 }
 
 /// Represents a single biquad IIR filter.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Biquad {
     /// The type of filter
     pub filter_type: BiquadFilterType,
