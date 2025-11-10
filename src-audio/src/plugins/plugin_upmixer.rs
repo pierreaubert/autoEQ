@@ -1,8 +1,8 @@
 // ============================================================================
-// Upmixer Plugin - Stereo to 5.0 Surround
+// Upmixer Plugin - Stereo to 5.1 Surround
 // ============================================================================
 //
-// This plugin converts stereo (2 channels) to 5.0 surround sound using
+// This plugin converts stereo (2 channels) to 5.1 surround sound using
 // FFT-based Direct/Ambient decomposition.
 //
 // Algorithm uses frequency-domain
@@ -13,8 +13,9 @@
 // 0: Front Left (FL)
 // 1: Front Right (FR)
 // 2: Center (C)
-// 3: Rear Left (RL)
-// 4: Rear Right (RR)
+// 3: Low Frequency Effects (LFE/Subwoofer)
+// 4: Left Surround (Ls)
+// 5: Right Surround (Rs)
 
 use super::parameters::{Parameter, ParameterId, ParameterValue};
 use super::plugin::{Plugin, PluginInfo, PluginResult, ProcessContext};
@@ -22,7 +23,7 @@ use rustfft::num_complex::Complex;
 use rustfft::{Fft, FftPlanner};
 use std::sync::Arc;
 
-/// Stereo to 5.0 surround upmixer using FFT-based Direct/Ambient decomposition
+/// Stereo to 5.1 surround upmixer using FFT-based Direct/Ambient decomposition
 pub struct UpmixerPlugin {
     /// FFT size (must be power of 2)
     fft_size: usize,
@@ -73,6 +74,7 @@ pub struct UpmixerPlugin {
     time_out_front_left: Vec<Complex<f32>>,
     time_out_front_right: Vec<Complex<f32>>,
     time_out_center: Vec<Complex<f32>>,
+    time_out_lfe: Vec<Complex<f32>>,
     time_out_rear_left: Vec<Complex<f32>>,
     time_out_rear_right: Vec<Complex<f32>>,
 
@@ -133,7 +135,7 @@ impl UpmixerPlugin {
         // Output accumulator holds up to 3*fft_size samples per channel
         // This provides enough headroom to avoid frequent draining during processing
         // which can cause discontinuities and crackling
-        let output_accumulator = vec![vec![0.0; fft_size * 3]; 5]; // 5 output channels
+        let output_accumulator = vec![vec![0.0; fft_size * 3]; 6]; // 6 output channels (5.1)
 
         Self {
             fft_size,
@@ -167,6 +169,7 @@ impl UpmixerPlugin {
             time_out_front_left: vec![zero_complex; fft_size],
             time_out_front_right: vec![zero_complex; fft_size],
             time_out_center: vec![zero_complex; fft_size],
+            time_out_lfe: vec![zero_complex; fft_size],
             time_out_rear_left: vec![zero_complex; fft_size],
             time_out_rear_right: vec![zero_complex; fft_size],
 
@@ -179,7 +182,7 @@ impl UpmixerPlugin {
             output_accumulator,
             output_accumulator_fill: 0,
             next_add_position: 0,
-            output_block: vec![0.0; fft_size * 5], // Pre-allocated output block
+            output_block: vec![0.0; fft_size * 6], // Pre-allocated output block (5.1)
         }
     }
 
@@ -187,7 +190,7 @@ impl UpmixerPlugin {
     fn process_fft_block(&mut self, input: &[f32], output: &mut [f32]) {
         // Verify sizes
         assert_eq!(input.len(), self.fft_size * 2); // stereo interleaved
-        assert_eq!(output.len(), self.fft_size * 5); // 5.0 surround interleaved
+        assert_eq!(output.len(), self.fft_size * 6); // 5.1 surround interleaved
 
         // 1. Copy input to time domain buffers and apply ANALYSIS window
         // CRITICAL: Window BEFORE FFT to prevent spectral leakage!
@@ -259,6 +262,23 @@ impl UpmixerPlugin {
             .copy_from_slice(&self.ambient_right);
         self.fft_inverse.process(&mut self.time_out_rear_right);
 
+        // Generate LFE channel - low-pass filtered sum of L+R
+        // LFE typically uses 80-120 Hz crossover, we'll use 120 Hz
+        let lfe_cutoff_hz = 120.0;
+        let lfe_cutoff_bin = ((lfe_cutoff_hz * self.fft_size as f32) / self.sample_rate as f32) as usize;
+
+        // Create LFE as sum of L+R in frequency domain, low-pass filtered
+        for i in 0..self.fft_size {
+            if i <= lfe_cutoff_bin || i >= (self.fft_size - lfe_cutoff_bin) {
+                // Keep low frequencies (and high-frequency mirror for real FFT)
+                self.time_out_lfe[i] = (self.freq_domain_left[i] + self.freq_domain_right[i]) * 0.5;
+            } else {
+                // Zero out high frequencies
+                self.time_out_lfe[i] = Complex::new(0.0, 0.0);
+            }
+        }
+        self.fft_inverse.process(&mut self.time_out_lfe);
+
         // 6. Mix outputs with gains (NO additional windowing needed!)
         // IFFT output is already windowed because we windowed before FFT
         // Apply -3dB gain reduction to prevent clipping (0.707946 ≈ 10^(-3/20))
@@ -276,21 +296,24 @@ impl UpmixerPlugin {
         // Mix channels - IFFT output already windowed, ready for overlap-add
         // Optimized: process all channels in single loop, better cache locality
         for i in 0..self.fft_size {
-            let idx = i * 5;
+            let idx = i * 6;
 
             // Extract real parts once
             let direct_left = self.time_out_front_left[i].re;
             let direct_right = self.time_out_front_right[i].re;
             let center = self.time_out_center[i].re;
+            let lfe = self.time_out_lfe[i].re;
             let ambient_left = self.time_out_rear_left[i].re;
             let ambient_right = self.time_out_rear_right[i].re;
 
-            // Write all 5 channels with pre-computed gains (already include combined_scale)
-            output[idx] = direct_left * gain_fd + ambient_left * gain_fa;
-            output[idx + 1] = direct_right * gain_fd + ambient_right * gain_fa;
-            output[idx + 2] = center * gain_center;
-            output[idx + 3] = ambient_left * gain_ra;
-            output[idx + 4] = ambient_right * gain_ra;
+            // Write all 6 channels with pre-computed gains (already include combined_scale)
+            // Channel order: FL, FR, C, LFE, Ls, Rs
+            output[idx] = direct_left * gain_fd + ambient_left * gain_fa;     // FL
+            output[idx + 1] = direct_right * gain_fd + ambient_right * gain_fa; // FR
+            output[idx + 2] = center * gain_center;                           // C
+            output[idx + 3] = lfe * gain_fd;                                  // LFE (uses front direct gain)
+            output[idx + 4] = ambient_left * gain_ra;                         // Ls
+            output[idx + 5] = ambient_right * gain_ra;                        // Rs
         }
     }
 }
@@ -298,11 +321,11 @@ impl UpmixerPlugin {
 impl Plugin for UpmixerPlugin {
     fn info(&self) -> PluginInfo {
         PluginInfo {
-            name: "Stereo to 5.0 Upmixer".to_string(),
+            name: "Stereo to 5.1 Upmixer".to_string(),
             version: "1.0.0".to_string(),
             author: "AutoEQ".to_string(),
             description:
-                "Converts stereo to 5.0 surround using FFT-based Direct/Ambient decomposition"
+                "Converts stereo to 5.1 surround using FFT-based Direct/Ambient decomposition"
                     .to_string(),
         }
     }
@@ -312,7 +335,7 @@ impl Plugin for UpmixerPlugin {
     }
 
     fn output_channels(&self) -> usize {
-        5 // 5.0 surround (FL, FR, C, RL, RR)
+        6 // 5.1 surround (FL, FR, C, LFE, Ls, Rs)
     }
 
     fn parameters(&self) -> Vec<Parameter> {
@@ -412,7 +435,7 @@ impl Plugin for UpmixerPlugin {
             ));
         }
 
-        let output_samples = context.num_frames * 5; // 5.0 surround
+        let output_samples = context.num_frames * 6; // 5.1 surround
         if output.len() != output_samples {
             return Err(format!(
                 "Output size mismatch: expected {}, got {}",
@@ -467,7 +490,7 @@ impl Plugin for UpmixerPlugin {
                 break;
             }
             // Step 1: Drain output accumulator if we have data and space
-            let frames_available = (output.len() - output_pos) / 5;
+            let frames_available = (output.len() - output_pos) / 6;
             let frames_to_drain = self.output_accumulator_fill.min(frames_available);
 
             if frames_to_drain > 0 {
@@ -478,14 +501,14 @@ impl Plugin for UpmixerPlugin {
 
                 // Copy samples to output
                 for i in 0..frames_to_drain {
-                    for ch in 0..5 {
-                        output[output_pos + i * 5 + ch] = self.output_accumulator[ch][i];
+                    for ch in 0..6 {
+                        output[output_pos + i * 6 + ch] = self.output_accumulator[ch][i];
                     }
                 }
-                output_pos += frames_to_drain * 5;
+                output_pos += frames_to_drain * 6;
 
                 // Shift accumulator
-                for ch in 0..5 {
+                for ch in 0..6 {
                     self.output_accumulator[ch]
                         .copy_within(frames_to_drain..self.output_accumulator_fill, 0);
                     // Clear the tail
@@ -540,9 +563,9 @@ impl Plugin for UpmixerPlugin {
 
                 // Accumulate output (overlap-add) at next_add_position
                 for i in 0..self.fft_size {
-                    for ch in 0..5 {
+                    for ch in 0..6 {
                         self.output_accumulator[ch][self.next_add_position + i] +=
-                            output_block[i * 5 + ch];
+                            output_block[i * 6 + ch];
                     }
                 }
 
@@ -657,13 +680,13 @@ impl Plugin for UpmixerPlugin {
             );
 
             for i in 0..frames_to_drain {
-                for ch in 0..5 {
-                    output[output_pos + i * 5 + ch] = self.output_accumulator[ch][i];
+                for ch in 0..6 {
+                    output[output_pos + i * 6 + ch] = self.output_accumulator[ch][i];
                 }
             }
-            output_pos += frames_to_drain * 5;
+            output_pos += frames_to_drain * 6;
 
-            for ch in 0..5 {
+            for ch in 0..6 {
                 self.output_accumulator[ch]
                     .copy_within(frames_to_drain..self.output_accumulator_fill, 0);
                 for i in
@@ -711,7 +734,7 @@ mod tests {
     fn test_upmixer_creation() {
         let plugin = UpmixerPlugin::new(2048, 1.0, 0.5, 1.0);
         assert_eq!(plugin.input_channels(), 2);
-        assert_eq!(plugin.output_channels(), 5);
+        assert_eq!(plugin.output_channels(), 6);
         assert_eq!(plugin.fft_size, 2048);
     }
 
@@ -745,7 +768,7 @@ mod tests {
             input[i * 2] = (i as f32 * 0.01).sin() * 0.5; // Left
             input[i * 2 + 1] = (i as f32 * 0.01).cos() * 0.5; // Right
         }
-        let mut output = vec![0.0_f32; 2048 * 5];
+        let mut output = vec![0.0_f32; 2048 * 6];
 
         let context = ProcessContext {
             sample_rate: 44100,
@@ -760,10 +783,10 @@ mod tests {
         assert!(sum > 0.0, "Output should not be all zeros");
 
         // Check that we have output in multiple channels
-        let mut channel_sums = vec![0.0; 5];
+        let mut channel_sums = vec![0.0; 6];
         for i in 0..2048 {
-            for ch in 0..5 {
-                channel_sums[ch] += output[i * 5 + ch].abs();
+            for ch in 0..6 {
+                channel_sums[ch] += output[i * 6 + ch].abs();
             }
         }
         println!("Channel sums: {:?}", channel_sums);
@@ -786,7 +809,7 @@ mod tests {
             input[i * 2] = (i as f32 * 0.01).sin() * 0.5; // Left
             input[i * 2 + 1] = (i as f32 * 0.01).cos() * 0.5; // Right
         }
-        let mut output = vec![0.0_f32; 2048 * 5];
+        let mut output = vec![0.0_f32; 2048 * 6];
 
         let context = ProcessContext {
             sample_rate: 44100,
@@ -817,7 +840,7 @@ mod tests {
             input[i * 2] = (i as f32 * 0.01).sin() * 0.5; // Left: sine
             input[i * 2 + 1] = (i as f32 * 0.02).cos() * 0.5; // Right: cosine at different freq
         }
-        let mut output = vec![0.0_f32; 2048 * 5];
+        let mut output = vec![0.0_f32; 2048 * 6];
 
         let context = ProcessContext {
             sample_rate: 44100,
@@ -827,10 +850,10 @@ mod tests {
         plugin.process(&input, &mut output, &context).unwrap();
 
         // Check each channel
-        let mut channel_energies = vec![0.0; 5];
+        let mut channel_energies = vec![0.0; 6];
         for i in 0..2048 {
-            for ch in 0..5 {
-                channel_energies[ch] += output[i * 5 + ch].powi(2);
+            for ch in 0..6 {
+                channel_energies[ch] += output[i * 6 + ch].powi(2);
             }
         }
 
@@ -846,14 +869,17 @@ mod tests {
             "Center should have direct component"
         );
 
+        // LFE should have signal (low-pass filtered)
+        assert!(channel_energies[3] > 0.001, "LFE should have signal");
+
         // Rear channels should have signal (ambient with gain=1.0)
         assert!(
-            channel_energies[3] > 0.01,
-            "Rear left should have ambient signal"
+            channel_energies[4] > 0.01,
+            "Left surround should have ambient signal"
         );
         assert!(
-            channel_energies[4] > 0.01,
-            "Rear right should have ambient signal"
+            channel_energies[5] > 0.01,
+            "Right surround should have ambient signal"
         );
     }
 
@@ -882,7 +908,7 @@ mod tests {
                     input[i * 2 + 1] = phase.sin() * 0.5;
                 }
 
-                let mut output = vec![0.0_f32; chunk_size * 5];
+                let mut output = vec![0.0_f32; chunk_size * 6];
                 let context = ProcessContext {
                     sample_rate: 44100,
                     num_frames: chunk_size,
@@ -934,7 +960,7 @@ mod tests {
 
             total_input_energy += input.iter().map(|x| x * x).sum::<f32>();
 
-            let mut output = vec![0.0_f32; buffer_size * 5];
+            let mut output = vec![0.0_f32; buffer_size * 6];
             let context = ProcessContext {
                 sample_rate: 44100,
                 num_frames: buffer_size,
@@ -942,10 +968,10 @@ mod tests {
 
             plugin.process(&input, &mut output, &context).unwrap();
 
-            // Count all 5 channels
+            // Count all 6 channels
             for i in 0..buffer_size {
-                for ch in 0..5 {
-                    total_output_energy += output[i * 5 + ch].powi(2);
+                for ch in 0..6 {
+                    total_output_energy += output[i * 6 + ch].powi(2);
                 }
             }
         }
@@ -988,7 +1014,7 @@ mod tests {
                 input[i * 2 + 1] = phase.sin() * 0.5;
             }
 
-            let mut output = vec![0.0_f32; buffer_size * 5];
+            let mut output = vec![0.0_f32; buffer_size * 6];
             let context = ProcessContext {
                 sample_rate: 44100,
                 num_frames: buffer_size,

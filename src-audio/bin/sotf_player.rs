@@ -418,8 +418,10 @@ fn parse_filters(filter_strings: &[String]) -> Result<Vec<Biquad>, String> {
 ///   "1,2,3,4,5->1,2,3,_,5,6"    - Route 5ch with gap (skip position 4)
 ///   "1,2,3,4,5,6->13,14,15,16,17,18"  - Route 5.1 to channels 13-18
 ///
-/// Returns: (input_channels, output_channels, matrix, max_hw_channel)
-fn parse_channel_mapping(mapping_str: &str) -> Result<(usize, usize, Vec<f32>, usize), String> {
+/// Returns: (input_channel_map, output_channel_map, matrix)
+fn parse_channel_mapping(
+    mapping_str: &str,
+) -> Result<(Vec<usize>, Vec<usize>, Vec<f32>), String> {
     let parts: Vec<&str> = mapping_str.split("->").collect();
     if parts.len() != 2 {
         return Err(format!(
@@ -478,36 +480,42 @@ fn parse_channel_mapping(mapping_str: &str) -> Result<(usize, usize, Vec<f32>, u
         ));
     }
 
-    // Build matrix: input_channels x max_hw_channel
-    // Matrix is row-major: matrix[out_ch * input_channels + in_ch]
-    let input_count = input_channels.len();
-    let output_count = max_hw_channel;
-    let mut matrix = vec![0.0f32; output_count * input_count];
+    // Build sparse channel mapping
+    // For "1,2->15,16":
+    //   input_channel_map = [0, 1] (read from logical channels 0,1)
+    //   output_channel_map = [14, 15] (write to physical channels 14,15)
+    //   matrix = 2x2 identity
 
-    // Map each input channel to its output position
-    let mut input_idx = 0;
-    for &output_hw_ch_opt in channel_map.iter() {
-        if let Some(output_hw_ch) = output_hw_ch_opt {
-            // Set gain from input_idx to output_hw_ch
-            matrix[output_hw_ch * input_count + input_idx] = 1.0;
-            input_idx += 1;
-        }
+    // Convert input channels from 1-indexed to 0-indexed
+    let input_channel_map: Vec<usize> = input_channels.iter().map(|&ch| ch - 1).collect();
+
+    // Extract non-gap output channels (already 0-indexed from parsing)
+    let output_channel_map: Vec<usize> = channel_map.iter().filter_map(|&x| x).collect();
+
+    let input_count = input_channel_map.len();
+    let output_count = output_channel_map.len();
+
+    // Create identity matrix for sparse mapping (logical channels map 1:1)
+    // Matrix is row-major: matrix[out_ch * input_count + in_ch]
+    let mut matrix = vec![0.0f32; output_count * input_count];
+    for i in 0..output_count.min(input_count) {
+        matrix[i * input_count + i] = 1.0;
     }
 
-    Ok((input_count, output_count, matrix, max_hw_channel))
+    Ok((input_channel_map, output_channel_map, matrix))
 }
 
 /// Create matrix plugin config from parsed mapping
 fn create_matrix_plugin_config(
-    input_channels: usize,
-    output_channels: usize,
+    input_channel_map: Vec<usize>,
+    output_channel_map: Vec<usize>,
     matrix: Vec<f32>,
 ) -> Result<PluginConfig, String> {
     use serde_json::json;
 
     let parameters = json!({
-        "input_channels": input_channels,
-        "output_channels": output_channels,
+        "input_channel_map": input_channel_map,
+        "output_channel_map": output_channel_map,
         "matrix": matrix,
     });
 
@@ -622,29 +630,32 @@ fn play_stream(
 
     // 4. Channel mapping to hardware (last plugin before output)
     let output_channels = if let Some(ref mapping_str) = hwaudio_play {
-        let (map_input_ch, map_output_ch, matrix, max_hw_ch) = parse_channel_mapping(mapping_str)?;
+        let (input_channel_map, output_channel_map, matrix) = parse_channel_mapping(mapping_str)?;
 
         // Verify that mapping input matches current output channels
-        if map_input_ch != output_channels {
+        if input_channel_map.len() != output_channels {
             return Err(format!(
                 "Channel mapping input mismatch: mapping expects {} channels but plugin chain outputs {}",
-                map_input_ch, output_channels
+                input_channel_map.len(), output_channels
             ));
         }
 
+        // Calculate the actual output channel count
+        let max_hw_ch = output_channel_map.iter().max().map(|&v| v + 1).unwrap_or(0);
+        let logical_output_channels = output_channel_map.len();
+
         println!("\nChannel mapping enabled:");
         println!("  Mapping: {}", mapping_str);
-        println!("  Input channels: {}", map_input_ch);
-        println!(
-            "  Output hardware channels: {} (max channel {})",
-            map_output_ch, max_hw_ch
-        );
+        println!("  Logical input channels: {}", input_channel_map.len());
+        println!("  Logical output channels: {}", logical_output_channels);
+        println!("  Physical output channels: {:?}", output_channel_map);
+        println!("  Max HW channel: {}", max_hw_ch);
 
-        let matrix_plugin = create_matrix_plugin_config(map_input_ch, map_output_ch, matrix)?;
+        let matrix_plugin = create_matrix_plugin_config(input_channel_map, output_channel_map, matrix)?;
         plugins.push(matrix_plugin);
         eprintln!(
-            "Added matrix plugin: {}ch -> {}ch",
-            map_input_ch, map_output_ch
+            "Added matrix plugin: {}ch (logical) -> {} HW channels",
+            logical_output_channels, max_hw_ch
         );
 
         max_hw_ch // Hardware will need this many channels
