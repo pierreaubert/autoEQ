@@ -14,6 +14,56 @@
 
 use super::parameters::{Parameter, ParameterId, ParameterValue};
 use super::plugin::{InPlacePlugin, PluginInfo, PluginResult, ProcessContext};
+use serde::{Deserialize, Serialize};
+
+// ============================================================================
+// Configuration
+// ============================================================================
+
+fn default_threshold_db() -> f32 {
+    -20.0
+}
+
+fn default_ratio() -> f32 {
+    4.0
+}
+
+fn default_attack_ms() -> f32 {
+    10.0
+}
+
+fn default_release_ms() -> f32 {
+    100.0
+}
+
+fn default_knee_db() -> f32 {
+    0.0
+}
+
+fn default_makeup_gain_db() -> f32 {
+    0.0
+}
+
+/// Configuration parameters for CompressorPlugin
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CompressorPluginParams {
+    #[serde(default = "default_threshold_db")]
+    pub threshold_db: f32,
+    #[serde(default = "default_ratio")]
+    pub ratio: f32,
+    #[serde(default = "default_attack_ms")]
+    pub attack_ms: f32,
+    #[serde(default = "default_release_ms")]
+    pub release_ms: f32,
+    #[serde(default = "default_knee_db")]
+    pub knee_db: f32,
+    #[serde(default = "default_makeup_gain_db")]
+    pub makeup_gain_db: f32,
+}
+
+// ============================================================================
+// Plugin Implementation
+// ============================================================================
 
 /// Dynamic range compressor
 pub struct CompressorPlugin {
@@ -91,6 +141,19 @@ impl CompressorPlugin {
             attack_coeff: 0.0,
             release_coeff: 0.0,
         }
+    }
+
+    /// Create a new compressor plugin from configuration parameters
+    pub fn from_params(channels: usize, params: CompressorPluginParams) -> Self {
+        Self::new(
+            channels,
+            params.threshold_db,
+            params.ratio,
+            params.attack_ms,
+            params.release_ms,
+            params.knee_db,
+            params.makeup_gain_db,
+        )
     }
 
     /// Calculate time coefficient for envelope follower

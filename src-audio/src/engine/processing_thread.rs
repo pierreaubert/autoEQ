@@ -8,7 +8,11 @@ use super::{
     DecoderMessage, PluginConfig, ProcessingCommand, ProcessingMessage, ProcessingResponse,
     ThreadEvent,
 };
-use crate::plugins::{AnalyzerPlugin, Plugin, PluginHost, ProcessContext};
+use crate::plugins::{
+    AnalyzerPlugin, BiquadFilterConfig, CompressorPluginParams, EqPluginParams, GainPluginParams,
+    GatePluginParams, LimiterPluginParams, LoudnessCompensationPluginParams, Plugin, PluginHost,
+    ProcessContext, UpmixerPluginParams,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{
@@ -472,188 +476,6 @@ fn run_processing_thread(
 // Plugin Configuration Parameters
 // ============================================================================
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct GainPluginParams {
-    #[serde(default = "default_gain_db")]
-    gain_db: f32,
-}
-
-fn default_gain_db() -> f32 {
-    0.0
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct UpmixerPluginParams {
-    #[serde(default = "default_fft_size")]
-    fft_size: usize,
-    #[serde(default = "default_gain_front_direct")]
-    gain_front_direct: f32,
-    #[serde(default = "default_gain_front_ambient")]
-    gain_front_ambient: f32,
-    #[serde(default = "default_gain_rear_ambient")]
-    gain_rear_ambient: f32,
-}
-
-fn default_fft_size() -> usize {
-    2048
-}
-
-fn default_gain_front_direct() -> f32 {
-    1.0
-}
-
-fn default_gain_front_ambient() -> f32 {
-    0.5
-}
-
-fn default_gain_rear_ambient() -> f32 {
-    1.0
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct EqPluginParams {
-    // EQ filter parameters (from autoeq-iir crate)
-    filters: Vec<BiquadFilterConfig>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct BiquadFilterConfig {
-    filter_type: String, // "peak", "lowshelf", "highshelf", "lowpass", "highpass", "notch", "bandpass"
-    freq: f64,
-    q: f64,
-    #[serde(default)]
-    db_gain: f64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct CompressorPluginParams {
-    #[serde(default = "default_threshold_db")]
-    threshold_db: f32,
-    #[serde(default = "default_ratio")]
-    ratio: f32,
-    #[serde(default = "default_attack_ms")]
-    attack_ms: f32,
-    #[serde(default = "default_release_ms")]
-    release_ms: f32,
-    #[serde(default = "default_knee_db")]
-    knee_db: f32,
-    #[serde(default = "default_makeup_gain_db")]
-    makeup_gain_db: f32,
-}
-
-fn default_threshold_db() -> f32 {
-    -20.0
-}
-
-fn default_ratio() -> f32 {
-    4.0
-}
-
-fn default_attack_ms() -> f32 {
-    10.0
-}
-
-fn default_release_ms() -> f32 {
-    100.0
-}
-
-fn default_knee_db() -> f32 {
-    0.0
-}
-
-fn default_makeup_gain_db() -> f32 {
-    0.0
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct LimiterPluginParams {
-    #[serde(default = "default_threshold_db_limiter")]
-    threshold_db: f32,
-    #[serde(default = "default_release_ms_limiter")]
-    release_ms: f32,
-    #[serde(default = "default_lookahead_ms")]
-    lookahead_ms: f32,
-    #[serde(default = "default_soft")]
-    soft: bool,
-}
-
-fn default_threshold_db_limiter() -> f32 {
-    -1.0
-}
-
-fn default_release_ms_limiter() -> f32 {
-    50.0
-}
-
-fn default_lookahead_ms() -> f32 {
-    5.0
-}
-
-fn default_soft() -> bool {
-    true
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct GatePluginParams {
-    #[serde(default = "default_threshold_db_gate")]
-    threshold_db: f32,
-    #[serde(default = "default_ratio_gate")]
-    ratio: f32,
-    #[serde(default = "default_attack_ms_gate")]
-    attack_ms: f32,
-    #[serde(default = "default_hold_ms")]
-    hold_ms: f32,
-    #[serde(default = "default_release_ms_gate")]
-    release_ms: f32,
-}
-
-fn default_threshold_db_gate() -> f32 {
-    -40.0
-}
-
-fn default_ratio_gate() -> f32 {
-    10.0
-}
-
-fn default_attack_ms_gate() -> f32 {
-    1.0
-}
-
-fn default_hold_ms() -> f32 {
-    10.0
-}
-
-fn default_release_ms_gate() -> f32 {
-    100.0
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct LoudnessCompensationPluginParams {
-    #[serde(default = "default_low_freq")]
-    low_freq: f32,
-    #[serde(default = "default_low_gain")]
-    low_gain: f32,
-    #[serde(default = "default_high_freq")]
-    high_freq: f32,
-    #[serde(default = "default_high_gain")]
-    high_gain: f32,
-}
-
-fn default_low_freq() -> f32 {
-    100.0
-}
-
-fn default_low_gain() -> f32 {
-    6.0
-}
-
-fn default_high_freq() -> f32 {
-    10000.0
-}
-
-fn default_high_gain() -> f32 {
-    6.0
-}
 
 // ============================================================================
 // Plugin Factory
@@ -739,7 +561,7 @@ fn create_plugin(
             let params: GainPluginParams = serde_json::from_value(parameters.clone())
                 .map_err(|e| format!("Failed to parse gain plugin parameters: {}", e))?;
 
-            let plugin = GainPlugin::new(channels, params.gain_db);
+            let plugin = GainPlugin::from_params(channels, params);
             Ok(Box::new(InPlacePluginAdapter::new(plugin)))
         }
 
@@ -755,12 +577,7 @@ fn create_plugin(
             let params: UpmixerPluginParams = serde_json::from_value(parameters.clone())
                 .map_err(|e| format!("Failed to parse upmixer plugin parameters: {}", e))?;
 
-            let plugin = UpmixerPlugin::new(
-                params.fft_size,
-                params.gain_front_direct,
-                params.gain_front_ambient,
-                params.gain_rear_ambient,
-            );
+            let plugin = UpmixerPlugin::from_params(params);
             Ok(Box::new(plugin))
         }
 
@@ -768,36 +585,7 @@ fn create_plugin(
             let params: EqPluginParams = serde_json::from_value(parameters.clone())
                 .map_err(|e| format!("Failed to parse EQ plugin parameters: {}", e))?;
 
-            // Convert filter configs to Biquad instances
-            use autoeq_iir::{Biquad, BiquadFilterType};
-
-            let filters: Result<Vec<Biquad>, String> = params
-                .filters
-                .iter()
-                .map(|f| {
-                    let filter_type = match f.filter_type.as_str() {
-                        "peak" => BiquadFilterType::Peak,
-                        "lowshelf" => BiquadFilterType::Lowshelf,
-                        "highshelf" => BiquadFilterType::Highshelf,
-                        "lowpass" => BiquadFilterType::Lowpass,
-                        "highpass" => BiquadFilterType::Highpass,
-                        "notch" => BiquadFilterType::Notch,
-                        "bandpass" => BiquadFilterType::Bandpass,
-                        other => return Err(format!("Unknown filter type: {}", other)),
-                    };
-
-                    Ok(Biquad::new(
-                        filter_type,
-                        f.freq,
-                        sample_rate as f64,
-                        f.q,
-                        f.db_gain,
-                    ))
-                })
-                .collect();
-
-            let filters = filters?;
-            let plugin = EqPlugin::new(channels, filters);
+            let plugin = EqPlugin::from_params(channels, sample_rate, params)?;
             Ok(Box::new(plugin))
         }
 
@@ -805,15 +593,7 @@ fn create_plugin(
             let params: CompressorPluginParams = serde_json::from_value(parameters.clone())
                 .map_err(|e| format!("Failed to parse compressor plugin parameters: {}", e))?;
 
-            let plugin = CompressorPlugin::new(
-                channels,
-                params.threshold_db,
-                params.ratio,
-                params.attack_ms,
-                params.release_ms,
-                params.knee_db,
-                params.makeup_gain_db,
-            );
+            let plugin = CompressorPlugin::from_params(channels, params);
             Ok(Box::new(InPlacePluginAdapter::new(plugin)))
         }
 
@@ -821,13 +601,7 @@ fn create_plugin(
             let params: LimiterPluginParams = serde_json::from_value(parameters.clone())
                 .map_err(|e| format!("Failed to parse limiter plugin parameters: {}", e))?;
 
-            let plugin = LimiterPlugin::new(
-                channels,
-                params.threshold_db,
-                params.release_ms,
-                params.lookahead_ms,
-                params.soft,
-            );
+            let plugin = LimiterPlugin::from_params(channels, params);
             Ok(Box::new(InPlacePluginAdapter::new(plugin)))
         }
 
@@ -835,14 +609,7 @@ fn create_plugin(
             let params: GatePluginParams = serde_json::from_value(parameters.clone())
                 .map_err(|e| format!("Failed to parse gate plugin parameters: {}", e))?;
 
-            let plugin = GatePlugin::new(
-                channels,
-                params.threshold_db,
-                params.ratio,
-                params.attack_ms,
-                params.hold_ms,
-                params.release_ms,
-            );
+            let plugin = GatePlugin::from_params(channels, params);
             Ok(Box::new(InPlacePluginAdapter::new(plugin)))
         }
 
@@ -855,13 +622,7 @@ fn create_plugin(
                     )
                 })?;
 
-            let plugin = LoudnessCompensationPlugin::new(
-                channels,
-                params.low_freq,
-                params.low_gain,
-                params.high_freq,
-                params.high_gain,
-            );
+            let plugin = LoudnessCompensationPlugin::from_params(channels, params);
             Ok(Box::new(plugin))
         }
 

@@ -1,6 +1,6 @@
 [package]
 name = "autoeq-iir"
-version = "0.2.24"
+version = { workspace = true }
 edition = { workspace = true }
 repository = { workspace = true }
 authors = { workspace = true }

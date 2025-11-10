@@ -21,7 +21,63 @@ use super::parameters::{Parameter, ParameterId, ParameterValue};
 use super::plugin::{Plugin, PluginInfo, PluginResult, ProcessContext};
 use rustfft::num_complex::Complex;
 use rustfft::{Fft, FftPlanner};
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+
+// ============================================================================
+// Configuration
+// ============================================================================
+
+fn default_fft_size() -> usize {
+    2048
+}
+
+fn default_gain_front_direct() -> f32 {
+    1.0
+}
+
+fn default_gain_front_ambient() -> f32 {
+    0.5
+}
+
+fn default_gain_rear_ambient() -> f32 {
+    1.0
+}
+
+fn default_lfe_cutoff_hz() -> f32 {
+    120.0
+}
+
+fn default_stereo_width() -> f32 {
+    0.5
+}
+
+fn default_bandpass_hz() -> f32 {
+    250.0
+}
+
+/// Configuration parameters for UpmixerPlugin
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpmixerPluginParams {
+    #[serde(default = "default_fft_size")]
+    pub fft_size: usize,
+    #[serde(default = "default_gain_front_direct")]
+    pub gain_front_direct: f32,
+    #[serde(default = "default_gain_front_ambient")]
+    pub gain_front_ambient: f32,
+    #[serde(default = "default_gain_rear_ambient")]
+    pub gain_rear_ambient: f32,
+    #[serde(default = "default_lfe_cutoff_hz")]
+    pub lfe_cutoff_hz: f32,
+    #[serde(default = "default_stereo_width")]
+    pub stereo_width: f32,
+    #[serde(default = "default_bandpass_hz")]
+    pub bandpass_hz: f32,
+}
+
+// ============================================================================
+// Plugin Implementation
+// ============================================================================
 
 /// Stereo to 5.1 surround upmixer using FFT-based Direct/Ambient decomposition
 pub struct UpmixerPlugin {
@@ -49,6 +105,18 @@ pub struct UpmixerPlugin {
     /// Rear ambient gain (gainRA)
     param_gain_rear_ambient: ParameterId,
     gain_rear_ambient: f32,
+
+    /// LFE cutoff frequency in Hz
+    param_lfe_cutoff_hz: ParameterId,
+    lfe_cutoff_hz: f32,
+
+    /// Stereo width (0.0 = wide, 1.0 = narrow, 0.5 = balanced)
+    param_stereo_width: ParameterId,
+    stereo_width: f32,
+
+    /// Bandpass frequency in Hz (must be > lfe_cutoff_hz)
+    param_bandpass_hz: ParameterId,
+    bandpass_hz: f32,
 
     // Processing buffers (allocated once, reused)
     /// Time domain buffer for left channel
@@ -112,8 +180,14 @@ impl UpmixerPlugin {
         gain_front_direct: f32,
         gain_front_ambient: f32,
         gain_rear_ambient: f32,
+        lfe_cutoff_hz: f32,
+        stereo_width: f32,
+        bandpass_hz: f32,
     ) -> Self {
         assert!(fft_size.is_power_of_two(), "FFT size must be power of 2");
+        assert!(lfe_cutoff_hz > 0.0 && lfe_cutoff_hz < 200.0, "LFE cutoff must be between 0-200 Hz");
+        assert!((0.0..=1.0).contains(&stereo_width), "Stereo width must be between 0.0-1.0");
+        assert!(bandpass_hz > lfe_cutoff_hz, "Bandpass frequency must be greater than LFE cutoff");
 
         let mut planner = FftPlanner::<f32>::new();
         let fft_forward = planner.plan_fft_forward(fft_size);
@@ -154,6 +228,15 @@ impl UpmixerPlugin {
             param_gain_rear_ambient: ParameterId::from("gain_rear_ambient"),
             gain_rear_ambient,
 
+            param_lfe_cutoff_hz: ParameterId::from("lfe_cutoff_hz"),
+            lfe_cutoff_hz,
+
+            param_stereo_width: ParameterId::from("stereo_width"),
+            stereo_width,
+
+            param_bandpass_hz: ParameterId::from("bandpass_hz"),
+            bandpass_hz,
+
             // Allocate all buffers
             time_domain_left: vec![zero_complex; fft_size],
             time_domain_right: vec![zero_complex; fft_size],
@@ -186,6 +269,19 @@ impl UpmixerPlugin {
         }
     }
 
+    /// Create a new upmixer plugin from configuration parameters
+    pub fn from_params(params: UpmixerPluginParams) -> Self {
+        Self::new(
+            params.fft_size,
+            params.gain_front_direct,
+            params.gain_front_ambient,
+            params.gain_rear_ambient,
+            params.lfe_cutoff_hz,
+            params.stereo_width,
+            params.bandpass_hz,
+        )
+    }
+
     /// Process one FFT block
     fn process_fft_block(&mut self, input: &[f32], output: &mut [f32]) {
         // Verify sizes
@@ -213,37 +309,60 @@ impl UpmixerPlugin {
         self.fft_forward.process(&mut self.freq_domain_left);
         self.fft_forward.process(&mut self.freq_domain_right);
 
-        // 3. Direct/Ambient decomposition
-        // Direct (center/phantom) = (L + R) / 2
-        // Ambient (sides) = (L - R) / 2
+        // 3. Frequency-dependent processing
+        // Calculate frequency bin boundaries
+        let lfe_cutoff_bin = ((self.lfe_cutoff_hz * self.fft_size as f32) / self.sample_rate as f32) as usize;
+        let bandpass_bin = ((self.bandpass_hz * self.fft_size as f32) / self.sample_rate as f32) as usize;
+
         for i in 0..self.fft_size {
             let left = self.freq_domain_left[i];
             let right = self.freq_domain_right[i];
 
-            // Direct component (what's common to both channels - center image)
-            self.direct[i] = (left + right) * 0.5;
+            // Handle Nyquist folding for real FFT
+            let is_lfe_band = i <= lfe_cutoff_bin || i >= (self.fft_size - lfe_cutoff_bin);
+            let is_passthrough_band = (i > lfe_cutoff_bin && i < bandpass_bin) ||
+                                      (i > (self.fft_size - bandpass_bin) && i < (self.fft_size - lfe_cutoff_bin));
 
-            // Ambient component (what's different - spatial/reverb)
-            // Left ambient: emphasize left differences
-            self.ambient_left[i] = (left - right) * 0.5;
-            // Right ambient: emphasize right differences
-            self.ambient_right[i] = (right - left) * 0.5;
+            if is_lfe_band {
+                // LFE band: only goes to LFE channel
+                self.time_out_lfe[i] = (left + right) * 0.5;
+                self.direct_left[i] = Complex::new(0.0, 0.0);
+                self.direct_right[i] = Complex::new(0.0, 0.0);
+                self.direct_center[i] = Complex::new(0.0, 0.0);
+                self.ambient_left[i] = Complex::new(0.0, 0.0);
+                self.ambient_right[i] = Complex::new(0.0, 0.0);
+            } else if is_passthrough_band {
+                // Pass-through band: stereo L/R only
+                self.direct_left[i] = left;
+                self.direct_right[i] = right;
+                self.direct_center[i] = Complex::new(0.0, 0.0);
+                self.time_out_lfe[i] = Complex::new(0.0, 0.0);
+                self.ambient_left[i] = Complex::new(0.0, 0.0);
+                self.ambient_right[i] = Complex::new(0.0, 0.0);
+            } else {
+                // Upmixing band: apply direct/ambient decomposition
+
+                // Direct component (what's common to both channels - center image)
+                self.direct[i] = (left + right) * 0.5;
+
+                // Ambient component (what's different - spatial/reverb)
+                self.ambient_left[i] = (left - right) * 0.5;
+                self.ambient_right[i] = (right - left) * 0.5;
+
+                // Center channel gets the direct component
+                self.direct_center[i] = self.direct[i];
+                self.direct_center_mag[i] = self.direct[i].norm();
+
+                // Front left/right: remove center based on stereo_width
+                // stereo_width = 0.0: no removal (wide), 1.0: full removal (narrow)
+                self.direct_left[i] = left - self.direct[i] * self.stereo_width;
+                self.direct_right[i] = right - self.direct[i] * self.stereo_width;
+
+                self.time_out_lfe[i] = Complex::new(0.0, 0.0);
+            }
         }
 
-        // 4. Extract center channel from direct component
-        // Center gets the direct component, left/right get direct minus center
-        for i in 0..self.fft_size {
-            // Center channel is the direct (phantom center) component
-            self.direct_center[i] = self.direct[i];
-            self.direct_center_mag[i] = self.direct[i].norm();
-
-            // Front left/right get direct component (panned)
-            // This creates a phantom center while maintaining stereo width
-            self.direct_left[i] = self.freq_domain_left[i] - self.direct[i] * 0.5;
-            self.direct_right[i] = self.freq_domain_right[i] - self.direct[i] * 0.5;
-        }
-
-        // 5. Inverse FFT for all output channels (in-place)
+        // 4. Inverse FFT for all output channels (in-place)
         // Copy to output buffers first, then process in-place
         self.time_out_front_left.copy_from_slice(&self.direct_left);
         self.fft_inverse.process(&mut self.time_out_front_left);
@@ -262,24 +381,10 @@ impl UpmixerPlugin {
             .copy_from_slice(&self.ambient_right);
         self.fft_inverse.process(&mut self.time_out_rear_right);
 
-        // Generate LFE channel - low-pass filtered sum of L+R
-        // LFE typically uses 80-120 Hz crossover, we'll use 120 Hz
-        let lfe_cutoff_hz = 120.0;
-        let lfe_cutoff_bin = ((lfe_cutoff_hz * self.fft_size as f32) / self.sample_rate as f32) as usize;
-
-        // Create LFE as sum of L+R in frequency domain, low-pass filtered
-        for i in 0..self.fft_size {
-            if i <= lfe_cutoff_bin || i >= (self.fft_size - lfe_cutoff_bin) {
-                // Keep low frequencies (and high-frequency mirror for real FFT)
-                self.time_out_lfe[i] = (self.freq_domain_left[i] + self.freq_domain_right[i]) * 0.5;
-            } else {
-                // Zero out high frequencies
-                self.time_out_lfe[i] = Complex::new(0.0, 0.0);
-            }
-        }
+        // LFE already processed in frequency domain above
         self.fft_inverse.process(&mut self.time_out_lfe);
 
-        // 6. Mix outputs with gains (NO additional windowing needed!)
+        // 5. Mix outputs with gains (NO additional windowing needed!)
         // IFFT output is already windowed because we windowed before FFT
         // Apply -3dB gain reduction to prevent clipping (0.707946 ≈ 10^(-3/20))
         let fft_scale = 1.0 / self.fft_size as f32;
@@ -346,6 +451,12 @@ impl Plugin for UpmixerPlugin {
                 .with_description("Gain for ambient sound in front channels"),
             Parameter::new_float("gain_rear_ambient", "Rear Ambient Gain", 1.0, 0.0, 2.0)
                 .with_description("Gain for ambient sound in rear channels"),
+            Parameter::new_float("lfe_cutoff_hz", "LFE Cutoff (Hz)", 120.0, 40.0, 200.0)
+                .with_description("Low-pass filter cutoff frequency for LFE channel"),
+            Parameter::new_float("stereo_width", "Stereo Width", 0.5, 0.0, 1.0)
+                .with_description("Control stereo width (0.0=wide, 1.0=narrow)"),
+            Parameter::new_float("bandpass_hz", "Upmix Crossover (Hz)", 250.0, 200.0, 1000.0)
+                .with_description("Frequency above which upmixing is applied"),
         ]
     }
 
@@ -365,6 +476,30 @@ impl Plugin for UpmixerPlugin {
         {
             self.gain_rear_ambient = gain;
             return Ok(());
+        } else if id == self.param_lfe_cutoff_hz
+            && let Some(cutoff) = value.as_float()
+        {
+            if cutoff > 0.0 && cutoff < 200.0 && cutoff < self.bandpass_hz {
+                self.lfe_cutoff_hz = cutoff;
+                return Ok(());
+            }
+            return Err("LFE cutoff must be 0-200 Hz and less than bandpass frequency".to_string());
+        } else if id == self.param_stereo_width
+            && let Some(width) = value.as_float()
+        {
+            if (0.0..=1.0).contains(&width) {
+                self.stereo_width = width;
+                return Ok(());
+            }
+            return Err("Stereo width must be between 0.0 and 1.0".to_string());
+        } else if id == self.param_bandpass_hz
+            && let Some(freq) = value.as_float()
+        {
+            if freq > self.lfe_cutoff_hz {
+                self.bandpass_hz = freq;
+                return Ok(());
+            }
+            return Err("Bandpass frequency must be greater than LFE cutoff".to_string());
         }
         Err(format!("Unknown parameter: {}", id))
     }
@@ -376,6 +511,12 @@ impl Plugin for UpmixerPlugin {
             Some(ParameterValue::Float(self.gain_front_ambient))
         } else if id == &self.param_gain_rear_ambient {
             Some(ParameterValue::Float(self.gain_rear_ambient))
+        } else if id == &self.param_lfe_cutoff_hz {
+            Some(ParameterValue::Float(self.lfe_cutoff_hz))
+        } else if id == &self.param_stereo_width {
+            Some(ParameterValue::Float(self.stereo_width))
+        } else if id == &self.param_bandpass_hz {
+            Some(ParameterValue::Float(self.bandpass_hz))
         } else {
             None
         }
@@ -732,7 +873,7 @@ mod tests {
 
     #[test]
     fn test_upmixer_creation() {
-        let plugin = UpmixerPlugin::new(2048, 1.0, 0.5, 1.0);
+        let plugin = UpmixerPlugin::new(2048, 1.0, 0.5, 1.0, 120.0, 0.5, 250.0);
         assert_eq!(plugin.input_channels(), 2);
         assert_eq!(plugin.output_channels(), 6);
         assert_eq!(plugin.fft_size, 2048);
@@ -740,7 +881,7 @@ mod tests {
 
     #[test]
     fn test_upmixer_parameters() {
-        let mut plugin = UpmixerPlugin::new(2048, 1.0, 0.5, 1.0);
+        let mut plugin = UpmixerPlugin::new(2048, 1.0, 0.5, 1.0, 120.0, 0.5, 250.0);
 
         // Test setting parameters
         plugin
@@ -758,7 +899,7 @@ mod tests {
 
     #[test]
     fn test_upmixer_processing() {
-        let mut plugin = UpmixerPlugin::new(2048, 1.0, 0.5, 1.0);
+        let mut plugin = UpmixerPlugin::new(2048, 1.0, 0.5, 1.0, 120.0, 0.5, 250.0);
         plugin.initialize(44100).unwrap();
 
         // Create test input: 2048 stereo samples (4096 samples total)
@@ -800,7 +941,7 @@ mod tests {
     #[test]
     fn test_upmixer_zero_gains() {
         // Test that with all gains at 0, output is silence (critical for crackling fix)
-        let mut plugin = UpmixerPlugin::new(2048, 0.0, 0.0, 0.0);
+        let mut plugin = UpmixerPlugin::new(2048, 0.0, 0.0, 0.0, 120.0, 0.5, 250.0);
         plugin.initialize(44100).unwrap();
 
         // Create test input with signal
@@ -830,15 +971,17 @@ mod tests {
 
     #[test]
     fn test_upmixer_full_5ch() {
-        // Test full 5.0 upmixing with direct/ambient decomposition
-        let mut plugin = UpmixerPlugin::new(2048, 1.0, 0.0, 1.0);
+        // Test full 5.1 upmixing with direct/ambient decomposition
+        let mut plugin = UpmixerPlugin::new(2048, 1.0, 0.0, 1.0, 120.0, 0.5, 250.0);
         plugin.initialize(44100).unwrap();
 
-        // Create test input with distinct left and right signals
+        // Create test input with distinct left and right signals at frequencies above bandpass_hz (250 Hz)
+        // Use 440 Hz and 880 Hz to ensure they fall in the upmixing band
         let mut input = vec![0.0_f32; 2048 * 2];
         for i in 0..2048 {
-            input[i * 2] = (i as f32 * 0.01).sin() * 0.5; // Left: sine
-            input[i * 2 + 1] = (i as f32 * 0.02).cos() * 0.5; // Right: cosine at different freq
+            let t = i as f32 / 44100.0;
+            input[i * 2] = (2.0 * std::f32::consts::PI * 440.0 * t).sin() * 0.5; // Left: 440 Hz
+            input[i * 2 + 1] = (2.0 * std::f32::consts::PI * 880.0 * t).cos() * 0.5; // Right: 880 Hz
         }
         let mut output = vec![0.0_f32; 2048 * 6];
 
@@ -869,8 +1012,9 @@ mod tests {
             "Center should have direct component"
         );
 
-        // LFE should have signal (low-pass filtered)
-        assert!(channel_energies[3] > 0.001, "LFE should have signal");
+        // LFE should have minimal signal since test frequencies (440 Hz, 880 Hz)
+        // are above the LFE cutoff (120 Hz)
+        assert!(channel_energies[3] < 0.01, "LFE should be minimal with high frequency input");
 
         // Rear channels should have signal (ambient with gain=1.0)
         assert!(
@@ -889,7 +1033,7 @@ mod tests {
         // Test with various buffer sizes
         for buffer_size in [256, 512, 1024] {
             println!("\n=== Testing buffer size {} ===", buffer_size);
-            let mut plugin = UpmixerPlugin::new(2048, 1.0, 0.5, 1.0);
+            let mut plugin = UpmixerPlugin::new(2048, 1.0, 0.5, 1.0, 120.0, 0.5, 250.0);
             plugin.initialize(44100).unwrap();
 
             // Generate continuous 440Hz sine wave, process in chunks
@@ -941,7 +1085,7 @@ mod tests {
     fn test_energy_preservation() {
         // INVARIANT: Total output energy across all 5 channels should roughly equal input energy
         // (accounting for latency and windowing losses)
-        let mut plugin = UpmixerPlugin::new(2048, 1.0, 0.5, 1.0);
+        let mut plugin = UpmixerPlugin::new(2048, 1.0, 0.5, 1.0, 120.0, 0.5, 250.0);
         plugin.initialize(44100).unwrap();
 
         let buffer_size = 1024;
@@ -998,7 +1142,7 @@ mod tests {
     #[test]
     fn test_no_gaps() {
         // INVARIANT: Every output buffer should have SOME non-zero samples after initial latency
-        let mut plugin = UpmixerPlugin::new(2048, 1.0, 0.5, 1.0);
+        let mut plugin = UpmixerPlugin::new(2048, 1.0, 0.5, 1.0, 120.0, 0.5, 250.0);
         plugin.initialize(44100).unwrap();
 
         let buffer_size = 512;

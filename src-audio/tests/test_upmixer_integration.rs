@@ -8,12 +8,12 @@ fn test_upmixer_stereo_to_5ch() {
     let mut host = PluginHost::new(2, 44100);
 
     // Add upmixer plugin
-    let upmixer = UpmixerPlugin::new(2048, 1.0, 0.5, 1.0);
+    let upmixer = UpmixerPlugin::new(2048, 1.0, 0.5, 1.0, 120.0, 0.5, 250.0);
     host.add_plugin(Box::new(upmixer)).unwrap();
 
     // Verify channel counts
     assert_eq!(host.input_channels(), 2);
-    assert_eq!(host.output_channels(), 5);
+    assert_eq!(host.output_channels(), 6);
 
     // Create stereo input with sine waves
     let mut input_stereo = vec![0.0; 2048 * 2];
@@ -23,20 +23,20 @@ fn test_upmixer_stereo_to_5ch() {
         input_stereo[i * 2 + 1] = (2.0 * std::f32::consts::PI * 880.0 * t).sin() * 0.3; // 880 Hz right
     }
 
-    let mut output_5ch = vec![0.0; 2048 * 5];
+    let mut output_6ch = vec![0.0; 2048 * 6];
 
     // Process
-    host.process(&input_stereo, &mut output_5ch).unwrap();
+    host.process(&input_stereo, &mut output_6ch).unwrap();
 
     // Verify we got output
-    let total_energy: f32 = output_5ch.iter().map(|x| x * x).sum();
+    let total_energy: f32 = output_6ch.iter().map(|x| x * x).sum();
     assert!(total_energy > 0.0, "Should have non-zero output");
 
     // Check individual channels
-    let mut channel_energies = vec![0.0; 5];
+    let mut channel_energies = vec![0.0; 6];
     for i in 0..2048 {
-        for ch in 0..5 {
-            channel_energies[ch] += output_5ch[i * 5 + ch].powi(2);
+        for ch in 0..6 {
+            channel_energies[ch] += output_6ch[i * 6 + ch].powi(2);
         }
     }
 
@@ -44,8 +44,9 @@ fn test_upmixer_stereo_to_5ch() {
     println!("  Front Left:  {:.4}", channel_energies[0]);
     println!("  Front Right: {:.4}", channel_energies[1]);
     println!("  Center:      {:.4}", channel_energies[2]);
-    println!("  Rear Left:   {:.4}", channel_energies[3]);
-    println!("  Rear Right:  {:.4}", channel_energies[4]);
+    println!("  LFE:         {:.4}", channel_energies[3]);
+    println!("  Rear Left:   {:.4}", channel_energies[4]);
+    println!("  Rear Right:  {:.4}", channel_energies[5]);
 
     // Front channels should have most energy
     assert!(
@@ -61,18 +62,18 @@ fn test_upmixer_chain_with_gain() {
     // Create a processing chain: stereo → upmix to 5ch → gain on 5ch
     let mut host = PluginHost::new(2, 44100);
 
-    // Add upmixer (2→5)
-    let upmixer = UpmixerPlugin::new(1024, 1.0, 0.5, 1.0); // Smaller FFT for this test
+    // Add upmixer (2→6)
+    let upmixer = UpmixerPlugin::new(1024, 1.0, 0.5, 1.0, 120.0, 0.5, 250.0); // Smaller FFT for this test
     host.add_plugin(Box::new(upmixer)).unwrap();
 
-    // Add gain to the 5-channel output
-    let gain = GainPlugin::new(5, -6.0); // -6dB on all 5 channels
+    // Add gain to the 6-channel output
+    let gain = GainPlugin::new(6, -6.0); // -6dB on all 6 channels
     host.add_plugin(Box::new(InPlacePluginAdapter::new(gain)))
         .unwrap();
 
     // Verify final configuration
     assert_eq!(host.input_channels(), 2);
-    assert_eq!(host.output_channels(), 5);
+    assert_eq!(host.output_channels(), 6);
 
     // Process with varying input
     let mut input = vec![0.0; 1024 * 2];
@@ -80,7 +81,7 @@ fn test_upmixer_chain_with_gain() {
         input[i * 2] = (i as f32 * 0.01).sin() * 0.5;
         input[i * 2 + 1] = (i as f32 * 0.015).cos() * 0.5;
     }
-    let mut output = vec![0.0; 1024 * 5];
+    let mut output = vec![0.0; 1024 * 6];
 
     host.process(&input, &mut output).unwrap();
 
@@ -94,12 +95,12 @@ fn test_upmixer_chain_with_gain() {
 fn test_upmixer_parameter_adjustment() {
     use sotf_audio::{ParameterId, ParameterValue, Plugin};
 
-    let mut plugin = UpmixerPlugin::new(2048, 1.0, 0.5, 1.0);
+    let mut plugin = UpmixerPlugin::new(2048, 1.0, 0.5, 1.0, 120.0, 0.5, 250.0);
     plugin.initialize(44100).unwrap();
 
     // Test parameter queries
     let params = plugin.parameters();
-    assert_eq!(params.len(), 3);
+    assert_eq!(params.len(), 6);
 
     // Modify gains
     plugin

@@ -8,6 +8,31 @@
 use super::parameters::{Parameter, ParameterId, ParameterValue};
 use super::plugin::{Plugin, PluginInfo, PluginResult, ProcessContext};
 use autoeq_iir::Biquad;
+use serde::{Deserialize, Serialize};
+
+// ============================================================================
+// Configuration
+// ============================================================================
+
+/// Biquad filter configuration for JSON deserialization
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BiquadFilterConfig {
+    pub filter_type: String, // "peak", "lowshelf", "highshelf", "lowpass", "highpass", "notch", "bandpass"
+    pub freq: f64,
+    pub q: f64,
+    #[serde(default)]
+    pub db_gain: f64,
+}
+
+/// Configuration parameters for EqPlugin
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EqPluginParams {
+    pub filters: Vec<BiquadFilterConfig>,
+}
+
+// ============================================================================
+// Plugin Implementation
+// ============================================================================
 
 /// Parametric EQ plugin using IIR biquad filters
 pub struct EqPlugin {
@@ -40,6 +65,43 @@ impl EqPlugin {
             filters: channel_filters,
             sample_rate: 48000, // Will be updated in initialize()
         }
+    }
+
+    /// Create a new EQ plugin from configuration parameters
+    pub fn from_params(
+        num_channels: usize,
+        sample_rate: u32,
+        params: EqPluginParams,
+    ) -> Result<Self, String> {
+        use autoeq_iir::BiquadFilterType;
+
+        let filters: Result<Vec<Biquad>, String> = params
+            .filters
+            .iter()
+            .map(|f| {
+                let filter_type = match f.filter_type.as_str() {
+                    "peak" => BiquadFilterType::Peak,
+                    "lowshelf" => BiquadFilterType::Lowshelf,
+                    "highshelf" => BiquadFilterType::Highshelf,
+                    "lowpass" => BiquadFilterType::Lowpass,
+                    "highpass" => BiquadFilterType::Highpass,
+                    "notch" => BiquadFilterType::Notch,
+                    "bandpass" => BiquadFilterType::Bandpass,
+                    other => return Err(format!("Unknown filter type: {}", other)),
+                };
+
+                Ok(Biquad::new(
+                    filter_type,
+                    f.freq,
+                    sample_rate as f64,
+                    f.q,
+                    f.db_gain,
+                ))
+            })
+            .collect();
+
+        let filters = filters?;
+        Ok(Self::new(num_channels, filters))
     }
 
     /// Update the sample rate for all filters

@@ -40,15 +40,17 @@ pub use host::{PluginHost, SharedPluginHost};
 pub use parameters::{Parameter, ParameterId, ParameterValue};
 pub use plugin::{InPlacePlugin, InPlacePluginAdapter, Plugin, PluginInfo, ProcessContext};
 
-pub use plugin_compressor::CompressorPlugin;
-pub use plugin_eq::EqPlugin;
-pub use plugin_gain::GainPlugin;
-pub use plugin_gate::GatePlugin;
-pub use plugin_limiter::LimiterPlugin;
-pub use plugin_loudness_compensation::LoudnessCompensationPlugin;
+pub use plugin_compressor::{CompressorPlugin, CompressorPluginParams};
+pub use plugin_eq::{BiquadFilterConfig, EqPlugin, EqPluginParams};
+pub use plugin_gain::{GainPlugin, GainPluginParams};
+pub use plugin_gate::{GatePlugin, GatePluginParams};
+pub use plugin_limiter::{LimiterPlugin, LimiterPluginParams};
+pub use plugin_loudness_compensation::{
+    LoudnessCompensationPlugin, LoudnessCompensationPluginParams,
+};
 pub use plugin_matrix::MatrixPlugin;
 pub use plugin_resampler::ResamplerPlugin;
-pub use plugin_upmixer::UpmixerPlugin;
+pub use plugin_upmixer::{UpmixerPlugin, UpmixerPluginParams};
 
 #[allow(unused_imports)]
 pub(crate) use analyzer_loudness_monitor::LoudnessMonitor;

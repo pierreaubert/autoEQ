@@ -13,7 +13,45 @@
 
 use super::parameters::{Parameter, ParameterId, ParameterValue};
 use super::plugin::{InPlacePlugin, PluginInfo, PluginResult, ProcessContext};
+use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
+
+// ============================================================================
+// Configuration
+// ============================================================================
+
+fn default_threshold_db() -> f32 {
+    -1.0
+}
+
+fn default_release_ms() -> f32 {
+    50.0
+}
+
+fn default_lookahead_ms() -> f32 {
+    5.0
+}
+
+fn default_soft() -> bool {
+    true
+}
+
+/// Configuration parameters for LimiterPlugin
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LimiterPluginParams {
+    #[serde(default = "default_threshold_db")]
+    pub threshold_db: f32,
+    #[serde(default = "default_release_ms")]
+    pub release_ms: f32,
+    #[serde(default = "default_lookahead_ms")]
+    pub lookahead_ms: f32,
+    #[serde(default = "default_soft")]
+    pub soft: bool,
+}
+
+// ============================================================================
+// Plugin Implementation
+// ============================================================================
 
 /// Brickwall limiter with lookahead
 pub struct LimiterPlugin {
@@ -77,6 +115,17 @@ impl LimiterPlugin {
             lookahead_buffer: VecDeque::new(),
             lookahead_samples: 0,
         }
+    }
+
+    /// Create a new limiter plugin from configuration parameters
+    pub fn from_params(channels: usize, params: LimiterPluginParams) -> Self {
+        Self::new(
+            channels,
+            params.threshold_db,
+            params.release_ms,
+            params.lookahead_ms,
+            params.soft,
+        )
     }
 
     /// Calculate time coefficient for envelope follower

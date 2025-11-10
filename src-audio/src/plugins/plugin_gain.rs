@@ -4,6 +4,26 @@
 
 use super::parameters::{Parameter, ParameterId, ParameterValue};
 use super::plugin::{InPlacePlugin, PluginInfo, PluginResult, ProcessContext};
+use serde::{Deserialize, Serialize};
+
+// ============================================================================
+// Configuration
+// ============================================================================
+
+fn default_gain_db() -> f32 {
+    0.0
+}
+
+/// Configuration parameters for GainPlugin
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GainPluginParams {
+    #[serde(default = "default_gain_db")]
+    pub gain_db: f32,
+}
+
+// ============================================================================
+// Plugin Implementation
+// ============================================================================
 
 /// Simple gain plugin that multiplies all samples by a gain factor
 ///
@@ -41,6 +61,11 @@ impl GainPlugin {
             gain_linear,
             param_gain_db: ParameterId::from("gain_db"),
         }
+    }
+
+    /// Create a new gain plugin from configuration parameters
+    pub fn from_params(channels: usize, params: GainPluginParams) -> Self {
+        Self::new(channels, params.gain_db)
     }
 
     /// Set gain in dB

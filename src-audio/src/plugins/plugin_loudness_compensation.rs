@@ -65,6 +65,39 @@ impl LoudnessCompensation {
 }
 
 // ============================================================================
+// Configuration Parameters
+// ============================================================================
+
+fn default_low_freq() -> f32 {
+    100.0
+}
+
+fn default_low_gain() -> f32 {
+    6.0
+}
+
+fn default_high_freq() -> f32 {
+    10000.0
+}
+
+fn default_high_gain() -> f32 {
+    6.0
+}
+
+/// Configuration parameters for LoudnessCompensationPlugin
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LoudnessCompensationPluginParams {
+    #[serde(default = "default_low_freq")]
+    pub low_freq: f32,
+    #[serde(default = "default_low_gain")]
+    pub low_gain: f32,
+    #[serde(default = "default_high_freq")]
+    pub high_freq: f32,
+    #[serde(default = "default_high_gain")]
+    pub high_gain: f32,
+}
+
+// ============================================================================
 // Loudness Compensation Plugin
 // ============================================================================
 
@@ -135,6 +168,17 @@ impl LoudnessCompensationPlugin {
 
         plugin.rebuild_filters();
         plugin
+    }
+
+    /// Create a new loudness compensation plugin from configuration parameters
+    pub fn from_params(num_channels: usize, params: LoudnessCompensationPluginParams) -> Self {
+        Self::new(
+            num_channels,
+            params.low_freq,
+            params.low_gain,
+            params.high_freq,
+            params.high_gain,
+        )
     }
 
     /// Rebuild all filters based on current parameters

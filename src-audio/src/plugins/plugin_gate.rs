@@ -14,6 +14,50 @@
 
 use super::parameters::{Parameter, ParameterId, ParameterValue};
 use super::plugin::{InPlacePlugin, PluginInfo, PluginResult, ProcessContext};
+use serde::{Deserialize, Serialize};
+
+// ============================================================================
+// Configuration
+// ============================================================================
+
+fn default_threshold_db() -> f32 {
+    -40.0
+}
+
+fn default_ratio() -> f32 {
+    10.0
+}
+
+fn default_attack_ms() -> f32 {
+    1.0
+}
+
+fn default_hold_ms() -> f32 {
+    10.0
+}
+
+fn default_release_ms() -> f32 {
+    100.0
+}
+
+/// Configuration parameters for GatePlugin
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GatePluginParams {
+    #[serde(default = "default_threshold_db")]
+    pub threshold_db: f32,
+    #[serde(default = "default_ratio")]
+    pub ratio: f32,
+    #[serde(default = "default_attack_ms")]
+    pub attack_ms: f32,
+    #[serde(default = "default_hold_ms")]
+    pub hold_ms: f32,
+    #[serde(default = "default_release_ms")]
+    pub release_ms: f32,
+}
+
+// ============================================================================
+// Plugin Implementation
+// ============================================================================
 
 /// Noise gate with hold time
 pub struct GatePlugin {
@@ -85,6 +129,18 @@ impl GatePlugin {
             attack_coeff: 0.0,
             release_coeff: 0.0,
         }
+    }
+
+    /// Create a new gate plugin from configuration parameters
+    pub fn from_params(channels: usize, params: GatePluginParams) -> Self {
+        Self::new(
+            channels,
+            params.threshold_db,
+            params.ratio,
+            params.attack_ms,
+            params.hold_ms,
+            params.release_ms,
+        )
     }
 
     /// Calculate time coefficient for envelope follower

@@ -4,10 +4,6 @@
 //! record the output, and analyze the results.
 
 use crate::signal_analysis::{analyze_recording, write_analysis_csv};
-// Note: PlaybackRecorder is available but not used in current implementation
-// use crate::audio_playback::{PlaybackRecorder, PlaybackRecordingConfig};
-// NOTE: CamillaDSP integration has been removed - record_and_analyze function is deprecated
-// use crate::camilla::{AudioManager, ChannelMapMode};
 use crate::signals::*;
 use hound::{SampleFormat, WavSpec, WavWriter};
 use std::path::{Path, PathBuf};
