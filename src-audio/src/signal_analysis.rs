@@ -49,6 +49,13 @@ pub fn analyze_recording(
         reference_signal.len()
     );
 
+    if recorded.is_empty() {
+        return Err("Recorded signal is empty!".to_string());
+    }
+    if reference_signal.is_empty() {
+        return Err("Reference signal is empty!".to_string());
+    }
+
     // Don't truncate yet - we need full signals for lag estimation
     let recorded = &recorded[..];
     let reference = reference_signal;
@@ -177,6 +184,7 @@ pub fn analyze_recording(
     let num_bins = fft_size / 2; // Single-sided spectrum
 
     // Apply 1/24 octave smoothing for each target frequency
+    let mut skipped_count = 0;
     for i in 0..num_output_points {
         // Log-spaced target frequency
         let target_freq =
@@ -193,6 +201,13 @@ pub fn analyze_recording(
         let bin_upper = ((freq_upper / freq_resolution).ceil() as usize).min(num_bins);
 
         if bin_lower > bin_upper || bin_upper >= ref_spectrum.len() {
+            if skipped_count < 5 {
+                println!(
+                    "[FFT Analysis] Skipping freq {:.1} Hz: bin_lower={}, bin_upper={}, ref_spectrum.len()={}",
+                    target_freq, bin_lower, bin_upper, ref_spectrum.len()
+                );
+            }
+            skipped_count += 1;
             continue; // Skip if range is invalid
         }
 
@@ -244,6 +259,23 @@ pub fn analyze_recording(
         phase_deg.push(phase);
     }
 
+    println!(
+        "[FFT Analysis] Generated {} frequency points for CSV output",
+        frequencies.len()
+    );
+    println!(
+        "[FFT Analysis] Skipped {} frequency points (out of {})",
+        skipped_count, num_output_points
+    );
+
+    if frequencies.is_empty() {
+        println!("[FFT Analysis] WARNING: No frequency points generated!");
+        println!("[FFT Analysis] ref_spectrum.len() = {}", ref_spectrum.len());
+        println!("[FFT Analysis] fft_size = {}", fft_size);
+        println!("[FFT Analysis] freq_resolution = {}", freq_resolution);
+        println!("[FFT Analysis] num_bins = {}", num_bins);
+    }
+
     Ok(AnalysisResult {
         frequencies,
         spl_db,
@@ -261,6 +293,16 @@ pub fn write_analysis_csv(result: &AnalysisResult, output_path: &Path) -> Result
     use std::fs::File;
     use std::io::Write;
 
+    println!(
+        "[write_analysis_csv] Writing {} frequency points to {:?}",
+        result.frequencies.len(),
+        output_path
+    );
+
+    if result.frequencies.is_empty() {
+        return Err("Cannot write CSV: Analysis result has no frequency points!".to_string());
+    }
+
     let mut file =
         File::create(output_path).map_err(|e| format!("Failed to create CSV file: {}", e))?;
 
@@ -277,6 +319,11 @@ pub fn write_analysis_csv(result: &AnalysisResult, output_path: &Path) -> Result
         )
         .map_err(|e| format!("Failed to write data: {}", e))?;
     }
+
+    println!(
+        "[write_analysis_csv] Successfully wrote {} data rows to CSV",
+        result.frequencies.len()
+    );
 
     Ok(())
 }
@@ -390,12 +437,22 @@ fn next_power_of_two(n: usize) -> usize {
 }
 
 /// Load a mono WAV file and convert to f32 samples
-fn load_wav_mono(path: &Path) -> Result<Vec<f32>, String> {
+/// Load a WAV file and extract a specific channel or convert to mono
+///
+/// # Arguments
+/// * `path` - Path to WAV file
+/// * `channel_index` - Optional channel index to extract (0-based). If None, will average all channels for mono
+fn load_wav_mono_channel(path: &Path, channel_index: Option<usize>) -> Result<Vec<f32>, String> {
     let mut reader =
         WavReader::open(path).map_err(|e| format!("Failed to open WAV file: {}", e))?;
 
     let spec = reader.spec();
     let channels = spec.channels as usize;
+
+    println!(
+        "[load_wav_mono_channel] WAV file: {} channels, {} Hz, {:?} format",
+        channels, spec.sample_rate, spec.sample_format
+    );
 
     // Read all samples and convert to f32
     let samples: Result<Vec<f32>, _> = match spec.sample_format {
@@ -407,17 +464,47 @@ fn load_wav_mono(path: &Path) -> Result<Vec<f32>, String> {
     };
 
     let samples = samples.map_err(|e| format!("Failed to read samples: {}", e))?;
+    println!("[load_wav_mono_channel] Read {} total samples", samples.len());
 
-    // Convert to mono if necessary
+    // Handle mono file - return as-is
     if channels == 1 {
-        Ok(samples)
+        println!("[load_wav_mono_channel] File is already mono, returning {} samples", samples.len());
+        return Ok(samples);
+    }
+
+    // Handle multi-channel file
+    if let Some(ch_idx) = channel_index {
+        // Extract specific channel
+        if ch_idx >= channels {
+            return Err(format!(
+                "Channel index {} out of range (file has {} channels)",
+                ch_idx, channels
+            ));
+        }
+        println!(
+            "[load_wav_mono_channel] Extracting channel {} from {} channels",
+            ch_idx, channels
+        );
+        Ok(samples
+            .chunks(channels)
+            .map(|chunk| chunk[ch_idx])
+            .collect())
     } else {
         // Average all channels to mono
+        println!(
+            "[load_wav_mono_channel] Averaging {} channels to mono",
+            channels
+        );
         Ok(samples
             .chunks(channels)
             .map(|chunk| chunk.iter().sum::<f32>() / channels as f32)
             .collect())
     }
+}
+
+/// Load a WAV file as mono (averages channels if multi-channel)
+fn load_wav_mono(path: &Path) -> Result<Vec<f32>, String> {
+    load_wav_mono_channel(path, None)
 }
 
 #[cfg(test)]

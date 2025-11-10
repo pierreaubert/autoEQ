@@ -244,6 +244,7 @@ pub fn record_and_analyze(
     output_csv_path: &Path,
     output_channel: u16,
     input_channel: u16,
+    device_name: Option<&str>,
 ) -> Result<(), String> {
     use crate::AudioStreamingManager;
     use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
@@ -267,9 +268,16 @@ pub fn record_and_analyze(
 
     // Set up recording stream
     let host = cpal::default_host();
-    let input_device = host
-        .default_input_device()
-        .ok_or_else(|| "No input device available".to_string())?;
+
+    // Get input device (either by name or default)
+    let input_device = if let Some(dev_name) = device_name {
+        eprintln!("[record_and_analyze] Looking for input device: {}", dev_name);
+        find_device_by_name(&host, dev_name, true)?
+    } else {
+        eprintln!("[record_and_analyze] Using default input device");
+        host.default_input_device()
+            .ok_or_else(|| "No default input device available".to_string())?
+    };
 
     eprintln!(
         "[record_and_analyze] Input device: {}",
@@ -278,29 +286,63 @@ pub fn record_and_analyze(
             .unwrap_or_else(|_| "Unknown".to_string())
     );
 
-    // Configure input stream
+    // Query the input device to determine hardware channel count
+    let input_device_config = input_device
+        .default_input_config()
+        .map_err(|e| format!("Failed to get input config: {}", e))?;
+
+    let hardware_input_channels = input_device_config.channels() as usize;
+    eprintln!(
+        "[record_and_analyze] Hardware input channels: {}",
+        hardware_input_channels
+    );
+
+    // Validate that input_channel is within hardware capabilities
+    if (input_channel as usize) >= hardware_input_channels {
+        return Err(format!(
+            "Input channel {} exceeds hardware channel count {} (channels are 0-indexed)",
+            input_channel,
+            hardware_input_channels
+        ));
+    }
+
+    // Configure input stream to use all available hardware channels
+    // We'll extract the specific channel we want in the callback
     let input_config = cpal::StreamConfig {
-        channels: (input_channel + 1).max(2), // Need at least input_channel+1 channels
+        channels: hardware_input_channels as u16,
         sample_rate: cpal::SampleRate(sample_rate),
         buffer_size: cpal::BufferSize::Default,
     };
+
+    eprintln!(
+        "[record_and_analyze] Recording from input channel {} (0-indexed) out of {} total channels",
+        input_channel,
+        hardware_input_channels
+    );
 
     // Shared state for recording
     let recorded_samples: Arc<Mutex<Vec<f32>>> = Arc::new(Mutex::new(Vec::new()));
     let recorded_samples_clone = Arc::clone(&recorded_samples);
 
     // Create input stream
+    let input_channel_idx = input_channel as usize;
     let input_stream = input_device
         .build_input_stream(
             &input_config,
             move |data: &[f32], _: &cpal::InputCallbackInfo| {
-                let num_channels = input_config.channels as usize;
                 let mut recorded = recorded_samples_clone.lock();
 
                 // Extract only the specified input channel
-                for frame in data.chunks(num_channels) {
-                    if (input_channel as usize) < frame.len() {
-                        recorded.push(frame[input_channel as usize]);
+                // Data is interleaved: [ch0, ch1, ..., chN, ch0, ch1, ..., chN, ...]
+                for frame in data.chunks(hardware_input_channels) {
+                    if input_channel_idx < frame.len() {
+                        recorded.push(frame[input_channel_idx]);
+                    } else {
+                        eprintln!(
+                            "[record_and_analyze] ERROR: Tried to access channel {} but frame has {} channels",
+                            input_channel_idx,
+                            frame.len()
+                        );
                     }
                 }
             },
@@ -324,53 +366,125 @@ pub fn record_and_analyze(
         .load_file(temp_wav_path)
         .map_err(|e| format!("Failed to load file: {}", e))?;
 
-    // Create matrix plugin config to route mono signal to specific output channel
-    // Matrix is 1 input channel to N output channels (where N = output_channel + 1)
-    let input_channels = 1;
-    let num_output_channels = (output_channel as usize) + 1;
+    // Get output device configuration to determine hardware channel count
+    let output_device = if let Some(dev_name) = device_name {
+        eprintln!("[record_and_analyze] Looking for output device: {}", dev_name);
+        find_device_by_name(&host, dev_name, false)?
+    } else {
+        eprintln!("[record_and_analyze] Using default output device");
+        host.default_output_device()
+            .ok_or_else(|| "No default output device available".to_string())?
+    };
 
-    // Create matrix: all zeros except 1.0 at the target output channel
-    // Matrix layout is row-major: matrix[out_ch * input_channels + in_ch]
-    // Since input_channels=1, this simplifies to: matrix[out_ch]
-    let mut matrix = vec![0.0; num_output_channels];
+    eprintln!(
+        "[record_and_analyze] Output device: {}",
+        output_device
+            .name()
+            .unwrap_or_else(|_| "Unknown".to_string())
+    );
+
+    let output_config = output_device
+        .default_output_config()
+        .map_err(|e| format!("Failed to get output config: {}", e))?;
+
+    let hardware_channels = output_config.channels() as usize;
+    eprintln!(
+        "[record_and_analyze] Hardware output channels: {}",
+        hardware_channels
+    );
+
+    // Validate that output_channel is within hardware capabilities
+    if (output_channel as usize) >= hardware_channels {
+        return Err(format!(
+            "Output channel {} exceeds hardware channel count {} (channels are 0-indexed)",
+            output_channel,
+            hardware_channels
+        ));
+    }
+
+    // Create matrix plugin config to route mono signal to specific output channel
+    // Use dense mapping: 1 input channel to hardware_channels output channels
+    // Matrix will have all zeros except 1.0 at the target output channel
+    eprintln!(
+        "[record_and_analyze] Routing mono input (channel 0) to hardware output channel {} (0-indexed)",
+        output_channel
+    );
+
+    // Create matrix: 1 input x hardware_channels outputs
+    // All zeros except position [output_channel * 1 + 0] = 1.0
+    let mut matrix = vec![0.0_f32; hardware_channels];
     matrix[output_channel as usize] = 1.0;
 
-    // Create PluginConfig for matrix plugin
     let matrix_params = serde_json::json!({
-        "input_channels": input_channels,
-        "output_channels": num_output_channels,
+        "input_channels": 1,
+        "output_channels": hardware_channels,
         "matrix": matrix,
     });
 
     use crate::engine::PluginConfig;
     let plugins = vec![PluginConfig::new("matrix", matrix_params)];
+
+    eprintln!(
+        "[record_and_analyze] Matrix: 1 input -> {} outputs, channel {} active (rest silent)",
+        hardware_channels,
+        output_channel
+    );
+
     manager
-        .start_playback(None, plugins, num_output_channels)
+        .start_playback(device_name.map(|s| s.to_string()), plugins, hardware_channels)
         .map_err(|e| format!("Failed to start playback: {}", e))?;
 
-    eprintln!("[record_and_analyze] Playback started");
+    eprintln!("[record_and_analyze] Playback started, waiting for completion...");
 
     // Wait for playback to complete
-    // NOTE: Currently waits for full timeout (duration * 1.5 + 1s) because position tracking
-    // doesn't stop when decoder finishes. This is a known limitation that will be fixed
-    // when proper end-of-stream detection is implemented in AudioStreamingManager.
-    let total_wait = Duration::from_secs_f64(expected_duration * 1.5 + 1.0);
-    let check_interval = Duration::from_millis(100);
+    // Use a generous timeout to ensure we capture the entire signal
+    let total_wait = Duration::from_secs_f64(expected_duration * 2.0 + 2.0);
+    let check_interval = Duration::from_millis(50);
     let mut elapsed = Duration::ZERO;
+    let mut last_sample_count = 0;
+    let mut stable_count = 0;
 
     while elapsed < total_wait {
         sleep(check_interval);
         elapsed += check_interval;
 
-        // Check for events (currently not working - state doesn't transition to Idle)
+        // Check recording progress
+        let current_sample_count = recorded_samples.lock().len();
+
+        // Print progress every second
+        if elapsed.as_millis() % 1000 < check_interval.as_millis() {
+            let recorded_duration = current_sample_count as f64 / sample_rate as f64;
+            eprintln!(
+                "[record_and_analyze] Recording progress: {:.2}s / {:.2}s ({} samples)",
+                recorded_duration, expected_duration, current_sample_count
+            );
+        }
+
+        // Check if recording has stopped growing (playback finished)
+        if current_sample_count == last_sample_count && current_sample_count > 0 {
+            stable_count += 1;
+            // If sample count hasn't changed for 500ms, assume playback is done
+            if stable_count >= 10 { // 10 * 50ms = 500ms
+                eprintln!("[record_and_analyze] Recording stable, playback likely complete");
+                break;
+            }
+        } else {
+            stable_count = 0;
+        }
+        last_sample_count = current_sample_count;
+
+        // Check for events
         manager.try_recv_event();
         let state = manager.get_state();
 
         if state == crate::StreamingState::Idle {
-            eprintln!("[record_and_analyze] Playback completed");
+            eprintln!("[record_and_analyze] Playback state changed to Idle");
             break;
         }
     }
+
+    // Add a small buffer after playback finishes
+    sleep(Duration::from_millis(200));
 
     // Stop playback
     manager
@@ -381,20 +495,49 @@ pub fn record_and_analyze(
     std::mem::drop(input_stream);
     eprintln!("[record_and_analyze] Recording stopped");
 
+    // Small delay to ensure all buffers are flushed
+    sleep(Duration::from_millis(100));
+
     // Get recorded samples
     let recorded = recorded_samples.lock().clone();
-    eprintln!("[record_and_analyze] Recorded {} samples", recorded.len());
+    eprintln!("[record_and_analyze] Total recorded: {} samples ({:.2}s)",
+        recorded.len(),
+        recorded.len() as f64 / sample_rate as f64
+    );
 
     if recorded.is_empty() {
         return Err("No samples were recorded".to_string());
     }
 
-    // Write recorded samples to WAV file
+    // Write recorded samples to WAV file as MONO (1 channel)
+    eprintln!(
+        "[record_and_analyze] Writing {} mono samples to WAV file...",
+        recorded.len()
+    );
     write_wav_file(recorded_wav_path, &recorded, sample_rate, 1)?;
     eprintln!(
-        "[record_and_analyze] Wrote recording to {:?}",
+        "[record_and_analyze] Wrote {} samples as MONO (1 channel) to {:?}",
+        recorded.len(),
         recorded_wav_path
     );
+
+    // Verify the WAV file was written correctly
+    use hound::WavReader;
+    let reader = WavReader::open(recorded_wav_path)
+        .map_err(|e| format!("Failed to verify WAV file: {}", e))?;
+    let spec = reader.spec();
+    eprintln!(
+        "[record_and_analyze] WAV file verification: {} channels, {} Hz, {} samples",
+        spec.channels,
+        spec.sample_rate,
+        reader.duration()
+    );
+    if spec.channels != 1 {
+        return Err(format!(
+            "ERROR: WAV file has {} channels instead of 1 (mono)!",
+            spec.channels
+        ));
+    }
 
     // Analyze the recording
     eprintln!("[record_and_analyze] Analyzing recording...");
@@ -434,6 +577,53 @@ pub fn parse_channel_list(s: &str) -> Result<Vec<u16>, String> {
     }
 
     Ok(channels)
+}
+
+/// Find an audio device by name
+///
+/// # Arguments
+/// * `host` - The cpal host to search devices on
+/// * `device_name` - The name of the device to find
+/// * `is_input` - True to search input devices, false for output devices
+///
+/// # Returns
+/// The matching device, or an error if not found
+fn find_device_by_name(
+    host: &cpal::Host,
+    device_name: &str,
+    is_input: bool,
+) -> Result<cpal::Device, String> {
+    use cpal::traits::{DeviceTrait, HostTrait};
+
+    let device_type = if is_input { "input" } else { "output" };
+
+    let devices = if is_input {
+        host.input_devices()
+            .map_err(|e| format!("Failed to enumerate input devices: {}", e))?
+    } else {
+        host.output_devices()
+            .map_err(|e| format!("Failed to enumerate output devices: {}", e))?
+    };
+
+    // Search for device with matching name (case-insensitive)
+    let target_name = device_name.to_lowercase();
+    for device in devices {
+        if let Ok(name) = device.name()
+            && name.to_lowercase() == target_name
+        {
+            eprintln!(
+                "[find_device_by_name] Found {} device: {}",
+                device_type, name
+            );
+            return Ok(device);
+        }
+    }
+
+    // Device not found - provide helpful error message
+    Err(format!(
+        "Audio device '{}' not found. Use --list-devices to see available {} devices.",
+        device_name, device_type
+    ))
 }
 
 /// Validate signal parameters

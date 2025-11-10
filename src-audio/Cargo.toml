@@ -20,6 +20,10 @@ path = "bin/sotf_recorder.rs"
 name = "generate_audio_tests"
 path = "bin/generate_audio_tests.rs"
 
+[[bin]]
+name = "wav2csv"
+path = "bin/wav2csv.rs"
+
 [dependencies]
 ndarray = { workspace = true }
 serde = { workspace = true }

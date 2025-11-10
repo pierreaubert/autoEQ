@@ -8,11 +8,11 @@ use std::str::FromStr;
 struct Cli {
     /// Signal type: tone, two-tone, sweep, white-noise, pink-noise, m-noise
     #[arg(long)]
-    signal: String,
+    signal: Option<String>,
 
     /// Duration in seconds
     #[arg(long)]
-    duration: f32,
+    duration: Option<f32>,
 
     /// Sample rate in Hz
     #[arg(long, default_value = "48000")]
@@ -24,15 +24,23 @@ struct Cli {
 
     /// Hardware output channel to send signal to (0-based, single channel only)
     #[arg(long)]
-    hwaudio_send_to: String,
+    hwaudio_send_to: Option<String>,
 
     /// Hardware input channels to record from (0-based, comma-separated)
     #[arg(long)]
-    hwaudio_record_from: String,
+    hwaudio_record_from: Option<String>,
 
     /// Optional filename prefix
     #[arg(long)]
     name: Option<String>,
+
+    /// Audio device name (use --list-devices to see available devices). If not specified, uses default device.
+    #[arg(long)]
+    device: Option<String>,
+
+    /// List available audio devices and exit
+    #[arg(long)]
+    list_devices: bool,
 
     // Signal-specific parameters
     /// Tone frequency in Hz (for tone signal)
@@ -71,14 +79,39 @@ struct Cli {
 fn main() {
     let cli = Cli::parse();
 
+    // Handle --list-devices flag
+    if cli.list_devices {
+        list_audio_devices();
+        return;
+    }
+
+    // Validate required arguments when not listing devices
+    let signal = cli.signal.unwrap_or_else(|| {
+        eprintln!("Error: --signal is required");
+        std::process::exit(1);
+    });
+    let duration = cli.duration.unwrap_or_else(|| {
+        eprintln!("Error: --duration is required");
+        std::process::exit(1);
+    });
+    let hwaudio_send_to = cli.hwaudio_send_to.unwrap_or_else(|| {
+        eprintln!("Error: --hwaudio-send-to is required");
+        std::process::exit(1);
+    });
+    let hwaudio_record_from = cli.hwaudio_record_from.unwrap_or_else(|| {
+        eprintln!("Error: --hwaudio-record-from is required");
+        std::process::exit(1);
+    });
+
     if let Err(e) = record_signal(
-        cli.signal,
-        cli.duration,
+        signal,
+        duration,
         cli.sample_rate,
         cli.channels,
-        cli.hwaudio_send_to,
-        cli.hwaudio_record_from,
+        hwaudio_send_to,
+        hwaudio_record_from,
         cli.name,
+        cli.device,
         cli.freq,
         cli.freq1,
         cli.freq2,
@@ -93,6 +126,74 @@ fn main() {
     }
 }
 
+fn list_audio_devices() {
+    use cpal::traits::{DeviceTrait, HostTrait};
+
+    println!("{}", "=".repeat(60));
+    println!("Available Audio Devices");
+    println!("{}", "=".repeat(60));
+
+    let host = cpal::default_host();
+
+    println!("\n📤 OUTPUT DEVICES:");
+    println!("{}", "-".repeat(60));
+
+    if let Some(default_out) = host.default_output_device() {
+        let name = default_out.name().unwrap_or_else(|_| "Unknown".to_string());
+        println!("  [DEFAULT] {}", name);
+    }
+
+    if let Ok(devices) = host.output_devices() {
+        for (idx, device) in devices.enumerate() {
+            let name = device.name().unwrap_or_else(|_| "Unknown".to_string());
+
+            // Get device info if possible
+            if let Ok(config) = device.default_output_config() {
+                println!(
+                    "  [{}] {} ({} channels, {} Hz)",
+                    idx,
+                    name,
+                    config.channels(),
+                    config.sample_rate().0
+                );
+            } else {
+                println!("  [{}] {}", idx, name);
+            }
+        }
+    }
+
+    println!("\n📥 INPUT DEVICES:");
+    println!("{}", "-".repeat(60));
+
+    if let Some(default_in) = host.default_input_device() {
+        let name = default_in.name().unwrap_or_else(|_| "Unknown".to_string());
+        println!("  [DEFAULT] {}", name);
+    }
+
+    if let Ok(devices) = host.input_devices() {
+        for (idx, device) in devices.enumerate() {
+            let name = device.name().unwrap_or_else(|_| "Unknown".to_string());
+
+            // Get device info if possible
+            if let Ok(config) = device.default_input_config() {
+                println!(
+                    "  [{}] {} ({} channels, {} Hz)",
+                    idx,
+                    name,
+                    config.channels(),
+                    config.sample_rate().0
+                );
+            } else {
+                println!("  [{}] {}", idx, name);
+            }
+        }
+    }
+
+    println!("\n{}", "=".repeat(60));
+    println!("💡 Usage: Use --device \"Device Name\" to select a device");
+    println!("{}", "=".repeat(60));
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn record_signal(
     signal: String,
@@ -102,6 +203,7 @@ pub fn record_signal(
     hwaudio_send_to: String,
     hwaudio_record_from: String,
     name: Option<String>,
+    device: Option<String>,
     freq: Option<f32>,
     freq1: Option<f32>,
     freq2: Option<f32>,
@@ -188,6 +290,11 @@ pub fn record_signal(
     println!("  Signal: {}", signal_type.as_str());
     println!("  Duration: {:.2}s", duration);
     println!("  Sample rate: {}Hz", sample_rate);
+    if let Some(ref dev) = device {
+        println!("  Audio device: {}", dev);
+    } else {
+        println!("  Audio device: [DEFAULT]");
+    }
     println!("  Channel pairs (send → record):");
     for (&send_ch, &record_ch) in send_to_channels.iter().zip(record_from_channels.iter()) {
         println!("    hw output {} → hw input {}", send_ch, record_ch);
@@ -264,8 +371,9 @@ pub fn record_signal(
             &prepared_signal, // Use the prepared mono signal for analysis
             sample_rate,
             &csv_path,
-            send_ch,   // Output channel
-            record_ch, // Input channel
+            send_ch,           // Output channel
+            record_ch,         // Input channel
+            device.as_deref(), // Optional device name
         )?;
 
         println!("  ✓ Recording complete");

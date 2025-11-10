@@ -316,7 +316,7 @@ checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 
 [[package]]
 name = "autoeq"
-version = "0.2.253"
+version = "0.4.466"
 dependencies = [
  "accelerate-src",
  "autoeq-cea2034",
@@ -348,7 +348,7 @@ dependencies = [
 
 [[package]]
 name = "autoeq-cea2034"
-version = "0.2.190"
+version = "0.4.466"
 dependencies = [
  "ndarray",
  "serde",
@@ -357,7 +357,7 @@ dependencies = [
 
 [[package]]
 name = "autoeq-de"
-version = "0.2.53"
+version = "0.4.466"
 dependencies = [
  "accelerate-src",
  "autoeq-env",
@@ -382,7 +382,7 @@ dependencies = [
 
 [[package]]
 name = "autoeq-env"
-version = "0.2.3"
+version = "0.4.466"
 dependencies = [
  "chrono",
  "thiserror 2.0.17",
@@ -390,7 +390,7 @@ dependencies = [
 
 [[package]]
 name = "autoeq-iir"
-version = "0.2.24"
+version = "0.4.466"
 dependencies = [
  "base64 0.22.1",
  "byteorder",
@@ -401,7 +401,7 @@ dependencies = [
 
 [[package]]
 name = "autoeq-testfunctions"
-version = "0.2.37"
+version = "0.4.466"
 dependencies = [
  "autoeq-env",
  "clap",
@@ -5671,7 +5671,7 @@ dependencies = [
 
 [[package]]
 name = "sotf"
-version = "0.4.50"
+version = "0.4.466"
 dependencies = [
  "accelerate-src",
  "autoeq",
@@ -5698,7 +5698,7 @@ dependencies = [
 
 [[package]]
 name = "sotf_audio"
-version = "0.2.466"
+version = "0.4.466"
 dependencies = [
  "autoeq-env",
  "autoeq-iir",

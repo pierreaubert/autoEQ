@@ -9,11 +9,11 @@ use super::{
     ThreadEvent,
 };
 use crate::plugins::{
-    AnalyzerPlugin, BiquadFilterConfig, CompressorPluginParams, EqPluginParams, GainPluginParams,
+    AnalyzerPlugin, CompressorPluginParams, EqPluginParams, GainPluginParams,
     GatePluginParams, LimiterPluginParams, LoudnessCompensationPluginParams, Plugin, PluginHost,
     ProcessContext, UpmixerPluginParams,
 };
-use serde::{Deserialize, Serialize};
+
 use std::collections::HashMap;
 use std::sync::{
     Arc,
