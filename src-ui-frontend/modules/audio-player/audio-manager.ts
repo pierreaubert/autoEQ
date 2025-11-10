@@ -243,12 +243,12 @@ export class StreamingManager {
         filters,
       );
 
-      // Convert FilterParam to backend format
+      // Convert FilterParam to backend format (FilterParams struct)
       const backendFilters = filters.map((f) => ({
-        frequency: f.frequency,
+        filter_type: "Peak",
+        freq: f.frequency,
         q: f.q,
-        gain: f.gain,
-        filter_type: "Peaking",
+        db_gain: f.gain,
       }));
 
       await invoke("stream_start_playback", {
@@ -342,12 +342,12 @@ export class StreamingManager {
     try {
       console.log("[StreamingManager] Updating filters (hot-reload):", filters);
 
-      // Convert FilterParam to backend format
+      // Convert FilterParam to backend format (FilterParams struct)
       const backendFilters = filters.map((f) => ({
-        frequency: f.frequency,
+        filter_type: "Peak",
+        freq: f.frequency,
         q: f.q,
-        gain: f.gain,
-        filter_type: "Peaking",
+        db_gain: f.gain,
       }));
 
       // Call the new stream_update_filters command

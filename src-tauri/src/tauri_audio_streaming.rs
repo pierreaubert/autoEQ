@@ -8,6 +8,15 @@ use autoeq::iir::Biquad;
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::Mutex;
 
+/// Simple filter parameters from frontend (without computed coefficients)
+#[derive(Clone, serde::Deserialize)]
+pub struct FilterParams {
+    pub filter_type: String,
+    pub freq: f64,
+    pub q: f64,
+    pub db_gain: f64,
+}
+
 /// Audio file information for the frontend
 #[derive(Clone, serde::Serialize)]
 pub struct AudioFileInfoPayload {
@@ -39,7 +48,7 @@ pub async fn stream_load_file(
     println!("[TAURI] Loading file for streaming: {}", file_path);
 
     let mut manager = streaming_manager.lock().await;
-    match manager.load_file(&file_path).await {
+    match manager.load_file(&file_path) {
         Ok(audio_info) => {
             let payload = convert_audio_file_info(&audio_info);
 
@@ -98,33 +107,56 @@ fn create_eq_plugin_config(filters: &[Biquad]) -> Result<PluginConfig, String> {
 #[tauri::command]
 pub async fn stream_start_playback(
     output_device: Option<String>,
-    filters: Vec<Biquad>,
+    filters: Vec<FilterParams>,
     streaming_manager: State<'_, Mutex<AudioStreamingManager>>,
     app_handle: AppHandle,
 ) -> Result<(), String> {
     println!("[TAURI] Starting playback with {} filters", filters.len());
 
-    // Build plugin chain
-    let mut plugins = Vec::new();
-
-    // Add EQ plugin if filters are present
-    if !filters.is_empty() {
-        plugins.push(create_eq_plugin_config(&filters)?);
-    }
-
-    // Get audio info to determine output channels
+    // Get audio info to determine sample rate and output channels
     let manager = streaming_manager.lock().await;
     let audio_info = manager
         .get_audio_info()
         .ok_or_else(|| "No audio file loaded".to_string())?;
+    let sample_rate = audio_info.spec.sample_rate as f64;
     let output_channels = audio_info.spec.channels as usize;
     drop(manager);
+
+    // Convert FilterParams to Biquad with computed coefficients
+    let biquads: Result<Vec<Biquad>, String> = filters
+        .iter()
+        .map(|f| {
+            use autoeq::iir::BiquadFilterType;
+
+            let filter_type = match f.filter_type.as_str() {
+                "Peak" => BiquadFilterType::Peak,
+                "Lowpass" => BiquadFilterType::Lowpass,
+                "Highpass" => BiquadFilterType::Highpass,
+                "Lowshelf" => BiquadFilterType::Lowshelf,
+                "Highshelf" => BiquadFilterType::Highshelf,
+                "Notch" => BiquadFilterType::Notch,
+                "Bandpass" => BiquadFilterType::Bandpass,
+                _ => return Err(format!("Unknown filter type: {}", f.filter_type)),
+            };
+
+            Ok(Biquad::new(filter_type, sample_rate, f.freq, f.q, f.db_gain))
+        })
+        .collect();
+
+    let biquads = biquads?;
+
+    // Build plugin chain
+    let mut plugins = Vec::new();
+
+    // Add EQ plugin if filters are present
+    if !biquads.is_empty() {
+        plugins.push(create_eq_plugin_config(&biquads)?);
+    }
 
     // Start playback
     let mut manager = streaming_manager.lock().await;
     match manager
         .start_playback(output_device.clone(), plugins, output_channels)
-        .await
     {
         Ok(_) => {
             // Emit state change event
@@ -158,7 +190,7 @@ pub async fn stream_pause_playback(
     println!("[TAURI] Pausing playback");
 
     let manager = streaming_manager.lock().await;
-    match manager.pause().await {
+    match manager.pause() {
         Ok(_) => {
             let _ = app_handle.emit(
                 "stream:state-changed",
@@ -180,7 +212,7 @@ pub async fn stream_resume_playback(
     println!("[TAURI] Resuming playback");
 
     let manager = streaming_manager.lock().await;
-    match manager.resume().await {
+    match manager.resume() {
         Ok(_) => {
             let _ = app_handle.emit(
                 "stream:state-changed",
@@ -202,7 +234,7 @@ pub async fn stream_stop_playback(
     println!("[TAURI] Stopping playback");
 
     let mut manager = streaming_manager.lock().await;
-    match manager.stop().await {
+    match manager.stop() {
         Ok(_) => {
             let _ = app_handle.emit(
                 "stream:state-changed",
@@ -225,7 +257,7 @@ pub async fn stream_seek(
     println!("[TAURI] Seeking to {}s", seconds);
 
     let manager = streaming_manager.lock().await;
-    match manager.seek(seconds).await {
+    match manager.seek(seconds) {
         Ok(_) => {
             let _ = app_handle.emit(
                 "stream:position-changed",
@@ -272,31 +304,76 @@ pub async fn stream_get_file_info(
 
 #[tauri::command]
 pub async fn stream_update_filters(
-    _filters: Vec<Biquad>,
+    filters: Vec<FilterParams>,
     _loudness: Option<LoudnessCompensation>,
-    _streaming_manager: State<'_, Mutex<AudioStreamingManager>>,
+    streaming_manager: State<'_, Mutex<AudioStreamingManager>>,
     app_handle: AppHandle,
 ) -> Result<(), String> {
-    // println!(
-    //     "[TAURI] Updating filters: {} filters{}",
-    //     _filters.len(),
-    //     if _loudness.is_some() {
-    //         " with loudness"
-    //     } else {
-    //         ""
-    //     }
-    // );
+    println!("[TAURI] Updating filters: {} filters", filters.len());
 
-    // TODO: Phase 3 - Convert filters to plugins and update plugin chain
-    // For now, return an error indicating this feature is not yet implemented
-    let error_msg = "Filter updates not yet implemented in native engine (coming in Phase 3)".to_string();
-    let _ = app_handle.emit(
-        "stream:error",
-        AudioError {
-            error: error_msg.clone(),
-        },
-    );
-    return Err(error_msg);
+    // Get audio info to determine sample rate
+    let manager = streaming_manager.lock().await;
+    let audio_info = manager
+        .get_audio_info()
+        .ok_or_else(|| "No audio file loaded".to_string())?;
+    let sample_rate = audio_info.spec.sample_rate as f64;
+    drop(manager);
+
+    // Convert FilterParams to Biquad with computed coefficients
+    let biquads: Result<Vec<Biquad>, String> = filters
+        .iter()
+        .map(|f| {
+            use autoeq::iir::BiquadFilterType;
+
+            let filter_type = match f.filter_type.as_str() {
+                "Peak" => BiquadFilterType::Peak,
+                "Lowpass" => BiquadFilterType::Lowpass,
+                "Highpass" => BiquadFilterType::Highpass,
+                "Lowshelf" => BiquadFilterType::Lowshelf,
+                "Highshelf" => BiquadFilterType::Highshelf,
+                "Notch" => BiquadFilterType::Notch,
+                "Bandpass" => BiquadFilterType::Bandpass,
+                _ => return Err(format!("Unknown filter type: {}", f.filter_type)),
+            };
+
+            Ok(Biquad::new(filter_type, sample_rate, f.freq, f.q, f.db_gain))
+        })
+        .collect();
+
+    let biquads = biquads?;
+
+    // Build plugin chain
+    let mut plugins = Vec::new();
+
+    // Add EQ plugin if filters are present
+    if !biquads.is_empty() {
+        plugins.push(create_eq_plugin_config(&biquads)?);
+    }
+
+    // Update plugin chain
+    let manager = streaming_manager.lock().await;
+    match manager.update_plugin_chain(plugins) {
+        Ok(_) => {
+            let _ = app_handle.emit(
+                "stream:filters-updated",
+                serde_json::json!({
+                    "ok": true,
+                }),
+            );
+            println!("[TAURI] Filters updated successfully");
+            Ok(())
+        }
+        Err(e) => {
+            let error_msg = format!("Failed to update filters: {}", e);
+            let _ = app_handle.emit(
+                "stream:error",
+                AudioError {
+                    error: error_msg.clone(),
+                },
+            );
+            Err(error_msg)
+        }
+    }
 
     /*
     let manager = streaming_manager.lock().await;

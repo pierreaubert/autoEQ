@@ -223,6 +223,7 @@ fn test_loopback_sweep_accuracy() {
         &csv_file,
         config.send_channel,
         config.record_channel,
+	/* Option<&str> */
     )
     .expect("Failed to record and analyze");
 

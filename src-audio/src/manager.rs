@@ -20,6 +20,10 @@ pub struct AudioStreamingManager {
     state: Arc<Mutex<StreamingState>>,
     /// Enable signal watching (Ctrl-C, SIGTERM)
     watch_signals: bool,
+    /// Pending request to enable spectrum monitoring (before engine starts)
+    pending_spectrum_monitoring: Arc<Mutex<bool>>,
+    /// Pending request to enable loudness monitoring (before engine starts)
+    pending_loudness_monitoring: Arc<Mutex<bool>>,
 }
 
 /// Commands for controlling the streaming (kept for API compatibility)
@@ -78,6 +82,8 @@ impl AudioStreamingManager {
             current_audio_info: Arc::new(Mutex::new(None)),
             state: Arc::new(Mutex::new(StreamingState::Idle)),
             watch_signals,
+            pending_spectrum_monitoring: Arc::new(Mutex::new(false)),
+            pending_loudness_monitoring: Arc::new(Mutex::new(false)),
         }
     }
 
@@ -167,10 +173,21 @@ impl AudioStreamingManager {
             .play(&audio_info.path)
             .map_err(AudioDecoderError::IoError)?;
 
+        // Store engine
         *self.engine.lock() = Some(engine);
         self.set_state(StreamingState::Playing);
 
         eprintln!("[AudioStreamingManager] Playback started");
+
+        // Enable any pending analyzers that were requested before engine was running
+        if *self.pending_spectrum_monitoring.lock() {
+            eprintln!("[AudioStreamingManager] Enabling pending spectrum monitoring");
+            self.enable_spectrum_monitoring().ok();
+        }
+        if *self.pending_loudness_monitoring.lock() {
+            eprintln!("[AudioStreamingManager] Enabling pending loudness monitoring");
+            self.enable_loudness_monitoring().ok();
+        }
 
         Ok(())
     }
@@ -207,6 +224,10 @@ impl AudioStreamingManager {
             engine.stop().map_err(AudioDecoderError::IoError)?;
             engine.shutdown().map_err(AudioDecoderError::IoError)?;
         }
+
+        // Clear pending analyzer flags
+        *self.pending_spectrum_monitoring.lock() = false;
+        *self.pending_loudness_monitoring.lock() = false;
 
         self.set_state(StreamingState::Idle);
 
@@ -300,15 +321,20 @@ impl AudioStreamingManager {
             );
             engine.add_loudness_analyzer("loudness".to_string(), channels)?;
             eprintln!("[AudioStreamingManager] Loudness monitoring enabled");
+            *self.pending_loudness_monitoring.lock() = false;
             Ok(())
         } else {
-            Err("No engine running".to_string())
+            // Engine not running yet - mark as pending and will be enabled when playback starts
+            eprintln!("[AudioStreamingManager] Engine not running yet - loudness monitoring will be enabled when playback starts");
+            *self.pending_loudness_monitoring.lock() = true;
+            Ok(())
         }
     }
 
     /// Disable loudness monitoring
     pub fn disable_loudness_monitoring(&mut self) {
         eprintln!("[AudioStreamingManager] Disabling loudness monitoring");
+        *self.pending_loudness_monitoring.lock() = false;
         if let Some(ref mut engine) = *self.engine.lock() {
             engine.remove_analyzer("loudness".to_string()).ok();
         }
@@ -360,15 +386,20 @@ impl AudioStreamingManager {
             );
             engine.add_spectrum_analyzer("spectrum".to_string(), channels)?;
             eprintln!("[AudioStreamingManager] Spectrum monitoring enabled");
+            *self.pending_spectrum_monitoring.lock() = false;
             Ok(())
         } else {
-            Err("No engine running".to_string())
+            // Engine not running yet - mark as pending and will be enabled when playback starts
+            eprintln!("[AudioStreamingManager] Engine not running yet - spectrum monitoring will be enabled when playback starts");
+            *self.pending_spectrum_monitoring.lock() = true;
+            Ok(())
         }
     }
 
     /// Disable spectrum monitoring
     pub fn disable_spectrum_monitoring(&mut self) {
         eprintln!("[AudioStreamingManager] Disabling spectrum monitoring");
+        *self.pending_spectrum_monitoring.lock() = false;
         if let Some(ref mut engine) = *self.engine.lock() {
             engine.remove_analyzer("spectrum".to_string()).ok();
         }
@@ -424,9 +455,16 @@ impl AudioStreamingManager {
 
     /// Update plugin chain
     /// TODO: Phase 3 - Implement plugin hot-reload
-    pub fn update_plugin_chain(&self, _plugins: Vec<PluginConfig>) -> Result<(), String> {
-        eprintln!("[AudioStreamingManager] Plugin chain update not yet implemented");
-        Err("Plugin chain update not yet implemented".to_string())
+    pub fn update_plugin_chain(&self, plugins: Vec<PluginConfig>) -> Result<(), String> {
+        eprintln!("[AudioStreamingManager] Updating plugin chain with {} plugins", plugins.len());
+
+        if let Some(ref mut engine) = *self.engine.lock() {
+            engine.update_plugin_chain(plugins)?;
+            eprintln!("[AudioStreamingManager] Plugin chain updated successfully");
+            Ok(())
+        } else {
+            Err("No engine running".to_string())
+        }
     }
 
     // ========================================================================
