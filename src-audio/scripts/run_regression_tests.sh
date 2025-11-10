@@ -36,16 +36,6 @@ echo ""
 echo "========================================="
 echo ""
 
-# Check for CamillaDSP
-if ! command -v camilladsp &> /dev/null; then
-    echo "ERROR: camilladsp not found in PATH"
-    echo "Please install CamillaDSP or add it to your PATH"
-    exit 1
-fi
-
-echo "Found CamillaDSP: $(which camilladsp)"
-echo ""
-
 # Run tests
 cd "$(dirname "$0")"
 

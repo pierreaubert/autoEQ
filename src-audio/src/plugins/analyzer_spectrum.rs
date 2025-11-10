@@ -39,7 +39,7 @@ impl Default for SpectrumInfo {
 
 /// Configuration for spectrum analyzer
 #[derive(Debug, Clone)]
-pub(crate) struct SpectrumConfig {
+pub struct SpectrumConfig {
     /// Number of frequency bins (default: 30)
     pub num_bins: usize,
     /// Minimum frequency in Hz (default: 20)
@@ -317,7 +317,7 @@ impl SpectrumAnalyzerPlugin {
     /// # Arguments
     /// * `num_channels` - Number of audio channels to analyze
     /// * `config` - Spectrum analyzer configuration
-    pub(crate) fn with_config(num_channels: usize, config: SpectrumConfig) -> Result<Self, String> {
+    pub fn with_config(num_channels: usize, config: SpectrumConfig) -> Result<Self, String> {
         let analyzer = SpectrumAnalyzer::new(num_channels as u32, 48000, config)?;
 
         Ok(Self {

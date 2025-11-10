@@ -68,7 +68,7 @@ fn test_loudness_comp_dynamic_adjustment() {
     plugin.initialize(48000).unwrap();
 
     let num_frames = 512;
-    let mut input = vec![0.1_f32; num_frames * 2];
+    let input = vec![0.1_f32; num_frames * 2];
     let mut output1 = vec![0.0_f32; num_frames * 2];
 
     let context = ProcessContext {

@@ -200,7 +200,7 @@ fn test_resampler_reset_functionality() {
     resampler.initialize(44100).unwrap();
 
     let num_frames = 1024;
-    let mut input = vec![0.5_f32; num_frames * 2];
+    let input = vec![0.5_f32; num_frames * 2];
     let max_output_frames = resampler.output_frames_for_input(num_frames);
     let mut output = vec![0.0_f32; max_output_frames * 2];
 
@@ -237,7 +237,7 @@ fn test_resampler_with_default_chunk_size() {
     resampler.initialize(44100).unwrap();
 
     let num_frames = 1024; // Default chunk size
-    let mut input = vec![0.3_f32; num_frames * 2];
+    let input = vec![0.3_f32; num_frames * 2];
     let max_output_frames = resampler.output_frames_for_input(num_frames);
     let mut output = vec![0.0_f32; max_output_frames * 2];
 

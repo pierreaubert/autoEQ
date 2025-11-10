@@ -2,7 +2,6 @@
 
 use sotf_audio::{
     CompressorPlugin, GatePlugin, InPlacePlugin, InPlacePluginAdapter, LimiterPlugin, PluginHost,
-    ProcessContext,
 };
 
 #[test]
@@ -15,7 +14,7 @@ fn test_compressor_basic() {
         .unwrap();
 
     // Test with loud signal (should be compressed)
-    let mut input = vec![0.8; 2048 * 2]; // Stereo, loud signal
+    let input = vec![0.8; 2048 * 2]; // Stereo, loud signal
     let mut output = vec![0.0; 2048 * 2];
 
     host.process(&input, &mut output).unwrap();
@@ -77,7 +76,7 @@ fn test_gate_silences_quiet_signals() {
 
     // Test with quiet signal (should be gated)
     let quiet_level = 0.001; // About -60dB
-    let mut input = vec![quiet_level; 2048 * 2];
+    let input = vec![quiet_level; 2048 * 2];
     let mut output = vec![0.0; 2048 * 2];
 
     host.process(&input, &mut output).unwrap();
@@ -108,7 +107,7 @@ fn test_gate_passes_loud_signals() {
 
     // Test with loud signal (should pass through)
     let loud_level = 0.5; // About -6dB, well above threshold
-    let mut input = vec![loud_level; 2048 * 2];
+    let input = vec![loud_level; 2048 * 2];
     let mut output = vec![0.0; 2048 * 2];
 
     host.process(&input, &mut output).unwrap();

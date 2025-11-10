@@ -1,6 +1,6 @@
 // Integration test for upmixer plugin
 
-use sotf_audio::{PluginHost, ProcessContext, UpmixerPlugin};
+use sotf_audio::{PluginHost, UpmixerPlugin};
 
 #[test]
 fn test_upmixer_stereo_to_5ch() {

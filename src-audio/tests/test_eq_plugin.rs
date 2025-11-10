@@ -120,7 +120,7 @@ fn test_eq_plugin_filter_update() {
 
     // Process with initial filter
     let num_frames = 512;
-    let mut input = vec![0.5_f32; num_frames * 2];
+    let input = vec![0.5_f32; num_frames * 2];
     let mut output1 = vec![0.0_f32; num_frames * 2];
 
     let context = ProcessContext {

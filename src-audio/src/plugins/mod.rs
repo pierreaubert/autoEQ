@@ -54,6 +54,6 @@ pub use plugin_upmixer::UpmixerPlugin;
 pub(crate) use analyzer_loudness_monitor::LoudnessMonitor;
 pub use analyzer_loudness_monitor::{LoudnessInfo, LoudnessMonitorPlugin};
 #[allow(unused_imports)]
-pub(crate) use analyzer_spectrum::{SpectrumAnalyzer, SpectrumConfig};
-pub use analyzer_spectrum::{SpectrumAnalyzerPlugin, SpectrumInfo};
+pub(crate) use analyzer_spectrum::SpectrumAnalyzer;
+pub use analyzer_spectrum::{SpectrumAnalyzerPlugin, SpectrumConfig, SpectrumInfo};
 pub use plugin_loudness_compensation::LoudnessCompensation;

@@ -7,9 +7,8 @@
 
 use sotf_audio::plugins::{
     AnalyzerPlugin, LoudnessData, LoudnessMonitorPlugin, ProcessContext, SpectrumAnalyzerPlugin,
-    SpectrumData,
+    SpectrumConfig, SpectrumData,
 };
-use sotf_audio::spectrum_analyzer::SpectrumConfig;
 
 #[test]
 fn test_loudness_monitor_stereo() {

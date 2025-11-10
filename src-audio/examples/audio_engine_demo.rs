@@ -29,7 +29,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         frame_size: 1024,
         buffer_ms: 200, // 200ms latency
         output_sample_rate: 48000,
+        input_channels: 2, // Stereo input
         output_channels: 2,
+        output_device: None, // Use default output device
         plugins: Vec::new(), // No plugins for now
         volume: 0.8,         // 80% volume
         muted: false,

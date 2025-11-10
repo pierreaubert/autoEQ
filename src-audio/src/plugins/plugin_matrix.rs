@@ -135,6 +135,8 @@ impl MatrixPlugin {
     ///
     /// # Example
     /// ```
+    /// use sotf_audio::plugins::MatrixPlugin;
+    ///
     /// // Map physical channels 1,2 to physical channels 15,16 with identity matrix
     /// let plugin = MatrixPlugin::with_sparse_mapping(
     ///     vec![1, 2],    // Read from physical channels 1, 2
