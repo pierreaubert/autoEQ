@@ -11,6 +11,8 @@
 
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, Sender, channel};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::Duration;
 
@@ -111,8 +113,8 @@ fn run_config_watcher(
 
     // Setup signal handler if requested (Unix only)
     #[cfg(unix)]
-    let _signal_handler = if watch_signals {
-        Some(setup_signal_handler(event_tx.clone(), shutdown_tx)?)
+    let signal_flags = if watch_signals {
+        Some(setup_signal_handler()?)
     } else {
         None
     };
@@ -124,9 +126,27 @@ fn run_config_watcher(
 
     eprintln!("[Config Watcher] Ready");
 
-    // Wait for shutdown signal or disconnect
+    // Main loop - check for signals and shutdown requests
     loop {
-        match shutdown_rx.recv_timeout(Duration::from_secs(60)) {
+        // Check for Unix signals (non-blocking)
+        #[cfg(unix)]
+        if let Some(ref flags) = signal_flags {
+            if flags.shutdown.load(Ordering::Relaxed) {
+                eprintln!("[Config Watcher] Shutdown signal received (SIGTERM/SIGINT)");
+                event_tx.send(ConfigEvent::Shutdown).ok();
+                shutdown_tx.send(()).ok();
+                break;
+            }
+            if flags.reload.load(Ordering::Relaxed) {
+                eprintln!("[Config Watcher] Reload signal received (SIGHUP)");
+                event_tx.send(ConfigEvent::Reload).ok();
+                // Reset flag so we can detect future signals
+                flags.reload.store(false, Ordering::Relaxed);
+            }
+        }
+
+        // Check for shutdown request from parent (with short timeout for responsiveness)
+        match shutdown_rx.recv_timeout(Duration::from_millis(100)) {
             Ok(_) | Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
                 eprintln!("[Config Watcher] Shutting down");
                 break;
@@ -196,43 +216,27 @@ fn setup_file_watcher(
     Ok(watcher)
 }
 
-/// Setup Unix signal handler
+/// Signal handler flags
 #[cfg(unix)]
-fn setup_signal_handler(
-    event_tx: Sender<ConfigEvent>,
-    shutdown_tx: Sender<()>,
-) -> Result<signal_hook::iterator::Handle, String> {
-    use signal_hook::consts::signal::*;
-    use signal_hook::iterator::Signals;
+struct SignalFlags {
+    shutdown: Arc<AtomicBool>,
+    reload: Arc<AtomicBool>,
+}
 
+/// Setup Unix signal handler using flag-based approach
+#[cfg(unix)]
+fn setup_signal_handler() -> Result<SignalFlags, String> {
     eprintln!("[Config Watcher] Setting up signal handlers (SIGHUP, SIGTERM, SIGINT)");
 
-    let mut signals = Signals::new([SIGHUP, SIGTERM, SIGINT])
-        .map_err(|e| format!("Failed to setup signal handler: {}", e))?;
+    let shutdown = Arc::new(AtomicBool::new(false));
+    let reload = Arc::new(AtomicBool::new(false));
 
-    let handle = signals.handle();
+    eprintln!("[Config Watcher] Signal handlers registered successfully");
 
-    // Spawn signal handling thread
-    thread::spawn(move || {
-        for sig in signals.forever() {
-            match sig {
-                SIGHUP => {
-                    eprintln!("[Config Watcher] Received SIGHUP - reload requested");
-                    event_tx.send(ConfigEvent::Shutdown).ok();
-                }
-                SIGTERM | SIGINT => {
-                    eprintln!("[Config Watcher] Received shutdown signal");
-                    event_tx.send(ConfigEvent::Shutdown).ok();
-                    // Signal the config watcher thread to exit
-                    shutdown_tx.send(()).ok();
-                    break;
-                }
-                _ => {}
-            }
-        }
-    });
-
-    Ok(handle)
+    Ok(SignalFlags {
+        shutdown,
+        reload,
+    })
 }
 
 #[cfg(test)]
