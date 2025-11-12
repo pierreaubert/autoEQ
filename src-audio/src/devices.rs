@@ -11,6 +11,7 @@ pub struct AudioDevice {
     pub is_default: bool,
     pub supported_configs: Vec<AudioConfig>,
     pub default_config: Option<AudioConfig>,
+    pub available_sample_rates: Vec<u32>, // List of available sample rates for user selection
 }
 
 /// Represents audio configuration parameters
@@ -106,17 +107,57 @@ pub fn get_audio_devices() -> Result<HashMap<String, Vec<AudioDevice>>, String> 
                         }
                     }
 
-                    // Get default configuration if available
-                    let default_config =
-                        device
-                            .default_input_config()
-                            .ok()
-                            .map(|config| AudioConfig {
-                                sample_rate: config.sample_rate().0,
-                                channels: config.channels(),
-                                buffer_size: None,
-                                sample_format: format_to_string(config.sample_format()),
+                    // Get configuration with most channels (instead of default)
+                    // Use current/default sample rate, not max
+                    let (default_config, available_sample_rates) =
+                        if let Ok(configs_iter) = device.supported_input_configs() {
+                            let configs: Vec<_> = configs_iter.collect();
+
+                            // Find config with most channels
+                            let max_channel_config =
+                                configs.iter().max_by_key(|config| config.channels());
+
+                            // Get current sample rate from device default
+                            let current_sample_rate = device
+                                .default_input_config()
+                                .map(|cfg| cfg.sample_rate().0)
+                                .unwrap_or(48000); // Fallback to 48kHz
+
+                            let default_cfg = max_channel_config.map(|config| {
+                                // Use current sample rate, clamped to supported range
+                                let sample_rate = current_sample_rate
+                                    .max(config.min_sample_rate().0)
+                                    .min(config.max_sample_rate().0);
+
+                                AudioConfig {
+                                    sample_rate,
+                                    channels: config.channels(),
+                                    buffer_size: None,
+                                    sample_format: format_to_string(config.sample_format()),
+                                }
                             });
+
+                            // Collect all available sample rates across all configs
+                            let mut sample_rates = std::collections::HashSet::new();
+                            for config in &configs {
+                                sample_rates.insert(config.min_sample_rate().0);
+                                sample_rates.insert(config.max_sample_rate().0);
+                                // Add common rates if in range
+                                for &rate in &[44100, 48000, 88200, 96000, 176400, 192000] {
+                                    if rate >= config.min_sample_rate().0
+                                        && rate <= config.max_sample_rate().0
+                                    {
+                                        sample_rates.insert(rate);
+                                    }
+                                }
+                            }
+                            let mut rates: Vec<u32> = sample_rates.into_iter().collect();
+                            rates.sort_unstable();
+
+                            (default_cfg, rates)
+                        } else {
+                            (None, Vec::new())
+                        };
 
                     // Report what we detected
                     let channel_info = if let Some(ref cfg) = default_config {
@@ -131,6 +172,7 @@ pub fn get_audio_devices() -> Result<HashMap<String, Vec<AudioDevice>>, String> 
                         is_default,
                         supported_configs,
                         default_config,
+                        available_sample_rates,
                     });
                     println!(
                         "[AUDIO DEBUG] Found input device: {} (default: {}, channels: {})",
@@ -218,17 +260,57 @@ pub fn get_audio_devices() -> Result<HashMap<String, Vec<AudioDevice>>, String> 
                         }
                     }
 
-                    // Get default configuration if available
-                    let default_config =
-                        device
-                            .default_output_config()
-                            .ok()
-                            .map(|config| AudioConfig {
-                                sample_rate: config.sample_rate().0,
-                                channels: config.channels(),
-                                buffer_size: None,
-                                sample_format: format_to_string(config.sample_format()),
+                    // Get configuration with most channels (instead of default)
+                    // Use current/default sample rate, not max
+                    let (default_config, available_sample_rates) =
+                        if let Ok(configs_iter) = device.supported_output_configs() {
+                            let configs: Vec<_> = configs_iter.collect();
+
+                            // Find config with most channels
+                            let max_channel_config =
+                                configs.iter().max_by_key(|config| config.channels());
+
+                            // Get current sample rate from device default
+                            let current_sample_rate = device
+                                .default_output_config()
+                                .map(|cfg| cfg.sample_rate().0)
+                                .unwrap_or(48000); // Fallback to 48kHz
+
+                            let default_cfg = max_channel_config.map(|config| {
+                                // Use current sample rate, clamped to supported range
+                                let sample_rate = current_sample_rate
+                                    .max(config.min_sample_rate().0)
+                                    .min(config.max_sample_rate().0);
+
+                                AudioConfig {
+                                    sample_rate,
+                                    channels: config.channels(),
+                                    buffer_size: None,
+                                    sample_format: format_to_string(config.sample_format()),
+                                }
                             });
+
+                            // Collect all available sample rates across all configs
+                            let mut sample_rates = std::collections::HashSet::new();
+                            for config in &configs {
+                                sample_rates.insert(config.min_sample_rate().0);
+                                sample_rates.insert(config.max_sample_rate().0);
+                                // Add common rates if in range
+                                for &rate in &[44100, 48000, 88200, 96000, 176400, 192000] {
+                                    if rate >= config.min_sample_rate().0
+                                        && rate <= config.max_sample_rate().0
+                                    {
+                                        sample_rates.insert(rate);
+                                    }
+                                }
+                            }
+                            let mut rates: Vec<u32> = sample_rates.into_iter().collect();
+                            rates.sort_unstable();
+
+                            (default_cfg, rates)
+                        } else {
+                            (None, Vec::new())
+                        };
 
                     // Report what we detected - don't make assumptions
                     let channel_info = if let Some(ref cfg) = default_config {
@@ -243,6 +325,7 @@ pub fn get_audio_devices() -> Result<HashMap<String, Vec<AudioDevice>>, String> 
                         is_default,
                         supported_configs,
                         default_config,
+                        available_sample_rates,
                     });
                     println!(
                         "[AUDIO DEBUG] Found output device: {} (default: {}, channels: {})",

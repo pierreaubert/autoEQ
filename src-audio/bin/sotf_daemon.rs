@@ -25,8 +25,8 @@
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use sotf_audio::manager::AudioStreamingManager;
 use sotf_audio::PluginConfig;
+use sotf_audio::manager::AudioStreamingManager;
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::sync::Arc;
@@ -354,7 +354,10 @@ fn list_audio_devices() -> Result<Vec<serde_json::Value>, String> {
             let name = device.name().unwrap_or_else(|_| "Unknown".to_string());
 
             // Skip if already added as default
-            if devices.iter().any(|d| d["name"] == name && d["is_default"] == true) {
+            if devices
+                .iter()
+                .any(|d| d["name"] == name && d["is_default"] == true)
+            {
                 continue;
             }
 
