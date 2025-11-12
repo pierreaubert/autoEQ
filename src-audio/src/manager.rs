@@ -325,7 +325,9 @@ impl AudioStreamingManager {
             Ok(())
         } else {
             // Engine not running yet - mark as pending and will be enabled when playback starts
-            eprintln!("[AudioStreamingManager] Engine not running yet - loudness monitoring will be enabled when playback starts");
+            eprintln!(
+                "[AudioStreamingManager] Engine not running yet - loudness monitoring will be enabled when playback starts"
+            );
             *self.pending_loudness_monitoring.lock() = true;
             Ok(())
         }
@@ -390,7 +392,9 @@ impl AudioStreamingManager {
             Ok(())
         } else {
             // Engine not running yet - mark as pending and will be enabled when playback starts
-            eprintln!("[AudioStreamingManager] Engine not running yet - spectrum monitoring will be enabled when playback starts");
+            eprintln!(
+                "[AudioStreamingManager] Engine not running yet - spectrum monitoring will be enabled when playback starts"
+            );
             *self.pending_spectrum_monitoring.lock() = true;
             Ok(())
         }
@@ -456,7 +460,10 @@ impl AudioStreamingManager {
     /// Update plugin chain
     /// TODO: Phase 3 - Implement plugin hot-reload
     pub fn update_plugin_chain(&self, plugins: Vec<PluginConfig>) -> Result<(), String> {
-        eprintln!("[AudioStreamingManager] Updating plugin chain with {} plugins", plugins.len());
+        eprintln!(
+            "[AudioStreamingManager] Updating plugin chain with {} plugins",
+            plugins.len()
+        );
 
         if let Some(ref mut engine) = *self.engine.lock() {
             engine.update_plugin_chain(plugins)?;

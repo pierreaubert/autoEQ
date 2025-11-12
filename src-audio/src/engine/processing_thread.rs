@@ -9,9 +9,9 @@ use super::{
     ThreadEvent,
 };
 use crate::plugins::{
-    AnalyzerPlugin, CompressorPluginParams, EqPluginParams, GainPluginParams,
-    GatePluginParams, LimiterPluginParams, LoudnessCompensationPluginParams, Plugin, PluginHost,
-    ProcessContext, UpmixerPluginParams,
+    AnalyzerPlugin, CompressorPluginParams, EqPluginParams, GainPluginParams, GatePluginParams,
+    LimiterPluginParams, LoudnessCompensationPluginParams, Plugin, PluginHost, ProcessContext,
+    UpmixerPluginParams,
 };
 
 use std::collections::HashMap;
@@ -475,7 +475,6 @@ fn run_processing_thread(
 // ============================================================================
 // Plugin Configuration Parameters
 // ============================================================================
-
 
 // ============================================================================
 // Plugin Factory

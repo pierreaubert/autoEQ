@@ -204,7 +204,10 @@ pub fn analyze_recording(
             if skipped_count < 5 {
                 println!(
                     "[FFT Analysis] Skipping freq {:.1} Hz: bin_lower={}, bin_upper={}, ref_spectrum.len()={}",
-                    target_freq, bin_lower, bin_upper, ref_spectrum.len()
+                    target_freq,
+                    bin_lower,
+                    bin_upper,
+                    ref_spectrum.len()
                 );
             }
             skipped_count += 1;
@@ -464,11 +467,17 @@ fn load_wav_mono_channel(path: &Path, channel_index: Option<usize>) -> Result<Ve
     };
 
     let samples = samples.map_err(|e| format!("Failed to read samples: {}", e))?;
-    println!("[load_wav_mono_channel] Read {} total samples", samples.len());
+    println!(
+        "[load_wav_mono_channel] Read {} total samples",
+        samples.len()
+    );
 
     // Handle mono file - return as-is
     if channels == 1 {
-        println!("[load_wav_mono_channel] File is already mono, returning {} samples", samples.len());
+        println!(
+            "[load_wav_mono_channel] File is already mono, returning {} samples",
+            samples.len()
+        );
         return Ok(samples);
     }
 

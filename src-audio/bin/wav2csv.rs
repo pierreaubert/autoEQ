@@ -1,6 +1,6 @@
 use clap::Parser;
 use hound::WavReader;
-use rustfft::{num_complex::Complex, FftPlanner};
+use rustfft::{FftPlanner, num_complex::Complex};
 use std::f32::consts::PI;
 use std::fs::File;
 use std::io::Write;
@@ -13,10 +13,12 @@ type SpectrumResult = Result<(Vec<f32>, Vec<f32>, Vec<f32>), String>;
 #[derive(Parser)]
 #[command(name = "wav2csv")]
 #[command(about = "Analyze WAV file and output frequency/SPL/phase CSV")]
-#[command(long_about = "Analyze WAV files and output frequency response as CSV.\n\n\
+#[command(
+    long_about = "Analyze WAV files and output frequency response as CSV.\n\n\
 For stationary signals (music, noise): Use default Welch's method\n\
 For log sweeps: Use --single-fft --pink-compensation --no-window\n\
-For impulse responses: Use --single-fft")]
+For impulse responses: Use --single-fft"
+)]
 struct Cli {
     /// Input WAV file
     input: PathBuf,
@@ -81,7 +83,8 @@ fn run(cli: Cli) -> Result<(), String> {
     // Determine FFT size
     let fft_size = if cli.single_fft {
         // For single FFT, use entire signal (rounded up to power of 2)
-        cli.fft_size.unwrap_or_else(|| next_power_of_two(signal.len()))
+        cli.fft_size
+            .unwrap_or_else(|| next_power_of_two(signal.len()))
     } else {
         // For Welch's method, use smaller windows
         cli.fft_size.unwrap_or(16384)
@@ -146,10 +149,7 @@ fn load_wav_mono(path: &PathBuf) -> Result<(Vec<f32>, u32), String> {
     let channels = spec.channels as usize;
 
     let samples: Vec<f32> = match spec.sample_format {
-        hound::SampleFormat::Float => reader
-            .samples::<f32>()
-            .map(|s| s.unwrap_or(0.0))
-            .collect(),
+        hound::SampleFormat::Float => reader.samples::<f32>().map(|s| s.unwrap_or(0.0)).collect(),
         hound::SampleFormat::Int => {
             let bits = spec.bits_per_sample;
             let max_val = (1 << (bits - 1)) as f32;
@@ -232,10 +232,8 @@ fn compute_welch_spectrum(
         }
 
         // Convert to complex
-        let mut buffer: Vec<Complex<f32>> = windowed
-            .iter()
-            .map(|&x| Complex::new(x, 0.0))
-            .collect();
+        let mut buffer: Vec<Complex<f32>> =
+            windowed.iter().map(|&x| Complex::new(x, 0.0)).collect();
 
         // Perform FFT
         fft.process(&mut buffer);
@@ -310,10 +308,7 @@ fn compute_single_fft_spectrum(
     };
 
     // Convert to complex
-    let mut buffer: Vec<Complex<f32>> = windowed
-        .iter()
-        .map(|&x| Complex::new(x, 0.0))
-        .collect();
+    let mut buffer: Vec<Complex<f32>> = windowed.iter().map(|&x| Complex::new(x, 0.0)).collect();
 
     // Perform FFT
     let mut planner = FftPlanner::new();
@@ -416,8 +411,12 @@ fn write_csv(
         .map_err(|e| format!("Failed to write CSV header: {}", e))?;
 
     for i in 0..frequencies.len() {
-        writeln!(file, "{:.2},{:.2},{:.2}", frequencies[i], spl_db[i], phase_deg[i])
-            .map_err(|e| format!("Failed to write CSV row: {}", e))?;
+        writeln!(
+            file,
+            "{:.2},{:.2},{:.2}",
+            frequencies[i], spl_db[i], phase_deg[i]
+        )
+        .map_err(|e| format!("Failed to write CSV row: {}", e))?;
     }
 
     Ok(())

@@ -271,7 +271,10 @@ pub fn record_and_analyze(
 
     // Get input device (either by name or default)
     let input_device = if let Some(dev_name) = device_name {
-        eprintln!("[record_and_analyze] Looking for input device: {}", dev_name);
+        eprintln!(
+            "[record_and_analyze] Looking for input device: {}",
+            dev_name
+        );
         find_device_by_name(&host, dev_name, true)?
     } else {
         eprintln!("[record_and_analyze] Using default input device");
@@ -301,8 +304,7 @@ pub fn record_and_analyze(
     if (input_channel as usize) >= hardware_input_channels {
         return Err(format!(
             "Input channel {} exceeds hardware channel count {} (channels are 0-indexed)",
-            input_channel,
-            hardware_input_channels
+            input_channel, hardware_input_channels
         ));
     }
 
@@ -316,8 +318,7 @@ pub fn record_and_analyze(
 
     eprintln!(
         "[record_and_analyze] Recording from input channel {} (0-indexed) out of {} total channels",
-        input_channel,
-        hardware_input_channels
+        input_channel, hardware_input_channels
     );
 
     // Shared state for recording
@@ -368,7 +369,10 @@ pub fn record_and_analyze(
 
     // Get output device configuration to determine hardware channel count
     let output_device = if let Some(dev_name) = device_name {
-        eprintln!("[record_and_analyze] Looking for output device: {}", dev_name);
+        eprintln!(
+            "[record_and_analyze] Looking for output device: {}",
+            dev_name
+        );
         find_device_by_name(&host, dev_name, false)?
     } else {
         eprintln!("[record_and_analyze] Using default output device");
@@ -397,8 +401,7 @@ pub fn record_and_analyze(
     if (output_channel as usize) >= hardware_channels {
         return Err(format!(
             "Output channel {} exceeds hardware channel count {} (channels are 0-indexed)",
-            output_channel,
-            hardware_channels
+            output_channel, hardware_channels
         ));
     }
 
@@ -426,12 +429,15 @@ pub fn record_and_analyze(
 
     eprintln!(
         "[record_and_analyze] Matrix: 1 input -> {} outputs, channel {} active (rest silent)",
-        hardware_channels,
-        output_channel
+        hardware_channels, output_channel
     );
 
     manager
-        .start_playback(device_name.map(|s| s.to_string()), plugins, hardware_channels)
+        .start_playback(
+            device_name.map(|s| s.to_string()),
+            plugins,
+            hardware_channels,
+        )
         .map_err(|e| format!("Failed to start playback: {}", e))?;
 
     eprintln!("[record_and_analyze] Playback started, waiting for completion...");
@@ -464,7 +470,8 @@ pub fn record_and_analyze(
         if current_sample_count == last_sample_count && current_sample_count > 0 {
             stable_count += 1;
             // If sample count hasn't changed for 500ms, assume playback is done
-            if stable_count >= 10 { // 10 * 50ms = 500ms
+            if stable_count >= 10 {
+                // 10 * 50ms = 500ms
                 eprintln!("[record_and_analyze] Recording stable, playback likely complete");
                 break;
             }
@@ -500,7 +507,8 @@ pub fn record_and_analyze(
 
     // Get recorded samples
     let recorded = recorded_samples.lock().clone();
-    eprintln!("[record_and_analyze] Total recorded: {} samples ({:.2}s)",
+    eprintln!(
+        "[record_and_analyze] Total recorded: {} samples ({:.2}s)",
         recorded.len(),
         recorded.len() as f64 / sample_rate as f64
     );

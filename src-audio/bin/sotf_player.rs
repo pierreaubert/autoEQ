@@ -419,9 +419,7 @@ fn parse_filters(filter_strings: &[String]) -> Result<Vec<Biquad>, String> {
 ///   "1,2,3,4,5,6->13,14,15,16,17,18"  - Route 5.1 to channels 13-18
 ///
 /// Returns: (input_channel_map, output_channel_map, matrix)
-fn parse_channel_mapping(
-    mapping_str: &str,
-) -> Result<(Vec<usize>, Vec<usize>, Vec<f32>), String> {
+fn parse_channel_mapping(mapping_str: &str) -> Result<(Vec<usize>, Vec<usize>, Vec<f32>), String> {
     let parts: Vec<&str> = mapping_str.split("->").collect();
     if parts.len() != 2 {
         return Err(format!(
@@ -636,7 +634,8 @@ fn play_stream(
         if input_channel_map.len() != output_channels {
             return Err(format!(
                 "Channel mapping input mismatch: mapping expects {} channels but plugin chain outputs {}",
-                input_channel_map.len(), output_channels
+                input_channel_map.len(),
+                output_channels
             ));
         }
 
@@ -651,7 +650,8 @@ fn play_stream(
         println!("  Physical output channels: {:?}", output_channel_map);
         println!("  Max HW channel: {}", max_hw_ch);
 
-        let matrix_plugin = create_matrix_plugin_config(input_channel_map, output_channel_map, matrix)?;
+        let matrix_plugin =
+            create_matrix_plugin_config(input_channel_map, output_channel_map, matrix)?;
         plugins.push(matrix_plugin);
         eprintln!(
             "Added matrix plugin: {}ch (logical) -> {} HW channels",

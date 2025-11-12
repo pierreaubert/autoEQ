@@ -185,9 +185,18 @@ impl UpmixerPlugin {
         bandpass_hz: f32,
     ) -> Self {
         assert!(fft_size.is_power_of_two(), "FFT size must be power of 2");
-        assert!(lfe_cutoff_hz > 0.0 && lfe_cutoff_hz < 200.0, "LFE cutoff must be between 0-200 Hz");
-        assert!((0.0..=1.0).contains(&stereo_width), "Stereo width must be between 0.0-1.0");
-        assert!(bandpass_hz > lfe_cutoff_hz, "Bandpass frequency must be greater than LFE cutoff");
+        assert!(
+            lfe_cutoff_hz > 0.0 && lfe_cutoff_hz < 200.0,
+            "LFE cutoff must be between 0-200 Hz"
+        );
+        assert!(
+            (0.0..=1.0).contains(&stereo_width),
+            "Stereo width must be between 0.0-1.0"
+        );
+        assert!(
+            bandpass_hz > lfe_cutoff_hz,
+            "Bandpass frequency must be greater than LFE cutoff"
+        );
 
         let mut planner = FftPlanner::<f32>::new();
         let fft_forward = planner.plan_fft_forward(fft_size);
@@ -311,8 +320,10 @@ impl UpmixerPlugin {
 
         // 3. Frequency-dependent processing
         // Calculate frequency bin boundaries
-        let lfe_cutoff_bin = ((self.lfe_cutoff_hz * self.fft_size as f32) / self.sample_rate as f32) as usize;
-        let bandpass_bin = ((self.bandpass_hz * self.fft_size as f32) / self.sample_rate as f32) as usize;
+        let lfe_cutoff_bin =
+            ((self.lfe_cutoff_hz * self.fft_size as f32) / self.sample_rate as f32) as usize;
+        let bandpass_bin =
+            ((self.bandpass_hz * self.fft_size as f32) / self.sample_rate as f32) as usize;
 
         for i in 0..self.fft_size {
             let left = self.freq_domain_left[i];
@@ -320,8 +331,8 @@ impl UpmixerPlugin {
 
             // Handle Nyquist folding for real FFT
             let is_lfe_band = i <= lfe_cutoff_bin || i >= (self.fft_size - lfe_cutoff_bin);
-            let is_passthrough_band = (i > lfe_cutoff_bin && i < bandpass_bin) ||
-                                      (i > (self.fft_size - bandpass_bin) && i < (self.fft_size - lfe_cutoff_bin));
+            let is_passthrough_band = (i > lfe_cutoff_bin && i < bandpass_bin)
+                || (i > (self.fft_size - bandpass_bin) && i < (self.fft_size - lfe_cutoff_bin));
 
             if is_lfe_band {
                 // LFE band: only goes to LFE channel
@@ -413,12 +424,12 @@ impl UpmixerPlugin {
 
             // Write all 6 channels with pre-computed gains (already include combined_scale)
             // Channel order: FL, FR, C, LFE, Ls, Rs
-            output[idx] = direct_left * gain_fd + ambient_left * gain_fa;     // FL
+            output[idx] = direct_left * gain_fd + ambient_left * gain_fa; // FL
             output[idx + 1] = direct_right * gain_fd + ambient_right * gain_fa; // FR
-            output[idx + 2] = center * gain_center;                           // C
-            output[idx + 3] = lfe * gain_fd;                                  // LFE (uses front direct gain)
-            output[idx + 4] = ambient_left * gain_ra;                         // Ls
-            output[idx + 5] = ambient_right * gain_ra;                        // Rs
+            output[idx + 2] = center * gain_center; // C
+            output[idx + 3] = lfe * gain_fd; // LFE (uses front direct gain)
+            output[idx + 4] = ambient_left * gain_ra; // Ls
+            output[idx + 5] = ambient_right * gain_ra; // Rs
         }
     }
 }
@@ -1014,7 +1025,10 @@ mod tests {
 
         // LFE should have minimal signal since test frequencies (440 Hz, 880 Hz)
         // are above the LFE cutoff (120 Hz)
-        assert!(channel_energies[3] < 0.01, "LFE should be minimal with high frequency input");
+        assert!(
+            channel_energies[3] < 0.01,
+            "LFE should be minimal with high frequency input"
+        );
 
         // Rear channels should have signal (ambient with gain=1.0)
         assert!(

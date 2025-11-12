@@ -10,9 +10,9 @@
 // - Windows: File watching only (no signal support)
 
 use std::path::PathBuf;
-use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{Receiver, Sender, channel};
 use std::thread;
 use std::time::Duration;
 
@@ -233,10 +233,7 @@ fn setup_signal_handler() -> Result<SignalFlags, String> {
 
     eprintln!("[Config Watcher] Signal handlers registered successfully");
 
-    Ok(SignalFlags {
-        shutdown,
-        reload,
-    })
+    Ok(SignalFlags { shutdown, reload })
 }
 
 #[cfg(test)]

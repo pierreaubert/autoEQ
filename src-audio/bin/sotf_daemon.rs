@@ -22,16 +22,15 @@
 //! - {"command": "get_loudness"} -> Get current loudness (LUFS)
 //! - {"command": "shutdown"} -> Gracefully shutdown daemon
 
+use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sotf_audio::manager::AudioStreamingManager;
-use sotf_audio::plugins::types::PluginConfig;
+use sotf_audio::PluginConfig;
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
-use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
-use parking_lot::Mutex;
 
 const SOCKET_PATH: &str = "/tmp/autoeq_audio.sock";
 const IDLE_TIMEOUT_SECS: u64 = 3;
@@ -151,7 +150,7 @@ impl AudioDaemon {
 
     async fn handle_load(&self, path: &str) -> Response {
         let mut manager = self.manager.lock();
-        match manager.load_file(path).await {
+        match manager.load_file(path) {
             Ok(_) => Response::ok_empty(),
             Err(e) => Response::err(format!("Failed to load file: {}", e)),
         }
@@ -159,15 +158,15 @@ impl AudioDaemon {
 
     async fn handle_play(&self) -> Response {
         let mut manager = self.manager.lock();
-        match manager.start_playback(None, vec![], 2).await {
+        match manager.start_playback(None, vec![], 2) {
             Ok(_) => Response::ok_empty(),
             Err(e) => Response::err(format!("Failed to start playback: {}", e)),
         }
     }
 
     async fn handle_pause(&self) -> Response {
-        let mut manager = self.manager.lock();
-        match manager.pause().await {
+        let manager = self.manager.lock();
+        match manager.pause() {
             Ok(_) => Response::ok_empty(),
             Err(e) => Response::err(format!("Failed to pause: {}", e)),
         }
@@ -175,43 +174,40 @@ impl AudioDaemon {
 
     async fn handle_stop(&self) -> Response {
         let mut manager = self.manager.lock();
-        match manager.stop().await {
+        match manager.stop() {
             Ok(_) => Response::ok_empty(),
             Err(e) => Response::err(format!("Failed to stop: {}", e)),
         }
     }
 
     async fn handle_seek(&self, position: f64) -> Response {
-        let mut manager = self.manager.lock();
-        match manager.seek(position).await {
+        let manager = self.manager.lock();
+        match manager.seek(position) {
             Ok(_) => Response::ok_empty(),
             Err(e) => Response::err(format!("Failed to seek: {}", e)),
         }
     }
 
     async fn handle_set_volume(&self, volume: f32) -> Response {
-        let mut manager = self.manager.lock();
-        manager.set_volume(volume);
+        let manager = self.manager.lock();
+        let _ = manager.set_volume(volume);
         Response::ok_empty()
     }
 
     async fn handle_list_devices(&self) -> Response {
-        match sotf_audio::list_audio_devices() {
+        match list_audio_devices() {
             Ok(devices) => Response::ok(serde_json::json!({ "devices": devices })),
             Err(e) => Response::err(format!("Failed to list devices: {}", e)),
         }
     }
 
-    async fn handle_set_device(&self, device: &str) -> Response {
-        let mut manager = self.manager.lock();
-        match manager.set_audio_device(device) {
-            Ok(_) => Response::ok_empty(),
-            Err(e) => Response::err(format!("Failed to set device: {}", e)),
-        }
+    async fn handle_set_device(&self, _device: &str) -> Response {
+        // Device selection is not exposed in current AudioStreamingManager API
+        // Would need to be implemented via cpal device enumeration + selection
+        Response::err("Device selection not yet implemented in streaming manager")
     }
 
-    async fn handle_load_plugins(&self, plugins: Vec<PluginConfig>) -> Response {
-        let mut manager = self.manager.lock();
+    async fn handle_load_plugins(&self, _plugins: Vec<PluginConfig>) -> Response {
         // This would require extending AudioStreamingManager to support runtime plugin loading
         // For now, plugins are loaded at playback start
         Response::err("Runtime plugin loading not yet implemented")
@@ -219,9 +215,14 @@ impl AudioDaemon {
 
     async fn handle_get_loudness(&self) -> Response {
         let manager = self.manager.lock();
-        // This would require exposing loudness data from the manager
-        // For now, return a placeholder
-        Response::err("Loudness monitoring not yet exposed")
+        match manager.get_loudness() {
+            Some(loudness) => Response::ok(serde_json::json!({
+                "momentary": loudness.momentary_lufs,
+                "short_term": loudness.shortterm_lufs,
+                "peak": loudness.peak,
+            })),
+            None => Response::err("Loudness monitoring not enabled"),
+        }
     }
 
     fn handle_client(&self, mut stream: UnixStream) {
@@ -273,14 +274,14 @@ impl AudioDaemon {
 
                 let elapsed = last_activity.lock().elapsed();
                 if elapsed > Duration::from_secs(IDLE_TIMEOUT_SECS) {
-                    let mut mgr = manager.lock();
+                    let mgr = manager.lock();
                     let state = mgr.get_state();
 
                     // Only stop if not playing
                     if matches!(
                         state,
                         sotf_audio::manager::StreamingState::Idle
-                            | sotf_audio::manager::StreamingState::Stopped
+                            | sotf_audio::manager::StreamingState::Ready
                     ) {
                         println!("Idle timeout reached, audio engine in low-power mode");
                         // Engine is already stopped, nothing to do
@@ -329,6 +330,53 @@ impl AudioDaemon {
         // Cleanup
         let _ = std::fs::remove_file(SOCKET_PATH);
         Ok(())
+    }
+}
+
+fn list_audio_devices() -> Result<Vec<serde_json::Value>, String> {
+    use cpal::traits::{DeviceTrait, HostTrait};
+
+    let host = cpal::default_host();
+    let mut devices = Vec::new();
+
+    // Get default output device
+    if let Some(default_out) = host.default_output_device() {
+        let name = default_out.name().unwrap_or_else(|_| "Unknown".to_string());
+        devices.push(serde_json::json!({
+            "name": name,
+            "is_default": true,
+        }));
+    }
+
+    // Get all output devices
+    if let Ok(output_devices) = host.output_devices() {
+        for device in output_devices {
+            let name = device.name().unwrap_or_else(|_| "Unknown".to_string());
+
+            // Skip if already added as default
+            if devices.iter().any(|d| d["name"] == name && d["is_default"] == true) {
+                continue;
+            }
+
+            let mut device_info = serde_json::json!({
+                "name": name,
+                "is_default": false,
+            });
+
+            // Get device config if available
+            if let Ok(config) = device.default_output_config() {
+                device_info["channels"] = config.channels().into();
+                device_info["sample_rate"] = config.sample_rate().0.into();
+            }
+
+            devices.push(device_info);
+        }
+    }
+
+    if devices.is_empty() {
+        Err("No audio devices found".to_string())
+    } else {
+        Ok(devices)
     }
 }
 
