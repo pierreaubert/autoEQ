@@ -10,6 +10,7 @@ use sotf_audio::SharedAudioState;
 mod tauri_audio_devices;
 mod tauri_audio_loudness;
 mod tauri_audio_recording;  // NOTE: Module kept for AudioError type, but commands disabled
+mod tauri_audio_capture;    // NEW: Audio capture with test signals
 mod tauri_audio_replaygain;
 mod tauri_audio_spectrum;
 mod tauri_audio_streaming;
@@ -52,6 +53,10 @@ pub use tauri_compute_eq::compute_eq_response;
 
 pub use tauri_generate_eq::{
     generate_apo_format, generate_aupreset_format, generate_rme_format, generate_rme_room_format,
+};
+
+pub use tauri_audio_capture::{
+    record_channel, save_recordings_zip, load_recordings_zip,
 };
 
 #[tauri::command]
@@ -242,7 +247,11 @@ pub fn run() {
             // ReplayGain analysis
             analyze_replaygain,
             // EQ response computation
-            compute_eq_response
+            compute_eq_response,
+            // Audio capture commands
+            record_channel,
+            save_recordings_zip,
+            load_recordings_zip
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
