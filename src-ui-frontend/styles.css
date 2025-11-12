@@ -61,6 +61,8 @@
 }
 
 body {
+  margin: 0;
+  padding: 0;
   font-family:
     -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   font-size: 12px;
@@ -80,7 +82,7 @@ body {
   display: flex;
   overflow: hidden;
   position: relative;
-  padding-bottom: 160px;
+  padding-bottom: 140px; /* Reduced from 160px to fit audio bar (80px) + bottom row (60px) */
 }
 
 /* Unified bottom row for buttons and optimization results */
@@ -2811,6 +2813,30 @@ input[type="checkbox"] {
   overflow: hidden;
 }
 
+/* Step containers should take full height */
+#content-container [data-step] {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Data acquisition step should fill height */
+.data-acquisition-step {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+}
+
+.data-acquisition-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  min-height: 0;
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
   .step-content-wrapper {
@@ -2861,6 +2887,11 @@ input[type="checkbox"] {
 /* Hide tab content sections by default when controlled by use case */
 #step2-container .tab-content {
   margin-top: var(--spacing-lg);
+  display: none !important;
+}
+
+#step2-container .tab-content.active {
+  display: block !important;
 }
 
 /* Step 4 - Audio Player Section */
@@ -3017,6 +3048,541 @@ input[type="checkbox"] {
   }
 
   .step3-results-actions button {
+    width: 100%;
+  }
+}
+
+/* ========================================
+   NEW CAPTURE WORKFLOW STYLES
+   Two-step capture: Config → Recording
+   ======================================== */
+
+/* Capture step container */
+.capture-step-container {
+  width: 100%;
+  min-height: 600px;
+}
+
+.capture-step {
+  display: none !important;
+}
+
+.capture-step.active {
+  display: block !important;
+}
+
+/* ========================================
+   STEP 1: CAPTURE CONFIG PANEL
+   ======================================== */
+
+.capture-config-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+  padding: var(--spacing-lg);
+  background: var(--bg-primary);
+  border-radius: var(--radius);
+}
+
+.capture-config-header {
+  margin-bottom: var(--spacing-md);
+}
+
+.capture-config-header h3 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 var(--spacing-sm) 0;
+}
+
+.capture-config-description {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  margin: 0;
+}
+
+/* Device sections */
+.capture-device-section {
+  background: var(--bg-accent);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  padding: var(--spacing-md);
+}
+
+.capture-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-md);
+  padding-bottom: var(--spacing-sm);
+  border-bottom: 2px solid var(--border-color);
+}
+
+.capture-section-header h4 {
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.capture-device-controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.capture-device-select-row {
+  display: flex;
+  gap: var(--spacing-md);
+  align-items: center;
+}
+
+.capture-device-select {
+  flex: 1;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 0.95rem;
+}
+
+.capture-device-info {
+  display: flex;
+  gap: var(--spacing-sm);
+}
+
+.info-badge {
+  padding: 4px 8px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.capture-channel-count-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.capture-channel-count-row label {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.capture-channel-input {
+  width: 80px;
+  padding: var(--spacing-sm);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 0.95rem;
+}
+
+/* Channel mapping */
+.capture-channel-mapping {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-sm);
+  padding: var(--spacing-md);
+  background: var(--bg-primary);
+  border-radius: var(--radius-sm);
+}
+
+.capture-channel-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-sm);
+  background: var(--bg-accent);
+  border-radius: var(--radius-sm);
+}
+
+.capture-channel-label {
+  min-width: 90px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.capture-channel-interface {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.capture-interface-input {
+  width: 60px;
+  padding: 4px 8px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 0.9rem;
+}
+
+.capture-group-select {
+  flex: 1;
+  padding: 4px 8px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 0.9rem;
+}
+
+/* Calibration section */
+.capture-calibration-section {
+  background: var(--bg-accent);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  padding: var(--spacing-md);
+}
+
+.capture-calibration-controls {
+  padding: var(--spacing-md);
+}
+
+.capture-calibration-row {
+  display: flex;
+  gap: var(--spacing-sm);
+  align-items: center;
+}
+
+.capture-calibration-path {
+  flex: 1;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 0.95rem;
+}
+
+/* Config actions */
+.capture-config-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: var(--spacing-lg);
+  border-top: 2px solid var(--border-color);
+}
+
+.capture-config-actions-left,
+.capture-config-actions-right {
+  display: flex;
+  gap: var(--spacing-sm);
+}
+
+/* ========================================
+   STEP 2: CAPTURE RECORDING PANEL
+   ======================================== */
+
+.capture-recording-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+  padding: var(--spacing-lg);
+  background: var(--bg-primary);
+  border-radius: var(--radius);
+}
+
+.capture-recording-header {
+  margin-bottom: var(--spacing-md);
+}
+
+.capture-recording-header h3 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 var(--spacing-sm) 0;
+}
+
+.capture-recording-description {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  margin: 0;
+}
+
+/* Signal selection */
+.capture-signal-section {
+  background: var(--bg-accent);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  padding: var(--spacing-md);
+}
+
+.capture-signal-controls {
+  padding: var(--spacing-sm);
+}
+
+.capture-signal-row {
+  display: flex;
+  gap: var(--spacing-lg);
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.capture-signal-row label {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.capture-signal-select {
+  min-width: 180px;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 0.95rem;
+}
+
+.capture-signal-properties {
+  display: flex;
+  gap: var(--spacing-md);
+  align-items: center;
+}
+
+.capture-duration-select {
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 0.95rem;
+}
+
+/* Channels section */
+.capture-channels-section {
+  background: var(--bg-accent);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  padding: var(--spacing-md);
+}
+
+.capture-recording-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+}
+
+.capture-channels-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md);
+}
+
+.capture-no-channels {
+  padding: var(--spacing-xl);
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.capture-channel-status-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md);
+  background: var(--bg-primary);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+}
+
+.capture-channel-name {
+  min-width: 150px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.capture-channel-state {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.state-icon {
+  font-size: 1.2rem;
+}
+
+.state-empty .state-icon {
+  color: var(--text-secondary);
+}
+
+.state-recording .state-icon {
+  color: #ff4444;
+  animation: pulse 1s ease-in-out infinite;
+}
+
+.state-done .state-icon {
+  color: var(--success-color);
+}
+
+.state-error .state-icon {
+  color: #ff4444;
+}
+
+.state-text {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+.state-recording .state-text {
+  color: #ff4444;
+  font-weight: 600;
+}
+
+.state-done .state-text {
+  color: var(--success-color);
+  font-weight: 600;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
+.capture-record-channel-btn {
+  min-width: 100px;
+}
+
+/* Plot section */
+.capture-plot-section {
+  background: var(--bg-accent);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  padding: var(--spacing-md);
+}
+
+.capture-plot-container {
+  position: relative;
+  width: 100%;
+  height: 400px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.capture-plot-canvas {
+  width: 100%;
+  height: 100%;
+  display: none;
+}
+
+.capture-plot-chart {
+  width: 100%;
+  height: 100%;
+}
+
+.capture-plot-placeholder {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-primary);
+}
+
+.capture-placeholder-content {
+  text-align: center;
+  padding: var(--spacing-xl);
+}
+
+.capture-placeholder-icon {
+  font-size: 4rem;
+  margin-bottom: var(--spacing-md);
+  opacity: 0.3;
+}
+
+.capture-placeholder-content h4 {
+  color: var(--text-primary);
+  margin: 0 0 var(--spacing-sm) 0;
+  font-weight: 600;
+}
+
+.capture-placeholder-content p {
+  color: var(--text-secondary);
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+/* Recording actions */
+.capture-recording-actions-bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: var(--spacing-lg);
+  border-top: 2px solid var(--border-color);
+}
+
+.capture-recording-actions-left,
+.capture-recording-actions-right {
+  display: flex;
+  gap: var(--spacing-sm);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .capture-device-select-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .capture-device-info {
+    justify-content: flex-start;
+  }
+
+  .capture-signal-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .capture-signal-select {
+    width: 100%;
+  }
+
+  .capture-channel-status-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .capture-channel-name {
+    min-width: auto;
+  }
+
+  .capture-config-actions,
+  .capture-recording-actions-bottom {
+    flex-direction: column;
+    gap: var(--spacing-md);
+  }
+
+  .capture-config-actions-left,
+  .capture-config-actions-right,
+  .capture-recording-actions-left,
+  .capture-recording-actions-right {
+    width: 100%;
+    flex-direction: column;
+  }
+
+  .capture-config-actions button,
+  .capture-recording-actions-bottom button {
     width: 100%;
   }
 }

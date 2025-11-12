@@ -1,13 +1,11 @@
 export * from "./optimization-constants";
 export {
-  generateAppHTML,
   generateDataAcquisition,
   generateEQDesign,
   generateOptimizationFineTuning,
   generatePlotsPanel,
   generateBottomRow,
   generateOptimizationModal,
-  generateCaptureModal,
 } from "./templates";
 export { UIManager } from "./ui-manager";
 export { PlotComposer } from "./plot";

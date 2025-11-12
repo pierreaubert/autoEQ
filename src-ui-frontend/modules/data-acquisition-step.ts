@@ -1,9 +1,11 @@
 // Data Acquisition Step Component
 // Wraps the existing data acquisition UI for use in the step-by-step workflow
 
-import "@audio-capture/capture-panel";
+import "@audio-capture/capture-config-panel";
+import "@audio-capture/capture-recording-panel";
 
 export type DataSource = "file" | "speaker" | "headphone" | "capture";
+export type CaptureStep = "config" | "recording";
 
 export interface DataAcquisitionConfig {
   onDataReady?: (source: DataSource) => void;
@@ -14,6 +16,7 @@ export class DataAcquisitionStep {
   private container: HTMLElement;
   private config: DataAcquisitionConfig;
   private currentSource: DataSource = "file";
+  private currentCaptureStep: CaptureStep = "config";
 
   constructor(container: HTMLElement, config: DataAcquisitionConfig = {}) {
     this.container = container;
@@ -158,8 +161,17 @@ export class DataAcquisitionStep {
 
             <!-- Capture Tab Content -->
             <div id="capture_inputs" class="tab-content">
-              <div id="capture_panel_container" class="capture-panel-container">
-                <!-- Full capture interface will be rendered here -->
+              <!-- Two-step capture workflow -->
+              <div id="capture_step_container" class="capture-step-container">
+                <!-- Step 1: Configuration -->
+                <div id="capture_config_step" class="capture-step active" data-step="config">
+                  <!-- capture-config-panel will be rendered here -->
+                </div>
+
+                <!-- Step 2: Recording -->
+                <div id="capture_recording_step" class="capture-step" data-step="recording">
+                  <!-- capture-recording-panel will be rendered here -->
+                </div>
               </div>
             </div>
           </div>
@@ -195,8 +207,12 @@ export class DataAcquisitionStep {
    * Attach event listeners
    */
   private attachEventListeners(): void {
+    console.log('[DataAcquisitionStep] attachEventListeners called');
+
     // Tab switching
     const tabLabels = this.container.querySelectorAll('.tab-label');
+    console.log('[DataAcquisitionStep] Found', tabLabels.length, 'tab labels');
+
     tabLabels.forEach((label) => {
       label.addEventListener('click', () => {
         const tab = (label as HTMLElement).dataset.tab as DataSource;
@@ -204,13 +220,11 @@ export class DataAcquisitionStep {
       });
     });
 
-    // Also check if capture tab is initially active and render it
-    setTimeout(() => {
-      const captureInputs = this.container.querySelector('#capture_inputs');
-      if (captureInputs && captureInputs.classList.contains('active')) {
-        this.renderCapturePanel();
-      }
-    }, 100);
+    // Initialize capture panels immediately so they're ready
+    // This ensures they exist even if the user navigates to capture tab first
+    console.log('[DataAcquisitionStep] About to call renderCapturePanel');
+    this.renderCapturePanel();
+    console.log('[DataAcquisitionStep] renderCapturePanel returned');
   }
 
   /**
@@ -261,14 +275,93 @@ export class DataAcquisitionStep {
   }
 
   /**
-   * Render the capture panel into the container
+   * Render the capture panels into the container
+   * Creates both config and recording panels for the two-step workflow
    */
   private renderCapturePanel(): void {
-    const container = this.container.querySelector('#capture_panel_container');
-    if (container && !container.querySelector('capture-panel')) {
-      // Only render if not already rendered
-      const capturePanel = document.createElement('capture-panel');
-      container.appendChild(capturePanel);
+    console.log('[DataAcquisitionStep] renderCapturePanel called');
+
+    // Render config panel (Step 1)
+    const configContainer = this.container.querySelector('#capture_config_step');
+    console.log('[DataAcquisitionStep] configContainer found:', !!configContainer);
+
+    if (configContainer) {
+      const existingPanel = configContainer.querySelector('capture-config-panel');
+      console.log('[DataAcquisitionStep] existing config panel:', !!existingPanel);
+
+      if (!existingPanel) {
+        console.log('[DataAcquisitionStep] Creating capture-config-panel element');
+        const configPanel = document.createElement('capture-config-panel');
+        configContainer.appendChild(configPanel);
+        console.log('[DataAcquisitionStep] capture-config-panel appended to DOM');
+
+        // Listen for config completion
+        configPanel.addEventListener('captureConfigComplete', ((event: CustomEvent) => {
+          console.log('[DataAcquisitionStep] Config complete:', event.detail);
+          this.switchCaptureStep('recording', event.detail.config);
+        }) as EventListener);
+      }
+    } else {
+      console.error('[DataAcquisitionStep] ERROR: Could not find #capture_config_step container!');
+    }
+
+    // Render recording panel (Step 2)
+    const recordingContainer = this.container.querySelector('#capture_recording_step');
+    console.log('[DataAcquisitionStep] recordingContainer found:', !!recordingContainer);
+
+    if (recordingContainer) {
+      const existingPanel = recordingContainer.querySelector('capture-recording-panel');
+      console.log('[DataAcquisitionStep] existing recording panel:', !!existingPanel);
+
+      if (!existingPanel) {
+        console.log('[DataAcquisitionStep] Creating capture-recording-panel element');
+        const recordingPanel = document.createElement('capture-recording-panel');
+        recordingContainer.appendChild(recordingPanel);
+        console.log('[DataAcquisitionStep] capture-recording-panel appended to DOM');
+
+        // Listen for recording completion
+        recordingPanel.addEventListener('captureRecordingComplete', ((event: CustomEvent) => {
+          console.log('[DataAcquisitionStep] Recording complete:', event.detail);
+          // Notify parent that data is ready
+          if (this.config.onDataReady) {
+            this.config.onDataReady('capture');
+          }
+        }) as EventListener);
+      }
+    } else {
+      console.error('[DataAcquisitionStep] ERROR: Could not find #capture_recording_step container!');
+    }
+  }
+
+  /**
+   * Switch between capture steps (config → recording)
+   */
+  private switchCaptureStep(step: CaptureStep, config?: any): void {
+    this.currentCaptureStep = step;
+
+    // Hide all steps
+    const steps = this.container.querySelectorAll('.capture-step');
+    steps.forEach(s => s.classList.remove('active'));
+
+    // Show the target step
+    const targetStep = this.container.querySelector(`[data-step="${step}"]`);
+    if (targetStep) {
+      targetStep.classList.add('active');
+    }
+
+    // If switching to recording step, pass config to recording panel
+    if (step === 'recording' && config) {
+      const recordingPanel = this.container.querySelector('capture-recording-panel') as any;
+      if (recordingPanel) {
+        // Set the full config
+        recordingPanel.setConfig(config);
+
+        // Extract channel names from groups
+        if (config.playback?.channelGroups) {
+          const channelNames = config.playback.channelGroups.map((g: any) => g.name);
+          recordingPanel.setChannels(config.playback.channels, channelNames);
+        }
+      }
     }
   }
 

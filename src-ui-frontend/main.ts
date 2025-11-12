@@ -1,7 +1,8 @@
 // Refactored main application - step-based workflow
 
 // Import web components first so they're registered
-import "./modules/audio-capture/capture-panel";
+import "./modules/audio-capture/capture-config-panel";
+import "./modules/audio-capture/capture-recording-panel";
 
 import {
   UIManager,
@@ -14,13 +15,13 @@ import {
   StepNavigator,
   StepContainer,
   UseCaseSelector,
+  DataAcquisitionStep,
   generateDataAcquisition,
   generateEQDesign,
   generateOptimizationFineTuning,
   generatePlotsPanel,
   generateBottomRow,
   generateOptimizationModal,
-  generateCaptureModal,
 } from "./modules";
 import { OptimizationResult } from "./types";
 import { AutoEQPlotAPI, PlotFiltersParams, PlotSpinParams } from "./types";
@@ -35,6 +36,7 @@ class AutoEQApplication {
   private stepNavigator!: StepNavigator;
   private stepContainer!: StepContainer;
   private useCaseSelector!: UseCaseSelector;
+  private dataAcquisitionStep!: DataAcquisitionStep;
 
   constructor() {
     // Generate and inject HTML content FIRST, before initializing managers
@@ -100,22 +102,7 @@ class AutoEQApplication {
 
           <!-- Step 2: Data Acquisition -->
           <div data-step="2" id="step2-container">
-            <div class="step-content-wrapper">
-              <div class="step-header-section">
-                <h2 class="step-title">Data Acquisition</h2>
-                <p class="step-description" id="step2-description">
-                  Select your data source: load from files, choose a speaker/headphone, or capture live measurements.
-                </p>
-              </div>
-              <form id="autoeq_form" class="parameter-form">
-                ${generateDataAcquisition()}
-              </form>
-              <div class="step-actions">
-                <button type="button" id="step2_next_btn" class="btn btn-primary btn-large" style="margin-left: auto;">
-                  Next: Configure EQ
-                </button>
-              </div>
-            </div>
+            <!-- DataAcquisitionStep component will be rendered here -->
           </div>
 
           <!-- Step 3: EQ Design & Optimization -->
@@ -230,7 +217,6 @@ class AutoEQApplication {
 
       <!-- Modals -->
       ${generateOptimizationModal()}
-      ${generateCaptureModal()}
     `;
   }
 
@@ -312,6 +298,22 @@ class AutoEQApplication {
         setTimeout(() => {
           this.stepNavigator.goToStep(2);
         }, 500);
+      },
+    });
+
+    // Initialize Data Acquisition Step (Step 2)
+    const step2Container = document.getElementById("step2-container")!;
+    this.dataAcquisitionStep = new DataAcquisitionStep(step2Container, {
+      onDataReady: (source) => {
+        console.log("📊 Data ready from source:", source);
+        // Enable next button when data is ready
+        const step2NextBtn = document.getElementById("step2_next_btn");
+        if (step2NextBtn) {
+          (step2NextBtn as HTMLButtonElement).disabled = false;
+        }
+      },
+      onSourceChange: (source) => {
+        console.log("📊 Data source changed to:", source);
       },
     });
 

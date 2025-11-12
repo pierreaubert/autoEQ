@@ -238,11 +238,13 @@ export class UIManager {
   }
 
   private setupEventListeners(): void {
-    // Form submission
-    this.form.addEventListener("submit", (e) => {
-      e.preventDefault();
-      this.onOptimizeClick();
-    });
+    // Form submission (may not exist in step-based workflow)
+    if (this.form) {
+      this.form.addEventListener("submit", (e) => {
+        e.preventDefault();
+        this.onOptimizeClick();
+      });
+    }
 
     // Reset button
     this.resetBtn.addEventListener("click", () => {
