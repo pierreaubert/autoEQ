@@ -3,8 +3,10 @@
 // ============================================================================
 
 use crate::tauri_audio_recording::AudioError;
-use sotf_audio::{AudioFileInfo, AudioStreamingManager, LoudnessCompensation, PluginConfig, StreamingState};
 use autoeq::iir::Biquad;
+use sotf_audio::{
+    AudioFileInfo, AudioStreamingManager, LoudnessCompensation, PluginConfig, StreamingState,
+};
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::Mutex;
 
@@ -139,7 +141,13 @@ pub async fn stream_start_playback(
                 _ => return Err(format!("Unknown filter type: {}", f.filter_type)),
             };
 
-            Ok(Biquad::new(filter_type, sample_rate, f.freq, f.q, f.db_gain))
+            Ok(Biquad::new(
+                filter_type,
+                sample_rate,
+                f.freq,
+                f.q,
+                f.db_gain,
+            ))
         })
         .collect();
 
@@ -155,9 +163,7 @@ pub async fn stream_start_playback(
 
     // Start playback
     let mut manager = streaming_manager.lock().await;
-    match manager
-        .start_playback(output_device.clone(), plugins, output_channels)
-    {
+    match manager.start_playback(output_device.clone(), plugins, output_channels) {
         Ok(_) => {
             // Emit state change event
             let _ = app_handle.emit(
@@ -336,7 +342,13 @@ pub async fn stream_update_filters(
                 _ => return Err(format!("Unknown filter type: {}", f.filter_type)),
             };
 
-            Ok(Biquad::new(filter_type, sample_rate, f.freq, f.q, f.db_gain))
+            Ok(Biquad::new(
+                filter_type,
+                sample_rate,
+                f.freq,
+                f.q,
+                f.db_gain,
+            ))
         })
         .collect();
 

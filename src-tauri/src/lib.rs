@@ -7,10 +7,10 @@ use sotf_audio::AudioStreamingManager;
 use sotf_audio::SharedAudioState;
 
 // Declare modules
+mod tauri_audio_capture; // NEW: Audio capture with test signals
 mod tauri_audio_devices;
 mod tauri_audio_loudness;
-mod tauri_audio_recording;  // NOTE: Module kept for AudioError type, but commands disabled
-mod tauri_audio_capture;    // NEW: Audio capture with test signals
+mod tauri_audio_recording; // NOTE: Module kept for AudioError type, but commands disabled
 mod tauri_audio_replaygain;
 mod tauri_audio_spectrum;
 mod tauri_audio_streaming;
@@ -55,9 +55,7 @@ pub use tauri_generate_eq::{
     generate_apo_format, generate_aupreset_format, generate_rme_format, generate_rme_room_format,
 };
 
-pub use tauri_audio_capture::{
-    record_channel, save_recordings_zip, load_recordings_zip,
-};
+pub use tauri_audio_capture::{load_recordings_zip, record_channel, save_recordings_zip};
 
 #[tauri::command]
 fn exit_app(window: tauri::Window) {
