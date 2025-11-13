@@ -270,6 +270,25 @@ export class LevelMeter {
   }
 
   /**
+   * Reconfigure channel count and labels
+   */
+  reconfigure(channels: number, channelLabels?: string[]): void {
+    this.config.channels = channels;
+    this.config.channelLabels = channelLabels ?? Array.from({ length: channels }, (_, i) => `${i + 1}`);
+
+    // Reinitialize arrays
+    this.currentLevels = new Array(channels).fill(this.config.minDb);
+    this.currentPeaks = new Array(channels).fill(this.config.minDb);
+    this.peakHolds = new Array(channels).fill(this.config.minDb);
+    this.peakHoldTimers = new Array(channels).fill(0);
+
+    console.log('[LevelMeter] Reconfigured to', channels, 'channels:', channelLabels);
+
+    // Trigger re-render
+    this.render();
+  }
+
+  /**
    * Cleanup
    */
   destroy(): void {

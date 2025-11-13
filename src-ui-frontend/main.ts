@@ -37,6 +37,7 @@ class AutoEQApplication {
   private stepContainer!: StepContainer;
   private useCaseSelector!: UseCaseSelector;
   private dataAcquisitionStep!: DataAcquisitionStep;
+  private optimizedFilters: FilterParam[] | null = null;
 
   constructor() {
     // Generate and inject HTML content FIRST, before initializing managers
@@ -115,7 +116,7 @@ class AutoEQApplication {
                 </p>
               </div>
               <div class="step3-two-column-layout">
-                <form id="eq_form" class="parameter-form">
+                <form id="autoeq_form" class="parameter-form">
                   <div class="step3-column">
                     ${generateEQDesign()}
                   </div>
@@ -265,6 +266,18 @@ class AutoEQApplication {
       onAfterStepChange: (stepId) => {
         console.log(`✅ Now on step ${stepId}`);
         this.stepNavigator.goToStep(stepId);
+
+        // Apply stored optimized filters when entering Step 4
+        if (stepId === 4 && this.optimizedFilters && this.audioPlayer) {
+          console.log("[MAIN] 📊 Applying stored optimized filters to audio player");
+          try {
+            this.audioPlayer.updateFilterParams(this.optimizedFilters);
+            this.audioPlayer.setEQEnabled(true);
+            console.log("[MAIN] ✅ Filters applied successfully");
+          } catch (error) {
+            console.error("[MAIN] ❌ Failed to apply filters:", error);
+          }
+        }
       },
     });
 
@@ -317,11 +330,18 @@ class AutoEQApplication {
       },
     });
 
-    // Setup Step 2 Next button
+    // Setup Step 2 Navigation buttons
     const step2NextBtn = document.getElementById("step2_next_btn");
     if (step2NextBtn) {
       step2NextBtn.addEventListener("click", () => {
         this.stepNavigator.goToStep(3);
+      });
+    }
+
+    const step2PrevBtn = document.getElementById("step2_prev_btn");
+    if (step2PrevBtn) {
+      step2PrevBtn.addEventListener("click", () => {
+        this.stepNavigator.goToStep(1);
       });
     }
 
@@ -442,11 +462,23 @@ class AutoEQApplication {
       tabsContainer.style.display = "none";
     }
 
+    // Also hide the "Select Data Source" heading
+    const sectionGroup = document.querySelector(".data-acquisition-step .section-group h3") as HTMLElement;
+    if (sectionGroup) {
+      sectionGroup.style.display = "none";
+    }
+
     // Get all tab content sections
     const fileInputs = document.getElementById("file_inputs");
     const speakerInputs = document.getElementById("speaker_inputs");
     const headphoneInputs = document.getElementById("headphone_inputs");
     const captureInputs = document.getElementById("capture_inputs");
+
+    // Get all info cards
+    const fileInfo = document.getElementById("file_info");
+    const speakerInfo = document.getElementById("speaker_info");
+    const headphoneInfo = document.getElementById("headphone_info");
+    const captureInfo = document.getElementById("capture_info");
 
     // Hide all sections first
     [fileInputs, speakerInputs, headphoneInputs, captureInputs].forEach((el) => {
@@ -456,14 +488,28 @@ class AutoEQApplication {
       }
     });
 
+    // Hide all info cards first
+    [fileInfo, speakerInfo, headphoneInfo, captureInfo].forEach((el) => {
+      if (el) {
+        (el as HTMLElement).style.display = "none";
+      }
+    });
+
     // Update description and show relevant section
-    const description = document.getElementById("step2-description");
+    const description = document.querySelector(".data-acquisition-step .step-description") as HTMLElement;
+    const headerSection = document.querySelector(".data-acquisition-step .step-header-section") as HTMLElement;
 
     switch (useCase) {
       case "speaker":
+        if (headerSection) {
+          headerSection.style.display = "block";
+        }
         if (speakerInputs) {
           speakerInputs.style.display = "block";
           speakerInputs.classList.add("active");
+        }
+        if (speakerInfo) {
+          (speakerInfo as HTMLElement).style.display = "block";
         }
         if (description) {
           description.textContent = "Search for your speaker in our database or select from recent measurements.";
@@ -474,12 +520,20 @@ class AutoEQApplication {
           speakerRadio.checked = true;
           speakerRadio.dispatchEvent(new Event("change", { bubbles: true }));
         }
+        // Enable button when speaker and version are selected
+        this.setupSpeakerValidation();
         break;
 
       case "headphone":
+        if (headerSection) {
+          headerSection.style.display = "block";
+        }
         if (headphoneInputs) {
           headphoneInputs.style.display = "block";
           headphoneInputs.classList.add("active");
+        }
+        if (headphoneInfo) {
+          (headphoneInfo as HTMLElement).style.display = "block";
         }
         if (description) {
           description.textContent = "Load your headphone measurement file and select the target curve.";
@@ -489,9 +543,15 @@ class AutoEQApplication {
           headphoneRadio.checked = true;
           headphoneRadio.dispatchEvent(new Event("change", { bubbles: true }));
         }
+        // Enable button when headphone curve and target are selected
+        this.setupHeadphoneValidation();
         break;
 
       case "capture":
+        // Hide header section for capture to save space
+        if (headerSection) {
+          headerSection.style.display = "none";
+        }
         if (captureInputs) {
           captureInputs.style.display = "block";
           captureInputs.classList.add("active");
@@ -504,8 +564,8 @@ class AutoEQApplication {
             console.log('[Main] Capture panel web component rendered');
           }
         }
-        if (description) {
-          description.textContent = "Capture live audio measurements using your microphone and test signal.";
+        if (captureInfo) {
+          (captureInfo as HTMLElement).style.display = "block";
         }
         const captureRadio = document.querySelector<HTMLInputElement>('input[name="input_source"][value="capture"]');
         if (captureRadio) {
@@ -515,9 +575,15 @@ class AutoEQApplication {
         break;
 
       case "file":
+        if (headerSection) {
+          headerSection.style.display = "block";
+        }
         if (fileInputs) {
           fileInputs.style.display = "block";
           fileInputs.classList.add("active");
+        }
+        if (fileInfo) {
+          (fileInfo as HTMLElement).style.display = "block";
         }
         if (description) {
           description.textContent = "Load CSV files containing your input curve and optionally a target curve.";
@@ -527,6 +593,8 @@ class AutoEQApplication {
           fileRadio.checked = true;
           fileRadio.dispatchEvent(new Event("change", { bubbles: true }));
         }
+        // Enable button when curve file is selected
+        this.setupFileValidation();
         break;
     }
   }
@@ -697,6 +765,33 @@ class AutoEQApplication {
       // Get form data
       const formData = new FormData(this.uiManager.getForm());
 
+      // Add Step 2 (Data Acquisition) fields to form data
+      const addFieldIfExists = (id: string, name?: string) => {
+        const element = document.getElementById(id) as HTMLInputElement | HTMLSelectElement;
+        if (element && element.value) {
+          formData.set(name || id, element.value);
+        }
+      };
+
+      // Add input source type (this should be set by radio buttons, but let's also check)
+      const inputSourceRadio = document.querySelector('input[name="input_source"]:checked') as HTMLInputElement;
+      if (inputSourceRadio) {
+        formData.set('input_source', inputSourceRadio.value);
+      }
+
+      // Add speaker fields
+      addFieldIfExists('speaker');
+      addFieldIfExists('version');
+      addFieldIfExists('measurement');
+
+      // Add file fields
+      addFieldIfExists('curve_path');
+      addFieldIfExists('target_path');
+
+      // Add headphone fields
+      addFieldIfExists('headphone_curve_path');
+      addFieldIfExists('headphone_target');
+
       // Validate parameters
       const validation = this.apiManager.validateOptimizationParams(formData);
       if (!validation.isValid) {
@@ -775,7 +870,7 @@ class AutoEQApplication {
         console.log("[MAIN] ℹ️  Skipping score update (scores not available for this optimization type)");
       }
 
-      // Update audio player with new filter parameters
+      // Store optimized filter parameters for later use
       if (result.filter_params) {
         const filterParams: FilterParam[] = [];
         for (let i = 0; i < result.filter_params.length; i += 3) {
@@ -789,8 +884,17 @@ class AutoEQApplication {
             enabled: true,
           });
         }
-        this.audioPlayer?.updateFilterParams(filterParams);
-        this.audioPlayer?.setEQEnabled(true);
+        // Store filters for later application
+        this.optimizedFilters = filterParams;
+
+        // Try to apply filters now if audio player is ready, but don't fail if it's not
+        try {
+          this.audioPlayer?.updateFilterParams(filterParams);
+          this.audioPlayer?.setEQEnabled(true);
+          console.log("[MAIN] ✅ Filters applied to audio player");
+        } catch (error) {
+          console.log("[MAIN] ℹ️  Audio player not ready yet, filters will be applied when entering Step 4");
+        }
       }
 
       // Generate plots using Tauri backend
@@ -1020,6 +1124,66 @@ class AutoEQApplication {
         "Failed to cancel optimization, but stopping locally",
       );
     }
+  }
+
+  /**
+   * Setup validation for speaker selection
+   */
+  private setupSpeakerValidation(): void {
+    const speakerInput = document.getElementById("speaker") as HTMLInputElement;
+    const versionSelect = document.getElementById("version") as HTMLSelectElement;
+    const measurementSelect = document.getElementById("measurement") as HTMLSelectElement;
+    const step2NextBtn = document.getElementById("step2_next_btn") as HTMLButtonElement;
+
+    const checkValidity = () => {
+      if (speakerInput && versionSelect && measurementSelect && step2NextBtn) {
+        const isValid = speakerInput.value.trim() !== "" &&
+                       versionSelect.value !== "" &&
+                       measurementSelect.value !== "";
+        step2NextBtn.disabled = !isValid;
+      }
+    };
+
+    if (speakerInput) speakerInput.addEventListener("input", checkValidity);
+    if (versionSelect) versionSelect.addEventListener("change", checkValidity);
+    if (measurementSelect) measurementSelect.addEventListener("change", checkValidity);
+  }
+
+  /**
+   * Setup validation for headphone selection
+   */
+  private setupHeadphoneValidation(): void {
+    const headphoneCurveInput = document.getElementById("headphone_curve_path") as HTMLInputElement;
+    const headphoneTargetSelect = document.getElementById("headphone_target") as HTMLSelectElement;
+    const step2NextBtn = document.getElementById("step2_next_btn") as HTMLButtonElement;
+
+    const checkValidity = () => {
+      if (headphoneCurveInput && headphoneTargetSelect && step2NextBtn) {
+        const isValid = headphoneCurveInput.value.trim() !== "" &&
+                       headphoneTargetSelect.value !== "";
+        step2NextBtn.disabled = !isValid;
+      }
+    };
+
+    if (headphoneCurveInput) headphoneCurveInput.addEventListener("input", checkValidity);
+    if (headphoneTargetSelect) headphoneTargetSelect.addEventListener("change", checkValidity);
+  }
+
+  /**
+   * Setup validation for file selection
+   */
+  private setupFileValidation(): void {
+    const curvePathInput = document.getElementById("curve_path") as HTMLInputElement;
+    const step2NextBtn = document.getElementById("step2_next_btn") as HTMLButtonElement;
+
+    const checkValidity = () => {
+      if (curvePathInput && step2NextBtn) {
+        const isValid = curvePathInput.value.trim() !== "";
+        step2NextBtn.disabled = !isValid;
+      }
+    };
+
+    if (curvePathInput) curvePathInput.addEventListener("input", checkValidity);
   }
 
   // Cleanup method

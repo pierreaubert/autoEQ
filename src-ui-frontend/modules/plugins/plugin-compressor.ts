@@ -46,9 +46,9 @@ export class CompressorPlugin extends BasePlugin {
       <div class="compressor-plugin ${standalone ? 'standalone' : 'embedded'}">
         ${standalone ? '<div class="compressor-menubar-container"></div>' : ''}
         <div class="compressor-content">
-          <!-- Main Grid: Parameters + Meter -->
+          <!-- Main Grid: Parameters + Meter + Graph -->
           <div class="compressor-grid">
-            <!-- Left: Parameters -->
+            <!-- Column 1: Parameters -->
             <div class="compressor-parameters">
               <h4 class="section-title">Dynamics Control</h4>
 
@@ -131,17 +131,20 @@ export class CompressorPlugin extends BasePlugin {
               </div>
             </div>
 
-            <!-- Right: Gain Reduction Meter -->
-            <div class="compressor-meter-section">
+            <!-- Column 2: Gain Reduction Meter -->
+            <div class="compressor-meter-column">
               <h4 class="section-title">Gain Reduction</h4>
               <div class="gr-meter-container">
                 <canvas class="gr-meter-canvas" width="100" height="300"></canvas>
                 <div class="gr-value">${Math.abs(this.currentGainReduction).toFixed(1)} dB</div>
               </div>
+            </div>
 
-              <!-- Transfer Curve Visualization -->
+            <!-- Column 3: Transfer Curve -->
+            <div class="compressor-curve-column">
+              <h4 class="section-title">Transfer Curve</h4>
               <div class="transfer-curve-container">
-                <canvas class="transfer-curve-canvas" width="200" height="200"></canvas>
+                <canvas class="transfer-curve-canvas" width="300" height="300"></canvas>
               </div>
             </div>
           </div>
@@ -200,8 +203,8 @@ export class CompressorPlugin extends BasePlugin {
     if (!ctx) return;
 
     const dpr = window.devicePixelRatio || 1;
-    const width = 200;
-    const height = 200;
+    const width = 300;
+    const height = 300;
 
     canvas.width = width * dpr;
     canvas.height = height * dpr;

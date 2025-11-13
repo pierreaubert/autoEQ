@@ -199,6 +199,16 @@ export class DataAcquisitionStep {
             </div>
           </div>
         </div>
+
+        <!-- Navigation Buttons -->
+        <div class="step-actions">
+          <button type="button" id="step2_prev_btn" class="btn btn-secondary btn-large">
+            Previous
+          </button>
+          <button type="button" id="step2_next_btn" class="btn btn-primary btn-large" disabled>
+            Continue to EQ Design
+          </button>
+        </div>
       </div>
     `;
   }
@@ -327,6 +337,12 @@ export class DataAcquisitionStep {
             this.config.onDataReady('capture');
           }
         }) as EventListener);
+
+        // Listen for previous button click - go back to config step
+        recordingPanel.addEventListener('captureNavigatePrevious', () => {
+          console.log('[DataAcquisitionStep] Navigate to previous capture step');
+          this.switchCaptureStep('config');
+        });
       }
     } else {
       console.error('[DataAcquisitionStep] ERROR: Could not find #capture_recording_step container!');

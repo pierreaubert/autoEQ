@@ -14,6 +14,7 @@ export { PluginMenubar, type PluginMenubarCallbacks } from './plugin-menubar';
 // Host
 export { PluginHost, type HostConfig, type HostCallbacks } from './host';
 export { ChannelStrip } from './host-channel-strip';
+export { BasicEQ } from './host-basic-eq';
 
 // Plugins
 export { EQPlugin, type FilterParam } from './plugin-eq';

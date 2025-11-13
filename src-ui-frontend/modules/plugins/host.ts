@@ -1,6 +1,7 @@
 // Plugin Host Component
 // Container for managing multiple plugins with menubar, hosting bar, and display box
 
+import './host.css';
 import { PluginMenubar, type PluginMenubarCallbacks } from './plugin-menubar';
 import { LevelMeter } from './level-meter';
 import type { IPlugin, MenubarConfig, LevelMeterData, LUFSMeterData } from './plugin-types';
@@ -47,6 +48,7 @@ export class PluginHost {
   private selectedPlugin: IPlugin | null = null;
   private volume: number = 1.0;
   private muted: boolean = false;
+  private monitoringMode: 'input' | 'output' = 'output';
 
   constructor(container: HTMLElement, config: HostConfig, callbacks: HostCallbacks = {}) {
     this.container = container;
@@ -117,8 +119,25 @@ export class PluginHost {
   private renderRightPanel(): string {
     return `
       ${this.config.showLUFS ? this.renderLUFSMeter() : ''}
+      ${this.config.showLevelMeters ? this.renderMonitoringToggle() : ''}
       ${this.config.showLevelMeters ? this.renderLevelMeters() : ''}
       ${this.config.showVolumeControl ? this.renderVolumeControl() : ''}
+    `;
+  }
+
+  /**
+   * Render monitoring toggle (input/output)
+   */
+  private renderMonitoringToggle(): string {
+    return `
+      <div class="monitoring-toggle">
+        <button class="monitoring-button ${this.monitoringMode === 'input' ? 'active' : ''}" data-mode="input">
+          Input
+        </button>
+        <button class="monitoring-button ${this.monitoringMode === 'output' ? 'active' : ''}" data-mode="output">
+          Output
+        </button>
+      </div>
     `;
   }
 
@@ -227,6 +246,15 @@ export class PluginHost {
         this.setVolume(value);
       });
     }
+
+    // Monitoring toggle buttons
+    const monitoringButtons = this.container.querySelectorAll('.monitoring-button');
+    monitoringButtons.forEach((button) => {
+      button.addEventListener('click', (e) => {
+        const mode = (e.target as HTMLElement).dataset.mode as 'input' | 'output';
+        this.setMonitoringMode(mode);
+      });
+    });
   }
 
   /**
@@ -250,6 +278,9 @@ export class PluginHost {
 
     this.plugins.push(plugin);
     this.renderPluginSlot(plugin);
+
+    // Update level meters if plugin changes channel count
+    this.updateLevelMeterChannels();
 
     // Callback
     if (this.callbacks.onPluginAdd) {
@@ -278,6 +309,9 @@ export class PluginHost {
 
     // Re-render slots
     this.renderAllPluginSlots();
+
+    // Update level meters if plugin changes channel count
+    this.updateLevelMeterChannels();
 
     // Cleanup plugin
     plugin.destroy();
@@ -378,7 +412,7 @@ export class PluginHost {
     const slots = this.container.querySelectorAll('.plugin-slot');
     slots.forEach((slot) => {
       const pluginId = (slot as HTMLElement).dataset.pluginId;
-      const isSelected = this.selectedPlugin && this.selectedPlugin.metadata.id === pluginId;
+      const isSelected = !!(this.selectedPlugin && this.selectedPlugin.metadata.id === pluginId);
       slot.classList.toggle('selected', isSelected);
     });
   }
@@ -387,8 +421,111 @@ export class PluginHost {
    * Show plugin selector dialog
    */
   private showPluginSelector(): void {
-    // TODO: Implement plugin selector dialog
-    console.log('[PluginHost] Show plugin selector');
+    // Available plugins
+    const availablePlugins = [
+      { id: 'eq', name: 'EQ', category: 'eq', description: 'Parametric Equalizer', icon: '🎚️' },
+      { id: 'compressor', name: 'Compressor', category: 'dynamics', description: 'Dynamic Range Compressor', icon: '🔊' },
+      { id: 'limiter', name: 'Limiter', category: 'dynamics', description: 'Peak Limiter', icon: '🛡️' },
+      { id: 'upmixer', name: 'Upmixer', category: 'spatial', description: 'Stereo to 5.1 Upmixer', icon: '🔉' },
+      { id: 'spectrum', name: 'Spectrum', category: 'analyzer', description: 'Frequency Spectrum Analyzer', icon: '📊' },
+    ];
+
+    // Filter by allowed plugins if specified
+    const plugins = this.config.allowedPlugins!.length > 0
+      ? availablePlugins.filter(p => this.config.allowedPlugins!.includes(p.category))
+      : availablePlugins;
+
+    // Create dialog
+    const dialog = document.createElement('div');
+    dialog.className = 'plugin-selector-overlay';
+    dialog.innerHTML = `
+      <div class="plugin-selector-dialog">
+        <div class="plugin-selector-header">
+          <h3>Add Plugin</h3>
+          <button class="plugin-selector-close">×</button>
+        </div>
+        <div class="plugin-selector-body">
+          ${plugins.map(plugin => `
+            <button class="plugin-selector-item" data-plugin-id="${plugin.id}">
+              <span class="plugin-icon">${plugin.icon}</span>
+              <div class="plugin-info">
+                <div class="plugin-name">${plugin.name}</div>
+                <div class="plugin-description">${plugin.description}</div>
+              </div>
+            </button>
+          `).join('')}
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(dialog);
+
+    // Close handler
+    const closeDialog = () => {
+      dialog.remove();
+    };
+
+    // Close button
+    const closeBtn = dialog.querySelector('.plugin-selector-close') as HTMLButtonElement;
+    closeBtn.addEventListener('click', closeDialog);
+
+    // Overlay click
+    dialog.addEventListener('click', (e) => {
+      if (e.target === dialog) {
+        closeDialog();
+      }
+    });
+
+    // Plugin selection
+    const pluginItems = dialog.querySelectorAll('.plugin-selector-item');
+    pluginItems.forEach(item => {
+      item.addEventListener('click', () => {
+        const pluginId = (item as HTMLElement).dataset.pluginId!;
+        this.createPluginById(pluginId);
+        closeDialog();
+      });
+    });
+  }
+
+  /**
+   * Create plugin by ID
+   */
+  private createPluginById(pluginId: string): void {
+    // Dynamically import and create plugin
+    import('./plugin-eq').then(({ EQPlugin }) => {
+      if (pluginId === 'eq') {
+        const plugin = new EQPlugin();
+        this.addPlugin(plugin);
+      }
+    });
+
+    import('./plugin-compressor').then(({ CompressorPlugin }) => {
+      if (pluginId === 'compressor') {
+        const plugin = new CompressorPlugin();
+        this.addPlugin(plugin);
+      }
+    });
+
+    import('./plugin-limiter').then(({ LimiterPlugin }) => {
+      if (pluginId === 'limiter') {
+        const plugin = new LimiterPlugin();
+        this.addPlugin(plugin);
+      }
+    });
+
+    import('./plugin-upmixer').then(({ UpmixerPlugin }) => {
+      if (pluginId === 'upmixer') {
+        const plugin = new UpmixerPlugin();
+        this.addPlugin(plugin);
+      }
+    });
+
+    import('./plugin-spectrum').then(({ SpectrumPlugin }) => {
+      if (pluginId === 'spectrum') {
+        const plugin = new SpectrumPlugin();
+        this.addPlugin(plugin);
+      }
+    });
   }
 
   /**
@@ -468,6 +605,78 @@ export class PluginHost {
    */
   getSelectedPlugin(): IPlugin | null {
     return this.selectedPlugin;
+  }
+
+  /**
+   * Set monitoring mode (input/output)
+   */
+  setMonitoringMode(mode: 'input' | 'output'): void {
+    this.monitoringMode = mode;
+
+    // Update button states
+    const buttons = this.container.querySelectorAll('.monitoring-button');
+    buttons.forEach((button) => {
+      const btnMode = (button as HTMLElement).dataset.mode;
+      button.classList.toggle('active', btnMode === mode);
+    });
+
+    // Reconfigure level meters with appropriate channel count
+    this.updateLevelMeterChannels();
+
+    console.log('[PluginHost] Monitoring mode:', mode);
+  }
+
+  /**
+   * Update level meter channel configuration based on monitoring mode
+   */
+  private updateLevelMeterChannels(): void {
+    if (!this.levelMeter) return;
+
+    const { inputChannels, outputChannels } = this.getChannelCounts();
+    const channels = this.monitoringMode === 'input' ? inputChannels : outputChannels;
+    const labels = this.generateChannelLabels(channels);
+
+    this.levelMeter.reconfigure(channels, labels);
+  }
+
+  /**
+   * Get input and output channel counts based on plugin chain
+   */
+  private getChannelCounts(): { inputChannels: number; outputChannels: number } {
+    // Default: start with 2 channels (stereo input)
+    let inputChannels = 2;
+    let outputChannels = 2;
+
+    // If we have plugins, check if any change channel count
+    // For now, check if there's an upmixer plugin
+    const hasUpmixer = this.plugins.some(p => p.metadata.category === 'spatial');
+
+    if (hasUpmixer) {
+      // Upmixer: 2ch input -> 5ch or 6ch output
+      inputChannels = 2;
+      outputChannels = 6; // L, R, C, LFE, SL, SR
+    } else {
+      // No channel-changing plugins: same in/out
+      inputChannels = 2;
+      outputChannels = 2;
+    }
+
+    return { inputChannels, outputChannels };
+  }
+
+  /**
+   * Generate channel labels based on count
+   */
+  private generateChannelLabels(count: number): string[] {
+    if (count === 2) {
+      return ['L', 'R'];
+    } else if (count === 6) {
+      return ['L', 'R', 'C', 'LFE', 'SL', 'SR'];
+    } else if (count === 8) {
+      return ['L', 'R', 'C', 'LFE', 'SL', 'SR', 'SBL', 'SBR'];
+    } else {
+      return Array.from({ length: count }, (_, i) => `${i + 1}`);
+    }
   }
 
   /**

@@ -83,26 +83,28 @@ export class UseCaseSelector {
    */
   private generateHTML(): string {
     return `
-      <div class="use-case-content">
-        <div class="use-case-header">
-          <h1 class="use-case-title">Choose Your Use Case</h1>
-          <p class="use-case-subtitle">
-            Select the type of device or measurement method for EQ optimization
-          </p>
-        </div>
+      <section class="section">
+        <div class="container">
+          <div class="has-text-centered mb-6">
+            <h1 class="title is-2">Choose Your Use Case</h1>
+            <p class="subtitle is-5">
+              Select the type of device or measurement method for EQ optimization
+            </p>
+          </div>
 
-        <div class="use-case-grid">
-          ${this.useCases.map((useCase) => this.generateCardHTML(useCase)).join("")}
-        </div>
+          <div class="columns is-multiline is-centered">
+            ${this.useCases.map((useCase) => this.generateCardHTML(useCase)).join("")}
+          </div>
 
-        <div class="use-case-info">
-          <p>
-            <strong>Not sure which to choose?</strong>
-            Start with <strong>Speaker</strong> or <strong>Headphone</strong>
-            to browse thousands of professional measurements.
-          </p>
+          <div class="notification is-info is-light mt-6">
+            <p>
+              <strong>Not sure which to choose?</strong>
+              Start with <strong>Speaker</strong> or <strong>Headphone</strong>
+              to browse thousands of professional measurements.
+            </p>
+          </div>
         </div>
-      </div>
+      </section>
     `;
   }
 
@@ -111,25 +113,27 @@ export class UseCaseSelector {
    */
   private generateCardHTML(useCase: UseCaseOption): string {
     const isSelected = this.selectedUseCase === useCase.id;
-    const selectedClass = isSelected ? "selected" : "";
+    const selectedClass = isSelected ? "is-primary" : "";
 
     return `
-      <div class="use-case-card ${selectedClass}" data-use-case="${useCase.id}">
-        <div class="use-case-card-icon">
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            ${useCase.icon}
-          </svg>
+      <div class="column is-one-third-desktop is-half-tablet">
+        <div class="box use-case-card ${selectedClass}" data-use-case="${useCase.id}" tabindex="0" role="button">
+          <div class="use-case-card-icon">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              ${useCase.icon}
+            </svg>
+          </div>
+          <h3 class="title is-5 mt-4">${useCase.title}</h3>
+          <p class="content">${useCase.description}</p>
+          ${isSelected ? '<span class="tag is-success is-light">Selected</span>' : ""}
         </div>
-        <h3 class="use-case-card-title">${useCase.title}</h3>
-        <p class="use-case-card-description">${useCase.description}</p>
-        ${isSelected ? '<div class="use-case-card-badge">Selected</div>' : ""}
       </div>
     `;
   }
@@ -168,18 +172,18 @@ export class UseCaseSelector {
     cards.forEach((card) => {
       const cardUseCase = (card as HTMLElement).dataset.useCase;
       if (cardUseCase === useCase) {
-        card.classList.add("selected");
+        card.classList.add("is-primary");
         // Add badge if not present
-        if (!card.querySelector(".use-case-card-badge")) {
-          const badge = document.createElement("div");
-          badge.className = "use-case-card-badge";
+        if (!card.querySelector(".tag")) {
+          const badge = document.createElement("span");
+          badge.className = "tag is-success is-light";
           badge.textContent = "Selected";
           card.appendChild(badge);
         }
       } else {
-        card.classList.remove("selected");
+        card.classList.remove("is-primary");
         // Remove badge if present
-        const badge = card.querySelector(".use-case-card-badge");
+        const badge = card.querySelector(".tag");
         if (badge) badge.remove();
       }
     });
@@ -212,8 +216,8 @@ export class UseCaseSelector {
 
     const cards = this.container.querySelectorAll(".use-case-card");
     cards.forEach((card) => {
-      card.classList.remove("selected");
-      const badge = card.querySelector(".use-case-card-badge");
+      card.classList.remove("is-primary");
+      const badge = card.querySelector(".tag");
       if (badge) badge.remove();
     });
   }

@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Basic EQ Demo</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 20px;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+        background: #1a1a1a;
+        color: #ffffff;
+      }
+
+      .demo-container {
+        max-width: 1200px;
+        margin: 0 auto;
+      }
+
+      h1 {
+        margin-bottom: 20px;
+        color: #00bfff;
+      }
+
+      .description {
+        margin-bottom: 30px;
+        padding: 15px;
+        background: #2a2a2a;
+        border-radius: 8px;
+        line-height: 1.6;
+      }
+
+      #basic-eq-container {
+        min-height: 600px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+      }
+
+      .info {
+        margin-top: 30px;
+        padding: 15px;
+        background: #2a2a2a;
+        border-radius: 8px;
+        border-left: 4px solid #00bfff;
+      }
+
+      .info h3 {
+        margin-top: 0;
+        color: #00bfff;
+      }
+
+      code {
+        background: #1a1a1a;
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-family: "Courier New", monospace;
+        color: #00ff88;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="demo-container">
+      <h1>Basic EQ Demo</h1>
+
+      <div class="description">
+        <p>
+          <strong>BasicEQ</strong> is a preconfigured plugin host that contains
+          just an EQ plugin. It's perfect for simple equalization tasks without
+          the complexity of a full channel strip.
+        </p>
+        <p>
+          This demo shows how to instantiate and use the BasicEQ component in
+          your application.
+        </p>
+      </div>
+
+      <div id="basic-eq-container">
+        <!-- BasicEQ will be rendered here -->
+      </div>
+
+      <div class="info">
+        <h3>Usage</h3>
+        <p>Create a BasicEQ instance:</p>
+        <pre><code>import { BasicEQ } from './modules/plugins/host-basic-eq';
+
+const container = document.getElementById('basic-eq-container');
+const basicEQ = new BasicEQ(container, {
+  onPluginChange: (plugin) => {
+    console.log('Plugin changed:', plugin.getName());
+  }
+});
+
+// Access the EQ plugin
+const eq = basicEQ.getEQ();
+
+// Add a filter
+eq.addFilter({
+  type: 'peak',
+  frequency: 1000,
+  q: 1.0,
+  gain: 3.0
+});</code></pre>
+      </div>
+    </div>
+
+    <script type="module">
+      import { BasicEQ } from "../modules/plugins/host-basic-eq.ts";
+
+      // Get container
+      const container = document.getElementById("basic-eq-container");
+
+      // Create BasicEQ instance
+      const basicEQ = new BasicEQ(container, {
+        onPluginChange: (plugin) => {
+          console.log("Plugin changed:", plugin.getName());
+        },
+        onParameterChange: (plugin, parameter, value) => {
+          console.log(
+            `Parameter changed: ${parameter.name} = ${value} in ${plugin.getName()}`
+          );
+        },
+      });
+
+      // Get the EQ plugin
+      const eq = basicEQ.getEQ();
+
+      // Add some example filters
+      eq.addFilter({
+        type: "peak",
+        frequency: 100,
+        q: 1.0,
+        gain: 2.0,
+      });
+
+      eq.addFilter({
+        type: "peak",
+        frequency: 1000,
+        q: 1.5,
+        gain: -3.0,
+      });
+
+      eq.addFilter({
+        type: "peak",
+        frequency: 5000,
+        q: 2.0,
+        gain: 4.0,
+      });
+
+      // Log info
+      console.log("BasicEQ initialized with", eq.getFilters().length, "filters");
+      console.log("Plugins in host:", basicEQ.getPlugins().map(p => p.getName()));
+    </script>
+  </body>
+</html>

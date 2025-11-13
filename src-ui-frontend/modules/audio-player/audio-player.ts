@@ -85,6 +85,12 @@ export class AudioPlayer {
   private peakDisplay: HTMLElement | null = null;
   private currentReplayGain: ReplayGainInfo | null = null;
 
+  // Host info display
+  private hostInfoFormat: HTMLElement | null = null;
+  private hostInfoSampleRate: HTMLElement | null = null;
+  private hostInfoChannels: HTMLElement | null = null;
+  private hostInfoBits: HTMLElement | null = null;
+
   // 30-bin spectrum analyzer constants
   private readonly SPECTRUM_BINS = 30;
   private readonly SPECTRUM_MIN_FREQ = 20;
@@ -282,6 +288,7 @@ export class AudioPlayer {
   private handleFileLoaded(info: AudioFileInfo): void {
     console.log("[AudioPlayer] File loaded:", info);
     this.updateAudioInfo();
+    this.updateHostInfo(info);
     this.showAudioStatus(true);
     this.setListenButtonEnabled(true);
     this.setStatus("Ready");
@@ -317,6 +324,29 @@ export class AudioPlayer {
     <div class="eq-table-container" style="display: none; padding: 12px;"></div>
   </div>
   ` : ''}
+
+  <!-- Section: Host Info -->
+  <div class="host-info-section-inline" style="margin: 16px 0; padding: 12px; background: var(--bg-secondary, #f5f5f5); border-radius: 8px;">
+    <h4 style="margin: 0 0 8px 0;">Audio Host Information</h4>
+    <div class="host-info-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; font-size: 0.9em;">
+      <div class="host-info-item">
+        <span class="host-info-label" style="color: var(--text-secondary, #666); font-weight: 500;">Format:</span>
+        <span class="host-info-format" style="font-family: monospace;">--</span>
+      </div>
+      <div class="host-info-item">
+        <span class="host-info-label" style="color: var(--text-secondary, #666); font-weight: 500;">Sample Rate:</span>
+        <span class="host-info-sample-rate" style="font-family: monospace;">--</span>
+      </div>
+      <div class="host-info-item">
+        <span class="host-info-label" style="color: var(--text-secondary, #666); font-weight: 500;">Channels:</span>
+        <span class="host-info-channels" style="font-family: monospace;">--</span>
+      </div>
+      <div class="host-info-item">
+        <span class="host-info-label" style="color: var(--text-secondary, #666); font-weight: 500;">Bit Depth:</span>
+        <span class="host-info-bits" style="font-family: monospace;">--</span>
+      </div>
+    </div>
+  </div>
 
   <!-- Section: Spectrum Analyzer -->
   <div class="spectrum-section-inline" style="margin: 16px 0; padding: 12px; background: var(--bg-secondary, #f5f5f5); border-radius: 8px;">
@@ -449,6 +479,12 @@ export class AudioPlayer {
       "#metrics-replay-gain",
     );
     this.peakDisplay = this.container.querySelector("#metrics-peak");
+
+    // Cache host info elements
+    this.hostInfoFormat = this.container.querySelector(".host-info-format");
+    this.hostInfoSampleRate = this.container.querySelector(".host-info-sample-rate");
+    this.hostInfoChannels = this.container.querySelector(".host-info-channels");
+    this.hostInfoBits = this.container.querySelector(".host-info-bits");
 
     console.log("[AudioPlayer] Cached ReplayGain elements:", {
       replayGainDisplay: !!this.replayGainDisplay,
@@ -661,6 +697,22 @@ export class AudioPlayer {
     if (this.audioBuffer && this.durationText) {
       const duration = this.audioBuffer.duration;
       this.durationText.textContent = this.formatTime(duration);
+    }
+  }
+
+  private updateHostInfo(info: AudioFileInfo): void {
+    if (this.hostInfoFormat) {
+      this.hostInfoFormat.textContent = info.format.toUpperCase();
+    }
+    if (this.hostInfoSampleRate) {
+      this.hostInfoSampleRate.textContent = `${(info.sample_rate / 1000).toFixed(1)} kHz`;
+    }
+    if (this.hostInfoChannels) {
+      const channelLabel = info.channels === 1 ? "Mono" : info.channels === 2 ? "Stereo" : `${info.channels}ch`;
+      this.hostInfoChannels.textContent = channelLabel;
+    }
+    if (this.hostInfoBits) {
+      this.hostInfoBits.textContent = `${info.bits_per_sample}-bit`;
     }
   }
 

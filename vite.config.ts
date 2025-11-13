@@ -40,6 +40,18 @@ export default defineConfig(async () => ({
     // We use a relative path '../dist' to put the final build
     // *outside* the 'frontend' folder, typically at project-root/dist
     outDir: "../dist",
+
+    // Multi-page build configuration
+    rollupOptions: {
+      input: {
+        main: path.resolve(__dirname, "./src-ui-frontend/index.html"),
+        'audio-player-demo': path.resolve(__dirname, "./src-ui-frontend/examples/audio-player-demo.html"),
+        'basic-eq-demo': path.resolve(__dirname, "./src-ui-frontend/examples/basic-eq-demo.html"),
+        'channel-strip-demo': path.resolve(__dirname, "./src-ui-frontend/examples/channel-strip-demo.html"),
+        'step-navigator-demo': path.resolve(__dirname, "./src-ui-frontend/examples/step-navigator-demo.html"),
+        'step-workflow-demo': path.resolve(__dirname, "./src-ui-frontend/examples/step-workflow-demo.html"),
+      },
+    },
   },
 
   resolve: {

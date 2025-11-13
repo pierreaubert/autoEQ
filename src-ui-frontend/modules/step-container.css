@@ -29,12 +29,17 @@
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: var(--spacing-lg);
   box-sizing: border-box;
 }
 
 .step-content-item.active {
   display: flex;
+}
+
+/* Ensure all children are hidden when step is not active */
+.step-content-item:not(.active) * {
+  display: none !important;
+  visibility: hidden !important;
 }
 
 /* Scrollbar Styling */
@@ -112,19 +117,9 @@
 }
 
 @media (max-width: 768px) {
-  .step-content-item {
-    padding: var(--spacing-md);
-  }
-
   .step-content-split {
     grid-template-columns: 1fr;
     gap: var(--spacing-md);
-  }
-}
-
-@media (max-width: 480px) {
-  .step-content-item {
-    padding: var(--spacing-sm);
   }
 }
 

@@ -41,6 +41,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--spacing-xl);
+  padding: 0 var(--spacing-xl) var(--spacing-xl);
 }
 
 /* Section Groups */

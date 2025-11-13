@@ -1,3 +1,7 @@
+/* Bulma CSS Framework */
+@import "bulma/css/bulma.min.css";
+
+/* Custom component styles */
 @import "@audio-player/audio-player.css";
 @import "@audio-player/spectrum-analyzer.css";
 @import "./modules/step-navigator.css";
@@ -8,6 +12,7 @@
 @import "./modules/listening-step.css";
 @import "./modules/saving-step.css";
 
+/* Custom theme variables (to override Bulma defaults if needed) */
 :root {
   --bg-primary: #f8f9fa;
   --bg-secondary: #ffffff;
@@ -82,7 +87,6 @@ body {
   display: flex;
   overflow: hidden;
   position: relative;
-  padding-bottom: 140px; /* Reduced from 160px to fit audio bar (80px) + bottom row (60px) */
 }
 
 /* Unified bottom row for buttons and optimization results */
@@ -2677,7 +2681,6 @@ input[type="checkbox"] {
   height: 100%;
   display: flex;
   flex-direction: column;
-  padding: var(--spacing-xl);
   box-sizing: border-box;
   overflow-y: auto;
 }
@@ -2685,6 +2688,7 @@ input[type="checkbox"] {
 /* Step Header Section */
 .step-header-section {
   margin-bottom: var(--spacing-xl);
+  padding: var(--spacing-xl) var(--spacing-xl) 0;
 }
 
 .step-title {
@@ -2706,7 +2710,7 @@ input[type="checkbox"] {
   display: flex;
   gap: var(--spacing-md);
   margin-top: var(--spacing-xl);
-  padding-top: var(--spacing-xl);
+  padding: var(--spacing-xl);
   border-top: 2px solid var(--border-color);
 }
 
@@ -2837,12 +2841,18 @@ input[type="checkbox"] {
   min-height: 0;
 }
 
+/* Step 4 specific padding */
+#step4-container {
+  padding: var(--spacing-xl);
+}
+
+/* Export section padding */
+.export-section {
+  padding: 0 var(--spacing-xl);
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
-  .step-content-wrapper {
-    padding: var(--spacing-lg);
-  }
-
   .step-title {
     font-size: 1.5rem;
   }
@@ -2861,10 +2871,6 @@ input[type="checkbox"] {
 }
 
 @media (max-width: 480px) {
-  .step-content-wrapper {
-    padding: var(--spacing-md);
-  }
-
   .step-title {
     font-size: 1.3rem;
   }
@@ -2934,6 +2940,7 @@ input[type="checkbox"] {
   grid-template-columns: 1fr;
   gap: var(--spacing-xl);
   margin-bottom: var(--spacing-xl);
+  padding: 0 var(--spacing-xl);
 }
 
 .step3-two-column-layout form {
@@ -3536,6 +3543,12 @@ input[type="checkbox"] {
 .capture-recording-actions-right {
   display: flex;
   gap: var(--spacing-sm);
+  align-items: center;
+}
+
+.capture-recording-actions-spacer {
+  flex: 1;
+  min-width: var(--spacing-lg);
 }
 
 /* Responsive adjustments */

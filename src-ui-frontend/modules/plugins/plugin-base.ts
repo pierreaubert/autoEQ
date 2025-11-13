@@ -6,8 +6,9 @@ import type {
   PluginMetadata,
   PluginState,
   PluginConfig,
-  PluginEvent,
 } from './plugin-types';
+
+import { PluginEvent } from './plugin-types';
 
 /**
  * Base plugin class
@@ -169,7 +170,7 @@ export abstract class BasePlugin implements IPlugin {
   /**
    * Get a single parameter value
    */
-  protected getParameter<T>(key: string, defaultValue?: T): T {
+  protected getParameter<T>(key: string, defaultValue?: T): T | undefined {
     return (this.state.parameters[key] as T) ?? defaultValue;
   }
 

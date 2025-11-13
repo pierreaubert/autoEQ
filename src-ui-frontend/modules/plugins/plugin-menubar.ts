@@ -1,6 +1,7 @@
 // Plugin Menubar Component
 // Shared menubar for plugins: Name, Presets, Matrix, Mute/Solo
 
+import './plugin-menubar.css';
 import type { MenubarConfig, MenubarButton, PluginPreset } from './plugin-types';
 
 export interface PluginMenubarCallbacks {

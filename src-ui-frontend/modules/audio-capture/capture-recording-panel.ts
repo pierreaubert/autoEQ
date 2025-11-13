@@ -132,6 +132,10 @@ export class CaptureRecordingPanel extends HTMLElement {
         <!-- Action Buttons -->
         <div class="capture-recording-actions-bottom">
           <div class="capture-recording-actions-left">
+            <button type="button" id="recording_prev_btn" class="btn btn-secondary">
+              ← Previous
+            </button>
+            <div class="capture-recording-actions-spacer"></div>
             <button type="button" id="recording_load_btn" class="btn btn-outline">
               Load
             </button>
@@ -176,6 +180,15 @@ export class CaptureRecordingPanel extends HTMLElement {
     const stopRecordingBtn = this.querySelector('#stop_recording_btn');
     stopRecordingBtn?.addEventListener('click', () => {
       this.stopRecording();
+    });
+
+    // Navigation buttons
+    const prevBtn = this.querySelector('#recording_prev_btn');
+    prevBtn?.addEventListener('click', () => {
+      this.dispatchEvent(new CustomEvent('captureNavigatePrevious', {
+        bubbles: true,
+        composed: true
+      }));
     });
 
     // Load/Save/Redo buttons

@@ -129,19 +129,34 @@ export class EQPlugin extends BasePlugin {
    * Setup canvas
    */
   private setupCanvas(): void {
-    if (!this.eqCanvas || !this.eqCtx) return;
+    if (!this.eqCanvas) return;
+
+    // Force a reflow to get accurate dimensions
+    const rect = this.eqCanvas.getBoundingClientRect();
+    const width = Math.floor(rect.width) || 600;
+    const height = Math.floor(rect.height) || 300;
 
     const dpr = window.devicePixelRatio || 1;
-    const rect = this.eqCanvas.getBoundingClientRect();
-    const width = Math.max(400, rect.width || 600);
-    const height = 300;
 
+    // Set canvas resolution accounting for device pixel ratio
     this.eqCanvas.width = width * dpr;
     this.eqCanvas.height = height * dpr;
 
+    // Get context and scale
     this.eqCtx = this.eqCanvas.getContext('2d');
     if (this.eqCtx) {
       this.eqCtx.scale(dpr, dpr);
+
+      console.log('[EQPlugin] Canvas setup:', {
+        cssWidth: width,
+        cssHeight: height,
+        canvasWidth: this.eqCanvas.width,
+        canvasHeight: this.eqCanvas.height,
+        dpr
+      });
+
+      // Draw initial graph
+      this.drawEQGraph();
     }
   }
 
@@ -419,11 +434,21 @@ export class EQPlugin extends BasePlugin {
    * Draw EQ graph
    */
   private drawEQGraph(): void {
-    if (!this.eqCanvas || !this.eqCtx) return;
+    if (!this.eqCanvas || !this.eqCtx) {
+      console.warn('[EQPlugin] Cannot draw: canvas or context missing');
+      return;
+    }
 
     const dpr = window.devicePixelRatio || 1;
     const width = this.eqCanvas.width / dpr;
     const height = this.eqCanvas.height / dpr;
+
+    console.log('[EQPlugin] Drawing EQ graph:', {
+      width,
+      height,
+      hasResponseData: !!this.eqResponseData,
+      filterCount: this.filters.length
+    });
 
     // Clear
     this.eqCtx.fillStyle = '#1a1a1a';
@@ -549,8 +574,12 @@ export class EQPlugin extends BasePlugin {
     const y = e.clientY - rect.top;
     const dpr = window.devicePixelRatio || 1;
     const width = this.eqCanvas.width / dpr;
+    const height = this.eqCanvas.height / dpr;
 
     const clickedFreq = this.xToFreq(x, width);
+    const clickedGain = this.yToGain(y, height);
+
+    console.log('[EQPlugin] Mouse down:', { x, y, clickedFreq, clickedGain });
 
     // Find closest filter
     let closestIdx = -1;
@@ -558,20 +587,29 @@ export class EQPlugin extends BasePlugin {
 
     this.filters.forEach((filter, idx) => {
       if (!filter.enabled) return;
-      const dist = Math.abs(Math.log10(filter.frequency) - Math.log10(clickedFreq));
+
+      // Calculate distance in both frequency and gain
+      const freqDist = Math.abs(Math.log10(filter.frequency) - Math.log10(clickedFreq));
+      const gainDist = Math.abs(filter.gain - clickedGain) / 10; // Normalize gain distance
+      const dist = Math.sqrt(freqDist * freqDist + gainDist * gainDist);
+
       if (dist < minDist) {
         minDist = dist;
         closestIdx = idx;
       }
     });
 
-    if (closestIdx >= 0) {
+    // Only select if reasonably close (threshold)
+    if (closestIdx >= 0 && minDist < 0.5) {
       this.selectedFilterIndex = closestIdx;
       this.isDragging = true;
       this.dragStartX = x;
       this.dragStartY = y;
+      console.log('[EQPlugin] Selected filter:', closestIdx, this.filters[closestIdx]);
       this.drawEQGraph();
       this.renderFilterTable();
+    } else {
+      console.log('[EQPlugin] No filter close enough, minDist:', minDist);
     }
   }
 
@@ -592,10 +630,21 @@ export class EQPlugin extends BasePlugin {
     if (!filter) return;
 
     // Update frequency (left/right)
-    filter.frequency = Math.max(this.MIN_FREQ, Math.min(this.MAX_FREQ, this.xToFreq(x, width)));
+    const newFreq = Math.max(this.MIN_FREQ, Math.min(this.MAX_FREQ, this.xToFreq(x, width)));
 
     // Update gain (up/down)
-    filter.gain = Math.max(this.minGain, Math.min(this.maxGain, this.yToGain(y, height)));
+    const newGain = Math.max(this.minGain, Math.min(this.maxGain, this.yToGain(y, height)));
+
+    console.log('[EQPlugin] Dragging filter:', {
+      filterIndex: this.selectedFilterIndex,
+      oldFreq: filter.frequency,
+      newFreq,
+      oldGain: filter.gain,
+      newGain
+    });
+
+    filter.frequency = newFreq;
+    filter.gain = newGain;
 
     this.onFilterChange();
   }
