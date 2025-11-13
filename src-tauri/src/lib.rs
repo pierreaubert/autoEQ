@@ -25,7 +25,8 @@ pub use tauri_speakers::{get_speaker_measurements, get_speaker_versions, get_spe
 pub use tauri_optim::{CancellationState, cancel_optimization, run_optimization};
 
 pub use tauri_plots::{
-    generate_plot_filters, generate_plot_spin, generate_plot_spin_details, generate_plot_spin_tonal,
+    generate_peq_plots, generate_plot_filters, generate_plot_spin, generate_plot_spin_details,
+    generate_plot_spin_tonal,
 };
 
 pub use tauri_audio_devices::{
@@ -210,6 +211,7 @@ pub fn run() {
             generate_plot_spin,
             generate_plot_spin_details,
             generate_plot_spin_tonal,
+            generate_peq_plots,
             exit_app,
             resolve_demo_track_path,
             get_audio_devices,

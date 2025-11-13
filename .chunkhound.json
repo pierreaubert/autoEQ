@@ -1,0 +1,11 @@
+{
+  "embedding": {
+    "provider": "openai",
+    "model": "dengcao/Qwen3-Embedding-8B:Q5_K_M",
+    "base_url": "http://localhost:11434/v1",
+    "rerank_model": "dengcao/Qwen3-Reranker-4B:Q5_K_M"
+  },
+  "llm": {
+    "provider": "claude-code-cli"
+  }
+}

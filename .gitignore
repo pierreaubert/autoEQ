@@ -4,6 +4,7 @@
 /docs
 /dist
 /node_modules
+/.chunkhound
 data_cached
 data_generated
 /coverage

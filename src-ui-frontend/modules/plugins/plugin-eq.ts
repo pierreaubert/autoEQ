@@ -1,10 +1,13 @@
 // EQ Plugin
 // Parametric equalizer with visual frequency response
 
+import 'bulma/css/bulma.min.css';
 import { BasePlugin } from './plugin-base';
 import { PluginMenubar } from './plugin-menubar';
 import type { PluginMetadata, PluginConfig } from './plugin-types';
-import { invoke } from '@tauri-apps/api/core';
+import { generateEQPlot, addPlotClickHandler } from './eq-plotter';
+import { ShortcutsModal, type ShortcutItem } from './shortcuts-modal';
+import Plotly from 'plotly.js-basic-dist-min';
 
 export interface FilterParam {
   filter_type: string;  // "Peak", "Lowshelf", "Highshelf", etc.
@@ -39,10 +42,10 @@ export class EQPlugin extends BasePlugin {
 
   // UI components
   private menubar: PluginMenubar | null = null;
+  private shortcutsModal: ShortcutsModal | null = null;
 
   // UI elements
-  private eqCanvas: HTMLCanvasElement | null = null;
-  private eqCtx: CanvasRenderingContext2D | null = null;
+  private plotContainer: HTMLElement | null = null;
   private filterTable: HTMLElement | null = null;
   private filterPopup: HTMLElement | null = null;
 
@@ -54,23 +57,8 @@ export class EQPlugin extends BasePlugin {
   ];
   private selectedFilterIndex: number = -1;
 
-  // Response data
-  private eqResponseData: any = null;
-  private eqResponseDebounceTimer: number | null = null;
-
-  // Graph constants
-  private readonly MIN_FREQ = 20;
-  private readonly MAX_FREQ = 20000;
-  private readonly FREQ_POINTS = 256;
-
-  // Dynamic Y-axis range
-  private minGain = -18;
-  private maxGain = 3;
-
-  // Interaction state
-  private isDragging = false;
-  private dragStartX = 0;
-  private dragStartY = 0;
+  // Plot update debounce
+  private plotUpdateDebounceTimer: number | null = null;
 
   /**
    * Render the plugin UI
@@ -82,14 +70,15 @@ export class EQPlugin extends BasePlugin {
       <div class="eq-plugin ${standalone ? 'standalone' : 'embedded'}">
         ${standalone ? '<div class="eq-menubar-container"></div>' : ''}
         <div class="eq-content">
-          <!-- Visual EQ Graph -->
-          <div class="eq-graph-container">
-            <canvas class="eq-graph-canvas" width="600" height="300"></canvas>
-          </div>
+          <!-- Plotly EQ Graph -->
+          <div class="eq-plot-container" id="eq-plot-${this.metadata.id}"></div>
+
+          <!-- Space for text between graph and table -->
+          <div class="eq-separator"></div>
 
           <!-- Filter Table -->
           <div class="eq-table-container">
-            <table class="eq-table"></table>
+            <table class="table is-bordered is-striped is-narrow is-hoverable eq-table"></table>
           </div>
         </div>
 
@@ -113,108 +102,225 @@ export class EQPlugin extends BasePlugin {
     }
 
     // Cache elements
-    this.eqCanvas = this.container.querySelector('.eq-graph-canvas') as HTMLCanvasElement;
-    this.eqCtx = this.eqCanvas?.getContext('2d') || null;
+    this.plotContainer = this.container.querySelector(`#eq-plot-${this.metadata.id}`) as HTMLElement;
     this.filterTable = this.container.querySelector('.eq-table') as HTMLElement;
     this.filterPopup = this.container.querySelector('.eq-filter-popup') as HTMLElement;
 
+    // Initialize shortcuts modal
+    this.initializeShortcutsModal();
+
     // Setup
-    this.setupCanvas();
     this.renderFilterTable();
     this.attachEventListeners();
-    this.computeEQResponse();
+    this.updatePlot();
   }
 
   /**
-   * Setup canvas
+   * Initialize the shortcuts modal with plugin and host shortcuts
    */
-  private setupCanvas(): void {
-    if (!this.eqCanvas) return;
+  private initializeShortcutsModal(): void {
+    const pluginShortcuts: ShortcutItem[] = [
+      { key: '1-9', description: 'Select EQ filter 1-9' },
+      { key: 'TAB', description: 'Cycle through EQ filters' },
+      { key: 'ESC', description: 'Clear selection' },
+      { key: '+ or =', description: 'Add new EQ filter' },
+      { key: '-', description: 'Remove selected EQ filter' },
+      { key: '?', description: 'Show shortcuts list' },
+    ];
 
-    // Force a reflow to get accurate dimensions
-    const rect = this.eqCanvas.getBoundingClientRect();
-    const width = Math.floor(rect.width) || 600;
-    const height = Math.floor(rect.height) || 300;
+    const hostShortcuts: ShortcutItem[] = [
+      { key: '< or ,', description: 'Monitor input' },
+      { key: '> or .', description: 'Monitor output' },
+      { key: '+, =, or ↑', description: 'Increase volume (+5%)' },
+      { key: '- or ↓', description: 'Decrease volume (-5%)' },
+    ];
 
-    const dpr = window.devicePixelRatio || 1;
+    this.shortcutsModal = new ShortcutsModal({
+      pluginShortcuts,
+      hostShortcuts,
+      pluginName: 'EQ Plugin',
+    });
 
-    // Set canvas resolution accounting for device pixel ratio
-    this.eqCanvas.width = width * dpr;
-    this.eqCanvas.height = height * dpr;
+    // Append modal to container
+    const modalElement = this.shortcutsModal.createModal();
+    this.container?.appendChild(modalElement);
+  }
 
-    // Get context and scale
-    this.eqCtx = this.eqCanvas.getContext('2d');
-    if (this.eqCtx) {
-      this.eqCtx.scale(dpr, dpr);
+  /**
+   * Update plot (debounced)
+   */
+  private requestPlotUpdate(): void {
+    if (this.plotUpdateDebounceTimer) {
+      clearTimeout(this.plotUpdateDebounceTimer);
+    }
 
-      console.log('[EQPlugin] Canvas setup:', {
-        cssWidth: width,
-        cssHeight: height,
-        canvasWidth: this.eqCanvas.width,
-        canvasHeight: this.eqCanvas.height,
-        dpr
+    this.plotUpdateDebounceTimer = window.setTimeout(() => {
+      this.updatePlot();
+      this.plotUpdateDebounceTimer = null;
+    }, 150);
+  }
+
+  /**
+   * Update the Plotly plot using browser-based computation
+   */
+  private updatePlot(): void {
+    if (!this.plotContainer) return;
+
+    try {
+      // Generate plot using browser-based biquad filters
+      generateEQPlot(this.plotContainer, this.filters, {
+        sampleRate: 48000,
+        showIndividualFilters: true,
+        height: 400,
       });
 
-      // Draw initial graph
-      this.drawEQGraph();
+      // Add click handler for filter selection
+      addPlotClickHandler(this.plotContainer, this.filters, (filterIndex) => {
+        this.selectedFilterIndex = filterIndex;
+        this.renderFilterTable();
+        console.log('[EQPlugin] Selected filter:', filterIndex, this.filters[filterIndex]);
+      });
+
+      const enabledCount = this.filters.filter(f => f.enabled).length;
+      console.log('[EQPlugin] Plot updated with', enabledCount, 'filters');
+    } catch (error) {
+      console.error('[EQPlugin] Failed to update plot:', error);
     }
   }
 
   /**
-   * Render filter table
+   * Get SVG icon for filter type
+   */
+  private getFilterSVGIcon(filterType: string): string {
+    const svgBase = `<svg width="48" height="48" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">`;
+    const svgEnd = `</svg>`;
+
+    switch (filterType) {
+      case 'Peak':
+        return `${svgBase}<path d="M 8,36 L 18,36 L 24,12 L 30,36 L 40,36" stroke="#00bfff" stroke-width="2" fill="none"/>${svgEnd}`;
+      case 'Lowshelf':
+        return `${svgBase}<path d="M 8,32 L 20,32 L 26,16 L 40,16" stroke="#00bfff" stroke-width="2" fill="none"/>${svgEnd}`;
+      case 'Highshelf':
+        return `${svgBase}<path d="M 8,16 L 22,16 L 28,32 L 40,32" stroke="#00bfff" stroke-width="2" fill="none"/>${svgEnd}`;
+      case 'Lowpass':
+        return `${svgBase}<path d="M 8,16 L 28,16 L 34,32 L 40,36" stroke="#00bfff" stroke-width="2" fill="none"/>${svgEnd}`;
+      case 'Highpass':
+        return `${svgBase}<path d="M 8,36 L 14,32 L 20,16 L 40,16" stroke="#00bfff" stroke-width="2" fill="none"/>${svgEnd}`;
+      case 'Bandpass':
+        return `${svgBase}<path d="M 8,36 L 14,28 L 24,12 L 34,28 L 40,36" stroke="#00bfff" stroke-width="2" fill="none"/>${svgEnd}`;
+      case 'Notch':
+        return `${svgBase}<path d="M 8,16 L 18,16 L 24,36 L 30,16 L 40,16" stroke="#00bfff" stroke-width="2" fill="none"/>${svgEnd}`;
+      default:
+        return `${svgBase}<circle cx="24" cy="24" r="8" stroke="#00bfff" stroke-width="2" fill="none"/>${svgEnd}`;
+    }
+  }
+
+  /**
+   * Render filter table (horizontal layout)
    */
   private renderFilterTable(): void {
     if (!this.filterTable) return;
 
-    const headers = `
-      <tr>
-        <th>Type</th>
-        <th>Enabled</th>
-        <th>Freq (Hz)</th>
-        <th>Gain (dB)</th>
-        <th>Q</th>
-        <th>Actions</th>
-      </tr>
-    `;
+    // Build header row with EQ numbers, on/off toggle, and remove buttons
+    const headerCells = this.filters.map((filter, index) => {
+      const isSelected = index === this.selectedFilterIndex;
+      const isEnabled = filter.enabled;
+      return `
+        <th class="${isSelected ? 'selected' : ''}" data-filter-index="${index}">
+          <p class="buttons eq-header-cell">
+            <button class="button is-white is-small" data-index="${index}" aria-label="Select">
+    	      <span>#${index+1}</span>
+	    </button>
+            <button class="button ${isEnabled ? 'is-success' : 'is-light'} is-small filter-toggle" data-index="${index}" aria-label="Toggle On/Off">
+	      <span class="icon is-small">${isEnabled ? '✓' : '○'}</span>
+	    </button>
+            <button class="button is-warning is-small filter-remove" data-index="${index}" aria-label="Remove">
+	      <span class="icon is-small">X</span>
+	    </button>
+          </p>
+        </th>
+      `;
+    }).join('');
 
-    const rows = this.filters.map((filter, index) => `
-      <tr data-filter-index="${index}" class="${index === this.selectedFilterIndex ? 'selected' : ''}">
-        <td>
-          <select class="filter-type-select" data-index="${index}">
-            ${Object.entries(FILTER_TYPES).map(([type, config]) =>
-              `<option value="${type}" ${filter.filter_type === type ? 'selected' : ''}>${config.label}</option>`
-            ).join('')}
-          </select>
+    // Build type row with icons in select
+    const typeRow = this.filters.map((filter, index) => {
+      const filterTypeConfig = FILTER_TYPES[filter.filter_type as keyof typeof FILTER_TYPES];
+      return `
+        <td class="${index === this.selectedFilterIndex ? 'selected' : ''}" data-filter-index="${index}">
+          <div class="eq-type-cell">
+            <select class="select is-small filter-type-select-compact" data-index="${index}" title="${filter.filter_type}">
+              ${Object.entries(FILTER_TYPES).map(([type, config]) =>
+                `<option value="${type}" ${filter.filter_type === type ? 'selected' : ''}>${config.icon} ${config.shortName}</option>`
+              ).join('')}
+            </select>
+          </div>
         </td>
-        <td>
+      `;
+    }).join('');
+
+    // Build enabled row with Bulma-styled checkboxes
+    const enabledRow = this.filters.map((filter, index) => `
+      <td class="${index === this.selectedFilterIndex ? 'selected' : ''}" data-filter-index="${index}">
+        <label class="checkbox">
           <input type="checkbox" class="filter-enabled" data-index="${index}" ${filter.enabled ? 'checked' : ''} />
-        </td>
-        <td>
-          <input type="number" class="filter-frequency" data-index="${index}" value="${filter.frequency.toFixed(1)}" min="20" max="20000" step="1" />
-        </td>
-        <td>
-          <input type="number" class="filter-gain" data-index="${index}" value="${filter.gain.toFixed(2)}" step="0.1" />
-        </td>
-        <td>
-          <input type="number" class="filter-q" data-index="${index}" value="${filter.q.toFixed(2)}" min="0.1" max="3.0" step="0.1" />
-        </td>
-        <td>
-          <button class="filter-edit-btn" data-index="${index}" title="Edit">✎</button>
-          <button class="filter-remove-btn" data-index="${index}" title="Remove">×</button>
-        </td>
-      </tr>
+        </label>
+      </td>
     `).join('');
 
+    // Build frequency row
+    const freqRow = this.filters.map((filter, index) => `
+      <td class="${index === this.selectedFilterIndex ? 'selected' : ''}" data-filter-index="${index}">
+        <input type="number" class="input is-small filter-frequency" data-index="${index}" value="${Math.round(filter.frequency)}" min="20" max="20000" step="1" />
+      </td>
+    `).join('');
+
+    // Build gain row
+    const gainRow = this.filters.map((filter, index) => `
+      <td class="${index === this.selectedFilterIndex ? 'selected' : ''}" data-filter-index="${index}">
+        <input type="number" class="input is-small filter-gain" data-index="${index}" value="${filter.gain.toFixed(1)}" step="0.1" />
+      </td>
+    `).join('');
+
+    // Build Q row
+    const qRow = this.filters.map((filter, index) => `
+      <td class="${index === this.selectedFilterIndex ? 'selected' : ''}" data-filter-index="${index}">
+        <input type="number" class="input is-small filter-q" data-index="${index}" value="${filter.q.toFixed(1)}" min="0.1" max="3.0" step="0.1" />
+      </td>
+    `).join('');
+
+    // Add button column
+    const addButtonCell = `<th><button class="filter-add-btn-compact" title="Add Filter">+</button></th>`;
+
     this.filterTable.innerHTML = `
-      <thead>${headers}</thead>
-      <tbody>${rows}</tbody>
-      <tfoot>
+      <thead>
         <tr>
-          <td colspan="6">
-            <button class="filter-add-btn">+ Add Filter</button>
-          </td>
+          <th class="eq-param-label has-text-right">EQ #</th>
+          ${headerCells}
+          ${addButtonCell}
         </tr>
-      </tfoot>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="eq-param-label has-text-right has-text-weight-semibold">Type</td>
+          ${typeRow}
+          <td></td>
+        </tr>
+        <tr>
+          <td class="eq-param-label has-text-right has-text-weight-semibold">Freq</td>
+          ${freqRow}
+          <td></td>
+        </tr>
+        <tr>
+          <td class="eq-param-label has-text-right has-text-weight-semibold">Gain</td>
+          ${gainRow}
+          <td></td>
+        </tr>
+        <tr>
+          <td class="eq-param-label has-text-right has-text-weight-semibold">Q</td>
+          ${qRow}
+          <td></td>
+        </tr>
+      </tbody>
     `;
 
     this.attachTableEventListeners();
@@ -224,18 +330,176 @@ export class EQPlugin extends BasePlugin {
    * Attach event listeners
    */
   private attachEventListeners(): void {
-    if (!this.eqCanvas) return;
-
-    // Canvas interactions
-    this.eqCanvas.addEventListener('mousedown', (e) => this.handleCanvasMouseDown(e));
-    this.eqCanvas.addEventListener('mousemove', (e) => this.handleCanvasMouseMove(e));
-    this.eqCanvas.addEventListener('mouseup', () => this.handleCanvasMouseUp());
-    this.eqCanvas.addEventListener('mouseleave', () => this.handleCanvasMouseUp());
-
     // Popup close
     const closeBtn = this.filterPopup?.querySelector('.popup-close') as HTMLButtonElement;
     if (closeBtn) {
       closeBtn.addEventListener('click', () => this.hideFilterPopup());
+    }
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', this.handleKeydown);
+  }
+
+  /**
+   * Handle keyboard shortcuts
+   */
+  private handleKeydown = (e: KeyboardEvent): void => {
+    const target = e.target as HTMLElement;
+
+    // Check if shortcuts modal is open - if so, let it handle keys
+    const isModalOpen = this.shortcutsModal?.isVisible();
+    if (isModalOpen) {
+      return;
+    }
+
+    // Don't handle other shortcuts if user is typing in an input field
+    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT') {
+      return;
+    }
+
+    // Number keys 1-9 to select EQ filters
+    if (e.key >= '1' && e.key <= '9') {
+      const filterIndex = parseInt(e.key) - 1;
+      if (filterIndex < this.filters.length) {
+        e.preventDefault();
+        this.selectFilter(filterIndex);
+      }
+      return;
+    }
+
+    // TAB to cycle through EQ filters
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      this.cycleFilter();
+      return;
+    }
+
+    // ESC to clear selection
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      this.clearSelection();
+      return;
+    }
+
+    // + to add new EQ
+    if (e.key === '+' || e.key === '=') {
+      e.preventDefault();
+      this.addDefaultFilter();
+      return;
+    }
+
+    // - to remove highlighted EQ
+    if (e.key === '-' || e.key === '_') {
+      if (this.selectedFilterIndex >= 0) {
+        e.preventDefault();
+        this.removeFilter(this.selectedFilterIndex);
+      }
+      return;
+    }
+
+    // ? to show shortcuts modal
+    if (e.key === '?' || (e.shiftKey && e.key === '/')) {
+      e.preventDefault();
+      this.showShortcutsModal();
+      return;
+    }
+  }
+
+  /**
+   * Select a filter (highlight in graph and table)
+   */
+  private selectFilter(index: number): void {
+    this.selectedFilterIndex = index;
+    this.renderFilterTable();
+    this.highlightFilterInPlot(index);
+    console.log('[EQPlugin] Selected filter:', index, this.filters[index]);
+  }
+
+  /**
+   * Clear filter selection
+   */
+  private clearSelection(): void {
+    this.selectedFilterIndex = -1;
+    this.renderFilterTable();
+    this.clearPlotHighlight();
+    console.log('[EQPlugin] Cleared filter selection');
+  }
+
+  /**
+   * Cycle to next filter (wraps around)
+   */
+  private cycleFilter(): void {
+    if (this.filters.length === 0) return;
+
+    // If nothing selected, select first filter
+    if (this.selectedFilterIndex < 0) {
+      this.selectFilter(0);
+      return;
+    }
+
+    // Move to next filter, wrap around to 0 if at end
+    const nextIndex = (this.selectedFilterIndex + 1) % this.filters.length;
+    this.selectFilter(nextIndex);
+  }
+
+  /**
+   * Highlight a specific filter in the plot
+   */
+  private highlightFilterInPlot(index: number): void {
+    if (!this.plotContainer || !this.filters[index].enabled) return;
+
+    try {
+      // First, reset all traces to default
+      const enabledCount = this.filters.filter(f => f.enabled).length;
+      if (enabledCount === 0) return;
+
+      const resetUpdate: any = {
+        'line.width': 2,
+        'opacity': 0.5,
+      };
+      const allTraceIndices = Array.from({ length: enabledCount }, (_, i) => i);
+      Plotly.restyle(this.plotContainer, resetUpdate, allTraceIndices);
+
+      // Count enabled filters before this one to get the trace index
+      let traceIndex = 0;
+      for (let i = 0; i < index; i++) {
+        if (this.filters[i].enabled) {
+          traceIndex++;
+        }
+      }
+
+      // Update the selected trace to be highlighted
+      const highlightUpdate: any = {
+        'line.width': 4,
+        'opacity': 1.0,
+      };
+      Plotly.restyle(this.plotContainer, highlightUpdate, [traceIndex]);
+    } catch (error) {
+      console.error('[EQPlugin] Failed to highlight filter in plot:', error);
+    }
+  }
+
+  /**
+   * Clear plot highlight
+   */
+  private clearPlotHighlight(): void {
+    if (!this.plotContainer) return;
+
+    try {
+      // Reset all individual filter traces to default style
+      const enabledCount = this.filters.filter(f => f.enabled).length;
+      if (enabledCount === 0) return;
+
+      const update: any = {
+        'line.width': 2,
+        'opacity': 0.5,
+      };
+
+      // Apply to all individual filter traces (indices 0 to enabledCount-1)
+      const traceIndices = Array.from({ length: enabledCount }, (_, i) => i);
+      Plotly.restyle(this.plotContainer, update, traceIndices);
+    } catch (error) {
+      console.error('[EQPlugin] Failed to clear plot highlight:', error);
     }
   }
 
@@ -245,20 +509,32 @@ export class EQPlugin extends BasePlugin {
   private attachTableEventListeners(): void {
     if (!this.filterTable) return;
 
-    // Type change
-    this.filterTable.querySelectorAll('.filter-type-select').forEach((select) => {
+    // Type change (compact selector with icons)
+    this.filterTable.querySelectorAll('.filter-type-select-compact').forEach((select) => {
       select.addEventListener('change', (e) => {
         const index = parseInt((e.target as HTMLElement).dataset.index!, 10);
-        this.filters[index].filter_type = (e.target as HTMLSelectElement).value;
+        const newType = (e.target as HTMLSelectElement).value;
+        this.filters[index].filter_type = newType;
         this.onFilterChange();
       });
     });
 
-    // Enabled toggle
-    this.filterTable.querySelectorAll('.filter-enabled').forEach((checkbox) => {
-      checkbox.addEventListener('change', (e) => {
+    // Filter selection (# button in header)
+    this.filterTable.querySelectorAll('th .button.is-info').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
         const index = parseInt((e.target as HTMLElement).dataset.index!, 10);
-        this.filters[index].enabled = (e.target as HTMLInputElement).checked;
+        this.selectedFilterIndex = index;
+        this.renderFilterTable();
+        this.highlightFilterInPlot(index);
+      });
+    });
+
+    // Enabled toggle (button in header)
+    this.filterTable.querySelectorAll('.filter-toggle').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        const index = parseInt((e.target as HTMLElement).dataset.index!, 10);
+        this.filters[index].enabled = !this.filters[index].enabled;
+        this.renderFilterTable();
         this.onFilterChange();
       });
     });
@@ -276,33 +552,25 @@ export class EQPlugin extends BasePlugin {
       });
     });
 
-    // Edit button
-    this.filterTable.querySelectorAll('.filter-edit-btn').forEach((btn) => {
-      btn.addEventListener('click', (e) => {
-        const index = parseInt((e.target as HTMLElement).dataset.index!, 10);
-        this.showFilterPopup(index);
-      });
-    });
-
-    // Remove button
-    this.filterTable.querySelectorAll('.filter-remove-btn').forEach((btn) => {
+    // Remove button (in header)
+    this.filterTable.querySelectorAll('.filter-remove').forEach((btn) => {
       btn.addEventListener('click', (e) => {
         const index = parseInt((e.target as HTMLElement).dataset.index!, 10);
         this.removeFilter(index);
       });
     });
 
-    // Add button
-    const addBtn = this.filterTable.querySelector('.filter-add-btn') as HTMLButtonElement;
+    // Add button (compact version)
+    const addBtn = this.filterTable.querySelector('.filter-add-btn-compact') as HTMLButtonElement;
     if (addBtn) {
-      addBtn.addEventListener('click', () => this.addFilter());
+      addBtn.addEventListener('click', () => this.addDefaultFilter());
     }
   }
 
   /**
-   * Add a filter
+   * Add a default filter (internal use for UI button)
    */
-  private addFilter(): void {
+  private addDefaultFilter(): void {
     this.filters.push({
       filter_type: 'Peak',
       frequency: 1000,
@@ -334,327 +602,10 @@ export class EQPlugin extends BasePlugin {
    * Handle filter change
    */
   private onFilterChange(): void {
-    this.requestEQResponseUpdate();
-    this.drawEQGraph();
+    this.requestPlotUpdate();
     this.updateParameter('filters', this.filters);
   }
 
-  /**
-   * Compute EQ response
-   */
-  private async computeEQResponse(): Promise<void> {
-    if (this.filters.length === 0) {
-      this.eqResponseData = null;
-      this.drawEQGraph();
-      return;
-    }
-
-    const logMin = Math.log10(this.MIN_FREQ);
-    const logMax = Math.log10(this.MAX_FREQ);
-    const frequencies: number[] = [];
-    for (let i = 0; i < this.FREQ_POINTS; i++) {
-      const logFreq = logMin + (logMax - logMin) * (i / (this.FREQ_POINTS - 1));
-      frequencies.push(Math.pow(10, logFreq));
-    }
-
-    try {
-      const result = await invoke('compute_eq_response', {
-        filters: this.filters,
-        sampleRate: 48000,
-        frequencies,
-      });
-
-      this.eqResponseData = result;
-      this.computeDynamicYAxisRange();
-      this.drawEQGraph();
-    } catch (error) {
-      console.error('[EQPlugin] Failed to compute response:', error);
-    }
-  }
-
-  /**
-   * Request EQ response update (debounced)
-   */
-  private requestEQResponseUpdate(): void {
-    if (this.eqResponseDebounceTimer) {
-      clearTimeout(this.eqResponseDebounceTimer);
-    }
-
-    this.eqResponseDebounceTimer = window.setTimeout(() => {
-      this.computeEQResponse();
-      this.eqResponseDebounceTimer = null;
-    }, 100);
-  }
-
-  /**
-   * Compute dynamic Y-axis range
-   */
-  private computeDynamicYAxisRange(): void {
-    let min = Infinity;
-    let max = -Infinity;
-
-    // Include filter gains
-    this.filters.forEach((filter) => {
-      if (filter.enabled) {
-        min = Math.min(min, filter.gain);
-        max = Math.max(max, filter.gain);
-      }
-    });
-
-    // Include response data
-    if (this.eqResponseData?.combined_response) {
-      this.eqResponseData.combined_response.forEach((gain: number) => {
-        min = Math.min(min, gain);
-        max = Math.max(max, gain);
-      });
-    }
-
-    // Default range
-    if (min === Infinity || max === -Infinity) {
-      min = -18;
-      max = 3;
-    }
-
-    // Add padding
-    const padding = 1;
-    const minRange = 6;
-    const range = max - min;
-
-    if (range < minRange) {
-      const center = (min + max) / 2;
-      min = center - minRange / 2;
-      max = center + minRange / 2;
-    }
-
-    this.minGain = min - padding;
-    this.maxGain = max + padding;
-  }
-
-  /**
-   * Draw EQ graph
-   */
-  private drawEQGraph(): void {
-    if (!this.eqCanvas || !this.eqCtx) {
-      console.warn('[EQPlugin] Cannot draw: canvas or context missing');
-      return;
-    }
-
-    const dpr = window.devicePixelRatio || 1;
-    const width = this.eqCanvas.width / dpr;
-    const height = this.eqCanvas.height / dpr;
-
-    console.log('[EQPlugin] Drawing EQ graph:', {
-      width,
-      height,
-      hasResponseData: !!this.eqResponseData,
-      filterCount: this.filters.length
-    });
-
-    // Clear
-    this.eqCtx.fillStyle = '#1a1a1a';
-    this.eqCtx.fillRect(0, 0, width, height);
-
-    // Draw grid
-    this.drawGrid(width, height);
-
-    // Draw response curve
-    if (this.eqResponseData) {
-      this.drawResponse(width, height);
-    }
-
-    // Draw filter handles
-    this.drawFilterHandles(width, height);
-  }
-
-  /**
-   * Draw grid
-   */
-  private drawGrid(width: number, height: number): void {
-    if (!this.eqCtx) return;
-
-    this.eqCtx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
-    this.eqCtx.lineWidth = 1;
-
-    // Vertical frequency lines
-    const freqMarkers = [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000];
-    freqMarkers.forEach((freq) => {
-      const x = this.freqToX(freq, width);
-      this.eqCtx!.beginPath();
-      this.eqCtx!.moveTo(x, 0);
-      this.eqCtx!.lineTo(x, height - 30);
-      this.eqCtx!.stroke();
-    });
-
-    // Horizontal gain lines
-    for (let gain = Math.ceil(this.minGain); gain <= this.maxGain; gain += 3) {
-      const y = this.gainToY(gain, height);
-      this.eqCtx.strokeStyle = gain === 0 ? 'rgba(255, 255, 255, 0.3)' : 'rgba(255, 255, 255, 0.1)';
-      this.eqCtx.beginPath();
-      this.eqCtx.moveTo(60, y);
-      this.eqCtx.lineTo(width - 20, y);
-      this.eqCtx.stroke();
-    }
-  }
-
-  /**
-   * Draw response curve
-   */
-  private drawResponse(width: number, height: number): void {
-    if (!this.eqCtx || !this.eqResponseData) return;
-
-    const { frequencies, combined_response } = this.eqResponseData;
-
-    // Draw combined response
-    this.eqCtx.strokeStyle = 'rgba(100, 200, 255, 0.8)';
-    this.eqCtx.lineWidth = 2;
-    this.eqCtx.beginPath();
-
-    frequencies.forEach((freq: number, i: number) => {
-      const x = this.freqToX(freq, width);
-      const y = this.gainToY(combined_response[i], height);
-
-      if (i === 0) {
-        this.eqCtx!.moveTo(x, y);
-      } else {
-        this.eqCtx!.lineTo(x, y);
-      }
-    });
-
-    this.eqCtx.stroke();
-  }
-
-  /**
-   * Draw filter handles
-   */
-  private drawFilterHandles(width: number, height: number): void {
-    if (!this.eqCtx) return;
-
-    this.filters.forEach((filter, idx) => {
-      if (!filter.enabled) return;
-
-      const x = this.freqToX(filter.frequency, width);
-      const y = this.gainToY(filter.gain, height);
-      const isSelected = idx === this.selectedFilterIndex;
-
-      // Draw Q bar
-      this.eqCtx!.strokeStyle = isSelected ? 'rgba(255, 200, 100, 0.8)' : 'rgba(255, 255, 255, 0.4)';
-      this.eqCtx!.lineWidth = isSelected ? 3 : 2;
-
-      const barWidth = 40 / filter.q;
-      this.eqCtx!.beginPath();
-      this.eqCtx!.moveTo(x - barWidth / 2, y);
-      this.eqCtx!.lineTo(x + barWidth / 2, y);
-      this.eqCtx!.stroke();
-
-      // Draw handle point
-      this.eqCtx!.fillStyle = isSelected ? 'rgba(255, 200, 100, 1)' : 'rgba(255, 255, 255, 0.8)';
-      this.eqCtx!.beginPath();
-      this.eqCtx!.arc(x, y, isSelected ? 6 : 4, 0, Math.PI * 2);
-      this.eqCtx!.fill();
-
-      // Selection ring
-      if (isSelected) {
-        this.eqCtx!.strokeStyle = 'rgba(255, 200, 100, 0.6)';
-        this.eqCtx!.lineWidth = 2;
-        this.eqCtx!.beginPath();
-        this.eqCtx!.arc(x, y, 10, 0, Math.PI * 2);
-        this.eqCtx!.stroke();
-      }
-    });
-  }
-
-  /**
-   * Handle canvas mouse down
-   */
-  private handleCanvasMouseDown(e: MouseEvent): void {
-    if (!this.eqCanvas) return;
-
-    const rect = this.eqCanvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    const dpr = window.devicePixelRatio || 1;
-    const width = this.eqCanvas.width / dpr;
-    const height = this.eqCanvas.height / dpr;
-
-    const clickedFreq = this.xToFreq(x, width);
-    const clickedGain = this.yToGain(y, height);
-
-    console.log('[EQPlugin] Mouse down:', { x, y, clickedFreq, clickedGain });
-
-    // Find closest filter
-    let closestIdx = -1;
-    let minDist = Infinity;
-
-    this.filters.forEach((filter, idx) => {
-      if (!filter.enabled) return;
-
-      // Calculate distance in both frequency and gain
-      const freqDist = Math.abs(Math.log10(filter.frequency) - Math.log10(clickedFreq));
-      const gainDist = Math.abs(filter.gain - clickedGain) / 10; // Normalize gain distance
-      const dist = Math.sqrt(freqDist * freqDist + gainDist * gainDist);
-
-      if (dist < minDist) {
-        minDist = dist;
-        closestIdx = idx;
-      }
-    });
-
-    // Only select if reasonably close (threshold)
-    if (closestIdx >= 0 && minDist < 0.5) {
-      this.selectedFilterIndex = closestIdx;
-      this.isDragging = true;
-      this.dragStartX = x;
-      this.dragStartY = y;
-      console.log('[EQPlugin] Selected filter:', closestIdx, this.filters[closestIdx]);
-      this.drawEQGraph();
-      this.renderFilterTable();
-    } else {
-      console.log('[EQPlugin] No filter close enough, minDist:', minDist);
-    }
-  }
-
-  /**
-   * Handle canvas mouse move
-   */
-  private handleCanvasMouseMove(e: MouseEvent): void {
-    if (!this.isDragging || !this.eqCanvas) return;
-
-    const rect = this.eqCanvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    const dpr = window.devicePixelRatio || 1;
-    const width = this.eqCanvas.width / dpr;
-    const height = this.eqCanvas.height / dpr;
-
-    const filter = this.filters[this.selectedFilterIndex];
-    if (!filter) return;
-
-    // Update frequency (left/right)
-    const newFreq = Math.max(this.MIN_FREQ, Math.min(this.MAX_FREQ, this.xToFreq(x, width)));
-
-    // Update gain (up/down)
-    const newGain = Math.max(this.minGain, Math.min(this.maxGain, this.yToGain(y, height)));
-
-    console.log('[EQPlugin] Dragging filter:', {
-      filterIndex: this.selectedFilterIndex,
-      oldFreq: filter.frequency,
-      newFreq,
-      oldGain: filter.gain,
-      newGain
-    });
-
-    filter.frequency = newFreq;
-    filter.gain = newGain;
-
-    this.onFilterChange();
-  }
-
-  /**
-   * Handle canvas mouse up
-   */
-  private handleCanvasMouseUp(): void {
-    this.isDragging = false;
-  }
 
   /**
    * Show filter popup
@@ -712,55 +663,50 @@ export class EQPlugin extends BasePlugin {
   }
 
   /**
-   * Coordinate conversions
+   * Show shortcuts modal
    */
-  private freqToX(freq: number, width: number): number {
-    const logMin = Math.log10(this.MIN_FREQ);
-    const logMax = Math.log10(this.MAX_FREQ);
-    const logFreq = Math.log10(Math.max(this.MIN_FREQ, Math.min(this.MAX_FREQ, freq)));
-    const normalized = (logFreq - logMin) / (logMax - logMin);
-    return 60 + normalized * (width - 80);
-  }
-
-  private xToFreq(x: number, width: number): number {
-    const normalized = (x - 60) / (width - 80);
-    const logMin = Math.log10(this.MIN_FREQ);
-    const logMax = Math.log10(this.MAX_FREQ);
-    const logFreq = logMin + normalized * (logMax - logMin);
-    return Math.pow(10, logFreq);
-  }
-
-  private gainToY(gain: number, height: number): number {
-    const range = this.maxGain - this.minGain;
-    const normalized = (gain - this.minGain) / range;
-    return height - 30 - normalized * (height - 60);
-  }
-
-  private yToGain(y: number, height: number): number {
-    const range = this.maxGain - this.minGain;
-    const normalized = (height - 30 - y) / (height - 60);
-    return this.minGain + normalized * range;
+  private showShortcutsModal(): void {
+    this.shortcutsModal?.show();
   }
 
   /**
    * Resize handler
    */
   resize(): void {
-    this.setupCanvas();
-    this.drawEQGraph();
+    if (this.plotContainer) {
+      // Regenerate plot on resize for better responsiveness
+      this.updatePlot();
+    }
   }
 
   /**
    * Destroy the plugin
    */
   destroy(): void {
-    if (this.eqResponseDebounceTimer) {
-      clearTimeout(this.eqResponseDebounceTimer);
+    // Remove keyboard listener
+    document.removeEventListener('keydown', this.handleKeydown);
+
+    if (this.plotUpdateDebounceTimer) {
+      clearTimeout(this.plotUpdateDebounceTimer);
+    }
+
+    if (this.plotContainer) {
+      // Remove Plotly plot
+      try {
+        Plotly.purge(this.plotContainer);
+      } catch (e) {
+        // Ignore if Plotly not loaded
+      }
     }
 
     if (this.menubar) {
       this.menubar.destroy();
       this.menubar = null;
+    }
+
+    if (this.shortcutsModal) {
+      this.shortcutsModal.destroy();
+      this.shortcutsModal = null;
     }
 
     super.destroy();
@@ -780,5 +726,35 @@ export class EQPlugin extends BasePlugin {
     this.filters = filters;
     this.renderFilterTable();
     this.onFilterChange();
+  }
+
+  /**
+   * Add a filter programmatically (public API)
+   */
+  addFilter(params?: { type?: string; frequency?: number; q?: number; gain?: number; enabled?: boolean }): void {
+    const filter: FilterParam = {
+      filter_type: params?.type ? this.normalizeFilterType(params.type) : 'Peak',
+      frequency: params?.frequency ?? 1000,
+      q: params?.q ?? 1.0,
+      gain: params?.gain ?? 0,
+      enabled: params?.enabled ?? true,
+    };
+
+    this.filters.push(filter);
+    this.renderFilterTable();
+    this.onFilterChange();
+  }
+
+  /**
+   * Normalize filter type string (e.g., "peak" -> "Peak")
+   */
+  private normalizeFilterType(type: string): string {
+    const normalized = type.charAt(0).toUpperCase() + type.slice(1).toLowerCase();
+    // Verify it's a valid type
+    if (normalized in FILTER_TYPES) {
+      return normalized;
+    }
+    console.warn(`[EQPlugin] Unknown filter type "${type}", defaulting to Peak`);
+    return 'Peak';
   }
 }

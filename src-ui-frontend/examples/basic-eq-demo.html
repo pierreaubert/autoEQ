@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Basic EQ Demo</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@1.0.4/css/bulma.min.css">
     <style>
       body {
         margin: 0;
@@ -125,7 +126,9 @@ eq.addFilter({
       // Get the EQ plugin
       const eq = basicEQ.getEQ();
 
-      // Add some example filters
+      // Clear default filters and add example filters
+      eq.setFilters([]);
+
       eq.addFilter({
         type: "peak",
         frequency: 100,
@@ -149,7 +152,8 @@ eq.addFilter({
 
       // Log info
       console.log("BasicEQ initialized with", eq.getFilters().length, "filters");
-      console.log("Plugins in host:", basicEQ.getPlugins().map(p => p.getName()));
+      console.log("Filters:", eq.getFilters());
+      console.log("Plugins in host:", basicEQ.getPlugins().map(p => p.metadata.name));
     </script>
   </body>
 </html>

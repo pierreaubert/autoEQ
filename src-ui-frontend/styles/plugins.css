@@ -337,7 +337,8 @@
 
 .level-meters-canvas {
   width: 100%;
-  height: 200px;
+  height: 100%;
+  min-height: 150px;
 }
 
 /* Volume Control */
@@ -379,23 +380,36 @@
 .eq-content {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  padding: 16px;
+  gap: 0;
+  padding: 0;
   flex: 1;
   overflow-y: auto;
 }
 
-.eq-graph-container {
+.eq-plot-container {
   width: 100%;
   max-width: 900px;
+  /* Height matches level-meters-container */
+  flex: 1;
+  min-height: 150px;
   margin: 0 auto;
+  background: rgba(26, 26, 26, 1);
+  border: 1px solid var(--border-color, #404040);
+  border-radius: 4px;
+  padding: 10px;
 }
 
-.eq-graph-canvas {
+/* Separator between graph and table */
+.eq-separator {
   width: 100%;
-  height: 300px;
-  cursor: crosshair;
-  border-radius: 4px;
+  max-width: 900px;
+  height: 20px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: var(--text-secondary, #888888);
 }
 
 /* EQ Table */
@@ -403,6 +417,13 @@
   width: 100%;
   max-width: 900px;
   margin: 0 auto;
+  /* Align height with LUFS meter + bottom controls */
+  display: flex;
+  flex-direction: column;
+  background: rgba(26, 26, 26, 1);
+  border: 1px solid var(--border-color, #404040);
+  border-radius: 4px;
+  padding: 10px;
 }
 
 .eq-table {
@@ -411,21 +432,118 @@
   font-size: 12px;
 }
 
+.eq-table-caption {
+  caption-side: top;
+  text-align: left;
+  padding: 12px 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary, #ffffff);
+  background: var(--bg-secondary, #1a1a1a);
+  border: 1px solid var(--border-color, #404040);
+  border-bottom: none;
+}
+
 .eq-table th,
 .eq-table td {
   padding: 8px;
   text-align: center;
-  border: 1px solid var(--border-color, #404040);
+  border: 1px solid rgba(128, 128, 128, 0.2);
+  background: rgba(26, 26, 26, 1);
 }
 
 .eq-table th {
-  background: var(--bg-tertiary, #2a2a2a);
+  background: rgba(26, 26, 26, 1);
   font-weight: 600;
   color: var(--text-secondary, #888888);
 }
 
+.eq-table tbody td {
+  background: rgba(26, 26, 26, 1);
+}
+
 .eq-table tr.selected {
   background: var(--bg-active, #2a4a6a);
+}
+
+.eq-table .eq-number {
+  font-weight: 600;
+  color: var(--text-secondary, #888888);
+  width: 40px;
+}
+
+/* Horizontal layout styles */
+.eq-table th.selected,
+.eq-table td.selected {
+  background: var(--bg-active, #2a4a6a);
+}
+
+.eq-table .eq-param-label {
+  font-weight: 600;
+  color: var(--text-secondary, #888888);
+  text-align: right;
+  padding-right: 12px;
+  white-space: nowrap;
+  background: rgba(26, 26, 26, 1);
+}
+
+.eq-table .eq-header-cell {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.eq-table .eq-type-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.filter-type-select-compact {
+  min-width: 70px;
+  padding: 4px 8px;
+  border: 1px solid var(--border-color, #404040);
+  background: var(--bg-secondary, #1a1a1a);
+  color: var(--text-primary, #ffffff);
+  border-radius: 4px;
+  font-size: 14px;
+  text-align: center;
+  cursor: pointer;
+}
+
+.filter-remove-btn-compact {
+  width: 40px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  background: var(--button-danger, #aa4040);
+  color: var(--text-primary, #ffffff);
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.filter-remove-btn-compact:hover {
+  background: var(--button-danger-hover, #cc5050);
+}
+
+.filter-add-btn-compact {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: none;
+  background: var(--button-primary, #00bfff);
+  color: var(--text-primary, #ffffff);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.filter-add-btn-compact:hover {
+  background: var(--button-primary-hover, #00a0dd);
 }
 
 .eq-table input[type="number"],
@@ -444,6 +562,15 @@
 
 .filter-type-select {
   min-width: 100px;
+}
+
+/* Specific input widths */
+.filter-frequency,
+.filter-gain,
+.filter-q {
+  min-width: 60px;
+  width: 60px !important;
+  max-width: 60px;
 }
 
 .filter-edit-btn,

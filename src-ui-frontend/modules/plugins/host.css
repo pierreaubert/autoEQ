@@ -144,7 +144,7 @@
 
 .plugin-display-left {
   flex: 1;
-  padding: 24px;
+  padding: 0 22px 0 0;
   overflow: auto;
   background: var(--bg-primary, #ffffff);
 }
@@ -155,8 +155,8 @@
   background: var(--bg-secondary, #f5f5f5);
   display: flex;
   flex-direction: column;
-  padding: 16px;
-  gap: 16px;
+  padding: 0;
+  gap: 0;
   overflow: auto;
 }
 
@@ -180,48 +180,63 @@
   opacity: 0.7;
 }
 
-/* LUFS Meter */
-.lufs-meter {
+/* LUFS Meter - Compact Version */
+.lufs-meter-compact {
+  flex: 0.75;
   background: var(--bg-accent, #fafafa);
-  border: 1px solid var(--border-color, #ddd);
-  border-radius: 6px;
-  padding: 12px;
+  border: none;
+  border-radius: 4px;
+  padding: 4px 6px;
+  display: flex;
+  flex-direction: column;
+  min-width: 60px;
 }
 
-.lufs-label {
-  font-size: 0.75rem;
+.lufs-header {
+  font-size: 0.6rem;
   font-weight: 600;
   color: var(--text-secondary, #666);
   text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-bottom: 8px;
+  letter-spacing: 0.3px;
+  margin: 0 0 1px 0;
+  text-align: center;
 }
 
-.lufs-value-container {
+.lufs-value-rows {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 0;
+  flex: 1;
+  justify-content: space-evenly;
 }
 
 .lufs-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 3px;
+  margin: 0;
+  padding: 0;
 }
 
 .lufs-type {
-  font-size: 0.85rem;
-  font-weight: 500;
+  font-size: 0.65rem;
+  font-weight: 600;
   color: var(--text-secondary, #666);
-  width: 20px;
+  width: 10px;
+  margin: 0;
+  padding: 0;
 }
 
 .lufs-value {
   font-family: 'Courier New', monospace;
-  font-size: 0.9rem;
+  font-size: 0.65rem;
   font-weight: 600;
   color: var(--text-primary, #333);
   text-align: right;
+  flex: 1;
+  margin: 0;
+  padding: 0;
 }
 
 /* Monitoring Toggle */
@@ -269,9 +284,111 @@
   display: flex;
   flex-direction: column;
   min-height: 150px;
+  padding: 0;
+  margin: 0;
 }
 
-/* Volume Control */
+/* Compact Controls Row (LUFS + monitoring + volume in one row) */
+.compact-controls-row {
+  display: flex;
+  gap: 4px;
+  align-items: stretch;
+  padding: 0;
+  margin: 0;
+}
+
+/* Monitoring Toggle - Compact Version (vertical stack) */
+.monitoring-toggle-compact {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--bg-accent, #fafafa);
+  border: none;
+  border-radius: 4px;
+  padding: 3px;
+  min-width: 32px;
+  max-width: 32px;
+}
+
+.monitoring-button-compact {
+  flex: 1;
+  padding: 4px 2px;
+  margin: 0;
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  color: var(--text-secondary, #666);
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: center;
+  line-height: 1;
+}
+
+.monitoring-button-compact:hover {
+  background: var(--bg-primary, #ffffff);
+  color: var(--text-primary, #333);
+}
+
+.monitoring-button-compact.active {
+  background: var(--button-primary, #007bff);
+  color: white;
+  box-shadow: 0 2px 4px rgba(0, 123, 255, 0.3);
+}
+
+/* Volume Control - Compact Round Knob */
+.volume-control-compact {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+}
+
+.volume-knob {
+  position: relative;
+  width: 55px;
+  height: 55px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.volume-knob-svg {
+  width: 100%;
+  height: 100%;
+  transform: rotate(0deg);
+}
+
+.volume-track {
+  fill: none;
+  stroke: var(--border-color, #ddd);
+  stroke-width: 4;
+}
+
+.volume-fill {
+  fill: none;
+  stroke: var(--button-primary, #007bff);
+  stroke-width: 4;
+  stroke-linecap: round;
+  transition: stroke-dasharray 0.1s ease;
+}
+
+.volume-value-compact {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-family: 'Courier New', monospace;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-primary, #333);
+  pointer-events: none;
+}
+
+/* Volume slider removed - using knob only */
+
+/* Old Volume Control (kept for backward compatibility) */
 .volume-control {
   background: var(--bg-accent, #fafafa);
   border: 1px solid var(--border-color, #ddd);

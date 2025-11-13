@@ -114,41 +114,52 @@ export class PluginHost {
   }
 
   /**
-   * Render right panel (LUFS, meters, volume)
+   * Render right panel (meters at top, then compact LUFS+controls row)
    */
   private renderRightPanel(): string {
     return `
-      ${this.config.showLUFS ? this.renderLUFSMeter() : ''}
-      ${this.config.showLevelMeters ? this.renderMonitoringToggle() : ''}
       ${this.config.showLevelMeters ? this.renderLevelMeters() : ''}
-      ${this.config.showVolumeControl ? this.renderVolumeControl() : ''}
+      ${this.config.showLUFS || this.config.showLevelMeters || this.config.showVolumeControl ? this.renderCompactControlsRow() : ''}
     `;
   }
 
   /**
-   * Render monitoring toggle (input/output)
+   * Render compact controls row (LUFS + monitoring + volume in one row)
+   */
+  private renderCompactControlsRow(): string {
+    return `
+      <div class="compact-controls-row">
+        ${this.config.showLUFS ? this.renderLUFSMeter() : ''}
+        ${this.config.showLevelMeters ? this.renderMonitoringToggle() : ''}
+        ${this.config.showVolumeControl ? this.renderVolumeControl() : ''}
+      </div>
+    `;
+  }
+
+  /**
+   * Render monitoring toggle (input/output) - compact version
    */
   private renderMonitoringToggle(): string {
     return `
-      <div class="monitoring-toggle">
-        <button class="monitoring-button ${this.monitoringMode === 'input' ? 'active' : ''}" data-mode="input">
-          Input
+      <div class="monitoring-toggle-compact">
+        <button class="monitoring-button-compact ${this.monitoringMode === 'input' ? 'active' : ''}" data-mode="input" title="Monitor Input">
+          &lt;
         </button>
-        <button class="monitoring-button ${this.monitoringMode === 'output' ? 'active' : ''}" data-mode="output">
-          Output
+        <button class="monitoring-button-compact ${this.monitoringMode === 'output' ? 'active' : ''}" data-mode="output" title="Monitor Output">
+          &gt;
         </button>
       </div>
     `;
   }
 
   /**
-   * Render LUFS meter
+   * Render LUFS meter - compact version for horizontal layout
    */
   private renderLUFSMeter(): string {
     return `
-      <div class="lufs-meter">
-        <div class="lufs-label">LUFS</div>
-        <div class="lufs-value-container">
+      <div class="lufs-meter-compact">
+        <div class="lufs-header">LUFS</div>
+        <div class="lufs-value-rows">
           <div class="lufs-row">
             <span class="lufs-type">M</span>
             <span class="lufs-value" data-lufs="momentary">-∞</span>
@@ -172,20 +183,27 @@ export class PluginHost {
   private renderLevelMeters(): string {
     return `
       <div class="level-meters-container">
-        <canvas class="level-meters-canvas" width="80" height="200"></canvas>
+        <canvas class="level-meters-canvas" width="200" height="300"></canvas>
       </div>
     `;
   }
 
   /**
-   * Render volume control
+   * Render volume control - compact round button
    */
   private renderVolumeControl(): string {
+    const volumePercent = Math.round(this.volume * 100);
     return `
-      <div class="volume-control">
-        <div class="volume-label">Volume</div>
-        <input type="range" class="volume-slider" min="0" max="100" value="${this.volume * 100}" />
-        <div class="volume-value">${Math.round(this.volume * 100)}%</div>
+      <div class="volume-control-compact">
+        <div class="volume-knob" data-volume="${volumePercent}">
+          <svg class="volume-knob-svg" viewBox="0 0 100 100">
+            <circle class="volume-track" cx="50" cy="50" r="40" />
+            <circle class="volume-fill" cx="50" cy="50" r="40"
+              stroke-dasharray="${(volumePercent / 100) * 251.2} 251.2"
+              transform="rotate(-90 50 50)" />
+          </svg>
+          <div class="volume-value-compact">${volumePercent}</div>
+        </div>
       </div>
     `;
   }
@@ -219,6 +237,25 @@ export class PluginHost {
     if (this.config.showLevelMeters) {
       const canvas = this.container.querySelector('.level-meters-canvas') as HTMLCanvasElement;
       if (canvas) {
+        // Make canvas responsive to container size
+        // Use setTimeout to ensure container has rendered and has dimensions
+        setTimeout(() => {
+          const container = canvas.parentElement as HTMLElement;
+          if (container) {
+            const width = container.clientWidth || 200;
+            const height = container.clientHeight || 300;
+
+            // Set canvas resolution (internal size)
+            canvas.width = width;
+            canvas.height = height;
+
+            // Force level meter to redraw
+            if (this.levelMeter) {
+              this.levelMeter.resize();
+            }
+          }
+        }, 0);
+
         this.levelMeter = new LevelMeter({
           canvas,
           channels: 6, // L, R, C, LFE, SL, SR
@@ -238,23 +275,74 @@ export class PluginHost {
       addButton.addEventListener('click', () => this.showPluginSelector());
     }
 
-    // Volume slider
-    const volumeSlider = this.container.querySelector('.volume-slider') as HTMLInputElement;
-    if (volumeSlider) {
-      volumeSlider.addEventListener('input', (e) => {
-        const value = parseInt((e.target as HTMLInputElement).value, 10) / 100;
-        this.setVolume(value);
+    // Volume knob - wheel support for compact version
+    const volumeKnob = this.container.querySelector('.volume-knob') as HTMLElement;
+    if (volumeKnob) {
+      volumeKnob.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const delta = -Math.sign((e as WheelEvent).deltaY) * 0.05;
+        this.setVolume(Math.max(0, Math.min(1, this.volume + delta)));
+      });
+
+      // Click to adjust
+      volumeKnob.addEventListener('click', (e) => {
+        const rect = volumeKnob.getBoundingClientRect();
+        const centerY = rect.top + rect.height / 2;
+        const clickY = (e as MouseEvent).clientY;
+        const delta = (centerY - clickY) / rect.height;
+        this.setVolume(Math.max(0, Math.min(1, this.volume + delta * 0.5)));
       });
     }
 
-    // Monitoring toggle buttons
-    const monitoringButtons = this.container.querySelectorAll('.monitoring-button');
+    // Monitoring toggle buttons - compact version
+    const monitoringButtons = this.container.querySelectorAll('.monitoring-button-compact');
     monitoringButtons.forEach((button) => {
       button.addEventListener('click', (e) => {
         const mode = (e.target as HTMLElement).dataset.mode as 'input' | 'output';
         this.setMonitoringMode(mode);
       });
     });
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', this.handleKeydown);
+  }
+
+  /**
+   * Handle keyboard shortcuts
+   */
+  private handleKeydown = (e: KeyboardEvent): void => {
+    // Check if target is an input element
+    const target = e.target as HTMLElement;
+    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT') {
+      return;
+    }
+
+    switch (e.key) {
+      case '<':
+      case 'ArrowLeft':
+        e.preventDefault();
+        this.setMonitoringMode('input');
+        break;
+      case '>':
+      case 'ArrowRight':
+        e.preventDefault();
+        this.setMonitoringMode('output');
+        break;
+
+      // Volume controls
+      case '+':
+      case 'ArrowUp':
+      case 'AudioVolumeUp':
+        e.preventDefault();
+        this.setVolume(Math.min(1, this.volume + 0.05));
+        break;
+      case '-':
+      case 'ArrowDown':
+      case 'AudioVolumeDown':
+        e.preventDefault();
+        this.setVolume(Math.max(0, this.volume - 0.05));
+        break;
+    }
   }
 
   /**
@@ -564,11 +652,18 @@ export class PluginHost {
   setVolume(volume: number): void {
     this.volume = Math.max(0, Math.min(1, volume));
 
-    // Update UI
-    const volumeSlider = this.container.querySelector('.volume-slider') as HTMLInputElement;
-    const volumeValue = this.container.querySelector('.volume-value') as HTMLElement;
-    if (volumeSlider) volumeSlider.value = String(this.volume * 100);
-    if (volumeValue) volumeValue.textContent = `${Math.round(this.volume * 100)}%`;
+    // Update UI - compact version
+    const volumeValue = this.container.querySelector('.volume-value-compact') as HTMLElement;
+    const volumeKnob = this.container.querySelector('.volume-knob') as HTMLElement;
+    const volumeFill = this.container.querySelector('.volume-fill') as SVGCircleElement;
+
+    const volumePercent = Math.round(this.volume * 100);
+    if (volumeValue) volumeValue.textContent = String(volumePercent);
+    if (volumeKnob) volumeKnob.dataset.volume = String(volumePercent);
+    if (volumeFill) {
+      const circumference = 251.2;
+      volumeFill.setAttribute('stroke-dasharray', `${(volumePercent / 100) * circumference} ${circumference}`);
+    }
 
     // Callback
     if (this.callbacks.onVolumeChange) {
@@ -613,8 +708,8 @@ export class PluginHost {
   setMonitoringMode(mode: 'input' | 'output'): void {
     this.monitoringMode = mode;
 
-    // Update button states
-    const buttons = this.container.querySelectorAll('.monitoring-button');
+    // Update button states - compact version
+    const buttons = this.container.querySelectorAll('.monitoring-button-compact');
     buttons.forEach((button) => {
       const btnMode = (button as HTMLElement).dataset.mode;
       button.classList.toggle('active', btnMode === mode);
@@ -670,10 +765,16 @@ export class PluginHost {
   private generateChannelLabels(count: number): string[] {
     if (count === 2) {
       return ['L', 'R'];
-    } else if (count === 6) {
+    } else if (count === 6) { // 5.1
       return ['L', 'R', 'C', 'LFE', 'SL', 'SR'];
-    } else if (count === 8) {
+    } else if (count === 8) { // 7.1
       return ['L', 'R', 'C', 'LFE', 'SL', 'SR', 'SBL', 'SBR'];
+    } else if (count === 12) { // 5.1.4
+      return ['L', 'R', 'C', 'LFE', 'SL', 'SR', 'TFL', 'TFR', 'TBL', 'TBR'];
+    } else if (count === 14) { // 9.1.4
+      return ['L', 'R', 'C', 'LFE', 'SL', 'SR', 'SBL', 'SBR', 'TFL', 'TFR', 'TBL', 'TBR'];
+    } else if (count === 16) { // 9.1.6
+      return ['L', 'R', 'C', 'LFE', 'SL', 'SR', 'SBL', 'SBR', 'TFL', 'TFR', 'TC', 'TBL', 'TBR', 'TBC'];
     } else {
       return Array.from({ length: count }, (_, i) => `${i + 1}`);
     }
@@ -683,6 +784,9 @@ export class PluginHost {
    * Destroy the host
    */
   destroy(): void {
+    // Remove keyboard listener
+    document.removeEventListener('keydown', this.handleKeydown);
+
     // Destroy all plugins
     this.plugins.forEach((plugin) => plugin.destroy());
     this.plugins = [];
