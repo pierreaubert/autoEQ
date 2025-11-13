@@ -46,31 +46,19 @@ fn format_to_string(format: cpal::SampleFormat) -> String {
 
 /// Get information about all available audio devices
 pub fn get_audio_devices() -> Result<HashMap<String, Vec<AudioDevice>>, String> {
-    println!("[AUDIO DEBUG] Enumerating audio devices...");
-    println!("[AUDIO DEBUG] Getting default host...");
     let host = cpal::default_host();
-    println!("[AUDIO DEBUG] Host obtained successfully");
     let mut devices_map = HashMap::new();
 
     // Get input devices
     let mut input_devices = Vec::new();
-    println!("[AUDIO DEBUG] About to enumerate input devices...");
     match host.input_devices() {
         Ok(devices) => {
             let default_input = host.default_input_device();
             let default_input_name = default_input.as_ref().and_then(|d| d.name().ok());
-            if let Some(ref name) = default_input_name {
-                println!("[AUDIO DEBUG] Default input device: {}", name);
-            }
 
             // WORKAROUND: On macOS, collecting devices into a Vec first can prevent
             // crashes caused by iterator issues with CoreAudio
             let device_vec: Vec<_> = devices.collect();
-            println!(
-                "[AUDIO DEBUG] Collected {} input device(s)",
-                device_vec.len()
-            );
-
             for device in device_vec {
                 if let Ok(name) = device.name() {
                     let is_default = default_input_name.as_ref() == Some(&name);
@@ -160,8 +148,19 @@ pub fn get_audio_devices() -> Result<HashMap<String, Vec<AudioDevice>>, String> 
                         };
 
                     // Report what we detected
-                    let channel_info = if let Some(ref cfg) = default_config {
-                        format!("{} ch", cfg.channels)
+                    if let Some(ref cfg) = default_config {
+                        let rate_range = if available_sample_rates.is_empty() {
+                            "unknown".to_string()
+                        } else if available_sample_rates.len() == 1 {
+                            format!("{} Hz", available_sample_rates[0])
+                        } else {
+                            format!(
+                                "{}-{} Hz",
+                                available_sample_rates.first().unwrap(),
+                                available_sample_rates.last().unwrap()
+                            )
+                        };
+                        format!("{} ch, {} (current: {} Hz)", cfg.channels, rate_range, cfg.sample_rate)
                     } else {
                         "unknown".to_string()
                     };
@@ -174,16 +173,8 @@ pub fn get_audio_devices() -> Result<HashMap<String, Vec<AudioDevice>>, String> 
                         default_config,
                         available_sample_rates,
                     });
-                    println!(
-                        "[AUDIO DEBUG] Found input device: {} (default: {}, channels: {})",
-                        name, is_default, channel_info
-                    );
                 }
             }
-            println!(
-                "[AUDIO DEBUG] Total input devices found: {}",
-                input_devices.len()
-            );
         }
         Err(e) => {
             eprintln!("[AUDIO ERROR] Failed to enumerate input devices: {}", e);
@@ -197,18 +188,10 @@ pub fn get_audio_devices() -> Result<HashMap<String, Vec<AudioDevice>>, String> 
         Ok(devices) => {
             let default_output = host.default_output_device();
             let default_output_name = default_output.as_ref().and_then(|d| d.name().ok());
-            if let Some(ref name) = default_output_name {
-                println!("[AUDIO DEBUG] Default output device: {}", name);
-            }
 
             // WORKAROUND: On macOS, collecting devices into a Vec first can prevent
             // crashes caused by iterator issues with CoreAudio
             let device_vec: Vec<_> = devices.collect();
-            println!(
-                "[AUDIO DEBUG] Collected {} output device(s)",
-                device_vec.len()
-            );
-
             for device in device_vec {
                 if let Ok(name) = device.name() {
                     let is_default = default_output_name.as_ref() == Some(&name);
@@ -313,8 +296,19 @@ pub fn get_audio_devices() -> Result<HashMap<String, Vec<AudioDevice>>, String> 
                         };
 
                     // Report what we detected - don't make assumptions
-                    let channel_info = if let Some(ref cfg) = default_config {
-                        format!("{} ch", cfg.channels)
+                    if let Some(ref cfg) = default_config {
+                        let rate_range = if available_sample_rates.is_empty() {
+                            "unknown".to_string()
+                        } else if available_sample_rates.len() == 1 {
+                            format!("{} Hz", available_sample_rates[0])
+                        } else {
+                            format!(
+                                "{}-{} Hz",
+                                available_sample_rates.first().unwrap(),
+                                available_sample_rates.last().unwrap()
+                            )
+                        };
+                        format!("{} ch, {} (current: {} Hz)", cfg.channels, rate_range, cfg.sample_rate)
                     } else {
                         "unknown".to_string()
                     };
@@ -327,16 +321,8 @@ pub fn get_audio_devices() -> Result<HashMap<String, Vec<AudioDevice>>, String> 
                         default_config,
                         available_sample_rates,
                     });
-                    println!(
-                        "[AUDIO DEBUG] Found output device: {} (default: {}, channels: {})",
-                        name, is_default, channel_info
-                    );
                 }
             }
-            println!(
-                "[AUDIO DEBUG] Total output devices found: {}",
-                output_devices.len()
-            );
         }
         Err(e) => {
             eprintln!("[AUDIO ERROR] Failed to enumerate output devices: {}", e);
@@ -367,15 +353,6 @@ pub fn set_audio_device(
     config: AudioConfig,
     audio_state: &SharedAudioState,
 ) -> Result<String, String> {
-    println!(
-        "[AUDIO DEBUG] Setting {} device '{}' with config: sample_rate={}, channels={}, format={}",
-        if is_input { "input" } else { "output" },
-        device_name,
-        config.sample_rate,
-        config.channels,
-        config.sample_format
-    );
-
     let host = cpal::default_host();
 
     // Find the device by name
@@ -470,25 +447,15 @@ pub fn set_audio_device(
         config.channels,
         config.sample_format
     );
-    println!("[AUDIO DEBUG] {}", success_msg);
     Ok(success_msg)
 }
 
 /// Get the current audio configuration
 pub fn get_audio_config(audio_state: &SharedAudioState) -> Result<AudioState, String> {
-    println!("[AUDIO DEBUG] Getting current audio configuration");
     let state = audio_state.lock().map_err(|e| {
         eprintln!("[AUDIO ERROR] Failed to lock audio state: {}", e);
         format!("Failed to lock audio state: {}", e)
     })?;
-
-    if let Some(ref device) = state.selected_input_device {
-        println!("[AUDIO DEBUG] Current input device: {}", device);
-    }
-    if let Some(ref device) = state.selected_output_device {
-        println!("[AUDIO DEBUG] Current output device: {}", device);
-    }
-
     Ok(state.clone())
 }
 
@@ -497,12 +464,6 @@ pub fn get_device_properties(
     device_name: String,
     is_input: bool,
 ) -> Result<serde_json::Value, String> {
-    println!(
-        "[AUDIO DEBUG] Getting properties for {} device: {}",
-        if is_input { "input" } else { "output" },
-        device_name
-    );
-
     let host = cpal::default_host();
 
     // Find the device by name

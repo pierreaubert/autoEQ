@@ -127,71 +127,93 @@ fn main() {
 }
 
 fn list_audio_devices() {
-    use cpal::traits::{DeviceTrait, HostTrait};
-
-    println!("{}", "=".repeat(60));
+    println!("{}", "=".repeat(80));
     println!("Available Audio Devices");
-    println!("{}", "=".repeat(60));
+    println!("{}", "=".repeat(80));
 
-    let host = cpal::default_host();
-
-    println!("\n📤 OUTPUT DEVICES:");
-    println!("{}", "-".repeat(60));
-
-    if let Some(default_out) = host.default_output_device() {
-        let name = default_out.name().unwrap_or_else(|_| "Unknown".to_string());
-        println!("  [DEFAULT] {}", name);
-    }
-
-    if let Ok(devices) = host.output_devices() {
-        for (idx, device) in devices.enumerate() {
-            let name = device.name().unwrap_or_else(|_| "Unknown".to_string());
-
-            // Get device info if possible
-            if let Ok(config) = device.default_output_config() {
-                println!(
-                    "  [{}] {} ({} channels, {} Hz)",
-                    idx,
-                    name,
-                    config.channels(),
-                    config.sample_rate().0
-                );
-            } else {
-                println!("  [{}] {}", idx, name);
-            }
+    let devices = match sotf_audio::devices::get_audio_devices() {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("Failed to get devices: {}", e);
+            return;
         }
-    }
+    };
 
     println!("\n📥 INPUT DEVICES:");
-    println!("{}", "-".repeat(60));
+    println!("{}", "-".repeat(80));
 
-    if let Some(default_in) = host.default_input_device() {
-        let name = default_in.name().unwrap_or_else(|_| "Unknown".to_string());
-        println!("  [DEFAULT] {}", name);
-    }
+    if let Some(input_devices) = devices.get("input") {
+        for (idx, device) in input_devices.iter().enumerate() {
+            let default_marker = if device.is_default { " (Default)" } else { "" };
 
-    if let Ok(devices) = host.input_devices() {
-        for (idx, device) in devices.enumerate() {
-            let name = device.name().unwrap_or_else(|_| "Unknown".to_string());
+            if let Some(config) = &device.default_config {
+                let rate_range = if device.available_sample_rates.is_empty() {
+                    "unknown".to_string()
+                } else if device.available_sample_rates.len() == 1 {
+                    format!("{} Hz", device.available_sample_rates[0])
+                } else {
+                    format!(
+                        "{}-{} Hz",
+                        device.available_sample_rates.first().unwrap(),
+                        device.available_sample_rates.last().unwrap()
+                    )
+                };
 
-            // Get device info if possible
-            if let Ok(config) = device.default_input_config() {
                 println!(
-                    "  [{}] {} ({} channels, {} Hz)",
+                    "  [{}] {}{} - {} ch, {} (current: {} Hz), {}",
                     idx,
-                    name,
-                    config.channels(),
-                    config.sample_rate().0
+                    device.name,
+                    default_marker,
+                    config.channels,
+                    rate_range,
+                    config.sample_rate,
+                    config.sample_format
                 );
             } else {
-                println!("  [{}] {}", idx, name);
+                println!("  [{}] {}{}", idx, device.name, default_marker);
             }
         }
     }
 
-    println!("\n{}", "=".repeat(60));
+    println!("\n📤 OUTPUT DEVICES:");
+    println!("{}", "-".repeat(80));
+
+    if let Some(output_devices) = devices.get("output") {
+        for (idx, device) in output_devices.iter().enumerate() {
+            let default_marker = if device.is_default { " (Default)" } else { "" };
+
+            if let Some(config) = &device.default_config {
+                let rate_range = if device.available_sample_rates.is_empty() {
+                    "unknown".to_string()
+                } else if device.available_sample_rates.len() == 1 {
+                    format!("{} Hz", device.available_sample_rates[0])
+                } else {
+                    format!(
+                        "{}-{} Hz",
+                        device.available_sample_rates.first().unwrap(),
+                        device.available_sample_rates.last().unwrap()
+                    )
+                };
+
+                println!(
+                    "  [{}] {}{} - {} ch, {} (current: {} Hz), {}",
+                    idx,
+                    device.name,
+                    default_marker,
+                    config.channels,
+                    rate_range,
+                    config.sample_rate,
+                    config.sample_format
+                );
+            } else {
+                println!("  [{}] {}{}", idx, device.name, default_marker);
+            }
+        }
+    }
+
+    println!("\n{}", "=".repeat(80));
     println!("💡 Usage: Use --device \"Device Name\" to select a device");
-    println!("{}", "=".repeat(60));
+    println!("{}", "=".repeat(80));
 }
 
 #[allow(clippy::too_many_arguments)]

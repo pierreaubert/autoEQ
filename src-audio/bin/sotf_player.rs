@@ -289,17 +289,35 @@ fn list_devices() -> Result<(), String> {
     // Print input devices
     if let Some(input_devices) = devices.get("input") {
         println!("Input Devices:");
-        println!("{}", "=".repeat(60));
+        println!("{}", "=".repeat(80));
         for (idx, device) in input_devices.iter().enumerate() {
-            println!("  [{}] {}", idx + 1, device.name);
-            if device.is_default {
-                println!("      (Default)");
-            }
+            let default_marker = if device.is_default { " (Default)" } else { "" };
+
             if let Some(config) = &device.default_config {
+                let rate_range = if device.available_sample_rates.is_empty() {
+                    "unknown".to_string()
+                } else if device.available_sample_rates.len() == 1 {
+                    format!("{} Hz", device.available_sample_rates[0])
+                } else {
+                    format!(
+                        "{}-{} Hz",
+                        device.available_sample_rates.first().unwrap(),
+                        device.available_sample_rates.last().unwrap()
+                    )
+                };
+
                 println!(
-                    "      {}Hz, {} ch, {}",
-                    config.sample_rate, config.channels, config.sample_format
+                    "  [{}] {}{} - {} ch, {} (current: {} Hz), {}",
+                    idx + 1,
+                    device.name,
+                    default_marker,
+                    config.channels,
+                    rate_range,
+                    config.sample_rate,
+                    config.sample_format
                 );
+            } else {
+                println!("  [{}] {}{}", idx + 1, device.name, default_marker);
             }
         }
         println!();
@@ -308,17 +326,35 @@ fn list_devices() -> Result<(), String> {
     // Print output devices
     if let Some(output_devices) = devices.get("output") {
         println!("Output Devices:");
-        println!("{}", "=".repeat(60));
+        println!("{}", "=".repeat(80));
         for (idx, device) in output_devices.iter().enumerate() {
-            println!("  [{}] {}", idx + 1, device.name);
-            if device.is_default {
-                println!("      (Default)");
-            }
+            let default_marker = if device.is_default { " (Default)" } else { "" };
+
             if let Some(config) = &device.default_config {
+                let rate_range = if device.available_sample_rates.is_empty() {
+                    "unknown".to_string()
+                } else if device.available_sample_rates.len() == 1 {
+                    format!("{} Hz", device.available_sample_rates[0])
+                } else {
+                    format!(
+                        "{}-{} Hz",
+                        device.available_sample_rates.first().unwrap(),
+                        device.available_sample_rates.last().unwrap()
+                    )
+                };
+
                 println!(
-                    "      {}Hz, {} ch, {}",
-                    config.sample_rate, config.channels, config.sample_format
+                    "  [{}] {}{} - {} ch, {} (current: {} Hz), {}",
+                    idx + 1,
+                    device.name,
+                    default_marker,
+                    config.channels,
+                    rate_range,
+                    config.sample_rate,
+                    config.sample_format
                 );
+            } else {
+                println!("  [{}] {}{}", idx + 1, device.name, default_marker);
             }
         }
         println!();
