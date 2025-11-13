@@ -4,15 +4,15 @@
 //! and our Rust implementation. It handles the conversion between C callbacks
 //! and safe Rust abstractions.
 
+use libc::{free, malloc};
 use std::os::raw::c_void;
 use std::ptr;
 use std::sync::{Arc, Mutex, OnceLock};
-use libc::{free, malloc};
 
-use coreaudio_sys::*;
 use core_foundation::uuid::CFUUIDRef;
+use coreaudio_sys::*;
 
-use crate::{AudioDriverError, Result, HALDriver};
+use crate::{AudioDriverError, HALDriver, Result};
 
 // Define Core Audio constants - using Apple's naming convention
 #[allow(non_upper_case_globals)]
@@ -39,16 +39,14 @@ pub struct AudioDriverPlugInInterface {
 unsafe fn init_driver() -> Result<Arc<Mutex<HALDriver>>> {
     crate::init_logging();
 
-    DRIVER_INSTANCE.get_or_init(|| {
-        match HALDriver::new() {
-            Ok(driver) => {
-                log::info!("HAL Driver initialized successfully");
-                Arc::new(Mutex::new(driver))
-            }
-            Err(e) => {
-                log::error!("Failed to initialize HAL driver: {}", e);
-                panic!("Failed to initialize HAL driver: {}", e);
-            }
+    DRIVER_INSTANCE.get_or_init(|| match HALDriver::new() {
+        Ok(driver) => {
+            log::info!("HAL Driver initialized successfully");
+            Arc::new(Mutex::new(driver))
+        }
+        Err(e) => {
+            log::error!("Failed to initialize HAL driver: {}", e);
+            panic!("Failed to initialize HAL driver: {}", e);
         }
     });
 
@@ -71,8 +69,12 @@ pub unsafe extern "C" fn audio_driver_plugin_open(
     driver_ref: *mut c_void, // Simplified host info
     driver: *mut *mut AudioServerPlugInDriverInterface,
 ) -> OSStatus {
-    log::info!("🚀 AudioDriverPlugInOpen called - driver_ref: {:p}, driver: {:p}", driver_ref, driver);
-    
+    log::info!(
+        "🚀 AudioDriverPlugInOpen called - driver_ref: {:p}, driver: {:p}",
+        driver_ref,
+        driver
+    );
+
     // Initialize the driver
     log::info!("🔧 Initializing driver instance...");
     let driver_instance = match init_driver() {
@@ -85,16 +87,17 @@ pub unsafe extern "C" fn audio_driver_plugin_open(
             return kAudioHardwareUnspecifiedError;
         }
     };
-    
+
     // Create the interface structure
     log::info!("📦 Allocating driver interface structure...");
-    let interface = malloc(std::mem::size_of::<AudioDriverPlugInInterface>()) as *mut AudioDriverPlugInInterface;
+    let interface = malloc(std::mem::size_of::<AudioDriverPlugInInterface>())
+        as *mut AudioDriverPlugInInterface;
     if interface.is_null() {
         log::error!("❌ Failed to allocate driver interface");
         return kAudioHardwareUnspecifiedError;
     }
     log::info!("✅ Interface allocated at {:p}", interface);
-    
+
     // Populate the interface with function pointers
     // Use transmute to convert between compatible but technically different function pointer types
     (*interface).interface = AudioServerPlugInDriverInterface {
@@ -122,7 +125,7 @@ pub unsafe extern "C" fn audio_driver_plugin_open(
         DoIOOperation: Some(driver_do_io_operation),
         EndIOOperation: Some(driver_end_io_operation),
     };
-    
+
     // Store the host info for future reference
     if !driver_ref.is_null() {
         log::info!("📝 Setting host info...");
@@ -135,29 +138,29 @@ pub unsafe extern "C" fn audio_driver_plugin_open(
     } else {
         log::warn!("⚠️  driver_ref is null, skipping host info");
     }
-    
+
     *driver = &mut (*interface).interface;
     log::info!("📤 Returning driver interface pointer: {:p}", *driver);
-    
+
     log::info!("✅ AudioDriverPlugInOpen completed successfully");
     kAudioHardwareNoError
 }
 
 /// Entry point called when Core Audio unloads the driver
 pub unsafe extern "C" fn audio_driver_plugin_close(
-    driver: *mut AudioServerPlugInDriverInterface
+    driver: *mut AudioServerPlugInDriverInterface,
 ) -> OSStatus {
     log::info!("AudioDriverPlugInClose called");
-    
+
     if !driver.is_null() {
         // Calculate the offset to get back to our AudioDriverPlugInInterface
-        let interface = (driver as *mut u8).offset(
-            -(std::mem::offset_of!(AudioDriverPlugInInterface, interface) as isize)
-        ) as *mut AudioDriverPlugInInterface;
-        
+        let interface = (driver as *mut u8)
+            .offset(-(std::mem::offset_of!(AudioDriverPlugInInterface, interface) as isize))
+            as *mut AudioDriverPlugInInterface;
+
         free(interface as *mut c_void);
     }
-    
+
     log::info!("AudioDriverPlugInClose completed");
     kAudioHardwareNoError
 }
@@ -165,7 +168,7 @@ pub unsafe extern "C" fn audio_driver_plugin_close(
 /// Factory function for creating driver instances
 pub unsafe extern "C" fn audio_driver_plugin_factory(_uuid: CFUUIDRef) -> *mut c_void {
     log::info!("🏭 AudioDriverPlugInFactory called (not implemented, returning null)");
-    
+
     // For now, we don't support the factory pattern - return null
     // Core Audio will use AudioDriverPlugInOpen instead
     ptr::null_mut()
@@ -196,8 +199,12 @@ unsafe extern "C" fn driver_initialize(
     _driver: AudioServerPlugInDriverRef,
     host: AudioServerPlugInHostRef,
 ) -> OSStatus {
-    log::info!("🔧 driver_initialize called - driver: {:p}, host: {:p}", _driver, host);
-    
+    log::info!(
+        "🔧 driver_initialize called - driver: {:p}, host: {:p}",
+        _driver,
+        host
+    );
+
     let driver_instance = match get_driver() {
         Ok(instance) => instance,
         Err(e) => {
@@ -205,7 +212,7 @@ unsafe extern "C" fn driver_initialize(
             return kAudioHardwareUnspecifiedError;
         }
     };
-    
+
     let result = match driver_instance.lock() {
         Ok(mut driver_lock) => {
             log::info!("🔒 Driver locked, calling initialize...");
@@ -235,27 +242,29 @@ unsafe extern "C" fn driver_create_device(
     _client_info: *const AudioServerPlugInClientInfo,
     device_object_id: *mut AudioObjectID,
 ) -> OSStatus {
-    log::info!("🎤 driver_create_device called - description: {:p}, client_info: {:p}", _description, _client_info);
-    
+    log::info!(
+        "🎤 driver_create_device called - description: {:p}, client_info: {:p}",
+        _description,
+        _client_info
+    );
+
     let driver_instance = match get_driver() {
         Ok(instance) => instance,
         Err(_) => return kAudioHardwareUnspecifiedError,
     };
-    
+
     let result = match driver_instance.lock() {
-        Ok(mut driver_lock) => {
-            match driver_lock.create_device() {
-                Ok(object_id) => {
-                    *device_object_id = object_id;
-                    log::info!("✅ Device created with ID: {}", object_id);
-                    kAudioHardwareNoError
-                }
-                Err(e) => {
-                    log::error!("❌ Failed to create device: {}", e);
-                    kAudioHardwareUnspecifiedError
-                }
+        Ok(mut driver_lock) => match driver_lock.create_device() {
+            Ok(object_id) => {
+                *device_object_id = object_id;
+                log::info!("✅ Device created with ID: {}", object_id);
+                kAudioHardwareNoError
             }
-        }
+            Err(e) => {
+                log::error!("❌ Failed to create device: {}", e);
+                kAudioHardwareUnspecifiedError
+            }
+        },
         Err(e) => {
             log::error!("Failed to lock driver: {}", e);
             kAudioHardwareUnspecifiedError
@@ -268,26 +277,27 @@ unsafe extern "C" fn driver_destroy_device(
     _driver: AudioServerPlugInDriverRef,
     device_object_id: AudioObjectID,
 ) -> OSStatus {
-    log::info!("driver_destroy_device called for device {}", device_object_id);
-    
+    log::info!(
+        "driver_destroy_device called for device {}",
+        device_object_id
+    );
+
     let driver_instance = match get_driver() {
         Ok(instance) => instance,
         Err(_) => return kAudioHardwareUnspecifiedError,
     };
-    
+
     let result = match driver_instance.lock() {
-        Ok(mut driver_lock) => {
-            match driver_lock.destroy_device(device_object_id) {
-                Ok(_) => {
-                    log::info!("Device {} destroyed", device_object_id);
-                    kAudioHardwareNoError
-                }
-                Err(e) => {
-                    log::error!("Failed to destroy device: {}", e);
-                    kAudioHardwareUnspecifiedError
-                }
+        Ok(mut driver_lock) => match driver_lock.destroy_device(device_object_id) {
+            Ok(_) => {
+                log::info!("Device {} destroyed", device_object_id);
+                kAudioHardwareNoError
             }
-        }
+            Err(e) => {
+                log::error!("Failed to destroy device: {}", e);
+                kAudioHardwareUnspecifiedError
+            }
+        },
         Err(e) => {
             log::error!("Failed to lock driver: {}", e);
             kAudioHardwareUnspecifiedError
@@ -301,7 +311,10 @@ unsafe extern "C" fn driver_add_device_client(
     device_object_id: AudioObjectID,
     _client_info: *const AudioServerPlugInClientInfo,
 ) -> OSStatus {
-    log::info!("driver_add_device_client called for device {}", device_object_id);
+    log::info!(
+        "driver_add_device_client called for device {}",
+        device_object_id
+    );
     kAudioHardwareNoError
 }
 
@@ -310,7 +323,10 @@ unsafe extern "C" fn driver_remove_device_client(
     device_object_id: AudioObjectID,
     _client_info: *const AudioServerPlugInClientInfo,
 ) -> OSStatus {
-    log::info!("driver_remove_device_client called for device {}", device_object_id);
+    log::info!(
+        "driver_remove_device_client called for device {}",
+        device_object_id
+    );
     kAudioHardwareNoError
 }
 
@@ -320,8 +336,11 @@ unsafe extern "C" fn driver_perform_device_configuration_change(
     change_action: UInt64,
     _change_info: *mut c_void,
 ) -> OSStatus {
-    log::info!("driver_perform_device_configuration_change called for device {} with action {}",
-              device_object_id, change_action);
+    log::info!(
+        "driver_perform_device_configuration_change called for device {} with action {}",
+        device_object_id,
+        change_action
+    );
     kAudioHardwareNoError
 }
 
@@ -331,8 +350,11 @@ unsafe extern "C" fn driver_abort_device_configuration_change(
     change_action: UInt64,
     _change_info: *mut c_void,
 ) -> OSStatus {
-    log::info!("driver_abort_device_configuration_change called for device {} with action {}",
-              device_object_id, change_action);
+    log::info!(
+        "driver_abort_device_configuration_change called for device {} with action {}",
+        device_object_id,
+        change_action
+    );
     kAudioHardwareNoError
 }
 
@@ -347,11 +369,16 @@ unsafe extern "C" fn driver_has_property(
         log::warn!("⚠️  driver_has_property: address is null");
         return 0;
     }
-    
+
     let addr = *address;
-    log::debug!("🔍 driver_has_property: object={} selector=0x{:08X} scope=0x{:08X} element={}",
-               object_id, addr.mSelector, addr.mScope, addr.mElement);
-    
+    log::debug!(
+        "🔍 driver_has_property: object={} selector=0x{:08X} scope=0x{:08X} element={}",
+        object_id,
+        addr.mSelector,
+        addr.mScope,
+        addr.mElement
+    );
+
     if let Ok(driver_instance) = get_driver() {
         if let Ok(driver_lock) = driver_instance.lock() {
             let has_prop = driver_lock.has_property(object_id, &addr);
@@ -378,16 +405,19 @@ unsafe extern "C" fn driver_is_property_settable(
     if address.is_null() || out_is_settable.is_null() {
         return kAudioHardwareBadParameterError;
     }
-    
+
     let addr = *address;
-    log::debug!("driver_is_property_settable called for object {} selector {}",
-               object_id, addr.mSelector);
-    
+    log::debug!(
+        "driver_is_property_settable called for object {} selector {}",
+        object_id,
+        addr.mSelector
+    );
+
     let driver_instance = match get_driver() {
         Ok(instance) => instance,
         Err(_) => return kAudioHardwareUnspecifiedError,
     };
-    
+
     let result = match driver_instance.lock() {
         Ok(driver_lock) => {
             *out_is_settable = if driver_lock.is_property_settable(object_id, &addr) {
@@ -414,29 +444,30 @@ unsafe extern "C" fn driver_get_property_data_size(
     if address.is_null() || out_data_size.is_null() {
         return kAudioHardwareBadParameterError;
     }
-    
+
     let addr = *address;
-    log::debug!("driver_get_property_data_size called for object {} selector {}",
-               object_id, addr.mSelector);
-    
+    log::debug!(
+        "driver_get_property_data_size called for object {} selector {}",
+        object_id,
+        addr.mSelector
+    );
+
     let driver_instance = match get_driver() {
         Ok(instance) => instance,
         Err(_) => return kAudioHardwareUnspecifiedError,
     };
-    
+
     let result = match driver_instance.lock() {
-        Ok(driver_lock) => {
-            match driver_lock.get_property_data_size(object_id, &addr) {
-                Ok(size) => {
-                    *out_data_size = size;
-                    kAudioHardwareNoError
-                }
-                Err(e) => {
-                    log::error!("get_property_data_size failed: {}", e);
-                    kAudioHardwareUnknownPropertyError
-                }
+        Ok(driver_lock) => match driver_lock.get_property_data_size(object_id, &addr) {
+            Ok(size) => {
+                *out_data_size = size;
+                kAudioHardwareNoError
             }
-        }
+            Err(e) => {
+                log::error!("get_property_data_size failed: {}", e);
+                kAudioHardwareUnknownPropertyError
+            }
+        },
         Err(_) => kAudioHardwareUnspecifiedError,
     };
     result
@@ -456,20 +487,24 @@ unsafe extern "C" fn driver_get_property_data(
     if address.is_null() || out_data.is_null() || out_data_size.is_null() {
         return kAudioHardwareBadParameterError;
     }
-    
+
     let addr = *address;
-    log::debug!("driver_get_property_data called for object {} selector {}",
-               object_id, addr.mSelector);
-    
+    log::debug!(
+        "driver_get_property_data called for object {} selector {}",
+        object_id,
+        addr.mSelector
+    );
+
     let driver_instance = match get_driver() {
         Ok(instance) => instance,
         Err(_) => return kAudioHardwareUnspecifiedError,
     };
-    
+
     let result = match driver_instance.lock() {
         Ok(driver_lock) => {
-            let data_slice = std::slice::from_raw_parts_mut(out_data as *mut u8, in_data_size as usize);
-            
+            let data_slice =
+                std::slice::from_raw_parts_mut(out_data as *mut u8, in_data_size as usize);
+
             match driver_lock.get_property_data(object_id, &addr, data_slice) {
                 Ok(bytes_written) => {
                     *out_data_size = bytes_written;
@@ -499,20 +534,23 @@ unsafe extern "C" fn driver_set_property_data(
     if address.is_null() || data.is_null() {
         return kAudioHardwareBadParameterError;
     }
-    
+
     let addr = *address;
-    log::debug!("driver_set_property_data called for object {} selector {}",
-               object_id, addr.mSelector);
-    
+    log::debug!(
+        "driver_set_property_data called for object {} selector {}",
+        object_id,
+        addr.mSelector
+    );
+
     let driver_instance = match get_driver() {
         Ok(instance) => instance,
         Err(_) => return kAudioHardwareUnspecifiedError,
     };
-    
+
     let result = match driver_instance.lock() {
         Ok(mut driver_lock) => {
             let data_slice = std::slice::from_raw_parts(data as *const u8, data_size as usize);
-            
+
             match driver_lock.set_property_data(object_id, &addr, data_slice) {
                 Ok(_) => kAudioHardwareNoError,
                 Err(e) => {
@@ -533,25 +571,23 @@ unsafe extern "C" fn driver_start_io(
     _client_id: UInt32,
 ) -> OSStatus {
     log::info!("driver_start_io called for device {}", device_object_id);
-    
+
     let driver_instance = match get_driver() {
         Ok(instance) => instance,
         Err(_) => return kAudioHardwareUnspecifiedError,
     };
-    
+
     let result = match driver_instance.lock() {
-        Ok(mut driver_lock) => {
-            match driver_lock.start_io(device_object_id) {
-                Ok(_) => {
-                    log::info!("Started I/O for device {}", device_object_id);
-                    kAudioHardwareNoError
-                }
-                Err(e) => {
-                    log::error!("Failed to start I/O: {}", e);
-                    kAudioHardwareUnspecifiedError
-                }
+        Ok(mut driver_lock) => match driver_lock.start_io(device_object_id) {
+            Ok(_) => {
+                log::info!("Started I/O for device {}", device_object_id);
+                kAudioHardwareNoError
             }
-        }
+            Err(e) => {
+                log::error!("Failed to start I/O: {}", e);
+                kAudioHardwareUnspecifiedError
+            }
+        },
         Err(_) => kAudioHardwareUnspecifiedError,
     };
     result
@@ -563,25 +599,23 @@ unsafe extern "C" fn driver_stop_io(
     _client_id: UInt32,
 ) -> OSStatus {
     log::info!("driver_stop_io called for device {}", device_object_id);
-    
+
     let driver_instance = match get_driver() {
         Ok(instance) => instance,
         Err(_) => return kAudioHardwareUnspecifiedError,
     };
-    
+
     let result = match driver_instance.lock() {
-        Ok(mut driver_lock) => {
-            match driver_lock.stop_io(device_object_id) {
-                Ok(_) => {
-                    log::info!("Stopped I/O for device {}", device_object_id);
-                    kAudioHardwareNoError
-                }
-                Err(e) => {
-                    log::error!("Failed to stop I/O: {}", e);
-                    kAudioHardwareUnspecifiedError
-                }
+        Ok(mut driver_lock) => match driver_lock.stop_io(device_object_id) {
+            Ok(_) => {
+                log::info!("Stopped I/O for device {}", device_object_id);
+                kAudioHardwareNoError
             }
-        }
+            Err(e) => {
+                log::error!("Failed to stop I/O: {}", e);
+                kAudioHardwareUnspecifiedError
+            }
+        },
         Err(_) => kAudioHardwareUnspecifiedError,
     };
     result
@@ -598,12 +632,12 @@ unsafe extern "C" fn driver_get_zero_time_stamp(
     if out_sample_time.is_null() || out_host_time.is_null() || out_seed.is_null() {
         return kAudioHardwareBadParameterError;
     }
-    
+
     // For now, return current time
     *out_sample_time = 0.0;
     *out_host_time = mach_absolute_time();
     *out_seed = 1;
-    
+
     kAudioHardwareNoError
 }
 
@@ -650,12 +684,12 @@ unsafe extern "C" fn driver_do_io_operation(
 ) -> OSStatus {
     // This is the main I/O processing function
     // We'll implement the actual audio processing here
-    
+
     let driver_instance = match get_driver() {
         Ok(instance) => instance,
         Err(_) => return kAudioHardwareUnspecifiedError,
     };
-    
+
     let result = match driver_instance.lock() {
         Ok(_driver_lock) => {
             // TODO: Implement actual audio processing

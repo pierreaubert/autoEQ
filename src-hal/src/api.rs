@@ -3,7 +3,7 @@
 //! This module provides a simple, safe API for the audio player (src-audio)
 //! to interact with the HAL driver's audio buffers.
 
-use crate::audio_buffer::{AudioBuffer, AudioBufferConfig, get_global_buffer};
+use crate::audio_buffer::{get_global_buffer, AudioBuffer, AudioBufferConfig};
 use std::sync::Arc;
 
 /// Handle for reading audio from the HAL driver (macOS apps → player)
@@ -156,7 +156,7 @@ pub struct BufferStats {
 // C API for potential C/C++ integration
 // This allows src-audio or other C code to access the HAL buffers
 
-use std::os::raw::{c_int, c_float};
+use std::os::raw::{c_float, c_int};
 
 /// C API: Read audio from HAL input buffer
 ///

@@ -8,12 +8,12 @@
 //! - Forwards audio data to/from audio buffers
 //! - Lets the audio player handle all processing and configuration
 
+use crate::audio_buffer::AudioBuffer;
+use crate::utils::AudioObjectIDGenerator;
+use crate::{AudioDriverError, Result};
+use coreaudio_sys::*;
 use std::collections::HashMap;
 use std::os::raw::c_void;
-use coreaudio_sys::*;
-use crate::{AudioDriverError, Result};
-use crate::utils::AudioObjectIDGenerator;
-use crate::audio_buffer::AudioBuffer;
 use std::sync::Arc;
 
 // Define Core Audio property selectors as hardcoded values
@@ -137,34 +137,34 @@ unsafe impl Sync for HALDriver {}
 pub struct VirtualAudioDevice {
     /// Unique object ID for this device
     object_id: AudioObjectID,
-    
+
     /// Device name
     name: String,
-    
+
     /// Device UID (unique identifier)
     device_uid: String,
-    
+
     /// Model UID
     model_uid: String,
-    
+
     /// Manufacturer name
     manufacturer: String,
-    
+
     /// Number of input channels
     input_channels: u32,
-    
+
     /// Number of output channels
     output_channels: u32,
-    
+
     /// Current sample rate
     sample_rate: f64,
-    
+
     /// Whether I/O is currently running
     io_running: bool,
-    
+
     /// Input stream ID
     input_stream_id: Option<AudioObjectID>,
-    
+
     /// Output stream ID
     output_stream_id: Option<AudioObjectID>,
 }
@@ -183,13 +183,20 @@ impl HALDriver {
             buffer_size: 512,
             audio_buffer: None,
         };
-        log::info!("✅ HAL driver instance created - sample_rate: {}, buffer_size: {}", driver.sample_rate, driver.buffer_size);
+        log::info!(
+            "✅ HAL driver instance created - sample_rate: {}, buffer_size: {}",
+            driver.sample_rate,
+            driver.buffer_size
+        );
         Ok(driver)
     }
-    
+
     /// Initialize the driver with the host interface
     pub fn initialize(&mut self, host: *mut AudioServerPlugInHostInterface) -> Result<()> {
-        log::info!("⚙️  Initializing HAL driver with host interface: {:p}", host);
+        log::info!(
+            "⚙️  Initializing HAL driver with host interface: {:p}",
+            host
+        );
 
         if host.is_null() {
             log::error!("❌ Host interface is null!");
@@ -212,11 +219,7 @@ impl HALDriver {
         self.audio_buffer = Some(buffer.clone());
 
         // Also set as global buffer for easy access from audio player
-        crate::audio_buffer::init_global_buffer(
-            capacity_ms,
-            self.sample_rate as u32,
-            channels,
-        );
+        crate::audio_buffer::init_global_buffer(capacity_ms, self.sample_rate as u32, channels);
         log::info!("✅ Audio buffer initialized");
 
         // Create the default virtual device
@@ -226,23 +229,27 @@ impl HALDriver {
 
         Ok(())
     }
-    
+
     /// Set the host info
     pub fn set_host_info(&mut self, host_info: *mut c_void) {
         log::info!("📝 Setting host info: {:p}", host_info);
         self.host_info = Some(host_info);
         log::info!("✅ Host info stored");
     }
-    
+
     /// Create a new virtual audio device
     pub fn create_device(&mut self) -> Result<AudioObjectID> {
         log::info!("🎵 Creating new virtual audio device...");
         let device_id = self.id_generator.next_id();
         let input_stream_id = self.id_generator.next_id();
         let output_stream_id = self.id_generator.next_id();
-        log::info!("🎯 Generated IDs - device: {}, input_stream: {}, output_stream: {}", 
-                  device_id, input_stream_id, output_stream_id);
-        
+        log::info!(
+            "🎯 Generated IDs - device: {}, input_stream: {}, output_stream: {}",
+            device_id,
+            input_stream_id,
+            output_stream_id
+        );
+
         let device = VirtualAudioDevice {
             object_id: device_id,
             name: "Audio HAL Driver".to_string(),
@@ -256,23 +263,34 @@ impl HALDriver {
             input_stream_id: Some(input_stream_id),
             output_stream_id: Some(output_stream_id),
         };
-        
+
         log::info!("💻 Device configuration:");
         log::info!("   Name: {}", device.name);
         log::info!("   UID: {}", device.device_uid);
         log::info!("   Manufacturer: {}", device.manufacturer);
-        log::info!("   Channels: {}in/{}out", device.input_channels, device.output_channels);
+        log::info!(
+            "   Channels: {}in/{}out",
+            device.input_channels,
+            device.output_channels
+        );
         log::info!("   Sample Rate: {} Hz", device.sample_rate);
-        
+
         self.devices.insert(device_id, device);
-        log::info!("✅ Device added to devices map (total devices: {})", self.devices.len());
-        
-        log::info!("✅ Created virtual device: ID={}, input_stream={}, output_stream={}", 
-                  device_id, input_stream_id, output_stream_id);
-        
+        log::info!(
+            "✅ Device added to devices map (total devices: {})",
+            self.devices.len()
+        );
+
+        log::info!(
+            "✅ Created virtual device: ID={}, input_stream={}, output_stream={}",
+            device_id,
+            input_stream_id,
+            output_stream_id
+        );
+
         Ok(device_id)
     }
-    
+
     /// Destroy a virtual audio device
     pub fn destroy_device(&mut self, device_id: AudioObjectID) -> Result<()> {
         if let Some(_device) = self.devices.remove(&device_id) {
@@ -282,14 +300,14 @@ impl HALDriver {
             Err(AudioDriverError::Device(format!("Device not found: {}", device_id)).into())
         }
     }
-    
+
     /// Determine the type of an audio object
     fn get_object_type(&self, object_id: AudioObjectID) -> ObjectType {
         // Check if it's a device
         if self.devices.contains_key(&object_id) {
             return ObjectType::Device;
         }
-        
+
         // Check if it's a stream
         for device in self.devices.values() {
             if device.input_stream_id == Some(object_id) {
@@ -299,13 +317,17 @@ impl HALDriver {
                 return ObjectType::OutputStream;
             }
         }
-        
+
         ObjectType::Unknown
     }
-    
+
     /// Check if the driver has a specific property
     #[allow(non_upper_case_globals)]
-    pub fn has_property(&self, _object_id: AudioObjectID, address: &AudioObjectPropertyAddress) -> bool {
+    pub fn has_property(
+        &self,
+        _object_id: AudioObjectID,
+        address: &AudioObjectPropertyAddress,
+    ) -> bool {
         let obj_type = self.get_object_type(_object_id);
 
         match address.mSelector {
@@ -359,57 +381,64 @@ impl HALDriver {
             _ => false,
         }
     }
-    
+
     /// Check if a property is settable
     #[allow(non_upper_case_globals)]
-    pub fn is_property_settable(&self, _object_id: AudioObjectID, address: &AudioObjectPropertyAddress) -> bool {
+    pub fn is_property_settable(
+        &self,
+        _object_id: AudioObjectID,
+        address: &AudioObjectPropertyAddress,
+    ) -> bool {
         match address.mSelector {
-            kAudioDevicePropertyNominalSampleRate |
-            kAudioDevicePropertyBufferFrameSize => true,
+            kAudioDevicePropertyNominalSampleRate | kAudioDevicePropertyBufferFrameSize => true,
             _ => false,
         }
     }
-    
+
     /// Get the size of property data
     #[allow(non_upper_case_globals)]
-    pub fn get_property_data_size(&self, _object_id: AudioObjectID, address: &AudioObjectPropertyAddress) -> Result<u32> {
+    pub fn get_property_data_size(
+        &self,
+        _object_id: AudioObjectID,
+        address: &AudioObjectPropertyAddress,
+    ) -> Result<u32> {
         use crate::utils::cfstring_ref_size;
 
         match address.mSelector {
             // CFString properties
-            kAudioObjectPropertyName |
-            kAudioObjectPropertyManufacturer |
-            kAudioDevicePropertyDeviceUID |
-            kAudioDevicePropertyModelUID => Ok(cfstring_ref_size()),
-            
+            kAudioObjectPropertyName
+            | kAudioObjectPropertyManufacturer
+            | kAudioDevicePropertyDeviceUID
+            | kAudioDevicePropertyModelUID => Ok(cfstring_ref_size()),
+
             // U32 properties
-            kAudioObjectPropertyClass |
-            kAudioObjectPropertyBaseClass |
-            kAudioObjectPropertyOwner |
-            kAudioDevicePropertyTransportType |
-            kAudioDevicePropertyClockDomain |
-            kAudioDevicePropertyDeviceIsAlive |
-            kAudioDevicePropertyDeviceIsRunning |
-            kAudioDevicePropertyDeviceCanBeDefaultDevice |
-            kAudioDevicePropertyDeviceCanBeDefaultSystemDevice |
-            kAudioDevicePropertyIsHidden |
-            kAudioDevicePropertyLatency |
-            kAudioDevicePropertySafetyOffset |
-            kAudioDevicePropertyBufferFrameSize |
-            kAudioDevicePropertyIOCycleUsage |
-            kAudioStreamPropertyDirection |
-            kAudioStreamPropertyTerminalType |
-            kAudioStreamPropertyStartingChannel => Ok(std::mem::size_of::<u32>() as u32),
-            
+            kAudioObjectPropertyClass
+            | kAudioObjectPropertyBaseClass
+            | kAudioObjectPropertyOwner
+            | kAudioDevicePropertyTransportType
+            | kAudioDevicePropertyClockDomain
+            | kAudioDevicePropertyDeviceIsAlive
+            | kAudioDevicePropertyDeviceIsRunning
+            | kAudioDevicePropertyDeviceCanBeDefaultDevice
+            | kAudioDevicePropertyDeviceCanBeDefaultSystemDevice
+            | kAudioDevicePropertyIsHidden
+            | kAudioDevicePropertyLatency
+            | kAudioDevicePropertySafetyOffset
+            | kAudioDevicePropertyBufferFrameSize
+            | kAudioDevicePropertyIOCycleUsage
+            | kAudioStreamPropertyDirection
+            | kAudioStreamPropertyTerminalType
+            | kAudioStreamPropertyStartingChannel => Ok(std::mem::size_of::<u32>() as u32),
+
             // F64 properties
             kAudioDevicePropertyNominalSampleRate => Ok(std::mem::size_of::<f64>() as u32),
-            
+
             // Array properties
             kAudioDevicePropertyAvailableNominalSampleRates => {
                 // Support 44.1, 48, and 96 kHz
                 Ok((std::mem::size_of::<AudioValueRange>() * 3) as u32)
             }
-            
+
             kAudioDevicePropertyStreams => {
                 if let Some(_device) = self.devices.get(&_object_id) {
                     // Return both input and output stream IDs
@@ -418,33 +447,44 @@ impl HALDriver {
                     Ok(0)
                 }
             }
-            
+
             kAudioDevicePropertyBufferFrameSizeRange => {
                 Ok(std::mem::size_of::<AudioValueRange>() as u32)
             }
-            
-            kAudioStreamPropertyVirtualFormat |
-            kAudioStreamPropertyPhysicalFormat => {
+
+            kAudioStreamPropertyVirtualFormat | kAudioStreamPropertyPhysicalFormat => {
                 Ok(std::mem::size_of::<AudioStreamBasicDescription>() as u32)
             }
-            
-            kAudioStreamPropertyAvailableVirtualFormats |
-            kAudioStreamPropertyAvailablePhysicalFormats => {
+
+            kAudioStreamPropertyAvailableVirtualFormats
+            | kAudioStreamPropertyAvailablePhysicalFormats => {
                 // Support stereo 16/24/32-bit at various sample rates
                 Ok(std::mem::size_of::<AudioStreamRangedDescription>() as u32 * 3)
             }
-            
+
             _ => {
-                log::warn!("Unhandled get_property_data_size selector: 0x{:08X}", address.mSelector);
-                Err(AudioDriverError::Device(format!("Unknown property selector: 0x{:08X}", address.mSelector)).into())
+                log::warn!(
+                    "Unhandled get_property_data_size selector: 0x{:08X}",
+                    address.mSelector
+                );
+                Err(AudioDriverError::Device(format!(
+                    "Unknown property selector: 0x{:08X}",
+                    address.mSelector
+                ))
+                .into())
             }
         }
     }
-    
+
     /// Get property data
     #[allow(non_upper_case_globals)]
-    pub fn get_property_data(&self, _object_id: AudioObjectID, address: &AudioObjectPropertyAddress, buffer: &mut [u8]) -> Result<u32> {
-        use crate::utils::{copy_value_to_buffer, copy_cfstring_to_buffer};
+    pub fn get_property_data(
+        &self,
+        _object_id: AudioObjectID,
+        address: &AudioObjectPropertyAddress,
+        buffer: &mut [u8],
+    ) -> Result<u32> {
+        use crate::utils::{copy_cfstring_to_buffer, copy_value_to_buffer};
 
         let obj_type = self.get_object_type(_object_id);
 
@@ -458,11 +498,9 @@ impl HALDriver {
                 };
                 copy_value_to_buffer(&class_id, buffer)
             }
-            
-            kAudioObjectPropertyBaseClass => {
-                copy_value_to_buffer(&kAudioObjectClassID, buffer)
-            }
-            
+
+            kAudioObjectPropertyBaseClass => copy_value_to_buffer(&kAudioObjectClassID, buffer),
+
             kAudioObjectPropertyOwner => {
                 // For devices, return 0 (system owned). For streams, return device ID
                 let owner = match obj_type {
@@ -470,8 +508,9 @@ impl HALDriver {
                     ObjectType::InputStream | ObjectType::OutputStream => {
                         // Find the owning device
                         for device in self.devices.values() {
-                            if device.input_stream_id == Some(_object_id) || 
-                               device.output_stream_id == Some(_object_id) {
+                            if device.input_stream_id == Some(_object_id)
+                                || device.output_stream_id == Some(_object_id)
+                            {
                                 return copy_value_to_buffer(&device.object_id, buffer);
                             }
                         }
@@ -481,7 +520,7 @@ impl HALDriver {
                 };
                 copy_value_to_buffer(&owner, buffer)
             }
-            
+
             // String properties
             kAudioObjectPropertyName => {
                 let name = if let Some(device) = self.devices.get(&_object_id) {
@@ -491,7 +530,7 @@ impl HALDriver {
                 };
                 copy_cfstring_to_buffer(name, buffer)
             }
-            
+
             kAudioObjectPropertyManufacturer => {
                 let manufacturer = if let Some(device) = self.devices.get(&_object_id) {
                     &device.manufacturer
@@ -500,7 +539,7 @@ impl HALDriver {
                 };
                 copy_cfstring_to_buffer(manufacturer, buffer)
             }
-            
+
             kAudioDevicePropertyDeviceUID => {
                 if let Some(device) = self.devices.get(&_object_id) {
                     copy_cfstring_to_buffer(&device.device_uid, buffer)
@@ -508,7 +547,7 @@ impl HALDriver {
                     copy_cfstring_to_buffer("com.audiohal.device.unknown", buffer)
                 }
             }
-            
+
             kAudioDevicePropertyModelUID => {
                 if let Some(device) = self.devices.get(&_object_id) {
                     copy_cfstring_to_buffer(&device.model_uid, buffer)
@@ -516,52 +555,53 @@ impl HALDriver {
                     copy_cfstring_to_buffer("com.audiohal.model.virtual", buffer)
                 }
             }
-            
+
             // Device properties
             kAudioDevicePropertyTransportType => {
                 copy_value_to_buffer(&kAudioDeviceTransportTypeVirtual, buffer)
             }
-            
+
             kAudioDevicePropertyClockDomain => {
                 let clock_domain = 0u32; // 0 means not part of any clock domain
                 copy_value_to_buffer(&clock_domain, buffer)
             }
-            
+
             kAudioDevicePropertyDeviceIsAlive => {
                 let is_alive = 1u32; // Always alive
                 copy_value_to_buffer(&is_alive, buffer)
             }
-            
+
             kAudioDevicePropertyDeviceIsRunning => {
                 let is_running = if let Some(device) = self.devices.get(&_object_id) {
-                    if device.io_running { 1u32 } else { 0u32 }
+                    if device.io_running {
+                        1u32
+                    } else {
+                        0u32
+                    }
                 } else {
                     0u32
                 };
                 copy_value_to_buffer(&is_running, buffer)
             }
-            
-            kAudioDevicePropertyDeviceCanBeDefaultDevice |
-            kAudioDevicePropertyDeviceCanBeDefaultSystemDevice => {
+
+            kAudioDevicePropertyDeviceCanBeDefaultDevice
+            | kAudioDevicePropertyDeviceCanBeDefaultSystemDevice => {
                 let can_be_default = 1u32; // Yes, can be default
                 copy_value_to_buffer(&can_be_default, buffer)
             }
-            
+
             kAudioDevicePropertyIsHidden => {
                 let is_hidden = 0u32; // Not hidden
                 copy_value_to_buffer(&is_hidden, buffer)
             }
-            
-            kAudioDevicePropertyLatency | 
-            kAudioDevicePropertySafetyOffset => {
+
+            kAudioDevicePropertyLatency | kAudioDevicePropertySafetyOffset => {
                 let latency = 0u32; // Zero latency (adjust if needed)
                 copy_value_to_buffer(&latency, buffer)
             }
-            
-            kAudioDevicePropertyBufferFrameSize => {
-                copy_value_to_buffer(&self.buffer_size, buffer)
-            }
-            
+
+            kAudioDevicePropertyBufferFrameSize => copy_value_to_buffer(&self.buffer_size, buffer),
+
             kAudioDevicePropertyBufferFrameSizeRange => {
                 // Support buffer sizes from 64 to 4096 frames
                 let range = AudioValueRange {
@@ -570,17 +610,26 @@ impl HALDriver {
                 };
                 copy_value_to_buffer(&range, buffer)
             }
-            
+
             kAudioDevicePropertyNominalSampleRate => {
                 copy_value_to_buffer(&self.sample_rate, buffer)
             }
-            
+
             kAudioDevicePropertyAvailableNominalSampleRates => {
                 // Support common sample rates
                 let rates = [
-                    AudioValueRange { mMinimum: 44100.0, mMaximum: 44100.0 },
-                    AudioValueRange { mMinimum: 48000.0, mMaximum: 48000.0 },
-                    AudioValueRange { mMinimum: 96000.0, mMaximum: 96000.0 },
+                    AudioValueRange {
+                        mMinimum: 44100.0,
+                        mMaximum: 44100.0,
+                    },
+                    AudioValueRange {
+                        mMinimum: 48000.0,
+                        mMaximum: 48000.0,
+                    },
+                    AudioValueRange {
+                        mMinimum: 96000.0,
+                        mMaximum: 96000.0,
+                    },
                 ];
                 let mut offset = 0;
                 for rate in &rates {
@@ -589,7 +638,7 @@ impl HALDriver {
                 }
                 Ok(offset as u32)
             }
-            
+
             kAudioDevicePropertyStreams => {
                 if let Some(device) = self.devices.get(&_object_id) {
                     let mut offset = 0;
@@ -606,18 +655,26 @@ impl HALDriver {
                     Ok(0)
                 }
             }
-            
+
             _ => {
-                log::warn!("Unhandled get_property_data selector: 0x{:08X} for object {}", 
-                          address.mSelector, _object_id);
+                log::warn!(
+                    "Unhandled get_property_data selector: 0x{:08X} for object {}",
+                    address.mSelector,
+                    _object_id
+                );
                 Ok(0)
             }
         }
     }
-    
+
     /// Set property data
     #[allow(non_upper_case_globals)]
-    pub fn set_property_data(&mut self, _object_id: AudioObjectID, address: &AudioObjectPropertyAddress, buffer: &[u8]) -> Result<()> {
+    pub fn set_property_data(
+        &mut self,
+        _object_id: AudioObjectID,
+        address: &AudioObjectPropertyAddress,
+        buffer: &[u8],
+    ) -> Result<()> {
         use crate::utils::read_value_from_buffer;
 
         match address.mSelector {
@@ -634,12 +691,15 @@ impl HALDriver {
                 Ok(())
             }
             _ => {
-                log::warn!("Unhandled set_property_data selector: {}", address.mSelector);
+                log::warn!(
+                    "Unhandled set_property_data selector: {}",
+                    address.mSelector
+                );
                 Ok(())
             }
         }
     }
-    
+
     /// Start I/O for a device
     pub fn start_io(&mut self, device_id: AudioObjectID) -> Result<()> {
         if let Some(device) = self.devices.get_mut(&device_id) {
@@ -650,7 +710,7 @@ impl HALDriver {
             Err(AudioDriverError::Device(format!("Device not found: {}", device_id)).into())
         }
     }
-    
+
     /// Stop I/O for a device
     pub fn stop_io(&mut self, device_id: AudioObjectID) -> Result<()> {
         if let Some(device) = self.devices.get_mut(&device_id) {
@@ -672,7 +732,9 @@ impl HALDriver {
         input_data: Option<&[f32]>,
         output_data: Option<&mut [f32]>,
     ) -> Result<()> {
-        let buffer = self.audio_buffer.as_ref()
+        let buffer = self
+            .audio_buffer
+            .as_ref()
             .ok_or_else(|| AudioDriverError::Buffer("Audio buffer not initialized".to_string()))?;
 
         // Write input audio (from macOS apps) to input buffer
@@ -682,7 +744,8 @@ impl HALDriver {
             if written < input.len() {
                 log::warn!(
                     "Input buffer overflow: wrote {}/{} samples",
-                    written, input.len()
+                    written,
+                    input.len()
                 );
             }
         }
@@ -695,7 +758,8 @@ impl HALDriver {
                 // Not enough data in loopback buffer, rest is already filled with zeros
                 log::trace!(
                     "Output buffer underrun: read {}/{} samples",
-                    read, output.len()
+                    read,
+                    output.len()
                 );
             }
         }
@@ -720,12 +784,12 @@ impl VirtualAudioDevice {
     pub fn is_io_running(&self) -> bool {
         self.io_running
     }
-    
+
     /// Get the device name
     pub fn name(&self) -> &str {
         &self.name
     }
-    
+
     /// Get the object ID
     pub fn object_id(&self) -> AudioObjectID {
         self.object_id

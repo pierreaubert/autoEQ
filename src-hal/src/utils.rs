@@ -3,10 +3,10 @@
 //! This module contains helper functions for Core Audio integration,
 //! error handling, and common operations.
 
-use coreaudio_sys::*;
+use crate::{AudioDriverError, Result};
 use core_foundation::base::TCFType;
 use core_foundation::string::{CFString, CFStringRef};
-use crate::{AudioDriverError, Result};
+use coreaudio_sys::*;
 
 /// Convert an OSStatus code to a Rust Result
 pub fn os_status_to_result(status: OSStatus) -> Result<()> {
@@ -37,13 +37,15 @@ pub fn create_asbd(
     } else {
         kAudioFormatLinearPCM
     };
-    
+
     let format_flags = if is_float {
         kAudioFormatFlagIsFloat | kAudioFormatFlagIsPacked | kAudioFormatFlagIsNonInterleaved
     } else {
-        kAudioFormatFlagIsSignedInteger | kAudioFormatFlagIsPacked | kAudioFormatFlagIsNonInterleaved
+        kAudioFormatFlagIsSignedInteger
+            | kAudioFormatFlagIsPacked
+            | kAudioFormatFlagIsNonInterleaved
     };
-    
+
     let bytes_per_frame = if is_float && bits_per_channel == 32 {
         4
     } else if !is_float && bits_per_channel == 16 {
@@ -51,7 +53,7 @@ pub fn create_asbd(
     } else {
         bits_per_channel / 8
     };
-    
+
     AudioStreamBasicDescription {
         mSampleRate: sample_rate,
         mFormatID: format_id,
@@ -82,7 +84,7 @@ impl AudioObjectIDGenerator {
             next_id: 1000,
         }
     }
-    
+
     pub fn next_id(&mut self) -> AudioObjectID {
         let id = self.next_id;
         self.next_id += 1;
@@ -99,34 +101,36 @@ impl Default for AudioObjectIDGenerator {
 /// Helper to copy data to a buffer safely
 pub fn copy_to_buffer<T: Copy>(data: &[T], buffer: &mut [u8]) -> Result<u32> {
     let data_size = std::mem::size_of_val(data);
-    
+
     if buffer.len() < data_size {
-        return Err(AudioDriverError::Buffer(
-            format!("Buffer too small: {} < {}", buffer.len(), data_size)
-        ).into());
+        return Err(AudioDriverError::Buffer(format!(
+            "Buffer too small: {} < {}",
+            buffer.len(),
+            data_size
+        ))
+        .into());
     }
-    
+
     unsafe {
-        std::ptr::copy_nonoverlapping(
-            data.as_ptr() as *const u8,
-            buffer.as_mut_ptr(),
-            data_size,
-        );
+        std::ptr::copy_nonoverlapping(data.as_ptr() as *const u8, buffer.as_mut_ptr(), data_size);
     }
-    
+
     Ok(data_size as u32)
 }
 
 /// Helper to copy a single value to a buffer
 pub fn copy_value_to_buffer<T: Copy>(value: &T, buffer: &mut [u8]) -> Result<u32> {
     let data_size = std::mem::size_of::<T>();
-    
+
     if buffer.len() < data_size {
-        return Err(AudioDriverError::Buffer(
-            format!("Buffer too small: {} < {}", buffer.len(), data_size)
-        ).into());
+        return Err(AudioDriverError::Buffer(format!(
+            "Buffer too small: {} < {}",
+            buffer.len(),
+            data_size
+        ))
+        .into());
     }
-    
+
     unsafe {
         std::ptr::copy_nonoverlapping(
             value as *const T as *const u8,
@@ -134,23 +138,24 @@ pub fn copy_value_to_buffer<T: Copy>(value: &T, buffer: &mut [u8]) -> Result<u32
             data_size,
         );
     }
-    
+
     Ok(data_size as u32)
 }
 
 /// Helper to read a value from a buffer
 pub fn read_value_from_buffer<T: Copy>(buffer: &[u8]) -> Result<T> {
     let data_size = std::mem::size_of::<T>();
-    
+
     if buffer.len() < data_size {
-        return Err(AudioDriverError::Buffer(
-            format!("Buffer too small: {} < {}", buffer.len(), data_size)
-        ).into());
+        return Err(AudioDriverError::Buffer(format!(
+            "Buffer too small: {} < {}",
+            buffer.len(),
+            data_size
+        ))
+        .into());
     }
-    
-    unsafe {
-        Ok(std::ptr::read(buffer.as_ptr() as *const T))
-    }
+
+    unsafe { Ok(std::ptr::read(buffer.as_ptr() as *const T)) }
 }
 
 /// Convert sample rate from Hz to a friendly string
@@ -181,21 +186,21 @@ pub fn is_format_supported(asbd: &AudioStreamBasicDescription) -> bool {
     // Check for supported sample rates
     let sample_rate = asbd.mSampleRate as u32;
     let supported_rates = [44100, 48000, 88200, 96000, 176400, 192000];
-    
+
     if !supported_rates.contains(&sample_rate) {
         return false;
     }
-    
+
     // Check format ID
     if asbd.mFormatID != kAudioFormatLinearPCM {
         return false;
     }
-    
+
     // Check channel count (support 1-8 channels)
     if asbd.mChannelsPerFrame == 0 || asbd.mChannelsPerFrame > 8 {
         return false;
     }
-    
+
     // Check bit depth
     match asbd.mBitsPerChannel {
         16 | 24 | 32 => true,
@@ -221,16 +226,19 @@ pub fn linear_to_db(linear: f32) -> f32 {
 pub fn copy_cfstring_to_buffer(string: &str, buffer: &mut [u8]) -> Result<u32> {
     let cf_string = CFString::new(string);
     let cf_ref = cf_string.as_concrete_TypeRef();
-    
+
     // Copy the CFStringRef pointer itself (not the string data)
     let ptr_size = std::mem::size_of::<CFStringRef>();
-    
+
     if buffer.len() < ptr_size {
-        return Err(AudioDriverError::Buffer(
-            format!("Buffer too small for CFStringRef: {} < {}", buffer.len(), ptr_size)
-        ).into());
+        return Err(AudioDriverError::Buffer(format!(
+            "Buffer too small for CFStringRef: {} < {}",
+            buffer.len(),
+            ptr_size
+        ))
+        .into());
     }
-    
+
     unsafe {
         std::ptr::copy_nonoverlapping(
             &cf_ref as *const CFStringRef as *const u8,
@@ -238,11 +246,11 @@ pub fn copy_cfstring_to_buffer(string: &str, buffer: &mut [u8]) -> Result<u32> {
             ptr_size,
         );
     }
-    
+
     // Important: We're giving ownership to Core Audio, so don't release it here
     // Core Audio will call CFRelease when done
     std::mem::forget(cf_string);
-    
+
     Ok(ptr_size as u32)
 }
 
@@ -254,13 +262,13 @@ pub fn cfstring_ref_size() -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_os_status_conversion() {
-        assert!(os_status_to_result(0).is_ok());  // kAudioHardwareNoError
-        assert!(os_status_to_result(-1).is_err());  // kAudioHardwareUnspecifiedError
+        assert!(os_status_to_result(0).is_ok()); // kAudioHardwareNoError
+        assert!(os_status_to_result(-1).is_err()); // kAudioHardwareUnspecifiedError
     }
-    
+
     #[test]
     fn test_asbd_creation() {
         let asbd = create_stereo_f32_asbd(48000.0);
@@ -269,7 +277,7 @@ mod tests {
         assert_eq!(asbd.mBitsPerChannel, 32);
         assert!(is_format_supported(&asbd));
     }
-    
+
     #[test]
     fn test_id_generation() {
         let mut gen = AudioObjectIDGenerator::new();
@@ -279,19 +287,19 @@ mod tests {
         assert!(id1 >= 1000);
         assert!(id2 > id1);
     }
-    
+
     #[test]
     fn test_buffer_operations() {
         let value: u32 = 42;
         let mut buffer = vec![0u8; 8];
-        
+
         let written = copy_value_to_buffer(&value, &mut buffer).unwrap();
         assert_eq!(written, 4);
-        
+
         let read_value: u32 = read_value_from_buffer(&buffer).unwrap();
         assert_eq!(read_value, value);
     }
-    
+
     #[test]
     fn test_db_conversion() {
         assert_eq!(db_to_linear(0.0), 1.0);

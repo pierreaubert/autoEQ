@@ -18,16 +18,16 @@
 use std::sync::Once;
 
 // Module declarations
+pub mod api;
+pub mod audio_buffer;
 pub mod bridge;
 pub mod hal_driver;
-pub mod audio_buffer;
-pub mod api;
 pub mod utils;
 
 // Re-exports for easier use
+pub use api::{BufferStats, HalAudioHandle, HalInputReader, HalOutputWriter};
+pub use audio_buffer::{AudioBuffer, AudioBufferConfig, AudioBufferConsumer, AudioBufferProducer};
 pub use hal_driver::HALDriver;
-pub use audio_buffer::{AudioBuffer, AudioBufferProducer, AudioBufferConsumer, AudioBufferConfig};
-pub use api::{HalInputReader, HalOutputWriter, HalAudioHandle, BufferStats};
 
 // Error types
 pub use anyhow::{Error, Result};
@@ -57,13 +57,16 @@ static INIT: Once = Once::new();
 
 pub fn init_logging() {
     INIT.call_once(|| {
-        env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("debug"))
-            .init();
-        log::info!("================================================================================");
+        env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("debug")).init();
+        log::info!(
+            "================================================================================"
+        );
         log::info!("🎵 Audio HAL Driver v{} Starting...", DRIVER_VERSION);
         log::info!("   Name: {}", DRIVER_NAME);
         log::info!("   Manufacturer: {}", DRIVER_MANUFACTURER);
-        log::info!("================================================================================");
+        log::info!(
+            "================================================================================"
+        );
     });
 }
 
@@ -73,8 +76,8 @@ pub const DRIVER_NAME: &str = "AudioHALDriver";
 pub const DRIVER_MANUFACTURER: &str = "Pierre";
 
 // Core Audio HAL driver entry points (C ABI)
-use libc::c_void;
 use coreaudio_sys::*;
+use libc::c_void;
 
 /// Main entry point called by Core Audio when loading the driver
 #[no_mangle]
@@ -93,7 +96,7 @@ pub unsafe extern "C" fn AudioDriverPlugInOpen(
 /// Called when Core Audio unloads the driver
 #[no_mangle]
 pub unsafe extern "C" fn AudioDriverPlugInClose(
-    driver: *mut AudioServerPlugInDriverInterface
+    driver: *mut AudioServerPlugInDriverInterface,
 ) -> OSStatus {
     log::info!("🚪 AudioDriverPlugInClose entry point called from Core Audio");
     let result = bridge::audio_driver_plugin_close(driver);
@@ -103,13 +106,12 @@ pub unsafe extern "C" fn AudioDriverPlugInClose(
 
 /// Entry point for factory function
 #[no_mangle]
-pub unsafe extern "C" fn AudioDriverPlugInFactory(
-    uuid: CFUUIDRef
-) -> *mut c_void {
+pub unsafe extern "C" fn AudioDriverPlugInFactory(uuid: CFUUIDRef) -> *mut c_void {
     // Initialize logging first
     init_logging();
     log::info!("🏭 AudioDriverPlugInFactory entry point called from Core Audio");
-    let result = bridge::audio_driver_plugin_factory(uuid as *const _ as core_foundation::uuid::CFUUIDRef);
+    let result =
+        bridge::audio_driver_plugin_factory(uuid as *const _ as core_foundation::uuid::CFUUIDRef);
     log::info!("🏁 AudioDriverPlugInFactory returning: {:p}", result);
     result
 }
