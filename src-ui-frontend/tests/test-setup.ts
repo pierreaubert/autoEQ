@@ -67,6 +67,22 @@ Object.defineProperty(window, "performance", {
   },
 });
 
+// Mock DragEvent for drag-and-drop tests
+if (typeof DragEvent === 'undefined') {
+  global.DragEvent = class DragEvent extends Event {
+    dataTransfer: any;
+    constructor(type: string, eventInitDict?: any) {
+      super(type, eventInitDict);
+      this.dataTransfer = eventInitDict?.dataTransfer || null;
+    }
+  } as any;
+}
+
+// Mock gradient object for canvas
+const mockGradient = {
+  addColorStop: vi.fn(),
+};
+
 // Mock HTMLCanvasElement.getContext for canvas tests
 const mockCanvasContext = {
   fillStyle: "",
@@ -102,8 +118,8 @@ const mockCanvasContext = {
   createImageData: vi.fn(),
   getImageData: vi.fn(),
   putImageData: vi.fn(),
-  createLinearGradient: vi.fn(),
-  createRadialGradient: vi.fn(),
+  createLinearGradient: vi.fn(() => mockGradient),
+  createRadialGradient: vi.fn(() => mockGradient),
   createPattern: vi.fn(),
   setLineDash: vi.fn(),
   getLineDash: vi.fn(() => []),

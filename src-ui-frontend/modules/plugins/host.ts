@@ -425,7 +425,7 @@ export class PluginHost {
    */
   private cacheElements(): void {
     this.hostingBar = this.container.querySelector('.hosting-bar');
-    this.helpBar = this.container.querySelector('.help-bar');
+    this.helpBar = this.container.querySelector('.notification');
     this.displayBox = this.container.querySelector('.display-box');
     this.displayLeft = this.container.querySelector('.display-left');
     this.displayRight = this.container.querySelector('.display-right');
@@ -491,11 +491,8 @@ export class PluginHost {
     const addButton = this.container.querySelector('.add-plugin-btn') as HTMLButtonElement;
     if (addButton) {
       addButton.addEventListener('click', () => {
-        console.log('[PluginHost] Add plugin button clicked');
         this.showPluginSelector();
       });
-    } else {
-      console.warn('[PluginHost] Add plugin button not found');
     }
 
     // Help bar close button
@@ -741,7 +738,10 @@ export class PluginHost {
    * Render a single plugin slot
    */
   private renderPluginSlot(plugin: IPlugin): void {
-    if (!this.pluginSlotsContainer) return;
+    if (!this.pluginSlotsContainer) {
+      console.error('[PluginHost] pluginSlotsContainer is null!');
+      return;
+    }
 
     const slot = document.createElement('button');
     slot.className = 'button is-small';
@@ -819,7 +819,6 @@ export class PluginHost {
    * Show plugin selector dialog
    */
   private showPluginSelector(): void {
-    console.log('[PluginHost] showPluginSelector called');
 
     // Available plugins
     const availablePlugins = [
@@ -894,41 +893,45 @@ export class PluginHost {
    * Create plugin by ID
    */
   private createPluginById(pluginId: string): void {
-    // Dynamically import and create plugin
-    import('./plugin-eq').then(({ EQPlugin }) => {
-      if (pluginId === 'eq') {
+    // Dynamically import and create plugin based on ID
+    if (pluginId === 'eq') {
+      import('./plugin-eq').then(({ EQPlugin }) => {
         const plugin = new EQPlugin();
         this.addPlugin(plugin);
-      }
-    });
-
-    import('./plugin-compressor').then(({ CompressorPlugin }) => {
-      if (pluginId === 'compressor') {
+      }).catch(err => {
+        console.error('[PluginHost] Failed to import EQ plugin:', err);
+      });
+    } else if (pluginId === 'compressor') {
+      import('./plugin-compressor').then(({ CompressorPlugin }) => {
         const plugin = new CompressorPlugin();
         this.addPlugin(plugin);
-      }
-    });
-
-    import('./plugin-limiter').then(({ LimiterPlugin }) => {
-      if (pluginId === 'limiter') {
+      }).catch(err => {
+        console.error('[PluginHost] Failed to import Compressor plugin:', err);
+      });
+    } else if (pluginId === 'limiter') {
+      import('./plugin-limiter').then(({ LimiterPlugin }) => {
         const plugin = new LimiterPlugin();
         this.addPlugin(plugin);
-      }
-    });
-
-    import('./plugin-upmixer').then(({ UpmixerPlugin }) => {
-      if (pluginId === 'upmixer') {
+      }).catch(err => {
+        console.error('[PluginHost] Failed to import Limiter plugin:', err);
+      });
+    } else if (pluginId === 'upmixer') {
+      import('./plugin-upmixer').then(({ UpmixerPlugin }) => {
         const plugin = new UpmixerPlugin();
         this.addPlugin(plugin);
-      }
-    });
-
-    import('./plugin-spectrum').then(({ SpectrumPlugin }) => {
-      if (pluginId === 'spectrum') {
+      }).catch(err => {
+        console.error('[PluginHost] Failed to import Upmixer plugin:', err);
+      });
+    } else if (pluginId === 'spectrum') {
+      import('./plugin-spectrum').then(({ SpectrumPlugin }) => {
         const plugin = new SpectrumPlugin();
         this.addPlugin(plugin);
-      }
-    });
+      }).catch(err => {
+        console.error('[PluginHost] Failed to import Spectrum plugin:', err);
+      });
+    } else {
+      console.error('[PluginHost] Unknown plugin ID:', pluginId);
+    }
   }
 
   /**
