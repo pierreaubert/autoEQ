@@ -4,6 +4,7 @@
 import { BasePlugin } from './plugin-base';
 import { PluginMenubar } from './plugin-menubar';
 import type { PluginMetadata } from './plugin-types';
+import Plotly from 'plotly.js-basic-dist-min';
 
 /**
  * Limiter Plugin
@@ -25,12 +26,20 @@ export class LimiterPlugin extends BasePlugin {
   private grMeterCtx: CanvasRenderingContext2D | null = null;
   private peakMeterCanvas: HTMLCanvasElement | null = null;
   private peakMeterCtx: CanvasRenderingContext2D | null = null;
+  private plotContainer: HTMLElement | null = null;
 
   // Parameters
   private ceiling: number = -0.1;         // dB (max output level)
   private release: number = 100.0;        // ms
   private lookahead: number = 5.0;        // ms
-  private truePeakMode: boolean = true;   // True peak vs sample peak
+
+  // Parameter metadata for keyboard control
+  private parameterOrder = ['ceiling', 'release', 'lookahead'];
+  private parameterRanges = {
+    ceiling: { min: -12, max: 0, step: 0.1 },
+    release: { min: 10, max: 1000, step: 10 },
+    lookahead: { min: 0, max: 10, step: 0.5 },
+  };
 
   // State
   private currentGainReduction: number = 0.0; // dB (negative)
@@ -39,6 +48,45 @@ export class LimiterPlugin extends BasePlugin {
   private peakHoldTimer: number = 0;
   private clipping: boolean = false;
   private animationFrameId: number | null = null;
+  private selectedParameterIndex: number = -1; // -1 = none selected
+
+  /**
+   * Render a single parameter slider with labels
+   */
+  private renderParameter(paramName: string, index: number, label: string, unit: string): string {
+    const value = (this as any)[paramName];
+    const range = this.parameterRanges[paramName as keyof typeof this.parameterRanges];
+
+    // Format value display
+    let displayValue = value.toFixed(paramName === 'ceiling' ? 2 : 1);
+    displayValue = `${displayValue} ${unit}`;
+
+    // Format min/max labels
+    const minLabel = `${range.min} ${unit}`;
+    const maxLabel = `${range.max} ${unit}`;
+
+    return `
+      <div class="field parameter-field plugin-param-field" data-param="${paramName}" data-index="${index}">
+        <div class="plugin-param-header">
+          <label class="label is-small has-text-light plugin-param-label">${label}</label>
+          <span class="tag is-dark param-value plugin-param-value">${displayValue}</span>
+        </div>
+        <input
+          type="range"
+          class="slider is-fullwidth param-slider"
+          data-param="${paramName}"
+          min="${range.min}"
+          max="${range.max}"
+          step="${range.step}"
+          value="${value}"
+        />
+        <div class="plugin-param-minmax">
+          <span class="has-text-grey-light plugin-param-minmax-label">${minLabel}</span>
+          <span class="has-text-grey-light plugin-param-minmax-label">${maxLabel}</span>
+        </div>
+      </div>
+    `;
+  }
 
   /**
    * Render the plugin UI
@@ -47,101 +95,62 @@ export class LimiterPlugin extends BasePlugin {
     if (!this.container) return;
 
     this.container.innerHTML = `
-      <div class="limiter-plugin ${standalone ? 'standalone' : 'embedded'}">
+      <div class="is-flex is-flex-direction-column limiter-plugin ${standalone ? 'standalone' : 'embedded'}" style="height: 100%; min-height: 0; background: #1a1a1a;">
         ${standalone ? '<div class="limiter-menubar-container"></div>' : ''}
-        <div class="limiter-content">
-          <!-- Grid: Parameters + Meters -->
-          <div class="limiter-grid">
-            <!-- Left: Parameters & Controls -->
-            <div class="limiter-parameters">
-              <h4 class="section-title">Limiter Settings</h4>
-
-              <div class="parameter-group">
-                <label>
-                  Ceiling
-                  <span class="param-value">${this.ceiling.toFixed(2)} dB</span>
-                </label>
-                <input type="range" class="param-slider" data-param="ceiling"
-                       min="-12" max="0" step="0.01" value="${this.ceiling}" />
-                <div class="param-scale">
-                  <span>-12</span>
-                  <span>0 dB</span>
+        <div class="is-flex is-flex-direction-column is-flex-grow-1" style="min-height: 0; overflow: hidden; padding: 0; margin: 0;">
+          <!-- Bulma Columns -->
+          <div class="columns is-gapless" style="height: 100%; margin: 0;">
+            <!-- Column 1: Parameters (30%) -->
+            <div class="column is-one-quarter">
+              <div class="box" style="background: #2a2a2a; border: none; border-right: 1px solid #404040; border-radius: 0; height: 100%; margin: 0;">
+                <h4 class="title is-6 has-text-light">Limiter Settings</h4>
+                <div>
+                  ${this.renderParameter('ceiling', 0, 'Ceiling', 'dB')}
+                  ${this.renderParameter('release', 1, 'Release', 'ms')}
+                  ${this.renderParameter('lookahead', 2, 'Lookahead', 'ms')}
                 </div>
-                <p class="param-hint">Maximum output level (brick wall)</p>
-              </div>
 
-              <div class="parameter-group">
-                <label>
-                  Release
-                  <span class="param-value">${this.release.toFixed(1)} ms</span>
-                </label>
-                <input type="range" class="param-slider" data-param="release"
-                       min="10" max="1000" step="1" value="${this.release}" />
-                <div class="param-scale">
-                  <span>10</span>
-                  <span>1000 ms</span>
-                </div>
-                <p class="param-hint">Time to return to unity gain</p>
-              </div>
-
-              <div class="parameter-group">
-                <label>
-                  Lookahead
-                  <span class="param-value">${this.lookahead.toFixed(1)} ms</span>
-                </label>
-                <input type="range" class="param-slider" data-param="lookahead"
-                       min="0" max="10" step="0.1" value="${this.lookahead}" />
-                <div class="param-scale">
-                  <span>0</span>
-                  <span>10 ms</span>
-                </div>
-                <p class="param-hint">Anticipate peaks for transparent limiting</p>
-              </div>
-
-              <div class="parameter-group checkbox-group">
-                <label class="checkbox-label">
-                  <input type="checkbox" class="param-checkbox" data-param="truePeakMode"
-                         ${this.truePeakMode ? 'checked' : ''} />
-                  <span>True Peak Detection</span>
-                </label>
-                <p class="param-hint">Detect inter-sample peaks (ITU-R BS.1770)</p>
-              </div>
-
-              <!-- Status Indicators -->
-              <div class="limiter-status">
-                <div class="status-item">
-                  <span class="status-label">Ceiling:</span>
-                  <span class="status-value">${this.ceiling.toFixed(2)} dB</span>
-                </div>
-                <div class="status-item">
-                  <span class="status-label">Peak Hold:</span>
-                  <span class="status-value peak-hold-value">${this.peakHold === -Infinity ? '-∞' : this.peakHold.toFixed(2)} dB</span>
-                </div>
-                <div class="status-item ${this.clipping ? 'clipping' : ''}">
-                  <span class="status-label">Clipping:</span>
-                  <span class="status-value clipping-indicator">${this.clipping ? 'YES' : 'NO'}</span>
+                <!-- Status Indicators -->
+                <div class="limiter-status" style="margin-top: 20px; padding: 12px; background: var(--bg-primary, #1a1a1a); border-radius: 4px;">
+                  <div class="status-item" style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                    <span class="has-text-grey-light" style="font-size: 11px;">Peak Hold:</span>
+                    <span class="has-text-light peak-hold-value" style="font-size: 11px; font-family: monospace;">${this.peakHold === -Infinity ? '-∞' : this.peakHold.toFixed(2)} dB</span>
+                  </div>
+                  <div class="status-item ${this.clipping ? 'clipping' : ''}" style="display: flex; justify-content: space-between;">
+                    <span class="has-text-grey-light" style="font-size: 11px;">Clipping:</span>
+                    <span class="clipping-indicator" style="font-size: 11px; font-weight: 600; color: ${this.clipping ? '#ef4444' : '#22c55e'};">${this.clipping ? 'YES' : 'NO'}</span>
+                  </div>
                 </div>
               </div>
             </div>
 
-            <!-- Right: Meters -->
-            <div class="limiter-meters">
-              <!-- Gain Reduction Meter -->
-              <div class="meter-section">
-                <h4 class="section-title">Gain Reduction</h4>
-                <div class="meter-container">
-                  <canvas class="gr-meter-canvas" width="80" height="250"></canvas>
-                  <div class="meter-value">${Math.abs(this.currentGainReduction).toFixed(1)} dB</div>
+            <!-- Column 2: Gain Reduction Meter (15%) -->
+            <div class="column is-narrow" style="width: 15%;">
+              <div class="box is-flex is-flex-direction-column" style="background: #2a2a2a; border: none; border-right: 1px solid #404040; border-radius: 0; height: 100%; margin: 0;">
+                <h4 class="title is-6 has-text-light has-text-centered mb-2">Gain Reduction</h4>
+                <div class="is-flex-grow-1 is-flex is-flex-direction-column is-align-items-center is-justify-content-center">
+                  <canvas class="gr-meter-canvas" width="60" height="240"></canvas>
+                  <div class="gr-value has-text-light has-text-centered" style="margin-top: 8px; font-size: 12px; font-weight: 600;">${Math.abs(this.currentGainReduction).toFixed(1)} dB</div>
                 </div>
               </div>
+            </div>
 
-              <!-- Peak Meter -->
-              <div class="meter-section">
-                <h4 class="section-title">Output Peak</h4>
-                <div class="meter-container">
-                  <canvas class="peak-meter-canvas" width="80" height="250"></canvas>
-                  <div class="meter-value">${this.currentPeak === -Infinity ? '-∞' : this.currentPeak.toFixed(1)} dB</div>
+            <!-- Column 3: Output Peak Meter (15%) -->
+            <div class="column is-narrow" style="width: 15%;">
+              <div class="box is-flex is-flex-direction-column" style="background: #2a2a2a; border: none; border-right: 1px solid #404040; border-radius: 0; height: 100%; margin: 0;">
+                <h4 class="title is-6 has-text-light has-text-centered mb-2">Output Peak</h4>
+                <div class="is-flex-grow-1 is-flex is-flex-direction-column is-align-items-center is-justify-content-center">
+                  <canvas class="peak-meter-canvas" width="60" height="240"></canvas>
+                  <div class="peak-value has-text-light has-text-centered" style="margin-top: 8px; font-size: 12px; font-weight: 600;">${this.currentPeak === -Infinity ? '-∞' : this.currentPeak.toFixed(1)} dB</div>
                 </div>
+              </div>
+            </div>
+
+            <!-- Column 4: Transfer Curve (40%) -->
+            <div class="column">
+              <div class="box" style="background: #2a2a2a; border: none; border-right: 1px solid #404040; border-radius: 0; height: 100%; margin: 0; padding: 12px;">
+                <h4 class="title is-6 has-text-light has-text-centered mb-2">Transfer Curve</h4>
+                <div id="limiter-plot-${this.metadata.id}" class="transfer-curve-container"></div>
               </div>
             </div>
           </div>
@@ -162,10 +171,14 @@ export class LimiterPlugin extends BasePlugin {
     this.grMeterCtx = this.grMeterCanvas?.getContext('2d') || null;
     this.peakMeterCanvas = this.container.querySelector('.peak-meter-canvas') as HTMLCanvasElement;
     this.peakMeterCtx = this.peakMeterCanvas?.getContext('2d') || null;
+    this.plotContainer = this.container.querySelector(`#limiter-plot-${this.metadata.id}`) as HTMLElement;
 
     // Setup canvases
-    this.setupMeterCanvas(this.grMeterCanvas);
-    this.setupMeterCanvas(this.peakMeterCanvas);
+    this.setupMeterCanvas(this.grMeterCanvas, 60, 240);
+    this.setupMeterCanvas(this.peakMeterCanvas, 60, 240);
+
+    // Setup Plotly graph
+    this.updatePlot();
 
     this.attachEventListeners();
     this.startRendering();
@@ -174,12 +187,10 @@ export class LimiterPlugin extends BasePlugin {
   /**
    * Setup meter canvas
    */
-  private setupMeterCanvas(canvas: HTMLCanvasElement | null): void {
+  private setupMeterCanvas(canvas: HTMLCanvasElement | null, width: number, height: number): void {
     if (!canvas) return;
 
     const dpr = window.devicePixelRatio || 1;
-    const width = 80;
-    const height = 250;
 
     canvas.width = width * dpr;
     canvas.height = height * dpr;
@@ -191,52 +202,287 @@ export class LimiterPlugin extends BasePlugin {
   }
 
   /**
+   * Update Plotly transfer curve
+   */
+  private updatePlot(): void {
+    if (!this.plotContainer) return;
+
+    const dbRange = 12; // -12 to 0 dB
+    const numPoints = 200;
+
+    // Generate input dB values
+    const inputDb: number[] = [];
+    const outputDb: number[] = [];
+    const referenceDb: number[] = [];
+
+    for (let i = 0; i <= numPoints; i++) {
+      const inputVal = (i / numPoints) * dbRange - dbRange; // -12 to 0 dB
+      inputDb.push(inputVal);
+      referenceDb.push(inputVal); // 1:1 reference line
+
+      // Limiter: hard clip at ceiling
+      let outputVal: number;
+      if (inputVal <= this.ceiling) {
+        outputVal = inputVal;
+      } else {
+        outputVal = this.ceiling;
+      }
+
+      outputDb.push(outputVal);
+    }
+
+    // Create Plotly traces
+    const traces: Plotly.Data[] = [
+      // Reference 1:1 line
+      {
+        x: inputDb,
+        y: referenceDb,
+        type: 'scatter',
+        mode: 'lines',
+        name: '1:1 Reference',
+        line: {
+          color: 'rgba(255, 255, 255, 0.3)',
+          width: 1,
+          dash: 'dot',
+        },
+        hoverinfo: 'skip',
+      } as Plotly.Data,
+      // Limiter curve
+      {
+        x: inputDb,
+        y: outputDb,
+        type: 'scatter',
+        mode: 'lines',
+        name: 'Limiter Curve',
+        line: {
+          color: '#ef4444',
+          width: 3,
+        },
+        hovertemplate: 'Input: %{x:.1f} dB<br>Output: %{y:.1f} dB<extra></extra>',
+      } as Plotly.Data,
+    ];
+
+    // Add ceiling line
+    traces.push(
+      // Horizontal ceiling line
+      {
+        x: [-12, 0],
+        y: [this.ceiling, this.ceiling],
+        type: 'scatter',
+        mode: 'lines',
+        name: 'Ceiling',
+        line: {
+          color: 'rgba(239, 68, 68, 0.6)',
+          width: 2,
+          dash: 'dash',
+        },
+        hoverinfo: 'skip',
+      } as Plotly.Data
+    );
+
+    // Layout configuration
+    const layout: Partial<Plotly.Layout> = {
+      title: {
+        text: '',
+      },
+      xaxis: {
+        title: { text: 'Input (dB)' },
+        gridcolor: 'rgba(255, 255, 255, 0.1)',
+        zerolinecolor: 'rgba(255, 255, 255, 0.2)',
+        range: [-12, 0],
+        dtick: 2,
+      },
+      yaxis: {
+        title: { text: 'Output (dB)' },
+        gridcolor: 'rgba(255, 255, 255, 0.1)',
+        zerolinecolor: 'rgba(255, 255, 255, 0.2)',
+        range: [-12, 0],
+        dtick: 2,
+      },
+      plot_bgcolor: '#1a1a1a',
+      paper_bgcolor: '#1a1a1a',
+      font: {
+        color: '#ffffff',
+        size: 11,
+      },
+      margin: {
+        l: 50,
+        r: 30,
+        t: 30,
+        b: 50,
+      },
+      showlegend: true,
+      legend: {
+        x: 0.02,
+        y: 0.98,
+        bgcolor: 'rgba(42, 42, 42, 0.8)',
+        bordercolor: 'rgba(64, 64, 64, 0.8)',
+        borderwidth: 1,
+      },
+      hovermode: 'closest',
+    };
+
+    // Config
+    const config: Partial<Plotly.Config> = {
+      responsive: true,
+      displayModeBar: false,
+    };
+
+    // Create or update plot
+    Plotly.react(this.plotContainer, traces, layout, config);
+  }
+
+  /**
    * Attach event listeners
    */
   private attachEventListeners(): void {
-    // Sliders
+    // Slider input events
     const sliders = this.container?.querySelectorAll('.param-slider') || [];
     sliders.forEach((slider) => {
       slider.addEventListener('input', (e) => {
-        const param = (e.target as HTMLElement).dataset.param!;
-        const value = parseFloat((e.target as HTMLInputElement).value);
-
-        // Update parameter
-        (this as any)[param] = value;
-
-        // Update display
-        const label = (e.target as HTMLElement).parentElement?.querySelector('.param-value');
-        if (label) {
-          if (param === 'release' || param === 'lookahead') {
-            label.textContent = `${value.toFixed(1)} ms`;
-          } else {
-            label.textContent = `${value.toFixed(2)} dB`;
-          }
-        }
-
-        // Update status
-        if (param === 'ceiling') {
-          const statusValue = this.container?.querySelector('.status-item .status-value');
-          if (statusValue) {
-            statusValue.textContent = `${value.toFixed(2)} dB`;
-          }
-        }
-
-        // Notify parameter change
-        this.updateParameter(param, value);
+        this.handleSliderChange(e as Event);
       });
     });
 
-    // Checkbox
-    const checkbox = this.container?.querySelector('.param-checkbox') as HTMLInputElement;
-    if (checkbox) {
-      checkbox.addEventListener('change', (e) => {
-        const param = (e.target as HTMLElement).dataset.param!;
-        const value = (e.target as HTMLInputElement).checked;
-
-        (this as any)[param] = value;
-        this.updateParameter(param, value);
+    // Parameter field click to select
+    const fields = this.container?.querySelectorAll('.parameter-field') || [];
+    fields.forEach((field) => {
+      field.addEventListener('click', (e) => {
+        const index = parseInt((field as HTMLElement).dataset.index || '-1', 10);
+        this.selectParameter(index);
       });
+    });
+
+    // Keyboard controls
+    document.addEventListener('keydown', this.handleKeydown);
+  }
+
+  /**
+   * Handle slider change
+   */
+  private handleSliderChange(e: Event): void {
+    const param = (e.target as HTMLElement).dataset.param!;
+    const value = parseFloat((e.target as HTMLInputElement).value);
+
+    // Update parameter
+    (this as any)[param] = value;
+
+    // Update display
+    this.updateParameterDisplay(param, value);
+
+    // Redraw transfer curve
+    this.updatePlot();
+
+    // Notify parameter change
+    this.updateParameter(param, value);
+  }
+
+  /**
+   * Update parameter display
+   */
+  private updateParameterDisplay(param: string, value: number): void {
+    const field = this.container?.querySelector(`.parameter-field[data-param="${param}"]`);
+    if (!field) return;
+
+    const label = field.querySelector('.param-value');
+    if (label) {
+      const precision = param === 'ceiling' ? 2 : 1;
+      const unit = param === 'ceiling' ? 'dB' : 'ms';
+      label.textContent = `${value.toFixed(precision)} ${unit}`;
+    }
+
+    // Update slider value
+    const slider = field.querySelector('.param-slider') as HTMLInputElement;
+    if (slider) {
+      slider.value = value.toString();
+    }
+  }
+
+  /**
+   * Select parameter by index
+   */
+  private selectParameter(index: number): void {
+    this.selectedParameterIndex = index;
+
+    // Update visual highlighting
+    const fields = this.container?.querySelectorAll('.parameter-field') || [];
+    fields.forEach((field, idx) => {
+      const slider = field.querySelector('.param-slider') as HTMLElement;
+      if (slider) {
+        if (idx === index) {
+          slider.style.accentColor = '#22c55e'; // Green
+          field.classList.add('is-selected');
+        } else {
+          slider.style.accentColor = '';
+          field.classList.remove('is-selected');
+        }
+      }
+    });
+  }
+
+  /**
+   * Clear parameter selection
+   */
+  private clearParameterSelection(): void {
+    this.selectedParameterIndex = -1;
+
+    const fields = this.container?.querySelectorAll('.parameter-field') || [];
+    fields.forEach((field) => {
+      const slider = field.querySelector('.param-slider') as HTMLElement;
+      if (slider) {
+        slider.style.accentColor = '';
+        field.classList.remove('is-selected');
+      }
+    });
+  }
+
+  /**
+   * Handle keyboard shortcuts
+   */
+  private handleKeydown = (e: KeyboardEvent): void => {
+    // Ignore if typing in input
+    const target = e.target as HTMLElement;
+    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT') {
+      return;
+    }
+
+    // ESC - clear selection
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      this.clearParameterSelection();
+      return;
+    }
+
+    // 1-3 - select parameter
+    const numKey = parseInt(e.key, 10);
+    if (numKey >= 1 && numKey <= 3) {
+      e.preventDefault();
+      this.selectParameter(numKey - 1);
+      return;
+    }
+
+    // Shift+ArrowLeft / Shift+ArrowRight - adjust selected parameter
+    if (this.selectedParameterIndex >= 0 && e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+      e.preventDefault();
+
+      const paramName = this.parameterOrder[this.selectedParameterIndex];
+      const range = this.parameterRanges[paramName as keyof typeof this.parameterRanges];
+      const currentValue = (this as any)[paramName];
+
+      const delta = e.key === 'ArrowRight' ? range.step : -range.step;
+      const newValue = Math.max(range.min, Math.min(range.max, currentValue + delta));
+
+      // Update parameter
+      (this as any)[paramName] = newValue;
+
+      // Update display
+      this.updateParameterDisplay(paramName, newValue);
+
+      // Redraw transfer curve
+      this.updatePlot();
+
+      // Notify parameter change
+      this.updateParameter(paramName, newValue);
     }
   }
 
@@ -313,7 +559,7 @@ export class LimiterPlugin extends BasePlugin {
     }
 
     // Update numeric display
-    const grValue = this.container?.querySelector('.limiter-meters .meter-value') as HTMLElement;
+    const grValue = this.container?.querySelector('.gr-value') as HTMLElement;
     if (grValue) {
       grValue.textContent = `${Math.abs(this.currentGainReduction).toFixed(1)} dB`;
     }
@@ -375,7 +621,7 @@ export class LimiterPlugin extends BasePlugin {
     this.peakMeterCtx.setLineDash([]);
 
     // Update numeric display
-    const peakValue = this.container?.querySelectorAll('.limiter-meters .meter-value')[1] as HTMLElement;
+    const peakValue = this.container?.querySelector('.peak-value') as HTMLElement;
     if (peakValue) {
       peakValue.textContent = this.currentPeak === -Infinity ? '-∞' : `${this.currentPeak.toFixed(1)} dB`;
     }
@@ -433,15 +679,18 @@ export class LimiterPlugin extends BasePlugin {
     this.clipping = peakDb > this.ceiling;
 
     if (this.clipping !== wasClipping) {
-      const statusItem = this.container?.querySelector('.status-item.clipping');
       const clippingIndicator = this.container?.querySelector('.clipping-indicator');
 
       if (this.clipping) {
-        statusItem?.classList.add('clipping');
-        if (clippingIndicator) clippingIndicator.textContent = 'YES';
+        if (clippingIndicator) {
+          clippingIndicator.textContent = 'YES';
+          (clippingIndicator as HTMLElement).style.color = '#ef4444';
+        }
       } else {
-        statusItem?.classList.remove('clipping');
-        if (clippingIndicator) clippingIndicator.textContent = 'NO';
+        if (clippingIndicator) {
+          clippingIndicator.textContent = 'NO';
+          (clippingIndicator as HTMLElement).style.color = '#22c55e';
+        }
       }
     }
   }
@@ -462,7 +711,6 @@ export class LimiterPlugin extends BasePlugin {
       ceiling: this.ceiling,
       release: this.release,
       lookahead: this.lookahead,
-      truePeakMode: this.truePeakMode,
     };
   }
 
@@ -473,12 +721,10 @@ export class LimiterPlugin extends BasePlugin {
     ceiling: number;
     release: number;
     lookahead: number;
-    truePeakMode: boolean;
   }>): void {
     if (params.ceiling !== undefined) this.ceiling = params.ceiling;
     if (params.release !== undefined) this.release = params.release;
     if (params.lookahead !== undefined) this.lookahead = params.lookahead;
-    if (params.truePeakMode !== undefined) this.truePeakMode = params.truePeakMode;
 
     // Re-render if already initialized
     if (this.container) {
@@ -490,8 +736,24 @@ export class LimiterPlugin extends BasePlugin {
    * Resize handler
    */
   resize(): void {
-    this.setupMeterCanvas(this.grMeterCanvas);
-    this.setupMeterCanvas(this.peakMeterCanvas);
+    this.setupMeterCanvas(this.grMeterCanvas, 60, 240);
+    this.setupMeterCanvas(this.peakMeterCanvas, 60, 240);
+
+    // Resize Plotly graph
+    if (this.plotContainer) {
+      Plotly.Plots.resize(this.plotContainer);
+    }
+  }
+
+  /**
+   * Get keyboard shortcuts for this plugin
+   */
+  getShortcuts() {
+    return [
+      { key: '1-3', description: 'Select parameter' },
+      { key: 'Esc', description: 'Clear selection' },
+      { key: 'Shift+←→', description: 'Adjust value' },
+    ];
   }
 
   /**
@@ -499,6 +761,14 @@ export class LimiterPlugin extends BasePlugin {
    */
   destroy(): void {
     this.stopRendering();
+
+    // Remove keyboard listener
+    document.removeEventListener('keydown', this.handleKeydown);
+
+    // Cleanup Plotly
+    if (this.plotContainer) {
+      Plotly.purge(this.plotContainer);
+    }
 
     if (this.menubar) {
       this.menubar.destroy();

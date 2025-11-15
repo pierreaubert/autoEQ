@@ -1,8 +1,9 @@
 <!-- markdownlint-disable-file MD013 -->
 
-# AutoEQ : an automatic eq for your speaker or headset
+# SotF: an automatic eq for your speaker or headset
 
-The software help you find very good EQ for your speakers or your headsets. It is available as a CLI or as an application.
+The software either an app or a cli helps you to get better sound from your speakers or your headsets.
+*Sound of the Future* or *SotF* in short comes from the song from [Giorgio Moroder](https://en.wikipedia.org/wiki/Giorgio_Moroder) made popular by [Daft Punk](https://en.wikipedia.org/wiki/Daft_Punk). You can find 100 versions on Youtube. Here is an [official one](https://youtu.be/zhl-Cs1-sG4?si=H4hgakoEdQn-HMH6&t=73).
 
 ## Install
 
@@ -65,11 +66,17 @@ A implementation of CEA2034 aka [Spinorama](https://spinorama.org): a set of met
 
 A small set of functions and constants used by the other crates but you are unlikely to be interested.
 
-### src-ui-backend
+### src-audio
 
-The backend take care of all the Audio activities (from recording to playing). It does not use WebAudio but CamillaDSP and Symphonia. It also provides support for IIR filters, SPL computations etc
+This backend take care of all the Audio activities (from recording to playing). It also provides support for IIR filters, SPL computations etc
 
-The backend also make the interface with autoeq. It should be splitted in 2 crates.
+### src-hal
+
+This crate builds a HAL (Audio Driver on MacOS) such that you can redirect all your music to this driver and benefit from corrected sounds all the time.
+
+### src-confbar
+
+This crate allows you to configure the above driver and is conveniently available from the menubar.
 
 ### src-ui-frontend
 

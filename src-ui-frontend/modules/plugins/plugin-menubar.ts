@@ -1,7 +1,6 @@
 // Plugin Menubar Component
 // Shared menubar for plugins: Name, Presets, Matrix, Mute/Solo
 
-import './plugin-menubar.css';
 import type { MenubarConfig, MenubarButton, PluginPreset } from './plugin-types';
 
 export interface PluginMenubarCallbacks {
@@ -60,18 +59,18 @@ export class PluginMenubar {
    */
   render(): void {
     this.container.innerHTML = `
-      <div class="plugin-menubar">
-        <div class="menubar-left">
-          ${this.config.showName ? `<span class="plugin-name">${this.pluginName}</span>` : ''}
+      <nav class="level is-mobile p-3 has-background-dark" style="border-bottom: 1px solid #404040;">
+        <div class="level-left">
+          ${this.config.showName ? `<div class="level-item"><p class="has-text-weight-semibold has-text-light">${this.pluginName}</p></div>` : ''}
         </div>
-        <div class="menubar-right">
+        <div class="level-right">
           ${this.renderPresets()}
           ${this.renderMatrix()}
           ${this.renderMuteSolo()}
           ${this.renderBypass()}
           ${this.renderCustomButtons()}
         </div>
-      </div>
+      </nav>
     `;
 
     this.attachEventListeners();
@@ -84,17 +83,26 @@ export class PluginMenubar {
     if (!this.config.showPresets) return '';
 
     return `
-      <div class="menubar-item menubar-presets">
-        <button class="menubar-button preset-button" title="Presets">
-          <span>${this.currentPresetName || 'Presets'}</span>
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
-            <path d="M6 8L2 4h8z"/>
-          </svg>
-        </button>
-        <div class="preset-dropdown" style="display: none;">
-          <div class="preset-list"></div>
-          <div class="preset-actions">
-            <button class="preset-save-btn">Save Preset</button>
+      <div class="level-item">
+        <div class="dropdown menubar-presets">
+          <div class="dropdown-trigger">
+            <button class="button is-small is-dark preset-button" aria-haspopup="true" aria-controls="dropdown-menu" title="Presets">
+              <span>${this.currentPresetName || 'Presets'}</span>
+              <span class="icon is-small">
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
+                  <path d="M6 8L2 4h8z"/>
+                </svg>
+              </span>
+            </button>
+          </div>
+          <div class="dropdown-menu" id="dropdown-menu" role="menu" style="display: none;">
+            <div class="dropdown-content">
+              <div class="preset-list"></div>
+              <hr class="dropdown-divider">
+              <div class="dropdown-item">
+                <button class="button is-small is-fullwidth preset-save-btn">Save Preset</button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -108,15 +116,17 @@ export class PluginMenubar {
     if (!this.config.showMatrix) return '';
 
     return `
-      <div class="menubar-item">
-        <button class="menubar-button matrix-button" title="Routing Matrix">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
-            <rect x="2" y="2" width="12" height="12" rx="1"/>
-            <line x1="5" y1="2" x2="5" y2="14"/>
-            <line x1="11" y1="2" x2="11" y2="14"/>
-            <line x1="2" y1="5" x2="14" y2="5"/>
-            <line x1="2" y1="11" x2="14" y2="11"/>
-          </svg>
+      <div class="level-item">
+        <button class="button is-small is-dark matrix-button" title="Routing Matrix">
+          <span class="icon is-small">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+              <rect x="2" y="2" width="12" height="12" rx="1"/>
+              <line x1="5" y1="2" x2="5" y2="14"/>
+              <line x1="11" y1="2" x2="11" y2="14"/>
+              <line x1="2" y1="5" x2="14" y2="5"/>
+              <line x1="2" y1="11" x2="14" y2="11"/>
+            </svg>
+          </span>
         </button>
       </div>
     `;
@@ -129,9 +139,11 @@ export class PluginMenubar {
     if (!this.config.showMuteSolo) return '';
 
     return `
-      <div class="menubar-item menubar-mute-solo">
-        <button class="menubar-button mute-button ${this.muted ? 'active' : ''}" title="Mute">M</button>
-        <button class="menubar-button solo-button ${this.solo ? 'active' : ''}" title="Solo">S</button>
+      <div class="level-item">
+        <div class="buttons has-addons">
+          <button class="button is-small ${this.muted ? 'is-danger' : 'is-dark'} mute-button" title="Mute">M</button>
+          <button class="button is-small ${this.solo ? 'is-warning' : 'is-dark'} solo-button" title="Solo">S</button>
+        </div>
       </div>
     `;
   }
@@ -141,12 +153,14 @@ export class PluginMenubar {
    */
   private renderBypass(): string {
     return `
-      <div class="menubar-item">
-        <button class="menubar-button bypass-button ${this.bypassed ? 'active' : ''}" title="Bypass">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
-            <circle cx="8" cy="8" r="6"/>
-            <line x1="4" y1="12" x2="12" y2="4"/>
-          </svg>
+      <div class="level-item">
+        <button class="button is-small ${this.bypassed ? 'is-info' : 'is-dark'} bypass-button" title="Bypass">
+          <span class="icon is-small">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+              <circle cx="8" cy="8" r="6"/>
+              <line x1="4" y1="12" x2="12" y2="4"/>
+            </svg>
+          </span>
         </button>
       </div>
     `;
@@ -159,8 +173,8 @@ export class PluginMenubar {
     return this.config.customButtons!
       .map(
         (btn) => `
-        <div class="menubar-item">
-          <button class="menubar-button custom-button" data-button-id="${btn.id}" title="${btn.label}">
+        <div class="level-item">
+          <button class="button is-small is-dark custom-button" data-button-id="${btn.id}" title="${btn.label}">
             ${btn.icon || btn.label}
           </button>
         </div>
@@ -173,14 +187,19 @@ export class PluginMenubar {
    * Attach event listeners
    */
   private attachEventListeners(): void {
-    // Preset button
+    // Preset dropdown (Bulma dropdown)
+    const presetDropdownContainer = this.container.querySelector('.menubar-presets') as HTMLElement;
     const presetButton = this.container.querySelector('.preset-button') as HTMLButtonElement;
-    const presetDropdown = this.container.querySelector('.preset-dropdown') as HTMLElement;
-    if (presetButton && presetDropdown) {
-      presetButton.addEventListener('click', () => {
-        const isVisible = presetDropdown.style.display !== 'none';
-        presetDropdown.style.display = isVisible ? 'none' : 'block';
-        this.updatePresetList();
+    const presetDropdownMenu = this.container.querySelector('.dropdown-menu') as HTMLElement;
+    if (presetButton && presetDropdownContainer && presetDropdownMenu) {
+      presetButton.addEventListener('click', (e) => {
+        e.stopPropagation();
+        presetDropdownContainer.classList.toggle('is-active');
+        const isActive = presetDropdownContainer.classList.contains('is-active');
+        presetDropdownMenu.style.display = isActive ? 'block' : 'none';
+        if (isActive) {
+          this.updatePresetList();
+        }
       });
     }
 
@@ -210,7 +229,8 @@ export class PluginMenubar {
     if (this.muteButton) {
       this.muteButton.addEventListener('click', () => {
         this.muted = !this.muted;
-        this.muteButton!.classList.toggle('active', this.muted);
+        this.muteButton!.classList.remove('is-dark', 'is-danger');
+        this.muteButton!.classList.add(this.muted ? 'is-danger' : 'is-dark');
         if (this.callbacks.onMute) {
           this.callbacks.onMute(this.muted);
         }
@@ -222,7 +242,8 @@ export class PluginMenubar {
     if (this.soloButton) {
       this.soloButton.addEventListener('click', () => {
         this.solo = !this.solo;
-        this.soloButton!.classList.toggle('active', this.solo);
+        this.soloButton!.classList.remove('is-dark', 'is-warning');
+        this.soloButton!.classList.add(this.solo ? 'is-warning' : 'is-dark');
         if (this.callbacks.onSolo) {
           this.callbacks.onSolo(this.solo);
         }
@@ -234,7 +255,8 @@ export class PluginMenubar {
     if (this.bypassButton) {
       this.bypassButton.addEventListener('click', () => {
         this.bypassed = !this.bypassed;
-        this.bypassButton!.classList.toggle('active', this.bypassed);
+        this.bypassButton!.classList.remove('is-dark', 'is-info');
+        this.bypassButton!.classList.add(this.bypassed ? 'is-info' : 'is-dark');
         if (this.callbacks.onBypass) {
           this.callbacks.onBypass(this.bypassed);
         }
@@ -253,8 +275,9 @@ export class PluginMenubar {
 
     // Close dropdown when clicking outside
     document.addEventListener('click', (e) => {
-      if (presetDropdown && !this.container.contains(e.target as Node)) {
-        presetDropdown.style.display = 'none';
+      if (presetDropdownContainer && presetDropdownMenu && !this.container.contains(e.target as Node)) {
+        presetDropdownContainer.classList.remove('is-active');
+        presetDropdownMenu.style.display = 'none';
       }
     });
   }
@@ -267,22 +290,22 @@ export class PluginMenubar {
     if (!presetList) return;
 
     if (this.presets.length === 0) {
-      presetList.innerHTML = '<div class="preset-empty">No presets available</div>';
+      presetList.innerHTML = '<div class="dropdown-item has-text-grey">No presets available</div>';
       return;
     }
 
     presetList.innerHTML = this.presets
       .map(
         (preset) => `
-        <button class="preset-item ${preset.name === this.currentPresetName ? 'active' : ''}" data-preset-name="${preset.name}">
+        <a class="dropdown-item ${preset.name === this.currentPresetName ? 'is-active' : ''}" data-preset-name="${preset.name}">
           ${preset.name}
-        </button>
+        </a>
       `
       )
       .join('');
 
     // Attach click handlers
-    const presetItems = presetList.querySelectorAll('.preset-item');
+    const presetItems = presetList.querySelectorAll('.dropdown-item');
     presetItems.forEach((item) => {
       item.addEventListener('click', () => {
         const presetName = (item as HTMLElement).dataset.presetName!;

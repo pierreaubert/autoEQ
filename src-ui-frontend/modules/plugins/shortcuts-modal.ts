@@ -38,7 +38,7 @@ export class ShortcutsModal {
   }
 
   /**
-   * Generate modal HTML
+   * Generate modal HTML using Bulma tags
    */
   private generateModalHTML(): string {
     const pluginName = this.config.pluginName || 'Plugin';
@@ -55,43 +55,31 @@ export class ShortcutsModal {
         <section class="modal-card-body">
           <div class="content">
             ${hasPluginShortcuts ? `
-              <h5>${pluginName} Shortcuts</h5>
-              <table class="table is-bordered is-striped is-narrow is-fullwidth">
-                <thead>
-                  <tr>
-                    <th>Key</th>
-                    <th>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${this.config.pluginShortcuts!.map(shortcut => `
-                    <tr>
-                      <td><code>${this.escapeHtml(shortcut.key)}</code></td>
-                      <td>${this.escapeHtml(shortcut.description)}</td>
-                    </tr>
-                  `).join('')}
-                </tbody>
-              </table>
+              <h5 class="title is-5">${pluginName} Shortcuts</h5>
+              <div class="field is-grouped is-grouped-multiline mb-5">
+                ${this.config.pluginShortcuts!.map(shortcut => `
+                  <div class="control">
+                    <div class="tags has-addons">
+                      <span class="tag is-dark">${this.escapeHtml(shortcut.key)}</span>
+                      <span class="tag is-light">${this.escapeHtml(shortcut.description)}</span>
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
             ` : ''}
 
             ${hasHostShortcuts ? `
-              <h5>Host Shortcuts</h5>
-              <table class="table is-bordered is-striped is-narrow is-fullwidth">
-                <thead>
-                  <tr>
-                    <th>Key</th>
-                    <th>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${this.config.hostShortcuts!.map(shortcut => `
-                    <tr>
-                      <td><code>${this.escapeHtml(shortcut.key)}</code></td>
-                      <td>${this.escapeHtml(shortcut.description)}</td>
-                    </tr>
-                  `).join('')}
-                </tbody>
-              </table>
+              <h5 class="title is-5">Host Shortcuts</h5>
+              <div class="field is-grouped is-grouped-multiline">
+                ${this.config.hostShortcuts!.map(shortcut => `
+                  <div class="control">
+                    <div class="tags has-addons">
+                      <span class="tag is-dark">${this.escapeHtml(shortcut.key)}</span>
+                      <span class="tag is-light">${this.escapeHtml(shortcut.description)}</span>
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
             ` : ''}
           </div>
         </section>

@@ -1,11 +1,16 @@
 {
   "embedding": {
     "provider": "openai",
-    "model": "dengcao/Qwen3-Embedding-8B:Q5_K_M",
-    "base_url": "http://localhost:11434/v1",
-    "rerank_model": "dengcao/Qwen3-Reranker-4B:Q5_K_M"
+    "model": "qwen3-embed",
+    "base_url": "http://192.168.1.36:8080/v1",
+    "rerank_model": "qwen3-rerank"
+  },
+  "indexing": {
+    "include": ["**/*.ts", "**/*.rs", "**/*.sh", "**/*.py", "**/*.swift"],
+    "exclude": ["**/node_modules/**", "**/__pycache__/**", "**/target"]
   },
   "llm": {
     "provider": "claude-code-cli"
-  }
+  },
+  "debug": true
 }

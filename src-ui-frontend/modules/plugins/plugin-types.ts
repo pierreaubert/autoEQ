@@ -15,6 +15,7 @@ export interface PluginMetadata {
   category: PluginCategory;
   version: string;
   icon?: string;
+  hasBuiltInLevelMeters?: boolean;  // True if plugin displays its own level meters
 }
 
 /**
@@ -53,6 +54,9 @@ export interface IPlugin {
   // UI
   render(standalone: boolean): void;
   resize?(): void;
+
+  // Keyboard shortcuts
+  getShortcuts?(): ShortcutItem[];
 
   // Events
   on(event: string, callback: (...args: any[]) => void): void;
@@ -128,4 +132,12 @@ export interface LUFSMeterData {
   momentary: number;           // Momentary loudness (LUFS)
   shortTerm: number;           // Short-term loudness (LUFS)
   integrated: number;          // Integrated loudness (LUFS)
+}
+
+/**
+ * Keyboard shortcut item
+ */
+export interface ShortcutItem {
+  key: string;
+  description: string;
 }

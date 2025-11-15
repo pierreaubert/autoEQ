@@ -67,18 +67,18 @@ export class EQPlugin extends BasePlugin {
     if (!this.container) return;
 
     this.container.innerHTML = `
-      <div class="eq-plugin ${standalone ? 'standalone' : 'embedded'}">
+      <div class="is-flex is-flex-direction-column eq-plugin ${standalone ? 'standalone' : 'embedded'}" style="height: 100%; background: #1a1a1a;">
         ${standalone ? '<div class="eq-menubar-container"></div>' : ''}
-        <div class="eq-content">
+        <div class="is-flex is-flex-direction-column is-flex-grow-1" style="gap: 0; padding: 0; overflow-y: auto;">
           <!-- Plotly EQ Graph -->
-          <div class="eq-plot-container" id="eq-plot-${this.metadata.id}"></div>
+          <div class="eq-plot-container" style="width: 100%; max-width: 900px; flex: 1; min-height: 150px; margin: 0 auto; background: #1a1a1a; border: 1px solid #404040;" id="eq-plot-${this.metadata.id}"></div>
 
           <!-- Space for text between graph and table -->
-          <div class="eq-separator"></div>
+          <div class="is-flex is-align-items-center is-justify-content-center" style="width: 100%; max-width: 900px; height: 20px; margin: 0 auto; font-size: 12px; color: #888;"></div>
 
           <!-- Filter Table -->
-          <div class="eq-table-container">
-            <table class="table is-bordered is-striped is-narrow is-hoverable eq-table"></table>
+          <div class="box" style="width: 100%; max-width: 900px; margin: 0 auto; background: #1a1a1a; border: 1px solid #404040; padding: 0;">
+            <table class="table is-bordered is-striped is-narrow is-hoverable is-fullwidth eq-table"></table>
           </div>
         </div>
 
@@ -289,7 +289,7 @@ export class EQPlugin extends BasePlugin {
     `).join('');
 
     // Add button column
-    const addButtonCell = `<th><button class="filter-add-btn-compact" title="Add Filter">+</button></th>`;
+    const addButtonCell = `<th><button class="button is-primary is-small filter-add-btn-compact" title="Add Filter">+</button></th>`;
 
     this.filterTable.innerHTML = `
       <thead>
@@ -677,6 +677,19 @@ export class EQPlugin extends BasePlugin {
       // Regenerate plot on resize for better responsiveness
       this.updatePlot();
     }
+  }
+
+  /**
+   * Get keyboard shortcuts for this plugin
+   */
+  getShortcuts() {
+    return [
+      { key: '1-9', description: 'Select filter' },
+      { key: 'Tab', description: 'Cycle filters' },
+      { key: '+', description: 'Add filter' },
+      { key: '-', description: 'Remove filter' },
+      { key: 'Esc', description: 'Clear selection' },
+    ];
   }
 
   /**

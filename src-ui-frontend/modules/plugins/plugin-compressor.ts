@@ -4,6 +4,7 @@
 import { BasePlugin } from './plugin-base';
 import { PluginMenubar } from './plugin-menubar';
 import type { PluginMetadata } from './plugin-types';
+import Plotly from 'plotly.js-basic-dist-min';
 
 /**
  * Compressor Plugin
@@ -23,6 +24,7 @@ export class CompressorPlugin extends BasePlugin {
   // UI elements
   private grMeterCanvas: HTMLCanvasElement | null = null;
   private grMeterCtx: CanvasRenderingContext2D | null = null;
+  private plotContainer: HTMLElement | null = null;
 
   // Parameters
   private threshold: number = -20.0;      // dB
@@ -32,9 +34,79 @@ export class CompressorPlugin extends BasePlugin {
   private knee: number = 3.0;             // dB
   private makeupGain: number = 0.0;       // dB
 
+  // Parameter metadata for keyboard control
+  private parameterOrder = ['threshold', 'ratio', 'attack', 'release', 'knee', 'makeupGain'];
+  private parameterRanges = {
+    threshold: { min: -60, max: 0, step: 0.5 },
+    ratio: { min: 1, max: 20, step: 0.5 },
+    attack: { min: 0.1, max: 100, step: 1 },
+    release: { min: 10, max: 1000, step: 10 },
+    knee: { min: 0, max: 12, step: 0.5 },
+    makeupGain: { min: 0, max: 24, step: 0.5 },
+  };
+
   // State
   private currentGainReduction: number = 0.0; // dB (negative)
   private animationFrameId: number | null = null;
+  private selectedParameterIndex: number = -1; // -1 = none selected
+
+  /**
+   * Render a single parameter slider with labels
+   */
+  private renderParameter(paramName: string, index: number, label: string, unit: string): string {
+    const value = (this as any)[paramName];
+    const range = this.parameterRanges[paramName as keyof typeof this.parameterRanges];
+
+    // Format value display
+    let displayValue = value.toFixed(1);
+    if (unit === ':1') {
+      displayValue = `${value.toFixed(1)}${unit}`;
+    } else {
+      displayValue = `${value.toFixed(1)} ${unit}`;
+    }
+
+    // Format min/max labels
+    let minLabel = range.min.toString();
+    let maxLabel = range.max.toString();
+    if (unit === ':1') {
+      minLabel = `${range.min}:1`;
+      maxLabel = `${range.max}:1`;
+    } else if (unit === 'dB') {
+      minLabel = `${range.min} dB`;
+      maxLabel = `${range.max} dB`;
+    } else {
+      minLabel = `${range.min} ${unit}`;
+      maxLabel = `${range.max} ${unit}`;
+    }
+
+    return `
+      <div class="field parameter-field" data-param="${paramName}" data-index="${index}">
+        <label class="label is-small has-text-light has-text-centered">${label}</label>
+        <div class="columns is-mobile is-gapless is-vcentered" style="margin-bottom: 0;">
+          <div class="column is-narrow" style="min-width: 60px;">
+            <div class="is-flex is-flex-direction-column is-justify-content-space-between" style="height: 100%; padding: 4px 0;">
+              <p class="has-text-grey-light is-size-7 has-text-right">${maxLabel}</p>
+              <p class="has-text-grey-light is-size-7 has-text-right">${minLabel}</p>
+            </div>
+          </div>
+          <div class="column">
+            <input
+              type="range"
+              class="slider is-fullwidth param-slider"
+              data-param="${paramName}"
+              min="${range.min}"
+              max="${range.max}"
+              step="${range.step}"
+              value="${value}"
+            />
+          </div>
+          <div class="column is-narrow has-text-centered" style="min-width: 80px;">
+            <span class="tag is-dark">${displayValue}</span>
+          </div>
+        </div>
+      </div>
+    `;
+  }
 
   /**
    * Render the plugin UI
@@ -43,108 +115,56 @@ export class CompressorPlugin extends BasePlugin {
     if (!this.container) return;
 
     this.container.innerHTML = `
-      <div class="compressor-plugin ${standalone ? 'standalone' : 'embedded'}">
+      <div class="is-flex is-flex-direction-column compressor-plugin ${standalone ? 'standalone' : 'embedded'}" style="height: 100%; min-height: 0; background: #1a1a1a;">
         ${standalone ? '<div class="compressor-menubar-container"></div>' : ''}
-        <div class="compressor-content">
-          <!-- Main Grid: Parameters + Meter + Graph -->
-          <div class="compressor-grid">
-            <!-- Column 1: Parameters -->
-            <div class="compressor-parameters">
-              <h4 class="section-title">Dynamics Control</h4>
-
-              <div class="parameter-group">
-                <label>
-                  Threshold
-                  <span class="param-value">${this.threshold.toFixed(1)} dB</span>
-                </label>
-                <input type="range" class="param-slider" data-param="threshold"
-                       min="-60" max="0" step="0.1" value="${this.threshold}" />
-                <div class="param-scale">
-                  <span>-60</span>
-                  <span>0</span>
-                </div>
-              </div>
-
-              <div class="parameter-group">
-                <label>
-                  Ratio
-                  <span class="param-value">${this.ratio.toFixed(1)}:1</span>
-                </label>
-                <input type="range" class="param-slider" data-param="ratio"
-                       min="1" max="20" step="0.1" value="${this.ratio}" />
-                <div class="param-scale">
-                  <span>1:1</span>
-                  <span>20:1</span>
-                </div>
-              </div>
-
-              <div class="parameter-group">
-                <label>
-                  Attack
-                  <span class="param-value">${this.attack.toFixed(1)} ms</span>
-                </label>
-                <input type="range" class="param-slider" data-param="attack"
-                       min="0.1" max="100" step="0.1" value="${this.attack}" />
-                <div class="param-scale">
-                  <span>0.1</span>
-                  <span>100 ms</span>
-                </div>
-              </div>
-
-              <div class="parameter-group">
-                <label>
-                  Release
-                  <span class="param-value">${this.release.toFixed(1)} ms</span>
-                </label>
-                <input type="range" class="param-slider" data-param="release"
-                       min="10" max="1000" step="1" value="${this.release}" />
-                <div class="param-scale">
-                  <span>10</span>
-                  <span>1000 ms</span>
-                </div>
-              </div>
-
-              <div class="parameter-group">
-                <label>
-                  Knee
-                  <span class="param-value">${this.knee.toFixed(1)} dB</span>
-                </label>
-                <input type="range" class="param-slider" data-param="knee"
-                       min="0" max="12" step="0.1" value="${this.knee}" />
-                <div class="param-scale">
-                  <span>Hard</span>
-                  <span>Soft</span>
-                </div>
-              </div>
-
-              <div class="parameter-group">
-                <label>
-                  Makeup Gain
-                  <span class="param-value">${this.makeupGain.toFixed(1)} dB</span>
-                </label>
-                <input type="range" class="param-slider" data-param="makeupGain"
-                       min="0" max="24" step="0.1" value="${this.makeupGain}" />
-                <div class="param-scale">
-                  <span>0</span>
-                  <span>+24 dB</span>
+        <div class="is-flex is-flex-direction-column is-flex-grow-1" style="min-height: 0; overflow: hidden; padding: 0; margin: 0;">
+          <!-- Bulma Columns -->
+          <div class="columns is-gapless" style="flex: 1; min-height: 0;">
+            <!-- Column 1: Parameters (25%) -->
+            <div class="column is-8 is-flex is-flex-direction-column">
+              <div class="box" style="height: 100%; margin: 0 !important; background: #2a2a2a; border: none; border-right: 1px solid #404040; border-radius: 0;">
+                <h4 class="title is-6 has-text-light">Dynamics Control</h4>
+                <div class="is-flex is-flex-direction-column">
+                  <div class="columns is-gapless">
+                    <div class="column is-2">
+                      ${this.renderParameter('threshold', 0, 'Threshold', 'dB')}
+  	            </div>
+                    <div class="column is-2">
+                      ${this.renderParameter('ratio', 1, 'Ratio', ':1')}
+  	            </div>
+                    <div class="column is-2">
+                      ${this.renderParameter('attack', 2, 'Attack', 'ms')}
+  	            </div>
+                    <div class="column is-2">
+                      ${this.renderParameter('release', 3, 'Release', 'ms')}
+  	           </div>
+                   <div class="column is-2">
+                     ${this.renderParameter('knee', 4, 'Knee', 'dB')}
+  	           </div>
+                   <div class="column is-2">
+                     ${this.renderParameter('makeupGain', 5, 'Makeup Gain', 'dB')}
+  	           </div>
+  	          </div>
                 </div>
               </div>
             </div>
 
-            <!-- Column 2: Gain Reduction Meter -->
-            <div class="compressor-meter-column">
-              <h4 class="section-title">Gain Reduction</h4>
-              <div class="gr-meter-container">
-                <canvas class="gr-meter-canvas" width="100" height="300"></canvas>
-                <div class="gr-value">${Math.abs(this.currentGainReduction).toFixed(1)} dB</div>
+            <!-- Column 2: Gain Reduction Meter (25%) -->
+            <div class="column is-1 is-flex is-flex-direction-column">
+              <div class="box" style="height: 100%; margin: 0 !important; background: #2a2a2a; border: none; border-right: 1px solid #404040; border-radius: 0;">
+                <h4 class="title is-6 has-text-light has-text-centered">Gain Reduction</h4>
+                <div class="is-flex is-flex-direction-column is-align-items-center" style="gap: 8px; height: calc(100% - 40px);">
+                  <canvas class="gr-meter-canvas" width="80" height="280"></canvas>
+                  <div class="gr-value has-text-light has-text-centered" style="margin-top: 8px; font-size: 14px; font-weight: 600;">${Math.abs(this.currentGainReduction).toFixed(1)} dB</div>
+                </div>
               </div>
             </div>
 
-            <!-- Column 3: Transfer Curve -->
-            <div class="compressor-curve-column">
-              <h4 class="section-title">Transfer Curve</h4>
-              <div class="transfer-curve-container">
-                <canvas class="transfer-curve-canvas" width="300" height="300"></canvas>
+            <!-- Column 3: Transfer Curve (50%) -->
+            <div class="column is-3 is-flex is-flex-direction-column">
+              <div class="box" style="height: 100%; margin: 0 !important; padding: 12px; background: #2a2a2a; border: none; border-right: 1px solid #404040; border-radius: 0;">
+                <h4 class="title is-6 has-text-light has-text-centered plugin-section-header">Transfer Curve</h4>
+                <div id="compressor-plot-${this.metadata.id}" class="is-flex is-flex-direction-column is-align-items-center transfer-curve-container" style="gap: 8px;"></div>
               </div>
             </div>
           </div>
@@ -163,12 +183,13 @@ export class CompressorPlugin extends BasePlugin {
     // Cache elements
     this.grMeterCanvas = this.container.querySelector('.gr-meter-canvas') as HTMLCanvasElement;
     this.grMeterCtx = this.grMeterCanvas?.getContext('2d') || null;
-
-    const transferCanvas = this.container.querySelector('.transfer-curve-canvas') as HTMLCanvasElement;
+    this.plotContainer = this.container.querySelector(`#compressor-plot-${this.metadata.id}`) as HTMLElement;
 
     // Setup canvases
     this.setupGRMeter();
-    this.setupTransferCurve(transferCanvas);
+
+    // Setup Plotly graph
+    this.updatePlot();
 
     this.attachEventListeners();
     this.startRendering();
@@ -194,185 +215,323 @@ export class CompressorPlugin extends BasePlugin {
   }
 
   /**
-   * Setup transfer curve canvas
+   * Update Plotly transfer curve
    */
-  private setupTransferCurve(canvas: HTMLCanvasElement | null): void {
-    if (!canvas) return;
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const dpr = window.devicePixelRatio || 1;
-    const width = 300;
-    const height = 300;
-
-    canvas.width = width * dpr;
-    canvas.height = height * dpr;
-
-    const scaledCtx = canvas.getContext('2d');
-    if (scaledCtx) {
-      scaledCtx.scale(dpr, dpr);
-    }
-
-    this.drawTransferCurve(canvas, ctx, width, height);
-  }
-
-  /**
-   * Draw transfer curve (input vs output)
-   */
-  private drawTransferCurve(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, width: number, height: number): void {
-    // Clear
-    ctx.fillStyle = '#1a1a1a';
-    ctx.fillRect(0, 0, width, height);
-
-    // Draw grid
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
-    ctx.lineWidth = 1;
-
-    // Vertical lines
-    for (let i = 0; i <= 4; i++) {
-      const x = (i / 4) * width;
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, height);
-      ctx.stroke();
-    }
-
-    // Horizontal lines
-    for (let i = 0; i <= 4; i++) {
-      const y = (i / 4) * height;
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(width, y);
-      ctx.stroke();
-    }
-
-    // Draw 1:1 reference line (no compression)
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-    ctx.lineWidth = 1;
-    ctx.setLineDash([2, 2]);
-    ctx.beginPath();
-    ctx.moveTo(0, height);
-    ctx.lineTo(width, 0);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    // Draw compression curve
-    ctx.strokeStyle = '#4a9eff';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
+  private updatePlot(): void {
+    if (!this.plotContainer) return;
 
     const dbRange = 60; // -60 to 0 dB
-    const thresholdNorm = (this.threshold + dbRange) / dbRange;
-    const kneeWidth = this.knee / dbRange;
+    const numPoints = 200;
 
-    for (let i = 0; i <= 100; i++) {
-      const inputNorm = i / 100; // 0 to 1
-      const inputDb = inputNorm * dbRange - dbRange; // -60 to 0 dB
+    // Generate input dB values
+    const inputDb: number[] = [];
+    const outputDb: number[] = [];
+    const referenceDb: number[] = [];
 
-      let outputDb: number;
+    for (let i = 0; i <= numPoints; i++) {
+      const inputVal = (i / numPoints) * dbRange - dbRange; // -60 to 0 dB
+      inputDb.push(inputVal);
+      referenceDb.push(inputVal); // 1:1 reference line
 
-      if (inputDb < this.threshold - this.knee / 2) {
+      let outputVal: number;
+
+      if (inputVal < this.threshold - this.knee / 2) {
         // Below threshold - no compression
-        outputDb = inputDb;
-      } else if (inputDb > this.threshold + this.knee / 2) {
+        outputVal = inputVal;
+      } else if (inputVal > this.threshold + this.knee / 2) {
         // Above threshold - full compression
-        const excess = inputDb - this.threshold;
-        outputDb = this.threshold + excess / this.ratio;
+        const excess = inputVal - this.threshold;
+        outputVal = this.threshold + excess / this.ratio;
       } else {
         // Knee region - smooth transition
-        const kneeInput = inputDb - (this.threshold - this.knee / 2);
+        const kneeInput = inputVal - (this.threshold - this.knee / 2);
         const kneeRatio = kneeInput / this.knee;
         const kneeOutput = kneeRatio * kneeRatio / 2;
-        outputDb = inputDb + kneeOutput * (1 / this.ratio - 1) * this.knee;
+        outputVal = inputVal + kneeOutput * (1 / this.ratio - 1) * this.knee;
       }
 
-      const outputNorm = (outputDb + dbRange) / dbRange;
-
-      const x = inputNorm * width;
-      const y = (1 - outputNorm) * height;
-
-      if (i === 0) {
-        ctx.moveTo(x, y);
-      } else {
-        ctx.lineTo(x, y);
-      }
+      outputDb.push(outputVal);
     }
 
-    ctx.stroke();
+    // Create Plotly traces
+    const traces: Plotly.Data[] = [
+      // Reference 1:1 line
+      {
+        x: inputDb,
+        y: referenceDb,
+        type: 'scatter',
+        mode: 'lines',
+        name: '1:1 Reference',
+        line: {
+          color: 'rgba(255, 255, 255, 0.3)',
+          width: 1,
+          dash: 'dot',
+        },
+        hoverinfo: 'skip',
+      } as Plotly.Data,
+      // Compression curve
+      {
+        x: inputDb,
+        y: outputDb,
+        type: 'scatter',
+        mode: 'lines',
+        name: 'Transfer Curve',
+        line: {
+          color: '#4a9eff',
+          width: 3,
+        },
+        hovertemplate: 'Input: %{x:.1f} dB<br>Output: %{y:.1f} dB<extra></extra>',
+      } as Plotly.Data,
+    ];
 
-    // Draw threshold line
-    ctx.strokeStyle = 'rgba(239, 68, 68, 0.6)';
-    ctx.lineWidth = 1;
-    ctx.setLineDash([4, 4]);
+    // Add threshold lines
+    traces.push(
+      // Vertical threshold line
+      {
+        x: [this.threshold, this.threshold],
+        y: [-60, 0],
+        type: 'scatter',
+        mode: 'lines',
+        name: 'Threshold',
+        line: {
+          color: 'rgba(239, 68, 68, 0.6)',
+          width: 2,
+          dash: 'dash',
+        },
+        hoverinfo: 'skip',
+      } as Plotly.Data,
+      // Horizontal threshold line
+      {
+        x: [-60, 0],
+        y: [this.threshold, this.threshold],
+        type: 'scatter',
+        mode: 'lines',
+        name: 'Threshold (ref)',
+        line: {
+          color: 'rgba(239, 68, 68, 0.6)',
+          width: 2,
+          dash: 'dash',
+        },
+        showlegend: false,
+        hoverinfo: 'skip',
+      } as Plotly.Data
+    );
 
-    const thresholdX = thresholdNorm * width;
-    ctx.beginPath();
-    ctx.moveTo(thresholdX, 0);
-    ctx.lineTo(thresholdX, height);
-    ctx.stroke();
+    // Layout configuration
+    const layout: Partial<Plotly.Layout> = {
+      title: {
+        text: '',
+      },
+      xaxis: {
+        title: { text: 'Input (dB)' },
+        gridcolor: 'rgba(255, 255, 255, 0.1)',
+        zerolinecolor: 'rgba(255, 255, 255, 0.2)',
+        range: [-60, 0],
+        dtick: 10,
+      },
+      yaxis: {
+        title: { text: 'Output (dB)' },
+        gridcolor: 'rgba(255, 255, 255, 0.1)',
+        zerolinecolor: 'rgba(255, 255, 255, 0.2)',
+        range: [-60, 0],
+        dtick: 10,
+      },
+      plot_bgcolor: '#1a1a1a',
+      paper_bgcolor: '#1a1a1a',
+      font: {
+        color: '#ffffff',
+        size: 11,
+      },
+      margin: {
+        l: 50,
+        r: 30,
+        t: 30,
+        b: 50,
+      },
+      showlegend: true,
+      legend: {
+        x: 0.02,
+        y: 0.98,
+        bgcolor: 'rgba(42, 42, 42, 0.8)',
+        bordercolor: 'rgba(64, 64, 64, 0.8)',
+        borderwidth: 1,
+      },
+      hovermode: 'closest',
+    };
 
-    const thresholdY = (1 - thresholdNorm) * height;
-    ctx.beginPath();
-    ctx.moveTo(0, thresholdY);
-    ctx.lineTo(width, thresholdY);
-    ctx.stroke();
-    ctx.setLineDash([]);
+    // Config
+    const config: Partial<Plotly.Config> = {
+      responsive: true,
+      displayModeBar: false,
+    };
 
-    // Labels
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-    ctx.font = '10px sans-serif';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'bottom';
-    ctx.fillText('Input (dB)', 5, height - 5);
-
-    ctx.save();
-    ctx.translate(10, height / 2);
-    ctx.rotate(-Math.PI / 2);
-    ctx.textAlign = 'center';
-    ctx.fillText('Output (dB)', 0, 0);
-    ctx.restore();
+    // Create or update plot
+    Plotly.react(this.plotContainer, traces, layout, config);
   }
 
   /**
    * Attach event listeners
    */
   private attachEventListeners(): void {
+    // Slider input events
     const sliders = this.container?.querySelectorAll('.param-slider') || [];
     sliders.forEach((slider) => {
       slider.addEventListener('input', (e) => {
-        const param = (e.target as HTMLElement).dataset.param!;
-        const value = parseFloat((e.target as HTMLInputElement).value);
-
-        // Update parameter
-        (this as any)[param] = value;
-
-        // Update display
-        const label = (e.target as HTMLElement).parentElement?.querySelector('.param-value');
-        if (label) {
-          if (param === 'ratio') {
-            label.textContent = `${value.toFixed(1)}:1`;
-          } else if (param === 'attack' || param === 'release') {
-            label.textContent = `${value.toFixed(1)} ms`;
-          } else {
-            label.textContent = `${value.toFixed(1)} dB`;
-          }
-        }
-
-        // Redraw transfer curve
-        const transferCanvas = this.container?.querySelector('.transfer-curve-canvas') as HTMLCanvasElement;
-        if (transferCanvas) {
-          const ctx = transferCanvas.getContext('2d');
-          if (ctx) {
-            const dpr = window.devicePixelRatio || 1;
-            this.drawTransferCurve(transferCanvas, ctx, 200, 200);
-          }
-        }
-
-        // Notify parameter change
-        this.updateParameter(param, value);
+        this.handleSliderChange(e as Event);
       });
     });
+
+    // Parameter field click to select
+    const fields = this.container?.querySelectorAll('.parameter-field') || [];
+    fields.forEach((field) => {
+      field.addEventListener('click', (e) => {
+        const index = parseInt((field as HTMLElement).dataset.index || '-1', 10);
+        this.selectParameter(index);
+      });
+    });
+
+    // Keyboard controls
+    document.addEventListener('keydown', this.handleKeydown);
+  }
+
+  /**
+   * Handle slider change
+   */
+  private handleSliderChange(e: Event): void {
+    const param = (e.target as HTMLElement).dataset.param!;
+    const value = parseFloat((e.target as HTMLInputElement).value);
+
+    // Update parameter
+    (this as any)[param] = value;
+
+    // Update display
+    this.updateParameterDisplay(param, value);
+
+    // Redraw transfer curve
+    this.redrawTransferCurve();
+
+    // Notify parameter change
+    this.updateParameter(param, value);
+  }
+
+  /**
+   * Update parameter display
+   */
+  private updateParameterDisplay(param: string, value: number): void {
+    const field = this.container?.querySelector(`.parameter-field[data-param="${param}"]`);
+    if (!field) return;
+
+    const label = field.querySelector('.param-value');
+    if (label) {
+      if (param === 'ratio') {
+        label.textContent = `${value.toFixed(1)}:1`;
+      } else if (param === 'attack' || param === 'release') {
+        label.textContent = `${value.toFixed(1)} ms`;
+      } else {
+        label.textContent = `${value.toFixed(1)} dB`;
+      }
+    }
+
+    // Update slider value
+    const slider = field.querySelector('.param-slider') as HTMLInputElement;
+    if (slider) {
+      slider.value = value.toString();
+    }
+  }
+
+  /**
+   * Redraw transfer curve
+   */
+  private redrawTransferCurve(): void {
+    this.updatePlot();
+  }
+
+  /**
+   * Select parameter by index
+   */
+  private selectParameter(index: number): void {
+    this.selectedParameterIndex = index;
+
+    // Update visual highlighting
+    const fields = this.container?.querySelectorAll('.parameter-field') || [];
+    fields.forEach((field, idx) => {
+      const slider = field.querySelector('.param-slider') as HTMLElement;
+      if (slider) {
+        if (idx === index) {
+          slider.style.accentColor = '#22c55e'; // Green
+          field.classList.add('is-selected');
+        } else {
+          slider.style.accentColor = '';
+          field.classList.remove('is-selected');
+        }
+      }
+    });
+  }
+
+  /**
+   * Clear parameter selection
+   */
+  private clearParameterSelection(): void {
+    this.selectedParameterIndex = -1;
+
+    const fields = this.container?.querySelectorAll('.parameter-field') || [];
+    fields.forEach((field) => {
+      const slider = field.querySelector('.param-slider') as HTMLElement;
+      if (slider) {
+        slider.style.accentColor = '';
+        field.classList.remove('is-selected');
+      }
+    });
+  }
+
+  /**
+   * Handle keyboard shortcuts
+   */
+  private handleKeydown = (e: KeyboardEvent): void => {
+    // Ignore if typing in input
+    const target = e.target as HTMLElement;
+    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT') {
+      return;
+    }
+
+    // ESC - clear selection
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      this.clearParameterSelection();
+      return;
+    }
+
+    // 1-6 - select parameter
+    const numKey = parseInt(e.key, 10);
+    if (numKey >= 1 && numKey <= 6) {
+      e.preventDefault();
+      this.selectParameter(numKey - 1);
+      return;
+    }
+
+    // Shift+ArrowLeft / Shift+ArrowRight - adjust selected parameter
+    if (this.selectedParameterIndex >= 0 && e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+      e.preventDefault();
+
+      const paramName = this.parameterOrder[this.selectedParameterIndex];
+      const range = this.parameterRanges[paramName as keyof typeof this.parameterRanges];
+      const currentValue = (this as any)[paramName];
+
+      const delta = e.key === 'ArrowRight' ? range.step : -range.step;
+      const newValue = Math.max(range.min, Math.min(range.max, currentValue + delta));
+
+      // Update parameter
+      (this as any)[paramName] = newValue;
+
+      // Update display
+      this.updateParameterDisplay(paramName, newValue);
+
+      // Redraw transfer curve
+      this.redrawTransferCurve();
+
+      // Notify parameter change
+      this.updateParameter(paramName, newValue);
+    }
   }
 
   /**
@@ -502,10 +661,22 @@ export class CompressorPlugin extends BasePlugin {
    */
   resize(): void {
     this.setupGRMeter();
-    const transferCanvas = this.container?.querySelector('.transfer-curve-canvas') as HTMLCanvasElement;
-    if (transferCanvas) {
-      this.setupTransferCurve(transferCanvas);
+
+    // Resize Plotly graph
+    if (this.plotContainer) {
+      Plotly.Plots.resize(this.plotContainer);
     }
+  }
+
+  /**
+   * Get keyboard shortcuts for this plugin
+   */
+  getShortcuts() {
+    return [
+      { key: '1-6', description: 'Select parameter' },
+      { key: 'Esc', description: 'Clear selection' },
+      { key: 'Shift+←→', description: 'Adjust value' },
+    ];
   }
 
   /**
@@ -513,6 +684,14 @@ export class CompressorPlugin extends BasePlugin {
    */
   destroy(): void {
     this.stopRendering();
+
+    // Remove keyboard listener
+    document.removeEventListener('keydown', this.handleKeydown);
+
+    // Cleanup Plotly
+    if (this.plotContainer) {
+      Plotly.purge(this.plotContainer);
+    }
 
     if (this.menubar) {
       this.menubar.destroy();
