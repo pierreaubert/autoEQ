@@ -34,7 +34,12 @@ export class LimiterPlugin extends BasePlugin {
   private lookahead: number = 5.0;        // ms
 
   // Parameter metadata for keyboard control
-  private parameterOrder = ['ceiling', 'release', 'lookahead'];
+  protected parameterOrder = ['ceiling', 'release', 'lookahead'];
+  protected parameterLabels = {
+    ceiling: 'Ceiling',
+    release: 'Release',
+    lookahead: 'Lookahead',
+  };
   private parameterRanges = {
     ceiling: { min: -12, max: 0, step: 0.1 },
     release: { min: 10, max: 1000, step: 10 },
@@ -48,41 +53,44 @@ export class LimiterPlugin extends BasePlugin {
   private peakHoldTimer: number = 0;
   private clipping: boolean = false;
   private animationFrameId: number | null = null;
-  private selectedParameterIndex: number = -1; // -1 = none selected
 
   /**
    * Render a single parameter slider with labels
    */
-  private renderParameter(paramName: string, index: number, label: string, unit: string): string {
+  private renderParameter(paramName: string, index: number, unit: string): string {
     const value = (this as any)[paramName];
     const range = this.parameterRanges[paramName as keyof typeof this.parameterRanges];
+
+    // Get formatted label with keyboard shortcut
+    const formattedLabel = this.getFormattedLabel(paramName);
 
     // Format value display
     let displayValue = value.toFixed(paramName === 'ceiling' ? 2 : 1);
     displayValue = `${displayValue} ${unit}`;
 
-    // Format min/max labels
-    const minLabel = `${range.min} ${unit}`;
-    const maxLabel = `${range.max} ${unit}`;
+    // Generate 6 legend values from max to min
+    const legendValues = [];
+    for (let i = 0; i < 6; i++) {
+      const legendValue = range.max - (i * (range.max - range.min) / 5);
+      const formatted = legendValue.toFixed(paramName === 'ceiling' ? 2 : 1);
+      legendValues.push(formatted);
+    }
 
     return `
-      <div class="field parameter-field plugin-param-field" data-param="${paramName}" data-index="${index}">
-        <div class="plugin-param-header">
-          <label class="label is-small has-text-light plugin-param-label">${label}</label>
-          <span class="tag is-dark param-value plugin-param-value">${displayValue}</span>
-        </div>
-        <input
-          type="range"
-          class="slider is-fullwidth param-slider"
-          data-param="${paramName}"
-          min="${range.min}"
-          max="${range.max}"
-          step="${range.step}"
-          value="${value}"
-        />
-        <div class="plugin-param-minmax">
-          <span class="has-text-grey-light plugin-param-minmax-label">${minLabel}</span>
-          <span class="has-text-grey-light plugin-param-minmax-label">${maxLabel}</span>
+      <div class="field parameter-field" data-param="${paramName}" data-index="${index}">
+        <div class="is-flex is-flex-direction-column is-align-items-center">
+          <div class="has-text-centered has-text-weight-semibold mb-2 has-text-light is-size-7" style="min-height: 2em; display: flex; align-items: center; justify-content: center;">${formattedLabel}</div>
+          <span class="tag is-success is-small mb-2 param-value" data-param="${paramName}">${displayValue}</span>
+          <div class="is-flex is-align-items-center">
+            <!-- Legend on the left -->
+              <div class="is-flex is-flex-direction-column is-justify-content-space-between mr-2 has-text-grey-light is-size-7" style="height: 250px; text-align: right;">
+              ${legendValues.map(v => `<span>${v}</span>`).join('')}
+            </div>
+            <!-- Slider -->
+            <input type="range" class="param-slider" data-param="${paramName}"
+                   min="${range.min}" max="${range.max}" step="${range.step}" value="${value}"
+                   style="writing-mode: vertical-lr; direction: rtl; width: 16px; height: 250px;" />
+          </div>
         </div>
       </div>
     `;
@@ -95,62 +103,60 @@ export class LimiterPlugin extends BasePlugin {
     if (!this.container) return;
 
     this.container.innerHTML = `
-      <div class="is-flex is-flex-direction-column limiter-plugin ${standalone ? 'standalone' : 'embedded'}" style="height: 100%; min-height: 0; background: #1a1a1a;">
+      <div class="is-flex is-flex-direction-column limiter-plugin ${standalone ? 'standalone' : 'embedded'}" style="max-height: 500px; max-width: 1000px; min-height: 0; background: #1a1a1a;">
         ${standalone ? '<div class="limiter-menubar-container"></div>' : ''}
         <div class="is-flex is-flex-direction-column is-flex-grow-1" style="min-height: 0; overflow: hidden; padding: 0; margin: 0;">
-          <!-- Bulma Columns -->
-          <div class="columns is-gapless" style="height: 100%; margin: 0;">
-            <!-- Column 1: Parameters (30%) -->
-            <div class="column is-one-quarter">
-              <div class="box" style="background: #2a2a2a; border: none; border-right: 1px solid #404040; border-radius: 0; height: 100%; margin: 0;">
+          <!-- Row 1: Parameters and Transfer Curve -->
+          <div class="columns is-gapless" style="flex: 1; min-height: 0;">
+            <!-- Column 1: Parameters -->
+            <div class="column is-6 is-flex is-flex-direction-column">
+              <div class="box" style="height: 100%; margin: 0 !important; background: #2a2a2a; border: none; border-right: 1px solid #404040; border-radius: 0;">
                 <h4 class="title is-6 has-text-light">Limiter Settings</h4>
-                <div>
-                  ${this.renderParameter('ceiling', 0, 'Ceiling', 'dB')}
-                  ${this.renderParameter('release', 1, 'Release', 'ms')}
-                  ${this.renderParameter('lookahead', 2, 'Lookahead', 'ms')}
-                </div>
-
-                <!-- Status Indicators -->
-                <div class="limiter-status" style="margin-top: 20px; padding: 12px; background: var(--bg-primary, #1a1a1a); border-radius: 4px;">
-                  <div class="status-item" style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                    <span class="has-text-grey-light" style="font-size: 11px;">Peak Hold:</span>
-                    <span class="has-text-light peak-hold-value" style="font-size: 11px; font-family: monospace;">${this.peakHold === -Infinity ? '-∞' : this.peakHold.toFixed(2)} dB</span>
+                <div class="columns is-gapless">
+                  <div class="column is-4">
+                    ${this.renderParameter('ceiling', 0, 'dB')}
                   </div>
-                  <div class="status-item ${this.clipping ? 'clipping' : ''}" style="display: flex; justify-content: space-between;">
-                    <span class="has-text-grey-light" style="font-size: 11px;">Clipping:</span>
-                    <span class="clipping-indicator" style="font-size: 11px; font-weight: 600; color: ${this.clipping ? '#ef4444' : '#22c55e'};">${this.clipping ? 'YES' : 'NO'}</span>
+                  <div class="column is-4">
+                    ${this.renderParameter('release', 1, 'ms')}
+                  </div>
+                  <div class="column is-4">
+                    ${this.renderParameter('lookahead', 2, 'ms')}
                   </div>
                 </div>
               </div>
             </div>
 
-            <!-- Column 2: Gain Reduction Meter (15%) -->
-            <div class="column is-narrow" style="width: 15%;">
-              <div class="box is-flex is-flex-direction-column" style="background: #2a2a2a; border: none; border-right: 1px solid #404040; border-radius: 0; height: 100%; margin: 0;">
-                <h4 class="title is-6 has-text-light has-text-centered mb-2">Gain Reduction</h4>
-                <div class="is-flex-grow-1 is-flex is-flex-direction-column is-align-items-center is-justify-content-center">
-                  <canvas class="gr-meter-canvas" width="60" height="240"></canvas>
-                  <div class="gr-value has-text-light has-text-centered" style="margin-top: 8px; font-size: 12px; font-weight: 600;">${Math.abs(this.currentGainReduction).toFixed(1)} dB</div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Column 3: Output Peak Meter (15%) -->
-            <div class="column is-narrow" style="width: 15%;">
-              <div class="box is-flex is-flex-direction-column" style="background: #2a2a2a; border: none; border-right: 1px solid #404040; border-radius: 0; height: 100%; margin: 0;">
-                <h4 class="title is-6 has-text-light has-text-centered mb-2">Output Peak</h4>
-                <div class="is-flex-grow-1 is-flex is-flex-direction-column is-align-items-center is-justify-content-center">
-                  <canvas class="peak-meter-canvas" width="60" height="240"></canvas>
-                  <div class="peak-value has-text-light has-text-centered" style="margin-top: 8px; font-size: 12px; font-weight: 600;">${this.currentPeak === -Infinity ? '-∞' : this.currentPeak.toFixed(1)} dB</div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Column 4: Transfer Curve (40%) -->
-            <div class="column">
-              <div class="box" style="background: #2a2a2a; border: none; border-right: 1px solid #404040; border-radius: 0; height: 100%; margin: 0; padding: 12px;">
-                <h4 class="title is-6 has-text-light has-text-centered mb-2">Transfer Curve</h4>
+            <!-- Column 2: Transfer Curve -->
+            <div class="column is-6 is-flex is-flex-direction-column">
+              <div class="box" style="height: 100%; margin: 0 !important; padding: 12px; background: #2a2a2a; border: none; border-right: 1px solid #404040; border-radius: 0;">
+                <h4 class="title is-6 has-text-light has-text-centered">Transfer Curve</h4>
                 <div id="limiter-plot-${this.metadata.id}" class="transfer-curve-container"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Row 2: Horizontal Meters -->
+          <div class="box p-3" style="margin: 0 !important; background: #2a2a2a; border-top: 1px solid #404040; border-radius: 0;">
+            <div class="columns is-gapless is-mobile">
+              <!-- Gain Reduction Meter -->
+              <div class="column">
+                <div class="is-flex is-align-items-center">
+                  <div class="has-text-weight-semibold mr-3 has-text-light is-size-7" style="min-width: 120px;">Gain Reduction</div>
+                  <div class="is-flex-grow-1">
+                    <canvas class="gr-meter-canvas" width="400" height="20"></canvas>
+                  </div>
+                  <span class="tag is-success is-small ml-3 gr-value">${Math.abs(this.currentGainReduction).toFixed(1)} dB</span>
+                </div>
+              </div>
+              <!-- Output Peak Meter -->
+              <div class="column ml-4">
+                <div class="is-flex is-align-items-center">
+                  <div class="has-text-weight-semibold mr-3 has-text-light is-size-7" style="min-width: 120px;">Output Peak</div>
+                  <div class="is-flex-grow-1">
+                    <canvas class="peak-meter-canvas" width="400" height="20"></canvas>
+                  </div>
+                  <span class="tag is-success is-small ml-3 peak-value">${this.currentPeak === -Infinity ? '-∞' : this.currentPeak.toFixed(1)} dB</span>
+                </div>
               </div>
             </div>
           </div>
@@ -174,8 +180,8 @@ export class LimiterPlugin extends BasePlugin {
     this.plotContainer = this.container.querySelector(`#limiter-plot-${this.metadata.id}`) as HTMLElement;
 
     // Setup canvases
-    this.setupMeterCanvas(this.grMeterCanvas, 60, 240);
-    this.setupMeterCanvas(this.peakMeterCanvas, 60, 240);
+    this.setupMeterCanvas(this.grMeterCanvas, 240, 40);
+    this.setupMeterCanvas(this.peakMeterCanvas, 240, 40);
 
     // Setup Plotly graph
     this.updatePlot();
@@ -285,31 +291,35 @@ export class LimiterPlugin extends BasePlugin {
       title: {
         text: '',
       },
+      width: 480,
+      height: 320,
       xaxis: {
-        title: { text: 'Input (dB)' },
+        title: { text: 'Input (dB)', font: { size: 10 } },
         gridcolor: 'rgba(255, 255, 255, 0.1)',
         zerolinecolor: 'rgba(255, 255, 255, 0.2)',
         range: [-12, 0],
         dtick: 2,
+        tickfont: { size: 9 },
       },
       yaxis: {
-        title: { text: 'Output (dB)' },
+        title: { text: 'Output (dB)', font: { size: 10 } },
         gridcolor: 'rgba(255, 255, 255, 0.1)',
         zerolinecolor: 'rgba(255, 255, 255, 0.2)',
         range: [-12, 0],
         dtick: 2,
+        tickfont: { size: 9 },
       },
       plot_bgcolor: '#1a1a1a',
       paper_bgcolor: '#1a1a1a',
       font: {
         color: '#ffffff',
-        size: 11,
+        size: 9,
       },
       margin: {
-        l: 50,
-        r: 30,
-        t: 30,
-        b: 50,
+        l: 40,
+        r: 20,
+        t: 10,
+        b: 40,
       },
       showlegend: true,
       legend: {
@@ -318,6 +328,7 @@ export class LimiterPlugin extends BasePlugin {
         bgcolor: 'rgba(42, 42, 42, 0.8)',
         bordercolor: 'rgba(64, 64, 64, 0.8)',
         borderwidth: 1,
+        font: { size: 9 },
       },
       hovermode: 'closest',
     };
@@ -352,9 +363,6 @@ export class LimiterPlugin extends BasePlugin {
         this.selectParameter(index);
       });
     });
-
-    // Keyboard controls
-    document.addEventListener('keydown', this.handleKeydown);
   }
 
   /**
@@ -399,10 +407,10 @@ export class LimiterPlugin extends BasePlugin {
   }
 
   /**
-   * Select parameter by index
+   * Select parameter by index (override base class)
    */
-  private selectParameter(index: number): void {
-    this.selectedParameterIndex = index;
+  protected selectParameter(index: number): void {
+    super.selectParameter(index);
 
     // Update visual highlighting
     const fields = this.container?.querySelectorAll('.parameter-field') || [];
@@ -421,10 +429,10 @@ export class LimiterPlugin extends BasePlugin {
   }
 
   /**
-   * Clear parameter selection
+   * Clear parameter selection (override base class)
    */
-  private clearParameterSelection(): void {
-    this.selectedParameterIndex = -1;
+  protected clearParameterSelection(): void {
+    super.clearParameterSelection();
 
     const fields = this.container?.querySelectorAll('.parameter-field') || [];
     fields.forEach((field) => {
@@ -437,53 +445,29 @@ export class LimiterPlugin extends BasePlugin {
   }
 
   /**
-   * Handle keyboard shortcuts
+   * Adjust selected parameter (override base class)
    */
-  private handleKeydown = (e: KeyboardEvent): void => {
-    // Ignore if typing in input
-    const target = e.target as HTMLElement;
-    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT') {
-      return;
-    }
+  protected adjustSelectedParameter(delta: number): void {
+    if (this.selectedParameterIndex < 0) return;
 
-    // ESC - clear selection
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      this.clearParameterSelection();
-      return;
-    }
+    const paramName = this.parameterOrder[this.selectedParameterIndex];
+    const range = this.parameterRanges[paramName as keyof typeof this.parameterRanges];
+    const currentValue = (this as any)[paramName];
 
-    // 1-3 - select parameter
-    const numKey = parseInt(e.key, 10);
-    if (numKey >= 1 && numKey <= 3) {
-      e.preventDefault();
-      this.selectParameter(numKey - 1);
-      return;
-    }
+    const step = delta > 0 ? range.step : -range.step;
+    const newValue = Math.max(range.min, Math.min(range.max, currentValue + step));
 
-    // Shift+ArrowLeft / Shift+ArrowRight - adjust selected parameter
-    if (this.selectedParameterIndex >= 0 && e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
-      e.preventDefault();
+    // Update parameter
+    (this as any)[paramName] = newValue;
 
-      const paramName = this.parameterOrder[this.selectedParameterIndex];
-      const range = this.parameterRanges[paramName as keyof typeof this.parameterRanges];
-      const currentValue = (this as any)[paramName];
+    // Update display
+    this.updateParameterDisplay(paramName, newValue);
 
-      const delta = e.key === 'ArrowRight' ? range.step : -range.step;
-      const newValue = Math.max(range.min, Math.min(range.max, currentValue + delta));
+    // Redraw transfer curve
+    this.updatePlot();
 
-      // Update parameter
-      (this as any)[paramName] = newValue;
-
-      // Update display
-      this.updateParameterDisplay(paramName, newValue);
-
-      // Redraw transfer curve
-      this.updatePlot();
-
-      // Notify parameter change
-      this.updateParameter(paramName, newValue);
-    }
+    // Notify parameter change
+    this.updateParameter(paramName, newValue);
   }
 
   /**
@@ -535,27 +519,19 @@ export class LimiterPlugin extends BasePlugin {
     this.grMeterCtx.fillStyle = '#2a2a2a';
     this.grMeterCtx.fillRect(0, 0, width, height);
 
-    // Draw scale (0 to -20 dB)
-    this.drawMeterScale(this.grMeterCtx, width, height, 20);
-
-    // Draw gain reduction bar
+    // Draw horizontal gain reduction bar
     if (this.currentGainReduction < 0) {
-      const grHeight = (Math.abs(this.currentGainReduction) / 20) * (height - 20);
+      const grWidth = (Math.abs(this.currentGainReduction) / 30) * (width - 20);
 
-      // Color based on amount
-      let color: string;
-      if (Math.abs(this.currentGainReduction) < 3) {
-        color = '#22c55e'; // Green
-      } else if (Math.abs(this.currentGainReduction) < 6) {
-        color = '#eab308'; // Yellow
-      } else if (Math.abs(this.currentGainReduction) < 10) {
-        color = '#f59e0b'; // Orange
-      } else {
-        color = '#ef4444'; // Red
-      }
+      // Gradient from green to red (left to right)
+      const gradient = this.grMeterCtx.createLinearGradient(10, 0, width - 10, 0);
+      gradient.addColorStop(0, '#22c55e');
+      gradient.addColorStop(0.3, '#eab308');
+      gradient.addColorStop(0.6, '#f59e0b');
+      gradient.addColorStop(1, '#ef4444');
 
-      this.grMeterCtx.fillStyle = color;
-      this.grMeterCtx.fillRect((width - 30) / 2, height - 10 - grHeight, 30, grHeight);
+      this.grMeterCtx.fillStyle = gradient;
+      this.grMeterCtx.fillRect(10, 2, grWidth, height - 4);
     }
 
     // Update numeric display
@@ -566,7 +542,7 @@ export class LimiterPlugin extends BasePlugin {
   }
 
   /**
-   * Render peak meter
+   * Render peak meter (horizontal)
    */
   private renderPeakMeter(): void {
     if (!this.peakMeterCanvas || !this.peakMeterCtx) return;
@@ -579,44 +555,32 @@ export class LimiterPlugin extends BasePlugin {
     this.peakMeterCtx.fillStyle = '#2a2a2a';
     this.peakMeterCtx.fillRect(0, 0, width, height);
 
-    // Draw scale (-12 to 0 dB)
-    this.drawMeterScale(this.peakMeterCtx, width, height, 12, -12);
-
-    // Draw peak bar
+    // Draw horizontal peak bar (-12 to 0 dB)
     if (this.currentPeak > -Infinity) {
       const peakNorm = Math.max(0, Math.min(1, (this.currentPeak - (-12)) / 12));
-      const peakHeight = peakNorm * (height - 20);
+      const peakWidth = peakNorm * (width - 20);
 
-      // Gradient from green to red
-      const gradient = this.peakMeterCtx.createLinearGradient(0, height - 10, 0, 10);
+      // Gradient from green to red (left to right)
+      const gradient = this.peakMeterCtx.createLinearGradient(10, 0, width - 10, 0);
       gradient.addColorStop(0, '#22c55e');
       gradient.addColorStop(0.6, '#eab308');
       gradient.addColorStop(0.85, '#f59e0b');
       gradient.addColorStop(1, '#ef4444');
 
       this.peakMeterCtx.fillStyle = gradient;
-      this.peakMeterCtx.fillRect((width - 30) / 2, height - 10 - peakHeight, 30, peakHeight);
+      this.peakMeterCtx.fillRect(10, 2, peakWidth, height - 4);
     }
 
-    // Draw peak hold line
-    if (this.peakHold > -Infinity) {
-      const peakHoldNorm = Math.max(0, Math.min(1, (this.peakHold - (-12)) / 12));
-      const peakHoldY = height - 10 - peakHoldNorm * (height - 20);
-
-      this.peakMeterCtx.fillStyle = this.peakHold > this.ceiling ? '#ef4444' : '#4a9eff';
-      this.peakMeterCtx.fillRect((width - 40) / 2, peakHoldY - 1, 40, 2);
-    }
-
-    // Draw ceiling line
+    // Draw ceiling line (vertical)
     const ceilingNorm = Math.max(0, Math.min(1, (this.ceiling - (-12)) / 12));
-    const ceilingY = height - 10 - ceilingNorm * (height - 20);
+    const ceilingX = 10 + ceilingNorm * (width - 20);
 
     this.peakMeterCtx.strokeStyle = '#ef4444';
     this.peakMeterCtx.lineWidth = 2;
     this.peakMeterCtx.setLineDash([4, 4]);
     this.peakMeterCtx.beginPath();
-    this.peakMeterCtx.moveTo(0, ceilingY);
-    this.peakMeterCtx.lineTo(width, ceilingY);
+    this.peakMeterCtx.moveTo(ceilingX, 0);
+    this.peakMeterCtx.lineTo(ceilingX, height);
     this.peakMeterCtx.stroke();
     this.peakMeterCtx.setLineDash([]);
 
@@ -761,9 +725,6 @@ export class LimiterPlugin extends BasePlugin {
    */
   destroy(): void {
     this.stopRendering();
-
-    // Remove keyboard listener
-    document.removeEventListener('keydown', this.handleKeydown);
 
     // Cleanup Plotly
     if (this.plotContainer) {

@@ -78,7 +78,7 @@ export class EQPlugin extends BasePlugin {
 
           <!-- Filter Table -->
           <div class="box" style="width: 100%; max-width: 900px; margin: 0 auto; background: #1a1a1a; border: 1px solid #404040; padding: 0;">
-            <table class="table is-bordered is-striped is-narrow is-hoverable is-fullwidth eq-table"></table>
+            <table class="table is-bordered is-striped is-narrow is-hoverable is-fullwidth is-dark eq-table"></table>
           </div>
         </div>
 
@@ -226,12 +226,12 @@ export class EQPlugin extends BasePlugin {
       const isSelected = index === this.selectedFilterIndex;
       const isEnabled = filter.enabled;
       return `
-        <th class="${isSelected ? 'selected' : ''}" data-filter-index="${index}">
+        <th class="has-background-grey-dark has-text-light ${isSelected ? 'selected' : ''}" data-filter-index="${index}">
           <p class="buttons eq-header-cell">
-            <button class="button is-white is-small" data-index="${index}" aria-label="Select">
+            <button class="button is-dark is-small" data-index="${index}" aria-label="Select">
     	      <span>#${index+1}</span>
 	    </button>
-            <button class="button ${isEnabled ? 'is-success' : 'is-light'} is-small filter-toggle" data-index="${index}" aria-label="Toggle On/Off">
+            <button class="button ${isEnabled ? 'is-success' : 'is-dark'} is-small filter-toggle" data-index="${index}" aria-label="Toggle On/Off">
 	      <span class="icon is-small">${isEnabled ? '✓' : '○'}</span>
 	    </button>
             <button class="button is-warning is-small filter-remove" data-index="${index}" aria-label="Remove">
@@ -245,14 +245,17 @@ export class EQPlugin extends BasePlugin {
     // Build type row with icons in select
     const typeRow = this.filters.map((filter, index) => {
       const filterTypeConfig = FILTER_TYPES[filter.filter_type as keyof typeof FILTER_TYPES];
+      const rowBg = 'has-background-black-ter';
       return `
-        <td class="${index === this.selectedFilterIndex ? 'selected' : ''}" data-filter-index="${index}">
+        <td class="${rowBg} ${index === this.selectedFilterIndex ? 'selected' : ''}" data-filter-index="${index}">
           <div class="eq-type-cell">
-            <select class="select is-small filter-type-select-compact" data-index="${index}" title="${filter.filter_type}">
-              ${Object.entries(FILTER_TYPES).map(([type, config]) =>
-                `<option value="${type}" ${filter.filter_type === type ? 'selected' : ''}>${config.icon} ${config.shortName}</option>`
-              ).join('')}
-            </select>
+            <div class="select is-small is-dark">
+              <select class="filter-type-select-compact has-background-dark has-text-light" data-index="${index}" title="${filter.filter_type}">
+                ${Object.entries(FILTER_TYPES).map(([type, config]) =>
+                  `<option value="${type}" ${filter.filter_type === type ? 'selected' : ''}>${config.icon} ${config.shortName}</option>`
+                ).join('')}
+              </select>
+            </div>
           </div>
         </td>
       `;
@@ -269,22 +272,22 @@ export class EQPlugin extends BasePlugin {
 
     // Build frequency row
     const freqRow = this.filters.map((filter, index) => `
-      <td class="${index === this.selectedFilterIndex ? 'selected' : ''}" data-filter-index="${index}">
-        <input type="number" class="input is-small filter-frequency" data-index="${index}" value="${Math.round(filter.frequency)}" min="20" max="20000" step="1" />
+      <td class="has-background-black-bis ${index === this.selectedFilterIndex ? 'selected' : ''}" data-filter-index="${index}">
+        <input type="number" class="input is-small has-background-dark has-text-light filter-frequency" data-index="${index}" value="${Math.round(filter.frequency)}" min="20" max="20000" step="1" />
       </td>
     `).join('');
 
     // Build gain row
     const gainRow = this.filters.map((filter, index) => `
-      <td class="${index === this.selectedFilterIndex ? 'selected' : ''}" data-filter-index="${index}">
-        <input type="number" class="input is-small filter-gain" data-index="${index}" value="${filter.gain.toFixed(1)}" step="0.1" />
+      <td class="has-background-black-ter ${index === this.selectedFilterIndex ? 'selected' : ''}" data-filter-index="${index}">
+        <input type="number" class="input is-small has-background-dark has-text-light filter-gain" data-index="${index}" value="${filter.gain.toFixed(1)}" step="0.1" />
       </td>
     `).join('');
 
     // Build Q row
     const qRow = this.filters.map((filter, index) => `
-      <td class="${index === this.selectedFilterIndex ? 'selected' : ''}" data-filter-index="${index}">
-        <input type="number" class="input is-small filter-q" data-index="${index}" value="${filter.q.toFixed(1)}" min="0.1" max="3.0" step="0.1" />
+      <td class="has-background-black-bis ${index === this.selectedFilterIndex ? 'selected' : ''}" data-filter-index="${index}">
+        <input type="number" class="input is-small has-background-dark has-text-light filter-q" data-index="${index}" value="${filter.q.toFixed(1)}" min="0.1" max="3.0" step="0.1" />
       </td>
     `).join('');
 
@@ -292,33 +295,33 @@ export class EQPlugin extends BasePlugin {
     const addButtonCell = `<th><button class="button is-primary is-small filter-add-btn-compact" title="Add Filter">+</button></th>`;
 
     this.filterTable.innerHTML = `
-      <thead>
+      <thead class="has-background-grey-dark">
         <tr>
-          <th class="eq-param-label has-text-right">EQ #</th>
+          <th class="eq-param-label has-text-right has-text-light">EQ #</th>
           ${headerCells}
           ${addButtonCell}
         </tr>
       </thead>
       <tbody>
-        <tr>
-          <td class="eq-param-label has-text-right has-text-weight-semibold">Type</td>
+        <tr class="has-background-black-ter">
+          <td class="eq-param-label has-text-right has-text-weight-semibold has-text-light">Type</td>
           ${typeRow}
-          <td></td>
+          <td class="has-background-black-ter"></td>
         </tr>
-        <tr>
-          <td class="eq-param-label has-text-right has-text-weight-semibold">Freq</td>
+        <tr class="has-background-black-bis">
+          <td class="eq-param-label has-text-right has-text-weight-semibold has-text-light">Freq</td>
           ${freqRow}
-          <td></td>
+          <td class="has-background-black-bis"></td>
         </tr>
-        <tr>
-          <td class="eq-param-label has-text-right has-text-weight-semibold">Gain</td>
+        <tr class="has-background-black-ter">
+          <td class="eq-param-label has-text-right has-text-weight-semibold has-text-light">Gain</td>
           ${gainRow}
-          <td></td>
+          <td class="has-background-black-ter"></td>
         </tr>
-        <tr>
-          <td class="eq-param-label has-text-right has-text-weight-semibold">Q</td>
+        <tr class="has-background-black-bis">
+          <td class="eq-param-label has-text-right has-text-weight-semibold has-text-light">Q</td>
           ${qRow}
-          <td></td>
+          <td class="has-background-black-bis"></td>
         </tr>
       </tbody>
     `;

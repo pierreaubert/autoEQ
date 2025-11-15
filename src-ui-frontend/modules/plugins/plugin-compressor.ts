@@ -35,7 +35,15 @@ export class CompressorPlugin extends BasePlugin {
   private makeupGain: number = 0.0;       // dB
 
   // Parameter metadata for keyboard control
-  private parameterOrder = ['threshold', 'ratio', 'attack', 'release', 'knee', 'makeupGain'];
+  protected parameterOrder = ['threshold', 'ratio', 'attack', 'release', 'knee', 'makeupGain'];
+  protected parameterLabels = {
+    threshold: 'Threshold',
+    ratio: 'Ratio',
+    attack: 'Attack',
+    release: 'Release',
+    knee: 'Knee',
+    makeupGain: 'Makeup Gain',
+  };
   private parameterRanges = {
     threshold: { min: -60, max: 0, step: 0.5 },
     ratio: { min: 1, max: 20, step: 0.5 },
@@ -48,14 +56,16 @@ export class CompressorPlugin extends BasePlugin {
   // State
   private currentGainReduction: number = 0.0; // dB (negative)
   private animationFrameId: number | null = null;
-  private selectedParameterIndex: number = -1; // -1 = none selected
 
   /**
    * Render a single parameter slider with labels
    */
-  private renderParameter(paramName: string, index: number, label: string, unit: string): string {
+  private renderParameter(paramName: string, index: number, unit: string): string {
     const value = (this as any)[paramName];
     const range = this.parameterRanges[paramName as keyof typeof this.parameterRanges];
+
+    // Get formatted label with keyboard shortcut
+    const formattedLabel = this.getFormattedLabel(paramName);
 
     // Format value display
     let displayValue = value.toFixed(1);
@@ -65,43 +75,31 @@ export class CompressorPlugin extends BasePlugin {
       displayValue = `${value.toFixed(1)} ${unit}`;
     }
 
-    // Format min/max labels
-    let minLabel = range.min.toString();
-    let maxLabel = range.max.toString();
-    if (unit === ':1') {
-      minLabel = `${range.min}:1`;
-      maxLabel = `${range.max}:1`;
-    } else if (unit === 'dB') {
-      minLabel = `${range.min} dB`;
-      maxLabel = `${range.max} dB`;
-    } else {
-      minLabel = `${range.min} ${unit}`;
-      maxLabel = `${range.max} ${unit}`;
+    // Generate 6 legend values from max to min
+    const legendValues = [];
+    for (let i = 0; i < 6; i++) {
+      const legendValue = range.max - (i * (range.max - range.min) / 5);
+      let formatted = legendValue.toFixed(1);
+      if (unit === ':1') {
+        formatted = `${formatted}`;
+      }
+      legendValues.push(formatted);
     }
 
     return `
       <div class="field parameter-field" data-param="${paramName}" data-index="${index}">
-        <label class="label is-small has-text-light has-text-centered">${label}</label>
-        <div class="columns is-mobile is-gapless is-vcentered" style="margin-bottom: 0;">
-          <div class="column is-narrow" style="min-width: 60px;">
-            <div class="is-flex is-flex-direction-column is-justify-content-space-between" style="height: 100%; padding: 4px 0;">
-              <p class="has-text-grey-light is-size-7 has-text-right">${maxLabel}</p>
-              <p class="has-text-grey-light is-size-7 has-text-right">${minLabel}</p>
+        <div class="is-flex is-flex-direction-column is-align-items-center">
+          <div class="has-text-centered has-text-weight-semibold mb-2 has-text-light is-size-7" style="min-height: 2em; display: flex; align-items: center; justify-content: center;">${formattedLabel}</div>
+          <span class="tag is-success is-small mb-2 param-value" data-param="${paramName}">${displayValue}</span>
+          <div class="is-flex is-align-items-center">
+            <!-- Legend on the left -->
+            <div class="is-flex is-flex-direction-column is-justify-content-space-between mr-2 has-text-grey-light is-size-7" style="height: 400px; text-align: right;">
+              ${legendValues.map(v => `<span>${v}</span>`).join('')}
             </div>
-          </div>
-          <div class="column">
-            <input
-              type="range"
-              class="slider is-fullwidth param-slider"
-              data-param="${paramName}"
-              min="${range.min}"
-              max="${range.max}"
-              step="${range.step}"
-              value="${value}"
-            />
-          </div>
-          <div class="column is-narrow has-text-centered" style="min-width: 80px;">
-            <span class="tag is-dark">${displayValue}</span>
+            <!-- Slider -->
+            <input type="range" class="param-slider" data-param="${paramName}"
+                   min="${range.min}" max="${range.max}" step="${range.step}" value="${value}"
+                   style="writing-mode: vertical-lr; direction: rtl; width: 16px; height: 400px;" />
           </div>
         </div>
       </div>
@@ -118,54 +116,54 @@ export class CompressorPlugin extends BasePlugin {
       <div class="is-flex is-flex-direction-column compressor-plugin ${standalone ? 'standalone' : 'embedded'}" style="height: 100%; min-height: 0; background: #1a1a1a;">
         ${standalone ? '<div class="compressor-menubar-container"></div>' : ''}
         <div class="is-flex is-flex-direction-column is-flex-grow-1" style="min-height: 0; overflow: hidden; padding: 0; margin: 0;">
-          <!-- Bulma Columns -->
+          <!-- Row 1: Parameters and Transfer Curve -->
           <div class="columns is-gapless" style="flex: 1; min-height: 0;">
-            <!-- Column 1: Parameters (25%) -->
-            <div class="column is-8 is-flex is-flex-direction-column">
+            <!-- Column 1: Parameters -->
+            <div class="column is-6 is-flex is-flex-direction-column">
               <div class="box" style="height: 100%; margin: 0 !important; background: #2a2a2a; border: none; border-right: 1px solid #404040; border-radius: 0;">
                 <h4 class="title is-6 has-text-light">Dynamics Control</h4>
                 <div class="is-flex is-flex-direction-column">
                   <div class="columns is-gapless">
                     <div class="column is-2">
-                      ${this.renderParameter('threshold', 0, 'Threshold', 'dB')}
+                      ${this.renderParameter('threshold', 0, 'dB')}
   	            </div>
                     <div class="column is-2">
-                      ${this.renderParameter('ratio', 1, 'Ratio', ':1')}
+                      ${this.renderParameter('ratio', 1, ':1')}
   	            </div>
                     <div class="column is-2">
-                      ${this.renderParameter('attack', 2, 'Attack', 'ms')}
+                      ${this.renderParameter('attack', 2, 'ms')}
   	            </div>
                     <div class="column is-2">
-                      ${this.renderParameter('release', 3, 'Release', 'ms')}
+                      ${this.renderParameter('release', 3, 'ms')}
   	           </div>
                    <div class="column is-2">
-                     ${this.renderParameter('knee', 4, 'Knee', 'dB')}
+                     ${this.renderParameter('knee', 4, 'dB')}
   	           </div>
                    <div class="column is-2">
-                     ${this.renderParameter('makeupGain', 5, 'Makeup Gain', 'dB')}
+                     ${this.renderParameter('makeupGain', 5, 'dB')}
   	           </div>
   	          </div>
                 </div>
               </div>
             </div>
 
-            <!-- Column 2: Gain Reduction Meter (25%) -->
-            <div class="column is-1 is-flex is-flex-direction-column">
-              <div class="box" style="height: 100%; margin: 0 !important; background: #2a2a2a; border: none; border-right: 1px solid #404040; border-radius: 0;">
-                <h4 class="title is-6 has-text-light has-text-centered">Gain Reduction</h4>
-                <div class="is-flex is-flex-direction-column is-align-items-center" style="gap: 8px; height: calc(100% - 40px);">
-                  <canvas class="gr-meter-canvas" width="80" height="280"></canvas>
-                  <div class="gr-value has-text-light has-text-centered" style="margin-top: 8px; font-size: 14px; font-weight: 600;">${Math.abs(this.currentGainReduction).toFixed(1)} dB</div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Column 3: Transfer Curve (50%) -->
-            <div class="column is-3 is-flex is-flex-direction-column">
+            <!-- Column 2: Transfer Curve -->
+            <div class="column is-6 is-flex is-flex-direction-column">
               <div class="box" style="height: 100%; margin: 0 !important; padding: 12px; background: #2a2a2a; border: none; border-right: 1px solid #404040; border-radius: 0;">
                 <h4 class="title is-6 has-text-light has-text-centered plugin-section-header">Transfer Curve</h4>
                 <div id="compressor-plot-${this.metadata.id}" class="is-flex is-flex-direction-column is-align-items-center transfer-curve-container" style="gap: 8px;"></div>
               </div>
+            </div>
+          </div>
+
+          <!-- Row 2: Horizontal Gain Reduction Meter -->
+          <div class="box p-3" style="margin: 0 !important; background: #2a2a2a; border-top: 1px solid #404040; border-radius: 0;">
+            <div class="is-flex is-align-items-center">
+              <div class="has-text-weight-semibold mr-3 has-text-light is-size-7" style="min-width: 120px;">Gain Reduction</div>
+              <div class="is-flex-grow-1">
+                <canvas class="gr-meter-canvas" width="400" height="30"></canvas>
+              </div>
+              <span class="tag is-success is-small ml-3">${Math.abs(this.currentGainReduction).toFixed(1)} dB</span>
             </div>
           </div>
         </div>
@@ -202,8 +200,8 @@ export class CompressorPlugin extends BasePlugin {
     if (!this.grMeterCanvas || !this.grMeterCtx) return;
 
     const dpr = window.devicePixelRatio || 1;
-    const width = 100;
-    const height = 300;
+    const width = 400;
+    const height = 20;
 
     this.grMeterCanvas.width = width * dpr;
     this.grMeterCanvas.height = height * dpr;
@@ -389,9 +387,6 @@ export class CompressorPlugin extends BasePlugin {
         this.selectParameter(index);
       });
     });
-
-    // Keyboard controls
-    document.addEventListener('keydown', this.handleKeydown);
   }
 
   /**
@@ -447,10 +442,10 @@ export class CompressorPlugin extends BasePlugin {
   }
 
   /**
-   * Select parameter by index
+   * Select parameter by index (override base class)
    */
-  private selectParameter(index: number): void {
-    this.selectedParameterIndex = index;
+  protected selectParameter(index: number): void {
+    super.selectParameter(index);
 
     // Update visual highlighting
     const fields = this.container?.querySelectorAll('.parameter-field') || [];
@@ -469,10 +464,10 @@ export class CompressorPlugin extends BasePlugin {
   }
 
   /**
-   * Clear parameter selection
+   * Clear parameter selection (override base class)
    */
-  private clearParameterSelection(): void {
-    this.selectedParameterIndex = -1;
+  protected clearParameterSelection(): void {
+    super.clearParameterSelection();
 
     const fields = this.container?.querySelectorAll('.parameter-field') || [];
     fields.forEach((field) => {
@@ -485,53 +480,29 @@ export class CompressorPlugin extends BasePlugin {
   }
 
   /**
-   * Handle keyboard shortcuts
+   * Adjust selected parameter (override base class)
    */
-  private handleKeydown = (e: KeyboardEvent): void => {
-    // Ignore if typing in input
-    const target = e.target as HTMLElement;
-    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT') {
-      return;
-    }
+  protected adjustSelectedParameter(delta: number): void {
+    if (this.selectedParameterIndex < 0) return;
 
-    // ESC - clear selection
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      this.clearParameterSelection();
-      return;
-    }
+    const paramName = this.parameterOrder[this.selectedParameterIndex];
+    const range = this.parameterRanges[paramName as keyof typeof this.parameterRanges];
+    const currentValue = (this as any)[paramName];
 
-    // 1-6 - select parameter
-    const numKey = parseInt(e.key, 10);
-    if (numKey >= 1 && numKey <= 6) {
-      e.preventDefault();
-      this.selectParameter(numKey - 1);
-      return;
-    }
+    const step = delta > 0 ? range.step : -range.step;
+    const newValue = Math.max(range.min, Math.min(range.max, currentValue + step));
 
-    // Shift+ArrowLeft / Shift+ArrowRight - adjust selected parameter
-    if (this.selectedParameterIndex >= 0 && e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
-      e.preventDefault();
+    // Update parameter
+    (this as any)[paramName] = newValue;
 
-      const paramName = this.parameterOrder[this.selectedParameterIndex];
-      const range = this.parameterRanges[paramName as keyof typeof this.parameterRanges];
-      const currentValue = (this as any)[paramName];
+    // Update display
+    this.updateParameterDisplay(paramName, newValue);
 
-      const delta = e.key === 'ArrowRight' ? range.step : -range.step;
-      const newValue = Math.max(range.min, Math.min(range.max, currentValue + delta));
+    // Redraw transfer curve
+    this.redrawTransferCurve();
 
-      // Update parameter
-      (this as any)[paramName] = newValue;
-
-      // Update display
-      this.updateParameterDisplay(paramName, newValue);
-
-      // Redraw transfer curve
-      this.redrawTransferCurve();
-
-      // Notify parameter change
-      this.updateParameter(paramName, newValue);
-    }
+    // Notify parameter change
+    this.updateParameter(paramName, newValue);
   }
 
   /**
@@ -556,7 +527,7 @@ export class CompressorPlugin extends BasePlugin {
   }
 
   /**
-   * Render gain reduction meter
+   * Render gain reduction meter (horizontal)
    */
   private renderGRMeter(): void {
     if (!this.grMeterCanvas || !this.grMeterCtx) return;
@@ -569,39 +540,39 @@ export class CompressorPlugin extends BasePlugin {
     this.grMeterCtx.fillStyle = '#2a2a2a';
     this.grMeterCtx.fillRect(0, 0, width, height);
 
-    // Draw scale markers (0 to -30 dB)
+    // Draw scale markers (0 to -30 dB) - horizontal
     this.grMeterCtx.strokeStyle = '#404040';
     this.grMeterCtx.lineWidth = 1;
     this.grMeterCtx.fillStyle = 'rgba(255, 255, 255, 0.7)';
     this.grMeterCtx.font = '9px sans-serif';
-    this.grMeterCtx.textAlign = 'right';
-    this.grMeterCtx.textBaseline = 'middle';
+    this.grMeterCtx.textAlign = 'center';
+    this.grMeterCtx.textBaseline = 'top';
 
     const markers = [0, -3, -6, -10, -15, -20, -30];
     markers.forEach((db) => {
-      const y = ((Math.abs(db) / 30) * (height - 20)) + 10;
+      const x = ((Math.abs(db) / 30) * (width - 20)) + 10;
 
       this.grMeterCtx!.beginPath();
-      this.grMeterCtx!.moveTo(width - 40, y);
-      this.grMeterCtx!.lineTo(width - 10, y);
+      this.grMeterCtx!.moveTo(x, 5);
+      this.grMeterCtx!.lineTo(x, height - 5);
       this.grMeterCtx!.stroke();
 
-      this.grMeterCtx!.fillText(`${db}`, width - 45, y);
+      this.grMeterCtx!.fillText(`${db}`, x, height - 15);
     });
 
-    // Draw gain reduction bar
+    // Draw gain reduction bar - horizontal from left
     if (this.currentGainReduction < 0) {
-      const grHeight = (Math.abs(this.currentGainReduction) / 30) * (height - 20);
+      const grWidth = (Math.abs(this.currentGainReduction) / 30) * (width - 20);
 
-      // Gradient from green to red
-      const gradient = this.grMeterCtx.createLinearGradient(0, height - 10, 0, 10);
+      // Gradient from green to red (left to right)
+      const gradient = this.grMeterCtx.createLinearGradient(10, 0, width - 10, 0);
       gradient.addColorStop(0, '#22c55e');
       gradient.addColorStop(0.3, '#eab308');
       gradient.addColorStop(0.6, '#f59e0b');
       gradient.addColorStop(1, '#ef4444');
 
       this.grMeterCtx.fillStyle = gradient;
-      this.grMeterCtx.fillRect(width - 35, height - 10 - grHeight, 20, grHeight);
+      this.grMeterCtx.fillRect(10, 5, grWidth, height - 20);
     }
 
     // Update numeric display
@@ -684,9 +655,6 @@ export class CompressorPlugin extends BasePlugin {
    */
   destroy(): void {
     this.stopRendering();
-
-    // Remove keyboard listener
-    document.removeEventListener('keydown', this.handleKeydown);
 
     // Cleanup Plotly
     if (this.plotContainer) {

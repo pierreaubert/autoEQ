@@ -53,8 +53,14 @@ export class UpmixerPlugin extends BasePlugin {
   private lfeLevel: number = 0.0;           // LFE level (dB)
   private crossfeedAmount: number = 0.5;    // Surround crossfeed (0-1)
 
-  // Keyboard navigation state
-  private selectedSliderIndex: number = -1;  // -1 = none selected
+  // Parameter metadata for keyboard control
+  protected parameterOrder = ['centerLevel', 'surroundLevel', 'lfeLevel', 'crossfeedAmount'];
+  protected parameterLabels = {
+    centerLevel: 'Center',
+    surroundLevel: 'Surround',
+    lfeLevel: 'LFE',
+    crossfeedAmount: 'Crossfeed',
+  };
   private sliders: HTMLInputElement[] = [];
 
   /**
@@ -265,10 +271,10 @@ export class UpmixerPlugin extends BasePlugin {
     if (!this.parametersContainer) return;
 
     const params = [
-      { name: 'centerLevel', label: 'Center', value: this.centerLevel, min: -12, max: 0, step: 0.1, unit: 'dB' },
-      { name: 'surroundLevel', label: 'Surround', value: this.surroundLevel, min: -12, max: 0, step: 0.1, unit: 'dB' },
-      { name: 'lfeLevel', label: 'LFE', value: this.lfeLevel, min: -12, max: 0, step: 0.1, unit: 'dB' },
-      { name: 'crossfeedAmount', label: 'Crossfeed', value: this.crossfeedAmount, min: 0, max: 1, step: 0.01, unit: '%' },
+      { name: 'centerLevel', value: this.centerLevel, min: -12, max: 0, step: 0.1, unit: 'dB' },
+      { name: 'surroundLevel', value: this.surroundLevel, min: -12, max: 0, step: 0.1, unit: 'dB' },
+      { name: 'lfeLevel', value: this.lfeLevel, min: -12, max: 0, step: 0.1, unit: 'dB' },
+      { name: 'crossfeedAmount', value: this.crossfeedAmount, min: 0, max: 1, step: 0.01, unit: '%' },
     ];
 
     this.parametersContainer.innerHTML = `
@@ -276,6 +282,9 @@ export class UpmixerPlugin extends BasePlugin {
       <div class="columns is-mobile is-variable is-3">
         ${params.map((p, idx) => {
           const displayValue = p.unit === '%' ? `${(p.value * 100).toFixed(0)}${p.unit}` : `${p.value.toFixed(1)} ${p.unit}`;
+
+          // Get formatted label with keyboard shortcut
+          const formattedLabel = this.getFormattedLabel(p.name);
 
           // Generate 6 legend values from max to min
           const legendValues = [];
@@ -286,9 +295,9 @@ export class UpmixerPlugin extends BasePlugin {
           }
 
           return `
-            <div class="column">
+            <div class="column parameter-field" data-param="${p.name}" data-index="${idx}">
               <div class="is-flex is-flex-direction-column is-align-items-center">
-                <div class="has-text-centered has-text-weight-semibold mb-2 has-text-light is-size-5">${p.label}</div>
+                <div class="has-text-centered has-text-weight-semibold mb-2 has-text-light is-size-5" style="min-height: 2em; display: flex; align-items: center; justify-content: center;">${formattedLabel}</div>
                 <span class="tag is-success is-small mb-2 param-value" data-param="${p.name}">${displayValue}</span>
                 <div class="is-flex is-align-items-center">
                   <!-- Legend on the left -->
@@ -367,79 +376,97 @@ export class UpmixerPlugin extends BasePlugin {
       });
     });
 
-    // Setup keyboard navigation
-    this.setupKeyboardNavigation();
+    // Parameter field click to select
+    const fields = this.parametersContainer?.querySelectorAll('.parameter-field') || [];
+    fields.forEach((field) => {
+      field.addEventListener('click', (e) => {
+        const index = parseInt((field as HTMLElement).dataset.index || '-1', 10);
+        this.selectParameter(index);
+      });
+    });
   }
 
   /**
-   * Setup keyboard navigation for parameter sliders
+   * Select parameter by index (override base class)
    */
-  private setupKeyboardNavigation(): void {
-    document.addEventListener('keydown', this.handleKeydown);
-  }
+  protected selectParameter(index: number): void {
+    super.selectParameter(index);
 
-  /**
-   * Handle keyboard shortcuts
-   */
-  private handleKeydown = (e: KeyboardEvent): void => {
-    // Ignore if typing in input
-    const target = e.target as HTMLElement;
-    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT') {
-      return;
-    }
-
-    // TAB - cycle through sliders
-    if (e.key === 'Tab') {
-      e.preventDefault();
-      this.selectedSliderIndex = (this.selectedSliderIndex + 1) % this.sliders.length;
-      this.updateSliderHighlight();
-      return;
-    }
-
-    // ESC - deselect all sliders
-    if (e.key === 'Escape') {
-      this.selectedSliderIndex = -1;
-      this.updateSliderHighlight();
-      return;
-    }
-
-    // Shift+Arrow keys - adjust selected slider
-    if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && e.shiftKey) {
-      if (this.selectedSliderIndex >= 0 && this.selectedSliderIndex < this.sliders.length) {
-        e.preventDefault();
-        e.stopPropagation();
-
-        const slider = this.sliders[this.selectedSliderIndex];
-        const currentValue = parseFloat(slider.value);
-        const min = parseFloat(slider.min);
-        const max = parseFloat(slider.max);
-        const paramName = slider.dataset.param || '';
-        const step = paramName === 'crossfeedAmount' ? 0.01 : 0.25;
-
-        if (e.key === 'ArrowUp') {
-          const newValue = Math.min(max, currentValue + step);
-          slider.value = newValue.toString();
-          slider.dispatchEvent(new Event('input', { bubbles: true }));
-        } else if (e.key === 'ArrowDown') {
-          const newValue = Math.max(min, currentValue - step);
-          slider.value = newValue.toString();
-          slider.dispatchEvent(new Event('input', { bubbles: true }));
+    // Update visual highlighting
+    const fields = this.parametersContainer?.querySelectorAll('.parameter-field') || [];
+    fields.forEach((field, idx) => {
+      const slider = field.querySelector('.param-slider') as HTMLElement;
+      if (slider) {
+        if (idx === index) {
+          slider.style.accentColor = '#22c55e'; // Green
+          field.classList.add('is-selected');
+        } else {
+          slider.style.accentColor = '';
+          field.classList.remove('is-selected');
         }
       }
-    }
+    });
   }
 
   /**
-   * Update slider highlight for keyboard navigation
+   * Clear parameter selection (override base class)
    */
-  private updateSliderHighlight(): void {
-    this.sliders.forEach((slider, idx) => {
-      if (idx === this.selectedSliderIndex) {
-        slider.classList.add('is-selected');
-      } else {
-        slider.classList.remove('is-selected');
+  protected clearParameterSelection(): void {
+    super.clearParameterSelection();
+
+    const fields = this.parametersContainer?.querySelectorAll('.parameter-field') || [];
+    fields.forEach((field) => {
+      const slider = field.querySelector('.param-slider') as HTMLElement;
+      if (slider) {
+        slider.style.accentColor = '';
+        field.classList.remove('is-selected');
       }
     });
+  }
+
+  /**
+   * Adjust selected parameter (override base class)
+   */
+  protected adjustSelectedParameter(delta: number): void {
+    if (this.selectedParameterIndex < 0) return;
+
+    const paramName = this.parameterOrder[this.selectedParameterIndex];
+    const currentValue = (this as any)[paramName];
+
+    // Determine step size based on parameter
+    const step = paramName === 'crossfeedAmount' ? 0.01 : 0.25;
+
+    // Calculate new value
+    let newValue: number;
+    if (paramName === 'crossfeedAmount') {
+      newValue = Math.max(0, Math.min(1, currentValue + (delta > 0 ? step : -step)));
+    } else {
+      newValue = Math.max(-12, Math.min(0, currentValue + (delta > 0 ? step : -step)));
+    }
+
+    // Update parameter
+    (this as any)[paramName] = newValue;
+
+    // Update display
+    const field = this.parametersContainer?.querySelector(`.parameter-field[data-param="${paramName}"]`);
+    if (field) {
+      const valueDisplay = field.querySelector('.param-value');
+      if (valueDisplay) {
+        if (paramName === 'crossfeedAmount') {
+          valueDisplay.textContent = `${(newValue * 100).toFixed(0)}%`;
+        } else {
+          valueDisplay.textContent = `${newValue.toFixed(1)} dB`;
+        }
+      }
+
+      const slider = field.querySelector('.param-slider') as HTMLInputElement;
+      if (slider) {
+        slider.value = newValue.toString();
+      }
+    }
+
+    // Notify parameter change
+    this.updateParameter(paramName, newValue);
   }
 
   /**
@@ -558,10 +585,9 @@ export class UpmixerPlugin extends BasePlugin {
    */
   getShortcuts() {
     return [
-      { key: 'Tab', description: 'Cycle through parameter sliders' },
-      { key: 'Shift+↑', description: 'Increase selected parameter' },
-      { key: 'Shift+↓', description: 'Decrease selected parameter' },
-      { key: 'Esc', description: 'Deselect all sliders' },
+      { key: '1-4', description: 'Select parameter' },
+      { key: 'Esc', description: 'Clear selection' },
+      { key: 'Shift+←→', description: 'Adjust value' },
     ];
   }
 
@@ -581,9 +607,6 @@ export class UpmixerPlugin extends BasePlugin {
    * Destroy the plugin
    */
   destroy(): void {
-    // Remove keyboard listener
-    document.removeEventListener('keydown', this.handleKeydown);
-
     if (this.menubar) {
       this.menubar.destroy();
       this.menubar = null;

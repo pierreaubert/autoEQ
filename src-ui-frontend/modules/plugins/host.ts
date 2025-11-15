@@ -94,7 +94,7 @@ export class PluginHost {
           </div>
           <div class="level-right">
             <div class="level-item">
-              <button class="button is-small is-ghost has-text-light" title="Add Plugin">
+              <button class="button is-small is-ghost has-text-light add-plugin-btn" title="Add Plugin">
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M8 2v12M2 8h12" stroke-linecap="round"/>
                 </svg>
@@ -118,7 +118,7 @@ export class PluginHost {
           </div>
 
           <!-- Right: Meters & Controls -->
-          <div class="is-flex is-flex-direction-column display-right p-4 has-background-grey-darker" style="min-width: 200px; border-left: 1px solid #404040;">
+          <div class="is-flex is-flex-direction-column display-right p-4 has-background-grey-darker" style="border-left: 1px solid #404040;">
             ${this.renderRightPanel()}
           </div>
         </div>
@@ -135,20 +135,20 @@ export class PluginHost {
   }
 
   /**
-   * Render right panel (meters at top, then compact LUFS+controls row)
-   * If selected plugin has built-in meters, use vertical layout without meters
+   * Render right panel (meters at top, then vertical controls)
+   * Always use vertical layout for controls
    */
   private renderRightPanel(): string {
     const pluginHasMeters = this.selectedPlugin?.metadata.hasBuiltInLevelMeters ?? false;
 
     if (pluginHasMeters) {
-      // Vertical layout: LUFS, Input/Output toggle, Volume stacked
+      // Vertical layout: LUFS, Input/Output toggle, Volume stacked (no host meters)
       return this.renderCompactControlsVertical();
     } else {
-      // Horizontal layout: meters + compact controls row
+      // Vertical layout: meters at top, then LUFS, Input/Output toggle, Volume stacked
       return `
         ${this.config.showLevelMeters ? this.renderLevelMeters() : ''}
-        ${this.config.showLUFS || this.config.showLevelMeters || this.config.showVolumeControl ? this.renderCompactControlsRow() : ''}
+        ${this.config.showLUFS || this.config.showLevelMeters || this.config.showVolumeControl ? this.renderCompactControlsVertical() : ''}
       `;
     }
   }
@@ -232,9 +232,16 @@ export class PluginHost {
    * Render level meters
    */
   private renderLevelMeters(): string {
+    const { outputChannels } = this.getChannelCounts();
+    // Calculate width: each channel gets 20px + 10px spacing
+    const channelWidth = 30;
+    const spacing = 10;
+    const canvasWidth = (outputChannels * channelWidth) + ((outputChannels + 1) * spacing);
+    const canvasHeight = 240;
+
     return `
-      <div class="is-flex is-flex-direction-column mb-3">
-        <canvas class="level-meters-canvas" width="200" height="300" style="display: block;"></canvas>
+      <div class="mb-3">
+        <canvas class="level-meters-canvas" width="${canvasWidth}" height="${canvasHeight}" style="width: ${canvasWidth}px; height: ${canvasHeight}px; display: block;"></canvas>
       </div>
     `;
   }
@@ -481,9 +488,14 @@ export class PluginHost {
    */
   private attachEventListeners(): void {
     // Add plugin button
-    const addButton = this.container.querySelector('.button.is-ghost') as HTMLButtonElement;
+    const addButton = this.container.querySelector('.add-plugin-btn') as HTMLButtonElement;
     if (addButton) {
-      addButton.addEventListener('click', () => this.showPluginSelector());
+      addButton.addEventListener('click', () => {
+        console.log('[PluginHost] Add plugin button clicked');
+        this.showPluginSelector();
+      });
+    } else {
+      console.warn('[PluginHost] Add plugin button not found');
     }
 
     // Help bar close button
@@ -807,6 +819,8 @@ export class PluginHost {
    * Show plugin selector dialog
    */
   private showPluginSelector(): void {
+    console.log('[PluginHost] showPluginSelector called');
+
     // Available plugins
     const availablePlugins = [
       { id: 'eq', name: 'EQ', category: 'eq', description: 'Parametric Equalizer', icon: '🎚️' },
@@ -821,26 +835,32 @@ export class PluginHost {
       ? availablePlugins.filter(p => this.config.allowedPlugins!.includes(p.category))
       : availablePlugins;
 
-    // Create dialog
+    // Create Bulma modal
     const dialog = document.createElement('div');
-    dialog.className = 'plugin-selector-overlay';
+    dialog.className = 'modal is-active';
+    dialog.style.zIndex = '9999';
     dialog.innerHTML = `
-      <div class="plugin-selector-dialog">
-        <div class="plugin-selector-header">
-          <h3>Add Plugin</h3>
-          <button class="plugin-selector-close">×</button>
-        </div>
-        <div class="plugin-selector-body">
-          ${plugins.map(plugin => `
-            <button class="plugin-selector-item" data-plugin-id="${plugin.id}">
-              <span class="plugin-icon">${plugin.icon}</span>
-              <div class="plugin-info">
-                <div class="plugin-name">${plugin.name}</div>
-                <div class="plugin-description">${plugin.description}</div>
+      <div class="modal-background"></div>
+      <div class="modal-card">
+        <header class="modal-card-head">
+          <p class="modal-card-title">Add Plugin</p>
+          <button class="delete plugin-selector-close" aria-label="close"></button>
+        </header>
+        <section class="modal-card-body">
+          <div class="columns is-multiline">
+            ${plugins.map(plugin => `
+              <div class="column is-half">
+                <button class="button is-fullwidth is-justify-content-flex-start plugin-selector-item" data-plugin-id="${plugin.id}" style="height: auto; padding: 1rem;">
+                  <span class="icon is-large mr-3">${plugin.icon}</span>
+                  <div class="has-text-left">
+                    <div class="has-text-weight-semibold">${plugin.name}</div>
+                    <div class="is-size-7 has-text-grey">${plugin.description}</div>
+                  </div>
+                </button>
               </div>
-            </button>
-          `).join('')}
-        </div>
+            `).join('')}
+          </div>
+        </section>
       </div>
     `;
 
@@ -855,12 +875,9 @@ export class PluginHost {
     const closeBtn = dialog.querySelector('.plugin-selector-close') as HTMLButtonElement;
     closeBtn.addEventListener('click', closeDialog);
 
-    // Overlay click
-    dialog.addEventListener('click', (e) => {
-      if (e.target === dialog) {
-        closeDialog();
-      }
-    });
+    // Modal background click to close
+    const modalBg = dialog.querySelector('.modal-background') as HTMLElement;
+    modalBg.addEventListener('click', closeDialog);
 
     // Plugin selection
     const pluginItems = dialog.querySelectorAll('.plugin-selector-item');

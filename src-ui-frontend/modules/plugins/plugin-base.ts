@@ -32,6 +32,14 @@ export abstract class BasePlugin implements IPlugin {
   // Event listeners
   private eventListeners: Map<string, Set<(...args: any[]) => void>> = new Map();
 
+  // Keyboard control
+  protected selectedParameterIndex: number = -1;
+  protected parameterOrder: string[] = [];
+  protected parameterLabels: Record<string, string> = {}; // Maps param name to display label
+  protected parameterKeys: Record<string, string> = {}; // Maps param name to assigned key
+  protected keyToParamIndex: Record<string, number> = {}; // Maps key to param index
+  protected keyboardHandler: ((e: KeyboardEvent) => void) | null = null;
+
   /**
    * Initialize the plugin
    */
@@ -46,12 +54,21 @@ export abstract class BasePlugin implements IPlugin {
 
     // Render the plugin
     this.render(config.standalone ?? true);
+
+    // Setup keyboard controls
+    this.setupKeyboardControls();
   }
 
   /**
    * Destroy the plugin
    */
   destroy(): void {
+    // Remove keyboard handler
+    if (this.keyboardHandler) {
+      document.removeEventListener('keydown', this.keyboardHandler);
+      this.keyboardHandler = null;
+    }
+
     if (this.container) {
       this.container.innerHTML = '';
       this.container = null;
@@ -200,5 +217,169 @@ export abstract class BasePlugin implements IPlugin {
    */
   toggleBypass(): void {
     this.setBypass(!this.state.bypassed);
+  }
+
+  /**
+   * Assign keyboard keys to parameters intelligently
+   * - First tries first letter of each parameter label
+   * - On collision, tries next letters until unique key found
+   */
+  protected assignParameterKeys(): void {
+    const usedKeys = new Set<string>();
+    this.parameterKeys = {};
+    this.keyToParamIndex = {};
+
+    this.parameterOrder.forEach((paramName, index) => {
+      const label = this.parameterLabels[paramName] || paramName;
+      let assignedKey: string | null = null;
+
+      // Try each letter in the label
+      for (let i = 0; i < label.length; i++) {
+        const char = label[i].toLowerCase();
+        // Only use letters a-z
+        if (char >= 'a' && char <= 'z' && !usedKeys.has(char)) {
+          assignedKey = char;
+          usedKeys.add(char);
+          break;
+        }
+      }
+
+      if (assignedKey) {
+        this.parameterKeys[paramName] = assignedKey;
+        this.keyToParamIndex[assignedKey] = index;
+      }
+    });
+  }
+
+  /**
+   * Get formatted label with keyboard shortcut indicator
+   * e.g., "Ratio" -> "[R]atio", "Release" -> "R[e]lease"
+   */
+  protected getFormattedLabel(paramName: string): string {
+    const label = this.parameterLabels[paramName] || paramName;
+    const key = this.parameterKeys[paramName];
+
+    if (!key) return label;
+
+    // Find the position of the key character
+    const keyIndex = label.toLowerCase().indexOf(key.toLowerCase());
+    if (keyIndex === -1) return label;
+
+    // Insert brackets around the key character
+    return label.substring(0, keyIndex) +
+           '[' + label[keyIndex] + ']' +
+           label.substring(keyIndex + 1);
+  }
+
+  /**
+   * Setup unified keyboard controls
+   * - 1-9: Select parameter by index
+   * - a-z: Select parameter by assigned letter
+   * - Tab: Cycle to next parameter
+   * - Shift+Tab: Cycle to previous parameter
+   * - Esc: Clear selection
+   * - Shift+Up: Increase selected parameter
+   * - Shift+Down: Decrease selected parameter
+   */
+  protected setupKeyboardControls(): void {
+    // Assign keys to parameters
+    this.assignParameterKeys();
+
+    this.keyboardHandler = (e: KeyboardEvent) => {
+      // Ignore if typing in input
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT') {
+        return;
+      }
+
+      // Letter keys - select parameter by assigned letter
+      const lowerKey = e.key.toLowerCase();
+      if (lowerKey.length === 1 && lowerKey >= 'a' && lowerKey <= 'z' && this.keyToParamIndex[lowerKey] !== undefined) {
+        e.preventDefault();
+        this.selectParameter(this.keyToParamIndex[lowerKey]);
+        return;
+      }
+
+      // 1-9 - select parameter by index
+      const numKey = parseInt(e.key, 10);
+      if (numKey >= 1 && numKey <= 9 && numKey <= this.parameterOrder.length) {
+        e.preventDefault();
+        this.selectParameter(numKey - 1);
+        return;
+      }
+
+      // Tab - cycle to next parameter
+      if (e.key === 'Tab' && !e.shiftKey) {
+        e.preventDefault();
+        if (this.parameterOrder.length > 0) {
+          const nextIndex = (this.selectedParameterIndex + 1) % this.parameterOrder.length;
+          this.selectParameter(nextIndex);
+        }
+        return;
+      }
+
+      // Shift+Tab - cycle to previous parameter
+      if (e.key === 'Tab' && e.shiftKey) {
+        e.preventDefault();
+        if (this.parameterOrder.length > 0) {
+          const prevIndex = this.selectedParameterIndex <= 0
+            ? this.parameterOrder.length - 1
+            : this.selectedParameterIndex - 1;
+          this.selectParameter(prevIndex);
+        }
+        return;
+      }
+
+      // Esc - clear selection
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        this.clearParameterSelection();
+        return;
+      }
+
+      // Shift+Up - increase selected parameter
+      if (e.key === 'ArrowUp' && e.shiftKey && this.selectedParameterIndex >= 0) {
+        e.preventDefault();
+        this.adjustSelectedParameter(1);
+        return;
+      }
+
+      // Shift+Down - decrease selected parameter
+      if (e.key === 'ArrowDown' && e.shiftKey && this.selectedParameterIndex >= 0) {
+        e.preventDefault();
+        this.adjustSelectedParameter(-1);
+        return;
+      }
+    };
+
+    document.addEventListener('keydown', this.keyboardHandler);
+  }
+
+  /**
+   * Select parameter by index
+   * Override this in child classes to implement visual feedback
+   */
+  protected selectParameter(index: number): void {
+    if (index < 0 || index >= this.parameterOrder.length) {
+      this.selectedParameterIndex = -1;
+      return;
+    }
+    this.selectedParameterIndex = index;
+  }
+
+  /**
+   * Clear parameter selection
+   * Override this in child classes to implement visual feedback
+   */
+  protected clearParameterSelection(): void {
+    this.selectedParameterIndex = -1;
+  }
+
+  /**
+   * Adjust selected parameter value
+   * Override this in child classes to implement parameter adjustment
+   */
+  protected adjustSelectedParameter(delta: number): void {
+    // To be implemented by child classes
   }
 }

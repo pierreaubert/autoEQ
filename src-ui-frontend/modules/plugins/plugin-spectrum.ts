@@ -33,48 +33,57 @@ export class SpectrumPlugin extends BasePlugin {
   private colorScheme: 'light' | 'dark' = 'dark';
 
   // Parameter metadata for keyboard control
-  private parameterOrder = ['minFreq', 'maxFreq', 'dbRange', 'pollInterval'];
+  protected parameterOrder = ['minFreq', 'maxFreq', 'dbRange', 'pollInterval'];
+  protected parameterLabels = {
+    minFreq: 'Min Frequency',
+    maxFreq: 'Max Frequency',
+    dbRange: 'dB Range',
+    pollInterval: 'Update Rate',
+  };
   private parameterRanges = {
     minFreq: { min: 10, max: 200, step: 10 },
     maxFreq: { min: 5000, max: 24000, step: 1000 },
     dbRange: { min: 30, max: 120, step: 10 },
     pollInterval: { min: 50, max: 500, step: 50 },
   };
-  private selectedParameterIndex: number = -1; // -1 = none selected
 
   /**
    * Render a single parameter slider with labels
    */
-  private renderParameter(paramName: string, index: number, label: string, unit: string): string {
+  private renderParameter(paramName: string, index: number, unit: string): string {
     const value = (this as any)[paramName];
     const range = this.parameterRanges[paramName as keyof typeof this.parameterRanges];
+
+    // Get formatted label with keyboard shortcut
+    const formattedLabel = this.getFormattedLabel(paramName);
 
     // Format value display
     let displayValue = value.toString();
     displayValue = `${displayValue} ${unit}`;
 
-    // Format min/max labels
-    const minLabel = `${range.min} ${unit}`;
-    const maxLabel = `${range.max} ${unit}`;
+    // Generate 6 legend values from max to min
+    const legendValues = [];
+    for (let i = 0; i < 6; i++) {
+      const legendValue = range.max - (i * (range.max - range.min) / 5);
+      const formatted = legendValue.toString();
+      legendValues.push(formatted);
+    }
 
     return `
-      <div class="field parameter-field plugin-param-field" data-param="${paramName}" data-index="${index}">
-        <div class="plugin-param-header">
-          <label class="label is-small has-text-light plugin-param-label">${label}</label>
-          <span class="tag is-dark param-value plugin-param-value">${displayValue}</span>
-        </div>
-        <input
-          type="range"
-          class="slider is-fullwidth param-slider"
-          data-param="${paramName}"
-          min="${range.min}"
-          max="${range.max}"
-          step="${range.step}"
-          value="${value}"
-        />
-        <div class="plugin-param-minmax">
-          <span class="has-text-grey-light plugin-param-minmax-label">${minLabel}</span>
-          <span class="has-text-grey-light plugin-param-minmax-label">${maxLabel}</span>
+      <div class="field parameter-field" data-param="${paramName}" data-index="${index}">
+        <div class="is-flex is-flex-direction-column is-align-items-center">
+          <div class="has-text-centered has-text-weight-semibold mb-2 has-text-light is-size-7" style="min-height: 2em; display: flex; align-items: center; justify-content: center;">${formattedLabel}</div>
+          <span class="tag is-success is-small mb-2 param-value" data-param="${paramName}">${displayValue}</span>
+          <div class="is-flex is-align-items-center">
+            <!-- Legend on the left -->
+            <div class="is-flex is-flex-direction-column is-justify-content-space-between mr-2 has-text-grey-light is-size-7" style="height: 400px; text-align: right;">
+              ${legendValues.map(v => `<span>${v}</span>`).join('')}
+            </div>
+            <!-- Slider -->
+            <input type="range" class="param-slider" data-param="${paramName}"
+                   min="${range.min}" max="${range.max}" step="${range.step}" value="${value}"
+                   style="writing-mode: vertical-lr; direction: rtl; width: 16px; height: 400px;" />
+          </div>
         </div>
       </div>
     `;
@@ -97,10 +106,10 @@ export class SpectrumPlugin extends BasePlugin {
               <div class="box is-flex is-flex-direction-column" style="background: #2a2a2a; border: none; border-right: 1px solid #404040; border-radius: 0; height: 100%; margin: 0;">
                 <h4 class="title is-6 has-text-light">Spectrum Settings</h4>
                 <div style="overflow-y: auto;">
-                  ${this.renderParameter('minFreq', 0, 'Min Frequency', 'Hz')}
-                  ${this.renderParameter('maxFreq', 1, 'Max Frequency', 'Hz')}
-                  ${this.renderParameter('dbRange', 2, 'dB Range', 'dB')}
-                  ${this.renderParameter('pollInterval', 3, 'Update Rate', 'ms')}
+                  ${this.renderParameter('minFreq', 0, 'Hz')}
+                  ${this.renderParameter('maxFreq', 1, 'Hz')}
+                  ${this.renderParameter('dbRange', 2, 'dB')}
+                  ${this.renderParameter('pollInterval', 3, 'ms')}
                 </div>
 
                 <!-- Control Buttons -->
@@ -209,9 +218,6 @@ export class SpectrumPlugin extends BasePlugin {
         this.recreateAnalyzer();
       });
     }
-
-    // Keyboard controls
-    document.addEventListener('keydown', this.handleKeydown);
   }
 
   /**
@@ -262,10 +268,10 @@ export class SpectrumPlugin extends BasePlugin {
   }
 
   /**
-   * Select parameter by index
+   * Select parameter by index (override base class)
    */
-  private selectParameter(index: number): void {
-    this.selectedParameterIndex = index;
+  protected selectParameter(index: number): void {
+    super.selectParameter(index);
 
     // Update visual highlighting
     const fields = this.container?.querySelectorAll('.parameter-field') || [];
@@ -284,10 +290,10 @@ export class SpectrumPlugin extends BasePlugin {
   }
 
   /**
-   * Clear parameter selection
+   * Clear parameter selection (override base class)
    */
-  private clearParameterSelection(): void {
-    this.selectedParameterIndex = -1;
+  protected clearParameterSelection(): void {
+    super.clearParameterSelection();
 
     const fields = this.container?.querySelectorAll('.parameter-field') || [];
     fields.forEach((field) => {
@@ -300,55 +306,31 @@ export class SpectrumPlugin extends BasePlugin {
   }
 
   /**
-   * Handle keyboard shortcuts
+   * Adjust selected parameter (override base class)
    */
-  private handleKeydown = (e: KeyboardEvent): void => {
-    // Ignore if typing in input
-    const target = e.target as HTMLElement;
-    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT') {
-      return;
+  protected adjustSelectedParameter(delta: number): void {
+    if (this.selectedParameterIndex < 0) return;
+
+    const paramName = this.parameterOrder[this.selectedParameterIndex];
+    const range = this.parameterRanges[paramName as keyof typeof this.parameterRanges];
+    const currentValue = (this as any)[paramName];
+
+    const step = delta > 0 ? range.step : -range.step;
+    const newValue = Math.max(range.min, Math.min(range.max, currentValue + step));
+
+    // Update parameter
+    (this as any)[paramName] = newValue;
+
+    // Update display
+    this.updateParameterDisplay(paramName, newValue);
+
+    // Recreate analyzer if needed
+    if (paramName !== 'pollInterval') {
+      this.recreateAnalyzer();
     }
 
-    // ESC - clear selection
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      this.clearParameterSelection();
-      return;
-    }
-
-    // 1-4 - select parameter
-    const numKey = parseInt(e.key, 10);
-    if (numKey >= 1 && numKey <= 4) {
-      e.preventDefault();
-      this.selectParameter(numKey - 1);
-      return;
-    }
-
-    // Shift+ArrowLeft / Shift+ArrowRight - adjust selected parameter
-    if (this.selectedParameterIndex >= 0 && e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
-      e.preventDefault();
-
-      const paramName = this.parameterOrder[this.selectedParameterIndex];
-      const range = this.parameterRanges[paramName as keyof typeof this.parameterRanges];
-      const currentValue = (this as any)[paramName];
-
-      const delta = e.key === 'ArrowRight' ? range.step : -range.step;
-      const newValue = Math.max(range.min, Math.min(range.max, currentValue + delta));
-
-      // Update parameter
-      (this as any)[paramName] = newValue;
-
-      // Update display
-      this.updateParameterDisplay(paramName, newValue);
-
-      // Recreate analyzer if needed
-      if (paramName !== 'pollInterval') {
-        this.recreateAnalyzer();
-      }
-
-      // Notify parameter change
-      this.updateParameter(paramName, newValue);
-    }
+    // Notify parameter change
+    this.updateParameter(paramName, newValue);
   }
 
   /**
@@ -477,8 +459,9 @@ export class SpectrumPlugin extends BasePlugin {
   getShortcuts() {
     return [
       { key: '1-4', description: 'Select parameter' },
+      { key: 'Tab', description: 'Next parameter' },
       { key: 'Esc', description: 'Clear selection' },
-      { key: 'Shift+←→', description: 'Adjust value' },
+      { key: 'Shift+↑↓', description: 'Adjust value' },
     ];
   }
 
@@ -486,9 +469,6 @@ export class SpectrumPlugin extends BasePlugin {
    * Destroy the plugin
    */
   destroy(): void {
-    // Remove keyboard listener
-    document.removeEventListener('keydown', this.handleKeydown);
-
     if (this.spectrumAnalyzer) {
       this.spectrumAnalyzer.destroy();
       this.spectrumAnalyzer = null;
