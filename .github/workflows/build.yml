@@ -60,7 +60,25 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential pkg-config libssl-dev
+          sudo apt-get install -y \
+            build-essential \
+            gcc \
+            g++ \
+            pkg-config \
+            libssl-dev \
+            cmake \
+            ninja-build \
+            perl \
+            libglib2.0-dev \
+            libgtk-3-dev \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libopenblas-dev \
+            gfortran \
+            chromium-browser \
+            chromium-chromedriver
 
       - name: Cache cargo registry
         uses: actions/cache@v4
@@ -79,6 +97,9 @@ jobs:
             cargo build --release --target ${{ matrix.target }}
           fi
         shell: bash
+        env:
+          BROWSER_PATH: /usr/bin/chromium-browser
+          WEBDRIVER_PATH: /usr/bin/chromedriver
 
       - name: Create distribution directory
         run: |
